@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Grocery DB — household-scoped. Initializes and migrates tables."""
-import sqlite3
+import os, sqlite3
 
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
