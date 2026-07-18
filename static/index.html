@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Grocery">
+<meta name="theme-color" content="#5ebe7e">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icon-192.png">
+<title>Grocery List</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
+  .header h1 { font-size: 16px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; }
+  .header-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .header-meta .user { font-size: 11px; opacity: 0.8; display: none; }
+  .btn-logout { background: rgba(255,255,255,0.15); border: none; color: rgba(255,255,255,0.8); font-size: 11px; cursor: pointer; padding: 4px 10px; border-radius: 8px; }
+  .btn-back { background: rgba(255,255,255,0.15); border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 4px 10px; border-radius: 8px; display: none; }
+
+  .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+
+  .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .store-btn { padding: 16px 12px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--card); font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; transition: all .15s; color: var(--text); }
+  .store-btn:hover, .store-btn:active { border-color: var(--green); background: #f5faf3; }
+  .store-btn .count { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .new-store-wrap { display: flex; gap: 8px; margin-bottom: 20px; }
+  .new-store-wrap input { flex: 1; padding: 12px 14px; font-size: 15px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); outline: none; }
+  .new-store-wrap input:focus { border-color: var(--green); }
+  .new-store-wrap button { background: var(--green); color: #fff; border: none; border-radius: 10px; padding: 0 18px; font-size: 22px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+  .store-group { margin-bottom: 18px; }
+  .store-group-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; padding: 6px 4px; border-bottom: 1.5px solid var(--border); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .cat-header { font-size: 12px; font-weight: 500; color: var(--muted); padding: 12px 4px 4px; border-bottom: 1px dotted var(--border); margin-bottom: 4px; }
+  .cat-header:first-child { margin-top: -4px; }
+  .store-group-title .shop-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--green); border-radius: 8px; color: var(--green); cursor: pointer; background: none; font-weight: 500; }
+  .item-row { display: flex; align-items: center; padding: 12px 10px; background: var(--card); border-radius: 10px; margin-bottom: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); gap: 10px; }
+  .item-row.purchased { opacity: 0.45; }
+  .item-check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #ccc; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; transition: all .15s; }
+  .item-row.purchased .item-check { background: var(--green); border-color: var(--green); color: #fff; }
+  .item-name { flex: 1; font-size: 15px; font-weight: 500; min-width: 0; }
+  .item-row.purchased .item-name { text-decoration: line-through; }
+  .item-meta { font-size: 10px; color: #aaa; text-align: right; flex-shrink: 0; }
+  .btn-delete { background: none; border: none; color: #bbb; font-size: 18px; cursor: pointer; padding: 4px 8px; flex-shrink: 0; border-radius: 8px; }
+  .btn-delete:hover, .btn-delete:active { color: #d94a4a; background: #fff0f0; }
+  .btn-move { background: none; border: none; color: #bbb; font-size: 17px; cursor: pointer; padding: 4px 8px; flex-shrink: 0; border-radius: 8px; }
+  .btn-move:hover, .btn-move:active { color: #3a7a4a; background: #e8f5e9; }
+
+  /* Move Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: flex-end; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal-sheet { background: #fff; width: 100%; max-width: 600px; border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); animation: slideUp .2s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-sheet h3 { font-size: 16px; margin-bottom: 4px; }
+  .modal-sheet .item-label { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .modal-store-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
+  .modal-store-option { padding: 14px 16px; border-radius: 12px; background: #f5f7f0; font-size: 15px; cursor: pointer; text-align: left; border: none; width: 100%; transition: all .15s; }
+  .modal-store-option:hover, .modal-store-option:active { background: #e8f5e9; }
+  .modal-store-option.current { opacity: 0.4; pointer-events: none; }
+  .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
+  .visit-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+  .visit-toast.show { display: block; }
+  .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
+  .visit-toast .btn-yes { background: var(--green); color: #fff; }
+  .visit-toast .btn-no { background: #666; color: #fff; }
+  .modal-cancel { display: block; width: 100%; padding: 14px; border-radius: 12px; border: none; background: #eee; font-size: 15px; cursor: pointer; }
+
+  .catalog { display: none; }
+  .catalog.active { display: block; }
+  .catalog-search { margin-bottom: 14px; }
+  .catalog-search input { width: 100%; padding: 14px 16px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); outline: none; }
+  .catalog-search input:focus { border-color: var(--green); }
+  .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .catalog-item { padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; display: flex; align-items: center; justify-content: center; min-height: 44px; word-break: break-word; }
+  .catalog-item:hover, .catalog-item:active { border-color: var(--green); background: #f5faf3; }
+  .catalog-item.on-list { border-color: var(--green); background: #e8f5e9; color: var(--green-dark); font-weight: 500; }
+
+  .empty-state { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 15px; }
+  .empty-state .emoji { font-size: 40px; margin-bottom: 8px; }
+
+  .btn-danger { display: block; width: 100%; padding: 14px; margin-top: 16px; background: var(--card); border: 1.5px dashed #d0cccc; border-radius: 12px; font-size: 14px; color: #999; cursor: pointer; text-align: center; }
+  .btn-danger:hover { border-color: #d94a4a; color: #d94a4a; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; } .header-meta .user { display: inline; } }
+
+  /* Shared bottom nav */
+  .shared-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: #fff; border-top: 1px solid #e0e0e0; display: flex; justify-content: center; box-shadow: 0 -1px 6px rgba(0,0,0,0.06); padding-bottom: env(safe-area-inset-bottom); }
+  .shared-nav a { flex: 1; max-width: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 8px; text-decoration: none; color: #999; font-size: 11px; font-weight: 500; border-top: 3px solid transparent; }
+  .shared-nav a.active { color: #333; border-top-color: #5ebe7e; font-weight: 600; }
+  @keyframes wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-1.5deg); } 75% { transform: rotate(1.5deg); } }
+  .suggestion-chip { display: inline-block; background: #fff9c4; border: 1px solid #fdd835; border-radius: 14px; padding: 4px 10px; margin: 3px 4px; font-size: 12px; cursor: pointer; animation: wiggle 0.4s ease-in-out infinite; user-select: none; }
+  .suggestion-chip.was-suggested { animation: none; opacity: 0.7; }
+  .suggestion-chip:hover { background: #fff176; }
+  .suggestion-wrap { padding: 4px 0 8px; min-height: 8px; }
+  .shared-nav a.other-app.active { border-top-color: #4a6fa5; }
+  .shared-nav a .nav-icon { font-size: 20px; margin-bottom: 2px; }
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+
+</style>
+</head>
+<body>
+<div class="header">
+  <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
+  <h1 id="headerTitle">🛒 Grocery List</h1>
+  <div class="header-meta">
+    <span class="user" id="headerUser"></span>
+    <button class="btn-logout" onclick="location.href='/settings'" title="Household Settings">⚙️ Settings</button>
+    <button class="btn-logout" id="btnLogout">Logout</button>
+  </div>
+</div>
+<div class="container">
+  <div id="screenHome">
+    <div class="store-grid" id="storeGrid"></div>
+    <div class="new-store-wrap">
+      <input type="text" id="newStoreInput" placeholder="+ New store..." autocomplete="off">
+      <button id="btnNewStore">+</button>
+    </div>
+    <div id="listView"></div>
+    <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
+  </div>
+  <div class="catalog" id="screenCatalog">
+    <div class="catalog-search">
+      <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off">
+    </div>
+    <div class="catalog-grid" id="catalogItems"></div>
+    <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
+  </div>
+</div>
+<!-- Shared bottom nav -->
+<nav class="shared-nav" id="sharedNav">
+  <a href="/" class="active"><span class="nav-icon">🛒</span>Grocery</a>
+  <a href="#" class="other-app" id="healthNavLink" style="display:none"><span class="nav-icon">🍽️</span>Health</a>
+</nav>
+<div class="toast" id="toast"></div>
+
+<!-- Move Item Modal -->
+<div class="modal-overlay" id="moveModal">
+  <div class="modal-sheet">
+    <h3>Move Item</h3>
+    <div class="item-label" id="moveItemLabel"></div>
+    <div class="modal-store-list" id="moveStoreList"></div>
+    <button class="modal-cancel" id="btnMoveCancel">Cancel</button>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
+let stores=[], list=[], currentStore=null, allStoreItems={};
+
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
+
+async function checkAuth() {
+  try {
+    const cfg = await (await fetch(API+'/auth/config')).json();
+    if (!cfg.user) { window.location.href='/login'; return false; }
+    $('#headerUser').textContent = cfg.display_name||cfg.user;
+    // Show Health nav link only if health_dashboard feature is enabled
+    if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
+      $('#healthNavLink').style.display = '';
+    }
+    return true;
+  } catch(e) { window.location.href='/login'; return false; }
+}
+
+async function loadData() {
+  const [s, l] = await Promise.all([
+    fetch(API+'/stores').then(r=>r.json()),
+    fetch(API+'/list').then(r=>r.json())
+  ]);
+  stores=s; list=l; renderHome(); loadSuggestions();
+}
+
+function renderHome() {
+  const counts={}; list.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
+  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
+  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
+
+  const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
+  const groups={}; list.forEach(i=>{ if(!groups[i.store_id])groups[i.store_id]=[]; groups[i.store_id].push(i); });
+
+  let html='';
+  for(const [sid,items] of Object.entries(groups)) {
+    html+='<div class="store-group"><div class="store-group-title">'+storeMap[sid]+' <span>'+items.length+'</span> <button class="shop-btn" data-sid="'+sid+'">+ Add</button></div><div class="suggestion-wrap" id="sug-'+sid+'"></div>';
+    html+=items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('');
+    html+='</div>';
+  }
+  if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store to add items</div>';
+  $('#listView').innerHTML=html;
+  $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
+  $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
+  $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
+  $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
+}
+
+async function openStore(sid) {
+  currentStore=stores.find(s=>s.id===sid);
+  $('#headerTitle').textContent='🛒 '+currentStore.name;
+  $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
+  $('#catalogSearch').value='';
+  if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
+  renderCatalog();
+}
+
+function renderCatalog(filter) {
+  const items=allStoreItems[currentStore.id]||[];
+  const onList=new Set(list.filter(i=>i.store_id===currentStore.id&&!i.purchased).map(i=>i.name.toLowerCase()));
+  let filtered=filter?items.filter(i=>i.name.toLowerCase().includes(filter.toLowerCase())):items;
+  let html='';
+  if(filter&&!items.find(i=>i.name.toLowerCase()===filter.toLowerCase()))
+    html+='<div class="catalog-item" data-new="'+filter+'">+ Add "'+filter+'"</div>';
+  // Group by category — show category headers in store view
+  const cats={}; const uncat=''; filtered.forEach(i=>{const c=i.category||uncat;if(!cats[c])cats[c]=[];cats[c].push(i);});
+  const catOrder=Object.keys(cats).sort();
+  for(const cat of catOrder){
+    if(cat) html+='<div class="cat-header" style="grid-column:1/-1;margin-top:4px">'+cat+'</div>';
+    html+=cats[cat].map(i=>'<div class="catalog-item'+(onList.has(i.name.toLowerCase())?' on-list':'')+'" data-id="'+i.id+'" data-name="'+i.name+'">'+(onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+'</div>').join('');
+  }
+  if(!html&&!filter) html='<div class="empty-state" style="grid-column:1/-1"><div class="emoji">📝</div>Search to add your first item</div>';
+  $('#catalogItems').innerHTML=html;
+  $$('#catalogItems .catalog-item').forEach(el=>el.addEventListener('click',async()=>{
+    const name=el.dataset.new||el.dataset.name;
+    // Check if already on the list (not purchased)
+    if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
+      toast('⚠️ Already on list: '+name); return;
+    }
+    await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+    if(!allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())){
+      await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+      allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
+    }
+    toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
+    $('#catalogSearch').value=''; renderCatalog(''); renderHome();
+  }));
+}
+
+$('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
+$('#btnBackHome').addEventListener('click',()=>showScreen('home'));
+
+function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='🛒 Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
+
+async function loadSuggestions(){
+  try{
+    const s = await fetch(API+'/suggestions').then(r=>r.json());
+    for(const [storeName, items] of Object.entries(s)){
+      const store = stores.find(s=>s.name===storeName);
+      if(!store) continue;
+      const wrap = $('#sug-'+store.id);
+      if(!wrap) continue;
+      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">💡 '+i.name+'</span>').join('');
+    }
+    $$('.suggestion-chip').forEach(el=>el.addEventListener('click',async()=>{
+      const sid=parseInt(el.dataset.store), name=el.dataset.name;
+      await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:sid,name})});
+      el.classList.add('was-suggested'); el.style.animation='none';
+      list=await fetch(API+'/list').then(r=>r.json()); renderHome(); loadSuggestions();
+    }));
+  }catch(e){}
+}
+
+async function toggleItem(id, showVisitPrompt = true){
+  const item = list.find(i=>i.id===id);
+  const wasPurchased = item?.purchased;
+  await fetch(API+'/list/'+id+'/toggle',{method:'POST'});
+  list=await fetch(API+'/list').then(r=>r.json());
+  renderHome();
+  if(currentStore)renderCatalog($('#catalogSearch').value.trim());
+  loadSuggestions();
+  if(!wasPurchased && showVisitPrompt && item){
+    const res=await fetch(API+'/stores/'+item.store_id+'/visit/today');
+    const data=await res.json();
+    if(!data.active || data.active.items_count <= 1){
+      const storeName = stores.find(s=>s.id===item.store_id)?.name||'this store';
+      $('#visitMsg').textContent='Shopping at '+storeName+'?';
+      $('#visitToast').classList.add('show');
+      $('#btnVisitYes').onclick = async ()=>{
+        await fetch(API+'/stores/'+item.store_id+'/visit',{method:'POST'});
+        $('#visitToast').classList.remove('show');
+        loadSuggestions();
+      };
+      $('#btnVisitNo').onclick = ()=>{$('#visitToast').classList.remove('show');};
+    }
+  }
+}
+async function deleteItem(id){await fetch(API+'/list/'+id,{method:'DELETE'});list=await fetch(API+'/list').then(r=>r.json());renderHome();}
+
+$('#btnNewStore').addEventListener('click',async()=>{
+  const name=$('#newStoreInput').value.trim(); if(!name)return;
+  await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  $('#newStoreInput').value=''; toast('Store added: '+name); loadData();
+});
+$('#newStoreInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewStore').click();});
+
+$('#btnClear').addEventListener('click',async()=>{
+  if(!confirm('Remove all open items from the list?'))return;
+  await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
+});
+
+$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});localStorage.clear();window.location.href='/login';});
+
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
+
+let moveItemId=null;
+function openMoveModal(itemId,itemName){
+  moveItemId=itemId;
+  const item=list.find(i=>i.id===itemId);
+  $('#moveItemLabel').textContent='"'+itemName+'" — currently in '+stores.find(s=>s.id===item.store_id)?.name;
+  $('#moveStoreList').innerHTML=stores
+    .map(s=>'<button class="modal-store-option'+(s.id===item.store_id?' current':'')+'" data-sid="'+s.id+'">'+s.name+'</button>')
+    .join('');
+  $$('#moveStoreList .modal-store-option').forEach(el=>el.addEventListener('click',()=>moveItem(parseInt(el.dataset.sid))));
+  $('#moveModal').classList.add('active');
+}
+async function moveItem(targetStoreId){
+  await fetch(API+'/list/'+moveItemId+'/move',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:targetStoreId})});
+  list=await fetch(API+'/list').then(r=>r.json());
+  $('#moveModal').classList.remove('active');
+  toast('✅ Moved to '+stores.find(s=>s.id===targetStoreId)?.name);
+  renderHome();
+}
+$('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
+$('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#moveModal').classList.remove('active');});
+
+(async()=>{if(await checkAuth())loadData();})();
+</script>
+<div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
+</body>
+</html>

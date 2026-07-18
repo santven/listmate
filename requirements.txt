@@ -1,0 +1,1 @@
+flask\ngunicorn\npsycopg2-binary\nrequests

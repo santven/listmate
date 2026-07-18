@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Grocery">
+<meta name="theme-color" content="#5ebe7e">
+<title>Grocery List</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f4ed; min-height: 100dvh; display: flex;
+    align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: #fff; border-radius: 20px; padding: 40px 32px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center;
+    max-width: 380px; width: 90%;
+  }
+  .login-card h1 { font-size: 22px; margin-bottom: 6px; color: #2c5a2c; }
+  .login-card p { font-size: 14px; color: #888; margin-bottom: 28px; }
+  #loginError { color: #d94a4a; font-size: 13px; margin-top: 12px; display: none; }
+  #gsiContainer { display: flex; justify-content: center; margin-top: 16px; }
+  .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
+  .signup-link { margin-top: 14px; font-size: 13px; color: #888; }
+  .signup-link a { color: #5ebe7e; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h1>🛒 Grocery List</h1>
+  <p>Sign in with Google to continue</p>
+  <div id="gsiContainer"></div>
+  <div id="loginError"></div>
+  <div class="signup-link">New here? <a href="/signup">Create a household</a></div>
+  <div class="privacy-note">🔒 Only members of your household can see your list.</div>
+</div>
+
+<script>
+(async () => {
+  try {
+    const cfg = await (await fetch('/api/auth/config')).json();
+    if (cfg.user) { window.location.href = '/'; return; }
+    if (!cfg.client_id) {
+      document.getElementById('loginError').style.display = 'block';
+      document.getElementById('loginError').textContent = 'Sign-in not configured.';
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.onload = () => {
+      google.accounts.id.initialize({
+        client_id: cfg.client_id,
+        callback: onSignIn,
+        auto_select: false,
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('gsiContainer'),
+        { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
+      );
+      google.accounts.id.prompt();
+    };
+    script.onerror = () => {
+      document.getElementById('loginError').style.display = 'block';
+      document.getElementById('loginError').textContent = 'Could not load Google Sign-In.';
+    };
+    document.head.appendChild(script);
+  } catch(e) {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginError').textContent = 'Cannot reach server.';
+  }
+})();
+
+async function onSignIn(response) {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      window.location.href = '/';
+    } else if (data.needs_signup) {
+      window.location.href = '/signup';
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+      document.getElementById('loginError').textContent = data.error || 'Sign-in failed.';
+    }
+  } catch(e) {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginError').textContent = 'Network error. Please try again.';
+  }
+}
+</script>
+</body>
+</html>

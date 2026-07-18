@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#5ebe7e">
+<title>Settings — Grocery List</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .header h1 { font-size: 16px; font-weight: 700; flex: 1; }
+  .header a { color: rgba(255,255,255,0.8); font-size: 13px; text-decoration: none; }
+  .container { max-width: 500px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .card h2 { font-size: 15px; margin-bottom: 14px; color: #2c5a2c; }
+  .card p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+
+  .member-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .member-row:last-child { border-bottom: 0; }
+  .member-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+  .member-info { flex: 1; min-width: 0; }
+  .member-name { font-size: 14px; font-weight: 600; }
+  .member-email { font-size: 12px; color: var(--muted); }
+  .member-role { font-size: 11px; color: var(--muted); background: #f0f4ed; padding: 2px 8px; border-radius: 6px; }
+
+  .add-member { display: flex; gap: 8px; margin-top: 12px; }
+  .add-member input { flex: 1; padding: 10px 12px; font-size: 14px; border: 1.5px solid var(--border); border-radius: 8px; outline: none; }
+  .add-member input:focus { border-color: var(--green); }
+  .add-member button { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .add-member button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-logout { display: block; width: 100%; padding: 12px; background: #fff; border: 1.5px solid #d94a4a; color: #d94a4a; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .btn-back { display: block; padding: 12px; text-align: center; color: var(--green); font-size: 14px; text-decoration: none; }
+
+  .error { color: #d94a4a; font-size: 12px; margin-top: 6px; display: none; }
+  .success { color: #3a7a4a; font-size: 12px; margin-top: 6px; display: none; }
+  .you-badge { font-size: 10px; color: var(--green); font-weight: 600; margin-left: 4px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚙️ Settings</h1>
+  <a href="/">← Back to list</a>
+</div>
+<div class="container" id="app">
+  <div class="card">
+    <h2 id="householdTitle">Household</h2>
+    <p id="householdDesc"></p>
+  </div>
+
+  <div class="card">
+    <h2>Members</h2>
+    <div id="memberList">Loading...</div>
+    <div id="addMemberSection" style="display:none;">
+      <div class="add-member">
+        <input type="email" id="newMemberEmail" placeholder="Email address">
+        <button id="btnAdd" onclick="addMember()">Add</button>
+      </div>
+      <div class="error" id="addError"></div>
+      <div class="success" id="addSuccess"></div>
+    </div>
+  </div>
+
+  <button class="btn-logout" onclick="logout()">Sign Out</button>
+  <a class="btn-back" href="/">← Back to list</a>
+</div>
+
+<script>
+let householdData = null;
+
+(async function init() {
+  // Check auth
+  const cfg = await (await fetch('/api/auth/config')).json();
+  if (!cfg.user) { window.location.href = '/login'; return; }
+
+  // Load household data
+  await loadHousehold();
+})();
+
+async function loadHousehold() {
+  try {
+    const res = await fetch('/api/auth/household');
+    householdData = await res.json();
+    const hh = householdData.household;
+    const members = householdData.members;
+
+    document.getElementById('householdDesc').textContent =
+      hh ? `${hh.name} · ${members.length} member${members.length !== 1 ? 's' : ''}` : 'Loading...';
+
+    // Render members
+    const list = document.getElementById('memberList');
+    list.innerHTML = members.map(m => `
+      <div class="member-row">
+        <div class="member-avatar">${(m.display_name || m.user_id)[0].toUpperCase()}</div>
+        <div class="member-info">
+          <div class="member-name">${m.display_name}${m.user_id === householdData.current_user_id ? '<span class="you-badge">you</span>' : ''}</div>
+          <div class="member-email">${m.email}</div>
+        </div>
+        <div class="member-role">${m.role}</div>
+      </div>
+    `).join('');
+
+    // Show add member form if owner
+    if (householdData.is_owner) {
+      document.getElementById('addMemberSection').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('memberList').textContent = 'Error loading household.';
+  }
+}
+
+async function addMember() {
+  const email = document.getElementById('newMemberEmail').value.trim();
+  document.getElementById('addError').style.display = 'none';
+  document.getElementById('addSuccess').style.display = 'none';
+
+  if (!email) {
+    document.getElementById('addError').style.display = 'block';
+    document.getElementById('addError').textContent = 'Please enter an email address.';
+    return;
+  }
+
+  document.getElementById('btnAdd').disabled = true;
+  try {
+    const res = await fetch('/api/auth/household/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('addSuccess').style.display = 'block';
+      document.getElementById('addSuccess').textContent = `Added ${email}. They can now sign in.`;
+      document.getElementById('newMemberEmail').value = '';
+      await loadHousehold(); // refresh
+    } else {
+      document.getElementById('addError').style.display = 'block';
+      document.getElementById('addError').textContent = data.error || 'Could not add member.';
+    }
+  } catch(e) {
+    document.getElementById('addError').style.display = 'block';
+    document.getElementById('addError').textContent = 'Network error.';
+  }
+  document.getElementById('btnAdd').disabled = false;
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+</script>
+</body>
+</html>
