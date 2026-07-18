@@ -149,12 +149,14 @@ else:
 # ── Session ─────────────────────────────────────────────────
 
 def install(app, cookie_name="listmate_session", cookie_secure=False):
-    global COOKIE_NAME, COOKIE_SECURE
-    COOKIE_NAME = cookie_name; COOKIE_SECURE = cookie_secure
-    app.secret_key = os.environ.get("FLASK_SECRET_KEY",
-        os.environ.get("SECRET_KEY", "dev-secret-change-me"))
+    global COOKIE_NAME
+    COOKIE_NAME = cookie_name
+    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
     import datetime
     app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
+    app.config["SESSION_COOKIE_SECURE"] = cookie_secure
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 def _set(uid, email, name, hhid, hhname):
     session[COOKIE_NAME] = {"user_id": uid, "email": email, "name": name,
