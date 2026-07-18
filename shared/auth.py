@@ -55,7 +55,12 @@ if USE_PG:
         def close(self):
             try: self._cur.close()
             except: pass
-            try: self._c.commit(); self._c.close()
+            try: self._c.commit()
+            except: pass
+            try: _pg_pool.putconn(self._c)
+            except: pass
+        def __del__(self):
+            try: self._cur.close()
             except: pass
             try: _pg_pool.putconn(self._c)
             except: pass
