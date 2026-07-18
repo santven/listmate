@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: listmate-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2
+    repo: https://github.com/santven/listmate
+    branch: main
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: listmate-db
+          property: connectionString
+      - key: SSO_GOOGLE_CLIENT_ID
+        sync: false
+      - key: DB_PATH
+        value: listmate.db
+
+databases:
+  - name: listmate-db
+    plan: free
