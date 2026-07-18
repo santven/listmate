@@ -73,30 +73,31 @@ if USE_PG:
     # Auth tables in Postgres schema
     def _ensure_auth_schema():
         db = _get_auth_db()
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS auth_users (
+        for stmt in [
+            """CREATE TABLE IF NOT EXISTS auth_users (
                 id SERIAL PRIMARY KEY,
                 google_id TEXT UNIQUE NOT NULL,
                 email TEXT NOT NULL,
                 name TEXT NOT NULL,
                 household_id INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS auth_households (
+            )""",
+            """CREATE TABLE IF NOT EXISTS auth_households (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS auth_feature_flags (
+            )""",
+            """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL REFERENCES auth_users(id),
                 feature TEXT NOT NULL,
                 enabled BOOLEAN NOT NULL DEFAULT FALSE,
                 PRIMARY KEY (user_id, feature)
-            );
-            CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email);
-            CREATE INDEX IF NOT EXISTS idx_auth_users_hh ON auth_users(household_id);
-        """)
+            )""",
+            """CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email)""",
+            """CREATE INDEX IF NOT EXISTS idx_auth_users_hh ON auth_users(household_id)""",
+        ]:
+            db.execute(stmt)
         db.commit()
         db.close()
 
@@ -132,30 +133,31 @@ else:
 
     def _init_auth_db():
         db = _get_auth_db()
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS auth_users (
+        for stmt in [
+            """CREATE TABLE IF NOT EXISTS auth_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 google_id TEXT UNIQUE NOT NULL,
                 email TEXT NOT NULL,
                 name TEXT NOT NULL,
                 household_id INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS auth_households (
+            )""",
+            """CREATE TABLE IF NOT EXISTS auth_households (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS auth_feature_flags (
+            )""",
+            """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL, feature TEXT NOT NULL,
                 enabled INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (user_id, feature),
                 FOREIGN KEY (user_id) REFERENCES auth_users(id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email);
-            CREATE INDEX IF NOT EXISTS idx_auth_users_hh ON auth_users(household_id);
-        """)
+            )""",
+            """CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email)""",
+            """CREATE INDEX IF NOT EXISTS idx_auth_users_hh ON auth_users(household_id)""",
+        ]:
+            db.execute(stmt)
         db.commit()
         db.close()
 
