@@ -212,6 +212,8 @@ def register_auth_routes(app):
             _set(user["id"], email, name, user["household_id"], hh_name)
             return jsonify({"ok": True, "name": name, "email": email,
                             "household_id": user["household_id"], "household_name": hh_name})
+        except id_token.exceptions.InvalidTokenError as e:
+            return jsonify({"error": f"Invalid token: {str(e)}"}), 401
         except Exception as e:
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
