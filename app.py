@@ -19,7 +19,7 @@ from categorize import categorize
 
 app = Flask(__name__, static_folder="static")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-install_auth(app, cookie_name="listmate_session", cookie_secure=True)
+install_auth(app, cookie_name="listmate_session", cookie_secure=False)
 
 CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
