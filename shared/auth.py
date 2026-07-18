@@ -121,9 +121,8 @@ else:
             else: c = self._c.execute(sql)
             self._rc = c.rowcount
             return self
-        def fetchall(self): return [dict(r) for r in self._c.fetchall()] if self._c.fetchall() is not None else []
-        def fetchone(self):
-            row = self._c.fetchone(); return dict(row) if row else None
+        def fetchall(self): rows = self._c.fetchall(); return [dict(r) for r in rows] if rows else []
+        def fetchone(self): row = self._c.fetchone(); return dict(row) if row else None
         def commit(self): self._c.commit()
         def close(self): self._c.close()
 
