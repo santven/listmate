@@ -80,7 +80,8 @@ async function init() {
 }
 
 async function onSignIn(response) {
-  document.getElementById('status').textContent = 'Signing in...';
+  const el = document.getElementById('status');
+  el.textContent = 'Signing in...';
   
   try {
     const res = await fetch('/api/auth/login', {
@@ -89,18 +90,16 @@ async function onSignIn(response) {
       body: JSON.stringify({ credential: response.credential })
     });
     
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      document.getElementById('status').textContent = data.error || 'Login error.';
-      return;
-    }
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch(e) {}
     
-    const data = await res.json();
     if (data.ok) { window.location.href = '/'; return; }
     if (data.needs_signup) { window.location.href = '/signup'; return; }
-    document.getElementById('status').textContent = data.error || 'Login failed.';
+    
+    el.textContent = (data.error || text || `Server error (${res.status})`);
   } catch(e) {
-    document.getElementById('status').textContent = 'Lost connection. Please refresh.';
+    el.textContent = 'Network error. Check connection and refresh.';
   }
 }
 
