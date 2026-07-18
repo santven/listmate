@@ -70,6 +70,12 @@ def settings_page():
     return send_from_directory("static", "settings.html")
 
 
+@app.route("/api/health")
+def health():
+    """No-auth health check for uptime monitoring."""
+    return jsonify({"status": "ok"})
+
+
 @app.route("/")
 def index():
     if not is_logged_in():
