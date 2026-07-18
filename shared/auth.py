@@ -188,7 +188,9 @@ def register_auth_routes(app):
             if not c: return jsonify({"error": "Missing credential"}), 400
             
             info = id_token.verify_oauth2_token(c, google_requests.Request(), GOOGLE_CLIENT_ID)
-            gid, email, name = info["sub"], info.get("email",""), info.get("name", email.split("@")[0])
+            gid = info["sub"]
+            email = info.get("email", "")
+            name = info.get("name") or email.split("@")[0] if email else "User"
             
             _init_schema()
             user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
