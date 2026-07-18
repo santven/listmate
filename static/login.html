@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Grocery">
+<meta name="apple-mobile-web-app-title" content="Listmate">
 <meta name="theme-color" content="#5ebe7e">
-<title>Grocery List</title>
+<title>Listmate</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -27,13 +27,15 @@
   .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
   .signup-link { margin-top: 14px; font-size: 13px; color: #888; }
   .signup-link a { color: #5ebe7e; text-decoration: none; }
+  #status { font-size: 12px; color: #888; margin-top: 8px; }
 </style>
 </head>
 <body>
 <div class="login-card">
-  <h1>🛒 Grocery List</h1>
+  <h1>🛒 Listmate</h1>
   <p>Sign in with Google to continue</p>
   <div id="gsiContainer"></div>
+  <div id="status"></div>
   <div id="loginError"></div>
   <div class="signup-link">New here? <a href="/signup">Create a household</a></div>
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
@@ -61,58 +63,56 @@
         document.getElementById('gsiContainer'),
         { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
       );
-      google.accounts.id.prompt();
     };
     script.onerror = () => {
       document.getElementById('loginError').style.display = 'block';
-      document.getElementById('loginError').textContent = 'Could not load Google Sign-In.';
+      document.getElementById('loginError').textContent = 'Could not load Google Sign-In. Try refreshing.';
     };
     document.head.appendChild(script);
   } catch(e) {
     document.getElementById('loginError').style.display = 'block';
-    document.getElementById('loginError').textContent = 'Cannot reach server.';
+    document.getElementById('loginError').textContent = 'Cannot reach server. Please refresh.';
   }
 })();
 
 async function onSignIn(response) {
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      window.location.href = '/';
-    } else if (data.needs_signup) {
-      window.location.href = '/signup';
-    } else {
-      document.getElementById('loginError').style.display = 'block';
-      document.getElementById('loginError').textContent = data.error || 'Sign-in failed.';
-    }
-  } catch(e) {
-    // Cold start retry — Render free tier takes 30-60s to wake
+  const show = msg => {
+    document.getElementById('status').textContent = msg;
+  };
+  const error = msg => {
     document.getElementById('loginError').style.display = 'block';
-    document.getElementById('loginError').textContent = 'Waking up... trying again.';
+    document.getElementById('loginError').textContent = msg;
+  };
+
+  show('Signing in...');
+  
+  // Try up to 3 times with increasing delays (Render cold start)
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await new Promise(r => setTimeout(r, 3000));
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: response.credential })
       });
       const data = await res.json();
+      
       if (data.ok) {
         window.location.href = '/';
+        return;
       } else if (data.needs_signup) {
         window.location.href = '/signup';
-      } else {
-        document.getElementById('loginError').style.display = 'block';
-        document.getElementById('loginError').textContent = data.error || 'Sign-in failed.';
+        return;
+      } else if (data.error) {
+        error(data.error);
+        return;
       }
-    } catch(e2) {
-      document.getElementById('loginError').style.display = 'block';
-      document.getElementById('loginError').textContent = 'Server is starting up. Please wait a few seconds and try again.';
+    } catch(e) {
+      if (attempt === 2) {
+        error('Login failed after 3 attempts. Please refresh and try again.');
+        return;
+      }
+      show(`Warming up... attempt ${attempt + 2}/3`);
+      await new Promise(r => setTimeout(r, 5000));
     }
   }
 }
