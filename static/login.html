@@ -76,43 +76,49 @@
 })();
 
 async function onSignIn(response) {
-  const show = msg => {
-    document.getElementById('status').textContent = msg;
-  };
+  const show = msg => { document.getElementById('status').textContent = msg; };
   const error = msg => {
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginError').textContent = msg;
   };
 
   show('Signing in...');
+
+  const body = JSON.stringify({ credential: response.credential });
   
-  // Try up to 3 times with increasing delays (Render cold start)
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: response.credential })
+        body: body,
+        signal: controller.signal
       });
-      const data = await res.json();
+      clearTimeout(timer);
       
-      if (data.ok) {
-        window.location.href = '/';
-        return;
-      } else if (data.needs_signup) {
-        window.location.href = '/signup';
-        return;
-      } else if (data.error) {
-        error(data.error);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        error(data.error || 'Server error. Try again.');
         return;
       }
+      
+      const data = await res.json();
+      if (data.ok) { window.location.href = '/'; return; }
+      if (data.needs_signup) { window.location.href = '/signup'; return; }
+      error(data.error || 'Login failed.');
+      return;
+      
     } catch(e) {
-      if (attempt === 2) {
-        error('Login failed after 3 attempts. Please refresh and try again.');
+      clearTimeout(timer);
+      if (attempt === 3) {
+        error('Login failed. Please refresh the page and try again.');
         return;
       }
-      show(`Warming up... attempt ${attempt + 2}/3`);
-      await new Promise(r => setTimeout(r, 5000));
+      show(`Warming up... retry ${attempt + 1}/3`);
+      await new Promise(r => setTimeout(r, 4000));
     }
   }
 }
