@@ -17,7 +17,13 @@ from shared.auth import (
 from categorize import categorize
 
 app = Flask(__name__, static_folder="static")
-install_auth(app, cookie_name="listmate_session", cookie_secure=False)
+install_auth(app, cookie_name="listmate_session", cookie_secure=True)
+
+# Render runs behind a proxy — trust X-Forwarded headers
+app.config["PREFERRED_URL_SCHEME"] = "https"
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
