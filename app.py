@@ -6,6 +6,7 @@ import os, json, sys
 from functools import wraps
 
 from flask import Flask, request, jsonify, session, redirect, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import shared.auth as authmod
 from shared.auth import (
@@ -17,6 +18,7 @@ from shared.auth import (
 from categorize import categorize
 
 app = Flask(__name__, static_folder="static")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 install_auth(app, cookie_name="listmate_session", cookie_secure=True)
 
 CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
