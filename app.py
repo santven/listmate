@@ -99,11 +99,24 @@ register_auth_routes(app)
 @require_user
 def list_stores():
     db = get_db()
-    stores = db.execute(
-        "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (_hh(),)
-    ).fetchall()
-    db.close()
-    return jsonify([dict(r) for r in stores])
+    try:
+        hh = _hh()
+        stores = db.execute(
+            "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+        ).fetchall()
+        # Auto-seed stores for root household if none exist
+        if not stores and hh >= 1:
+            from datetime import datetime
+            default_stores = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
+            for name in default_stores:
+                db.execute("INSERT INTO stores (household_id, name) VALUES (?,?)", (hh, name))
+            db.commit()
+            stores = db.execute(
+                "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+            ).fetchall()
+        return jsonify([dict(s) for s in stores])
+    finally:
+        db.close()
 
 
 @app.route("/api/stores", methods=["POST"])
