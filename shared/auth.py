@@ -235,24 +235,38 @@ def register_auth_routes(app):
                 user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid,))
             
             if not user:
-                if USE_PG:
-                    _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                         (gid, email, name))
-                    user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid,))
-                else:
-                    lid = _insert(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                                  (gid, email, name))
-                    user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE id = ?", (lid,))
-                _set(user["id"], email, name, 0, "")
-                return jsonify({"ok": True, "new_user": True, "needs_signup": True})
+                _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                     (gid, email, name))
+                user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid,))
             
             # Update Google ID if different
-            if user.get("google_id") != gid:
+            if user and user.get("google_id") != gid:
                 _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
             
-            hh_id = user.get("household_id", 0)
-            hh_name = ""
-            if hh_id:
+            hh_id = user.get("household_id", 0) if user else 0
+            
+            # Auto-assign: if no household, find or create one
+            if not hh_id:
+                # Try to find an existing household
+                hhs = _run(f"SELECT id, name FROM {_HH} ORDER BY id LIMIT 1")
+                if hhs:
+                    hh_id = hhs[0]["id"]
+                    hh_name = hhs[0]["name"]
+                else:
+                    # Create first household
+                    import secrets
+                    code = secrets.token_hex(4).upper()
+                    _run(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
+                    hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
+                    if hh:
+                        hh_id = hh["id"]
+                        hh_name = hh["name"]
+                    else:
+                        hh_id = 1
+                        hh_name = "Root Household"
+                
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+            else:
                 hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
                 hh_name = hh.get("name", "") if hh else ""
             
