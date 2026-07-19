@@ -125,22 +125,16 @@ def list_stores():
 @app.route("/api/trace")
 @require_user
 def trace():
-    """Return what the DB actually has."""
-    db = get_db()
+    import traceback as tb
     try:
+        db = get_db()
         hh = _hh()
-        # Test raw fetch
         r = db.execute("SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,))
-        raw = r.fetchall() if r else []
-        # Test fetchone
-        o = db.execute("SELECT * FROM stores WHERE household_id = %s LIMIT 1", (hh,))
-        one = o.fetchone()
-        return jsonify({"hh": hh, "count": len(raw), "first": one, "raw": raw[:3]})
+        raw = r.fetchall()
+        ses = dict(session.get("listmate_session", {}))
+        return jsonify({"ok": True, "hh": hh, "stores": len(raw), "first": raw[0] if raw else None, "session": ses})
     except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "tb": traceback.format_exc()[-500:]})
-    finally:
-        db.close()
+        return jsonify({"error": str(e), "traceback": tb.format_exc()[-800:]})
 
 
 @app.route("/api/stores", methods=["POST"])
