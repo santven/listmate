@@ -46,6 +46,11 @@ This link expires in 7 days.
 
     try:
         sg = SendGridAPIClient(api_key)
+        # Disable click/open tracking to avoid URL wrapping issues
+        message.tracking_settings = {
+            "click_tracking": {"enable": False, "enable_text": False},
+            "open_tracking": {"enable": False},
+        }
         response = sg.send(message)
         return 200 <= response.status_code < 300
     except Exception as e:
