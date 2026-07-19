@@ -135,8 +135,8 @@
 </div>
 <!-- Shared bottom nav -->
 <nav class="shared-nav" id="sharedNav">
-  <a href="/" class="active"><span class="nav-icon">🛒</span>Grocery</a>
-  <a href="#" class="other-app" id="healthNavLink" style="display:none"><span class="nav-icon">🍽️</span>Health</a>
+  <a href="https://grocery.raghavfamily.com/" class="active"><span class="nav-icon">🛒</span>Grocery</a>
+  <a href="https://foodlog.raghavfamily.com/" class="other-app" id="healthNavLink" style="display:none"><span class="nav-icon">🍽️</span>Health</a>
 </nav>
 <div class="toast" id="toast"></div>
 
@@ -183,16 +183,56 @@ function renderHome() {
   $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
-  const groups={}; list.forEach(i=>{ if(!groups[i.store_id])groups[i.store_id]=[]; groups[i.store_id].push(i); });
-
-  let html='';
-  for(const [sid,items] of Object.entries(groups)) {
-    html+='<div class="store-group"><div class="store-group-title">'+storeMap[sid]+' <span>'+items.length+'</span> <button class="shop-btn" data-sid="'+sid+'">+ Add</button></div><div class="suggestion-wrap" id="sug-'+sid+'"></div>';
-    html+=items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('');
-    html+='</div>';
+  
+  // Separate active and purchased items
+  const activeItems = list.filter(i=>!i.purchased);
+  const purchasedItems = list.filter(i=>i.purchased);
+  
+  // Group active items by store
+  const activeGroups = {};
+  activeItems.forEach(i=>{ if(!activeGroups[i.store_id])activeGroups[i.store_id]=[]; activeGroups[i.store_id].push(i); });
+  
+  // Group purchased items by store
+  const purchasedGroups = {};
+  purchasedItems.forEach(i=>{ if(!purchasedGroups[i.store_id])purchasedGroups[i.store_id]=[]; purchasedGroups[i.store_id].push(i); });
+  
+  function renderGroup(storeId, items, isPurchased) {
+    return '<div class="store-group">'+
+      '<div class="store-group-title">'+storeMap[storeId]+' <span>'+items.length+'</span>'+
+      (isPurchased?'':' <button class="shop-btn" data-sid="'+storeId+'">+ Add</button>')+
+      '</div><div class="suggestion-wrap" id="sug-'+storeId+'"></div>'+
+      items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('')+
+      '</div>';
   }
+  
+  let html = '';
+  // Active items first
+  for(const [sid,items] of Object.entries(activeGroups)) {
+    html += renderGroup(parseInt(sid), items, false);
+  }
+  // Purchased items at bottom, collapsed
+  if(Object.keys(purchasedGroups).length > 0) {
+    html += '<div class="store-group purchased-section"><div class="store-group-title" id="purchasedToggle" style="cursor:pointer;opacity:0.7;">✅ Completed <span>'+purchasedItems.length+'</span></div>';
+    html += '<div id="purchasedItems" style="display:none;">';
+    for(const [sid,items] of Object.entries(purchasedGroups)) {
+      html += renderGroup(parseInt(sid), items, true);
+    }
+    html += '</div></div>';
+  }
+  
   if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store to add items</div>';
   $('#listView').innerHTML=html;
+  
+  // Toggle purchased section
+  const toggle = document.getElementById('purchasedToggle');
+  const panel = document.getElementById('purchasedItems');
+  if(toggle && panel) {
+    toggle.addEventListener('click', ()=>{
+      const vis = panel.style.display==='none'?'block':'none';
+      panel.style.display=vis;
+    });
+  }
+  
   $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
   $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
   $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
@@ -272,10 +312,12 @@ async function toggleItem(id, showVisitPrompt = true){
   renderHome();
   if(currentStore)renderCatalog($('#catalogSearch').value.trim());
   loadSuggestions();
+  // Visit prompt: fire when checking off first item for a store today
   if(!wasPurchased && showVisitPrompt && item){
     const res=await fetch(API+'/stores/'+item.store_id+'/visit/today');
     const data=await res.json();
-    if(!data.active || data.active.items_count <= 1){
+    // Prompt if no visit recorded today, or visit exists but user hasn't confirmed (item count 0)
+    if(!data.active || data.active.items_count === 0){
       const storeName = stores.find(s=>s.id===item.store_id)?.name||'this store';
       $('#visitMsg').textContent='Shopping at '+storeName+'?';
       $('#visitToast').classList.add('show');
