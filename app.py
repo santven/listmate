@@ -25,7 +25,6 @@ DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
 # Database: PostgreSQL on Render (DATABASE_URL), SQLite locally
 _DATABASE_URL = os.environ.get("DATABASE_URL") or ""
-import sys, json as _json
 _use_pg = "postgres" in _DATABASE_URL.lower() or "RENDER" in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
 if _use_pg:
     import db_pg as dbmod
@@ -105,42 +104,25 @@ def list_stores():
     try:
         hh = _hh()
         stores = db.execute(
-            "SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,)
+            "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
         ).fetchall()
         # Auto-seed if empty
         if not stores and hh:
             names = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
             for name in names:
                 db.execute(
-                    "INSERT INTO stores (household_id, name) VALUES (%s,%s)", (hh, name)
+                    "INSERT INTO stores (household_id, name) VALUES (?,?)", (hh, name)
                 )
             db.commit()
             stores = db.execute(
-                "SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,)
+                "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
             ).fetchall()
         return jsonify(stores)
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     finally:
-        db.close()
-
-@app.route("/api/trace")
-@require_user
-def trace():
-    import traceback as tb
-    try:
-        db = get_db()
-        hh = _hh()
-        r = db.execute("SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,))
-        raw = r.fetchall()
-        ses = dict(session.get("listmate_session", {}))
-        return jsonify({"ok": True, "hh": hh, "stores": len(raw), "first": raw[0] if raw else None, "session": ses})
-    except Exception as e:
-        return jsonify({"error": str(e), "traceback": tb.format_exc()[-800:]})
-
-
-@app.route("/api/stores", methods=["POST"])
+        db.close()@app.route("/api/stores", methods=["POST"])
 @require_user
 def add_store():
     data = request.get_json(silent=True) or {}
