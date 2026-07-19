@@ -23,9 +23,11 @@ CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
-# Database: auto-detect PostgreSQL via DATABASE_URL
+# Database: PostgreSQL on Render (DATABASE_URL), SQLite locally
 _DATABASE_URL = os.environ.get("DATABASE_URL") or ""
-if "postgres" in _DATABASE_URL.lower():
+import sys, json as _json
+_use_pg = "postgres" in _DATABASE_URL.lower() or "RENDER" in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
+if _use_pg:
     import db_pg as dbmod
 else:
     import db as dbmod
@@ -68,8 +70,13 @@ def settings_page():
 
 @app.route("/api/health")
 def health():
-    """No-auth health check for uptime monitoring."""
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok",
+        "db": "pg" if _use_pg else "sqlite",
+        "db_url_set": bool(_DATABASE_URL),
+        "db_url_prefix": _DATABASE_URL[:25] + "..." if _DATABASE_URL else "EMPTY",
+        "render_hostname": os.environ.get("RENDER_EXTERNAL_HOSTNAME", "not set"),
+    })
 
 
 @app.route("/")
