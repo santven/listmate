@@ -106,23 +106,14 @@ def list_stores():
         stores = db.execute(
             "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
         ).fetchall()
-        # Auto-seed if empty
-        if not stores and hh:
-            names = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
-            for name in names:
-                db.execute(
-                    "INSERT INTO stores (household_id, name) VALUES (?,?)", (hh, name)
-                )
-            db.commit()
-            stores = db.execute(
-                "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
-            ).fetchall()
         return jsonify(stores)
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     finally:
-        db.close()@app.route("/api/stores", methods=["POST"])
+        db.close()
+
+@app.route("/api/stores", methods=["POST"])
 @require_user
 def add_store():
     data = request.get_json(silent=True) or {}
