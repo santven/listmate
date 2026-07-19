@@ -77,6 +77,7 @@ def health():
 
 
 @app.route("/")
+@app.route("/index.html")
 def index():
     if not is_logged_in():
         return redirect("/login")
