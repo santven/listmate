@@ -152,16 +152,17 @@ def install(app, cookie_name="listmate_session", cookie_secure=False):
     global COOKIE_NAME
     COOKIE_NAME = cookie_name
     app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-    import datetime
-    app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
-    app.config["SESSION_COOKIE_SECURE"] = cookie_secure
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    from datetime import timedelta
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
     app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = cookie_secure
 
 def _set(uid, email, name, hhid, hhname):
     session[COOKIE_NAME] = {"user_id": uid, "email": email, "name": name,
                              "household_id": hhid, "household_name": hhname}
     session.permanent = True
+    session.modified = True
 
 def _clear(): session.pop(COOKIE_NAME, None)
 def _get(): return session.get(COOKIE_NAME, {})
@@ -192,10 +193,14 @@ def register_auth_routes(app):
             info = id_token.verify_oauth2_token(c, google_requests.Request(), GOOGLE_CLIENT_ID)
             gid = info["sub"]
             email = info.get("email", "")
-            name = info.get("name") or email.split("@")[0] if email else "User"
+            name = info.get("name") or (email.split("@")[0] if email else "User")
             
             _init_schema()
-            user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
+            
+            # Match by email first, then by Google ID (Google sub can differ between OAuth clients)
+            user = _one(f"SELECT * FROM {_USERS} WHERE email = ?", (email,))
+            if not user:
+                user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
             
             if not user:
                 _insert(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
@@ -203,6 +208,11 @@ def register_auth_routes(app):
                 user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
                 _set(user["id"], email, name, 0, "")
                 return jsonify({"ok": True, "new_user": True, "needs_signup": True})
+            
+            # Update Google ID if it changed (e.g., different OAuth client)
+            if user.get("google_id") != gid:
+                _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
+                user["google_id"] = gid
             
             hh_name = ""
             if user["household_id"]:
