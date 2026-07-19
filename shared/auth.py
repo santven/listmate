@@ -152,6 +152,14 @@ else:
 
 # ── Session ─────────────────────────────────────────────────
 
+def _seed_stores(household_id):
+    """Create default stores for a new household (idempotent)."""
+    stores = _run(f"SELECT id FROM stores WHERE household_id = ?", (household_id,))
+    if stores: return  # Already seeded
+    defaults = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
+    for name in defaults:
+        _run(f"INSERT INTO stores (household_id, name) VALUES (?,?)", (household_id, name))
+
 def install(app, cookie_name="listmate_session", cookie_secure=False):
     global COOKIE_NAME
     COOKIE_NAME = cookie_name
@@ -225,17 +233,14 @@ def register_auth_routes(app):
                     hh_id = hhs[0]["id"]
                     hh_name = hhs[0]["name"]
                 else:
-                    # Create first household
+                    # Create first household + seed its stores
                     import secrets
                     code = secrets.token_hex(4).upper()
                     _run(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
-                    if hh:
-                        hh_id = hh["id"]
-                        hh_name = hh["name"]
-                    else:
-                        hh_id = 1
-                        hh_name = "Root Household"
+                    hh_id = hh["id"] if hh else 1
+                    hh_name = hh["name"] if hh else "Root Household"
+                    _seed_stores(hh_id)
                 
                 _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
             else:
@@ -305,6 +310,7 @@ def register_auth_routes(app):
         import secrets
         code = secrets.token_hex(4).upper()
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", (hname, code))
+        _seed_stores(hhid)
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
