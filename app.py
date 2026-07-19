@@ -102,16 +102,18 @@ def list_stores():
     try:
         hh = _hh()
         stores = db.execute(
-            "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+            "SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,)
         ).fetchall()
         # Auto-seed if empty
         if not stores and hh:
             names = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
             for name in names:
-                db.execute("INSERT INTO stores (household_id, name) VALUES (?,?)", (hh, name))
+                db.execute(
+                    "INSERT INTO stores (household_id, name) VALUES (%s,%s)", (hh, name)
+                )
             db.commit()
             stores = db.execute(
-                "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+                "SELECT * FROM stores WHERE household_id = %s ORDER BY name", (hh,)
             ).fetchall()
         return jsonify(stores)
     except Exception as e:
