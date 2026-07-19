@@ -4,57 +4,49 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#5ebe7e">
-<title>Grocery List — Sign Up</title>
+<title>Sign Up — Grocery List</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f0f4ed; min-height: 100dvh; display: flex;
-    align-items: center; justify-content: center;
-  }
-  .card {
-    background: #fff; border-radius: 20px; padding: 40px 32px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 380px; width: 90%;
-  }
-  .card h1 { font-size: 22px; margin-bottom: 4px; color: #2c5a2c; text-align: center; }
-  .card .sub { font-size: 14px; color: #888; margin-bottom: 24px; text-align: center; }
-  .step { display: none; }
-  .step.active { display: block; }
-  label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; margin-top: 16px; }
-  input[type="text"] {
-    width: 100%; padding: 12px 14px; font-size: 16px;
-    border: 1.5px solid #d8e0d0; border-radius: 10px;
-    background: #fff; outline: none;
-  }
-  input[type="text"]:focus { border-color: #5ebe7e; }
-  .btn {
-    display: block; width: 100%; padding: 14px; margin-top: 20px;
-    background: #5ebe7e; color: #fff; border: none; border-radius: 10px;
-    font-size: 16px; font-weight: 600; cursor: pointer;
-  }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-outline {
-    background: #fff; color: #5ebe7e; border: 1.5px solid #5ebe7e;
-  }
-  .error { color: #d94a4a; font-size: 13px; margin-top: 10px; display: none; }
-  .note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; text-align: center; }
-  #gsiContainer { display: flex; justify-content: center; margin: 16px 0; }
-  .back-link { text-align: center; margin-top: 14px; }
-  .back-link a { font-size: 13px; color: #5ebe7e; text-decoration: none; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f4ed;min-height:100dvh;display:flex;align-items:center;justify-content:center}
+  .card{background:#fff;border-radius:20px;padding:40px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);max-width:380px;width:90%}
+  .card h1{font-size:22px;margin-bottom:4px;color:#2c5a2c;text-align:center}
+  .card h2{font-size:16px;margin-bottom:8px;color:#2c5a2c;text-align:center}
+  .sub{font-size:14px;color:#888;margin-bottom:24px;text-align:center}
+  .step{display:none}
+  .step.active{display:block}
+  label{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;margin-top:16px}
+  input[type=text]{width:100%;padding:12px 14px;font-size:16px;border:1.5px solid #d8e0d0;border-radius:10px;background:#fff;outline:none}
+  input[type=text]:focus{border-color:#5ebe7e}
+  .btn{display:block;width:100%;padding:14px;margin-top:20px;background:#5ebe7e;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .error{color:#d94a4a;font-size:13px;margin-top:10px;display:none;text-align:center}
+  .note{font-size:11px;color:#aaa;margin-top:20px;line-height:1.5;border-top:1px solid #eee;padding-top:16px;text-align:center}
+  .invite-banner{background:#e8f5e9;border-radius:12px;padding:16px;margin-bottom:20px;text-align:center}
+  .invite-banner .household{font-weight:700;color:#2c5a2c;font-size:16px;margin-bottom:4px}
+  .invite-banner .desc{font-size:13px;color:#555}
+  .back-link{text-align:center;margin-top:14px}
+  .back-link a{font-size:13px;color:#5ebe7e;text-decoration:none}
+  #gsiContainer{display:flex;justify-content:center;margin:16px 0}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>🛒 Grocery List</h1>
-  <p class="sub">Set up your household</p>
+
+  <!-- Invite banner (hidden by default) -->
+  <div id="inviteBanner" class="invite-banner" style="display:none">
+    <div class="household" id="inviteHousehold"></div>
+    <div class="desc" id="inviteDesc"></div>
+  </div>
+
+  <p class="sub" id="pageSubtitle">Set up your household</p>
 
   <!-- Step 1: Sign in with Google -->
   <div id="step1" class="step active">
     <p style="text-align:center;font-size:14px;color:#666;margin-bottom:4px;">First, sign in with Google</p>
     <div id="gsiContainer"></div>
-    <div id="loginError" class="error" style="text-align:center;"></div>
+    <div id="loginError" class="error"></div>
   </div>
 
   <!-- Step 2: Choose household name -->
@@ -70,15 +62,55 @@
 </div>
 
 <script>
-let googleCredential = null;
-let googleEmail = null;
-let googleName = null;
+const urlParams = new URLSearchParams(window.location.search);
+const inviteToken = urlParams.get('token');
+let googleCredential = null, googleEmail = null;
 
-// Load Google Sign-In
-(async () => {
+// Check if this is an invite link
+(async function init() {
+  if (inviteToken) {
+    try {
+      const r = await fetch('/api/auth/invite/' + inviteToken);
+      const inv = await r.json();
+      if (inv.valid) {
+        document.getElementById('inviteBanner').style.display = 'block';
+        document.getElementById('inviteHousehold').textContent = inv.household_name;
+        document.getElementById('inviteDesc').textContent = inv.email 
+          ? 'You\'ve been invited as ' + inv.email 
+          : 'You\'ve been invited to join this household';
+        document.getElementById('pageSubtitle').textContent = 'Sign in to accept your invitation';
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('loginError').textContent = inv.error || 'Invalid invite link';
+        document.getElementById('pageSubtitle').textContent = '';
+      }
+    } catch(e) {
+      document.getElementById('loginError').style.display = 'block';
+      document.getElementById('loginError').textContent = 'Could not verify invite.';
+    }
+  }
+
+  // Load Google Sign-In always
   try {
     const cfg = await (await fetch('/api/auth/config')).json();
-    if (cfg.user) { window.location.href = '/'; return; }
+    
+    // Already logged in — accept invite if one is pending, else redirect home
+    if (cfg.user) {
+      if (inviteToken) {
+        const acc = await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' });
+        const accData = await acc.json();
+        if (accData.ok) {
+          // Redirect to home — they're now in the household
+          window.location.href = '/';
+          return;
+        }
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('loginError').textContent = accData.error || 'Could not accept invite.';
+        return;
+      }
+      window.location.href = '/';
+      return;
+    }
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.onload = () => {
@@ -102,14 +134,12 @@ let googleName = null;
 async function onGoogleSignIn(response) {
   googleCredential = response.credential;
 
-  // Decode the JWT to get the email (client-side, just for display)
+  // Decode JWT for email
   try {
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    googleEmail = payload.email;
-    googleName = payload.name || googleEmail.split('@')[0];
+    googleEmail = JSON.parse(atob(response.credential.split('.')[1])).email;
   } catch(e) {}
 
-  // Check if this email already has an account (attempt login)
+  // Step 1: Try login
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -117,17 +147,43 @@ async function onGoogleSignIn(response) {
       body: JSON.stringify({ credential: response.credential })
     });
     const data = await res.json();
+
     if (data.ok) {
+      // Logged in — accept invite if one is pending
+      if (inviteToken) {
+        const acc = await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' });
+        const accData = await acc.json();
+        if (!accData.ok) {
+          document.getElementById('loginError').style.display = 'block';
+          document.getElementById('loginError').textContent = accData.error || 'Could not accept invite.';
+          return;
+        }
+      }
       window.location.href = '/';
       return;
     }
+
     if (data.needs_signup) {
-      // Move to step 2
+      // If there's an invite token, accept it directly (no household name needed)
+      if (inviteToken) {
+        const acc = await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' });
+        const accData = await acc.json();
+        if (accData.ok) {
+          window.location.href = '/';
+          return;
+        }
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('loginError').textContent = accData.error || 'Could not accept invite.';
+        return;
+      }
+
+      // No invite — show household name step
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
       document.getElementById('householdName').focus();
       return;
     }
+
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginError').textContent = data.error || 'Sign-in failed.';
   } catch(e) {
@@ -153,9 +209,8 @@ async function createHousehold() {
       body: JSON.stringify({ credential: googleCredential, household_name: name })
     });
     const data = await res.json();
-    if (data.ok) {
-      window.location.href = '/';
-    } else {
+    if (data.ok) window.location.href = '/';
+    else {
       document.getElementById('signupError').style.display = 'block';
       document.getElementById('signupError').textContent = data.error || 'Could not create household.';
     }
@@ -167,9 +222,7 @@ async function createHousehold() {
 }
 
 function resetSignup() {
-  googleCredential = null;
-  googleEmail = null;
-  googleName = null;
+  googleCredential = null; googleEmail = null;
   document.getElementById('step2').classList.remove('active');
   document.getElementById('step1').classList.add('active');
   document.getElementById('householdName').value = '';
