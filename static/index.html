@@ -154,6 +154,8 @@
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 let stores=[], list=[], currentStore=null, allStoreItems={};
 
+let stores=[], list=[], currentStore=null, allStoreItems={}, _lastLoad=0, _CACHE_MS=5000;
+
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
@@ -161,7 +163,6 @@ async function checkAuth() {
     const cfg = await (await fetch(API+'/auth/config')).json();
     if (!cfg.user) { window.location.href='/login'; return false; }
     $('#headerUser').textContent = cfg.display_name||cfg.user;
-    // Show Health nav link only if health_dashboard feature is enabled
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
       $('#healthNavLink').style.display = '';
     }
@@ -170,6 +171,9 @@ async function checkAuth() {
 }
 
 async function loadData() {
+  const now = Date.now();
+  if (now - _lastLoad < _CACHE_MS && stores.length) { renderHome(); return; }
+  _lastLoad = now;
   const [s, l] = await Promise.all([
     fetch(API+'/stores').then(r=>r.json()),
     fetch(API+'/list').then(r=>r.json())
