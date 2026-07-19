@@ -3,3 +3,4 @@ gunicorn
 psycopg2-binary
 requests
 google-auth
+sendgrid>=6.0

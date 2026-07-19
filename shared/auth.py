@@ -84,6 +84,13 @@ if USE_PG:
                 PRIMARY KEY (user_id, feature))""",
             """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
             """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+            """CREATE TABLE IF NOT EXISTS invites (
+                id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL,
+                household_id INTEGER NOT NULL REFERENCES auth_households(id),
+                email TEXT, created_by INTEGER NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP)""",
+            """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
         _schema_done = True
@@ -146,6 +153,13 @@ else:
                 PRIMARY KEY (user_id, feature))""",
             """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
             """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+            """CREATE TABLE IF NOT EXISTS invites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL,
+                household_id INTEGER NOT NULL, email TEXT, created_by INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP,
+                FOREIGN KEY (household_id) REFERENCES auth_households(id))""",
+            """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
         _schema_done = True
@@ -341,10 +355,67 @@ def register_auth_routes(app):
         if not email: return jsonify({"error": "Email required"}), 400
 
         _init_schema()
-        user = _one(f"SELECT * FROM {_USERS} WHERE email = ?", (email,))
-        if not user:
-            _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,?)",
-                 (f"pending:{email}", email, email.split("@")[0], hhid))
-        elif user["household_id"] != hhid:
-            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, user["id"]))
-        return jsonify({"ok": True})
+
+        # Check if already a member
+        existing = _one(f"SELECT * FROM {_USERS} WHERE LOWER(email) = LOWER(?) AND household_id = ?",
+                       (email, hhid))
+        if existing:
+            return jsonify({"ok": True, "already_member": True})
+
+        import secrets
+        token = secrets.token_urlsafe(32)
+        _run(f"""INSERT INTO invites (token, household_id, email, created_by, expires_at)
+               VALUES (?, ?, ?, ?, datetime('now', '+7 days'))""",
+             (token, hhid, email, get_user_id()))
+
+        # Get names for email
+        hh_name = get_household_name()
+        inviter = get_display_name()
+
+        invite_link = f"https://grocerlist.app/signup?token={token}"
+
+        # Send email via SendGrid
+        try:
+            from email_helper import send_invite
+            send_invite(email, invite_link, household_name=hh_name, inviter_name=inviter)
+        except Exception:
+            pass
+
+        return jsonify({"ok": True, "invite_link": invite_link, "email": email})
+
+    @app.route("/api/auth/invite/<token>")
+    def auth_check_invite(token):
+        _init_schema()
+        invite = _one(
+            """SELECT i.id, h.name as household_name, i.email, i.expires_at, i.used_by
+               FROM invites i JOIN auth_households h ON h.id = i.household_id
+               WHERE i.token = ?""",
+            (token,))
+        if not invite:
+            return jsonify({"valid": False, "error": "Invalid invite link"}), 404
+        if invite.get("used_by"):
+            return jsonify({"valid": False, "error": "Invite already used"}), 410
+        return jsonify({"valid": True, "household_name": invite["household_name"],
+                        "email": invite.get("email")})
+
+    @app.route("/api/auth/invite/<token>/accept", methods=["POST"])
+    @require_user
+    def auth_accept_invite(token):
+        _init_schema()
+        invite = _one("SELECT * FROM invites WHERE token = ? AND used_by IS NULL", (token,))
+        if not invite:
+            return jsonify({"error": "Invalid or expired invite"}), 404
+
+        uid = get_user_id()
+        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+
+        if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
+            return jsonify({"error": "This invite is for a different email address"}), 403
+
+        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
+        _run("UPDATE invites SET used_by = ?, used_at = datetime('now') WHERE id = ?", (uid, invite["id"]))
+
+        hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (invite["household_id"],))
+        hh_name = hh.get("name","") if hh else ""
+        _set(uid, user["email"], user["name"], invite["household_id"], hh_name)
+        return jsonify({"ok": True, "household_id": invite["household_id"], "household_name": hh_name})
