@@ -158,6 +158,22 @@ def install(app, cookie_name="listmate_session", cookie_secure=False):
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_SECURE"] = cookie_secure
 
+    # Debug: add route to inspect session
+    @app.route("/api/auth/debug")
+    def auth_debug():
+        import traceback
+        sk = app.secret_key[:10] if app.secret_key else "NONE"
+        return jsonify({
+            "secret_key_set": bool(app.secret_key and app.secret_key != "dev-secret-change-me"),
+            "secret_prefix": sk,
+            "session_data": {k: str(v)[:100] for k, v in session.items()},
+            "cookie_name": COOKIE_NAME,
+            "cookie_secure": app.config.get("SESSION_COOKIE_SECURE"),
+            "logged_in": is_logged_in(),
+            "household_id": get_household_id(),
+            "env_secret": bool(os.environ.get("SECRET_KEY")),
+        })
+
 def _set(uid, email, name, hhid, hhname):
     session[COOKIE_NAME] = {"user_id": uid, "email": email, "name": name,
                              "household_id": hhid, "household_name": hhname}
