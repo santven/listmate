@@ -171,6 +171,8 @@ async function checkAuth() {
 }
 
 async function loadData() {
+  // Render immediately from cached state
+  if (stores.length) renderHome();
   const [s, l] = await Promise.all([
     fetch(API+'/stores').then(r=>r.json()),
     fetch(API+'/list').then(r=>r.json())
@@ -303,7 +305,7 @@ $('#btnClear').addEventListener('click',async()=>{
   await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
 });
 
-$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});localStorage.clear();window.location.href='/login';});
+$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});stores=[];list=[];localStorage.clear();window.location.href='/login';});
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
