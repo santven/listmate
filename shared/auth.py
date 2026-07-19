@@ -20,43 +20,46 @@ if USE_PG:
     from psycopg2 import extras as _extras
 
     def _connect():
-        return psycopg2.connect(os.environ["DATABASE_URL"])
-
-    def _query(sql, params=None):
-        sql = re.sub(r'\?', '%s', sql)
-        conn = _connect()
-        try:
-            cur = conn.cursor(cursor_factory=_extras.RealDictCursor)
-            if params: cur.execute(sql, params)
-            else: cur.execute(sql)
-            conn.commit()
-            return cur
-        except Exception:
-            conn.rollback()
-            raise
-
-    def _run(sql, params=None):
-        cur = _query(sql, params)
-        try: rows = cur.fetchall()
-        except Exception: rows = []  # DDL statements have no results
-        cur.close()
-        cur.connection.close()
-        return [dict(r) for r in rows] if rows else []
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        conn.autocommit = True
+        return conn
 
     def _one(sql, params=None):
-        cur = _query(sql, params)
-        row = cur.fetchone()
-        cur.close()
-        cur.connection.close()
-        return dict(row) if row else None
+        sql_fixed = re.sub(r'\?', '%s', sql)
+        conn = _connect()
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            row = cur.fetchone()
+            cols = [d[0] for d in cur.description] if cur.description else []
+            cur.close()
+            conn.close()
+            return dict(zip(cols, row)) if row else None
+        except Exception:
+            conn.rollback()
+            conn.close()
+            return None
+
+    def _run(sql, params=None):
+        sql_fixed = re.sub(r'\?', '%s', sql)
+        conn = _connect()
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            rows = cur.fetchall() if cur.description else []
+            cols = [d[0] for d in cur.description] if cur.description else []
+            cur.close()
+            conn.close()
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception:
+            conn.rollback()
+            conn.close()
+            return []
 
     def _insert(sql, params=None):
-        cur = _query(sql, params)
-        cur.execute("SELECT LASTVAL()")
-        lid = cur.fetchone()['lastval']
-        cur.close()
-        cur.connection.close()
-        return lid
+        return _run(sql, params)  # PG: just run it
 
     _USERS = "auth_users"
     _HH = "auth_households"
