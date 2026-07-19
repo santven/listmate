@@ -23,24 +23,20 @@ CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
-# Database: SQLite (local) or PostgreSQL (cloud)
-USE_PG = bool(os.environ.get("DATABASE_URL"))
-
-if USE_PG:
+# Database: auto-detect PostgreSQL via DATABASE_URL
+_DATABASE_URL = os.environ.get("DATABASE_URL") or ""
+if _DATABASE_URL and _DATABASE_URL.startswith("postgres"):
     import db_pg as dbmod
-    dbmod.init_db()
 else:
     import db as dbmod
 
 
 def get_db():
-    if USE_PG:
-        return dbmod.get_db()
     return dbmod.get_db()
 
 
 def close_db(conn):
-    if USE_PG:
+    if _DATABASE_URL:
         dbmod.close_db(conn)
     else:
         conn.close()

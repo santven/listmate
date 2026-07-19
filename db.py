@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Grocery DB — household-scoped. Initializes and migrates tables."""
+"""Grocery DB — SQLite backend. Used when DATABASE_URL is not set."""
 import os, sqlite3
 
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
+
+
+def get_db():
+    """Return a sqlite3 connection (compatible with db_pg.get_db API)."""
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    return db
+
+def close_db(conn):
+    if conn: conn.close()
 
 
 def _add_column_if_missing(db, table, column, coldef):
