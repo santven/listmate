@@ -25,7 +25,7 @@ DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
 # Database: auto-detect PostgreSQL via DATABASE_URL
 _DATABASE_URL = os.environ.get("DATABASE_URL") or ""
-if _DATABASE_URL and _DATABASE_URL.startswith("postgres"):
+if "postgres" in _DATABASE_URL.lower():
     import db_pg as dbmod
 else:
     import db as dbmod
