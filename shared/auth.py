@@ -37,7 +37,8 @@ if USE_PG:
 
     def _run(sql, params=None):
         cur = _query(sql, params)
-        rows = cur.fetchall()
+        try: rows = cur.fetchall()
+        except Exception: rows = []  # DDL statements have no results
         cur.close()
         cur.connection.close()
         return [dict(r) for r in rows] if rows else []
@@ -213,31 +214,36 @@ def register_auth_routes(app):
             
             _init_schema()
             
-            # Match by email first, then by Google ID (Google sub can differ between OAuth clients)
-            user = _one(f"SELECT * FROM {_USERS} WHERE email = ?", (email,))
+            # Find user — match by email first (case-insensitive on all DBs)
+            user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
             if not user:
-                user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
+                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid,))
             
             if not user:
-                _insert(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                        (gid, email, name))
-                user = _one(f"SELECT * FROM {_USERS} WHERE google_id = ?", (gid,))
+                if USE_PG:
+                    _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                         (gid, email, name))
+                    user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid,))
+                else:
+                    lid = _insert(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                                  (gid, email, name))
+                    user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE id = ?", (lid,))
                 _set(user["id"], email, name, 0, "")
                 return jsonify({"ok": True, "new_user": True, "needs_signup": True})
             
-            # Update Google ID if it changed (e.g., different OAuth client)
+            # Update Google ID if different
             if user.get("google_id") != gid:
                 _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
-                user["google_id"] = gid
             
+            hh_id = user.get("household_id", 0)
             hh_name = ""
-            if user["household_id"]:
-                hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (user["household_id"],))
-                hh_name = hh["name"] if hh else ""
+            if hh_id:
+                hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+                hh_name = hh.get("name", "") if hh else ""
             
-            _set(user["id"], email, name, user["household_id"], hh_name)
+            _set(user["id"], email, name, hh_id, hh_name)
             return jsonify({"ok": True, "name": name, "email": email,
-                            "household_id": user["household_id"], "household_name": hh_name})
+                            "household_id": hh_id, "household_name": hh_name})
         except id_token.exceptions.InvalidTokenError as e:
             return jsonify({"error": f"Invalid token: {str(e)}"}), 401
         except Exception as e:
