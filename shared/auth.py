@@ -162,34 +162,6 @@ def install(app, cookie_name="listmate_session", cookie_secure=False):
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_SECURE"] = cookie_secure
 
-    # Debug: add route to inspect session
-    @app.route("/api/auth/debug")
-    def auth_debug():
-        import traceback
-        sk = app.secret_key[:10] if app.secret_key else "NONE"
-        
-        # Direct DB query to see what's actually there
-        dbg = {"schema_ok": False, "user_count": 0, "venragh": None}
-        try:
-            _init_schema()
-            users = _run(f"SELECT id, email, name, household_id, google_id FROM {_USERS} ORDER BY id")
-            dbg["user_count"] = len(users)
-            dbg["users"] = users[:10]
-            dbg["schema_ok"] = True
-            
-            ven = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", ("venragh@gmail.com",))
-            dbg["venragh"] = str(ven)[:200] if ven else "NOT FOUND"
-        except Exception as e:
-            dbg["error"] = str(e)
-        
-        return jsonify({
-            "secret_key_set": bool(app.secret_key and app.secret_key != "dev-secret-change-me"),
-            "session_data": {k: str(v)[:100] for k, v in session.items()},
-            "logged_in": is_logged_in(),
-            "household_id": get_household_id(),
-            "db": dbg,
-        })
-
 def _set(uid, email, name, hhid, hhname):
     session[COOKIE_NAME] = {"user_id": uid, "email": email, "name": name,
                              "household_id": hhid, "household_name": hhname}
