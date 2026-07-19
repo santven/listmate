@@ -154,8 +154,6 @@
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 let stores=[], list=[], currentStore=null, allStoreItems={};
 
-let stores=[], list=[], currentStore=null, allStoreItems={};
-
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
@@ -163,6 +161,7 @@ async function checkAuth() {
     const cfg = await (await fetch(API+'/auth/config')).json();
     if (!cfg.user) { window.location.href='/login'; return false; }
     $('#headerUser').textContent = cfg.display_name||cfg.user;
+    // Show Health nav link only if health_dashboard feature is enabled
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
       $('#healthNavLink').style.display = '';
     }
@@ -171,8 +170,6 @@ async function checkAuth() {
 }
 
 async function loadData() {
-  // Render immediately from cached state
-  if (stores.length) renderHome();
   const [s, l] = await Promise.all([
     fetch(API+'/stores').then(r=>r.json()),
     fetch(API+'/list').then(r=>r.json())
@@ -305,7 +302,7 @@ $('#btnClear').addEventListener('click',async()=>{
   await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
 });
 
-$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});stores=[];list=[];localStorage.clear();window.location.href='/login';});
+$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});localStorage.clear();window.location.href='/login';});
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
