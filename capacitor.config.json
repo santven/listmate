@@ -1,0 +1,20 @@
+{
+  "appId": "app.grocerlist.app",
+  "appName": "Listmate",
+  "webDir": "static",
+  "server": {
+    "url": "https://grocerlist.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#5ebe7e"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#5ebe7e"
+    }
+  }
+}
