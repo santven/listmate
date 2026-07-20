@@ -68,6 +68,27 @@ let googleCredential = null, googleEmail = null;
 
 // Check if this is an invite link
 (async function init() {
+  // Check if already logged in — if so, check household status first
+  let alreadyInHousehold = false;
+  try {
+    const cfg = await (await fetch('/api/auth/config')).json();
+    if (cfg.user) {
+      // Check household
+      const hhRes = await fetch('/api/auth/household');
+      if (hhRes.ok) {
+        const hh = await hhRes.json();
+        if (hh.ok && hh.household && hh.household.id) {
+          alreadyInHousehold = true;
+          if (inviteToken) {
+            // Already in a household — try accepting anyway, then redirect
+            try { await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' }); } catch(e) {}
+          }
+          window.location.href = '/';
+          return;
+        }
+      }
+    }
+  } catch(e) { /* continue */ }
   if (inviteToken) {
     try {
       const r = await fetch('/api/auth/invite/' + inviteToken);
