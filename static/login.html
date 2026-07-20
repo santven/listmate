@@ -13,33 +13,76 @@
     background: #f0f4ed; min-height: 100dvh; display: flex;
     align-items: center; justify-content: center;
   }
-  .login-card {
+  .card {
     background: #fff; border-radius: 20px; padding: 40px 32px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center;
     max-width: 380px; width: 90%;
   }
-  .login-card h1 { font-size: 22px; margin-bottom: 6px; color: #2c5a2c; }
-  .login-card p { font-size: 14px; color: #888; margin-bottom: 28px; }
+  .card h1 { font-size: 22px; margin-bottom: 6px; color: #2c5a2c; }
+  .card p { font-size: 14px; color: #888; margin-bottom: 28px; }
   #status { font-size: 14px; color: #888; margin: 12px 0; min-height: 24px; }
   #gsiContainer { display: flex; justify-content: center; margin-top: 16px; }
   .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
+
+  /* Step 2 styles */
+  .step { display: none; }
+  .step.active { display: block; }
+  .step h2 { font-size: 16px; margin-bottom: 8px; color: #2c5a2c; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; margin-top: 16px; text-align: left; }
+  input[type=text] { width: 100%; padding: 12px 14px; font-size: 16px; border: 1.5px solid #d8e0d0; border-radius: 10px; outline: none; }
+  input[type=text]:focus { border-color: #5ebe7e; }
+  .btn { display: block; width: 100%; padding: 14px; margin-top: 20px; background: #5ebe7e; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .error { color: #d94a4a; font-size: 13px; margin-top: 10px; display: none; }
+  .back-link { text-align: center; margin-top: 14px; }
+  .back-link a { font-size: 13px; color: #5ebe7e; text-decoration: none; cursor: pointer; }
+  .invite-banner { background: #e8f5e9; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+  .invite-banner .household { font-weight: 700; color: #2c5a2c; font-size: 16px; margin-bottom: 4px; }
+  .invite-banner .desc { font-size: 13px; color: #555; }
 </style>
 </head>
 <body>
-<div class="login-card">
+<div class="card">
   <h1>🛒 Listmate</h1>
-  <p>Store-smart grocery lists for your household</p>
-  <div id="status">Connecting to server...</div>
-  <div id="gsiContainer"></div>
+  <p id="subtitle">Store-smart grocery lists for your household</p>
+  <div id="error" class="error"></div>
+
+  <!-- Step 1: Google Sign-In -->
+  <div id="step1" class="step active">
+    <div id="status">Connecting to server...</div>
+    <div id="gsiContainer"></div>
+  </div>
+
+  <!-- Step 2: Household setup (hidden until needs_signup) -->
+  <div id="step2" class="step">
+    <div id="inviteBanner" class="invite-banner" style="display:none">
+      <div class="household" id="inviteHousehold"></div>
+      <div class="desc" id="inviteDesc"></div>
+    </div>
+    <div id="createSection">
+      <h2>Set up your household</h2>
+      <label for="householdName">Household Name</label>
+      <input type="text" id="householdName" placeholder="e.g. Raghav household" maxlength="60">
+      <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
+    </div>
+    <button class="btn" id="btnAccept" onclick="acceptInvite()" style="display:none">Accept Invitation</button>
+    <div class="error" id="step2Error"></div>
+    <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
+  </div>
+
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
 </div>
 
 <script>
 let clientId = null;
+let googleCredential = null;
+
+const urlParams = new URLSearchParams(window.location.search);
+const inviteToken = urlParams.get('token');
 
 async function init() {
   const status = document.getElementById('status');
-  
+
   // Warm up the server first — Render free tier sleeps after 15min
   for (let i = 0; i < 8; i++) {
     try {
@@ -51,17 +94,17 @@ async function init() {
         break;
       }
     } catch(e) {}
-    status.textContent = `Warming up server... (${i+1}/8)`;
+    status.textContent = 'Warming up server... (' + (i+1) + '/8)';
     await new Promise(r => setTimeout(r, 5000));
   }
-  
+
   if (!clientId) {
     status.textContent = 'Server unavailable. Please refresh.';
     return;
   }
-  
+
   status.textContent = '';
-  
+
   // Load Google Sign-In
   const script = document.createElement('script');
   script.src = 'https://accounts.google.com/gsi/client';
@@ -80,27 +123,142 @@ async function init() {
 }
 
 async function onSignIn(response) {
-  const el = document.getElementById('status');
-  el.textContent = 'Signing in...';
-  
+  googleCredential = response.credential;
+  const statusEl = document.getElementById('status');
+  const errorEl = document.getElementById('error');
+  statusEl.textContent = 'Signing in...';
+  errorEl.style.display = 'none';
+
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ credential: response.credential })
     });
-    
+
     const text = await res.text();
     let data = {};
     try { data = JSON.parse(text); } catch(e) {}
-    
-    if (data.ok) { window.location.href = '/'; return; }
-    if (data.needs_signup) { window.location.href = '/signup'; return; }
-    
-    el.textContent = (data.error || text || `Server error (${res.status})`);
+
+    if (data.ok) {
+      // If invite token present, accept it
+      if (inviteToken) {
+        try { await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' }); } catch(e) {}
+      }
+      window.location.href = '/';
+      return;
+    }
+
+    if (data.needs_signup) {
+      statusEl.textContent = '';
+      document.getElementById('step1').classList.remove('active');
+      document.getElementById('step2').classList.add('active');
+
+      if (inviteToken) {
+        await showInviteBanner();
+      } else {
+        document.getElementById('createSection').style.display = 'block';
+        document.getElementById('btnAccept').style.display = 'none';
+      }
+      return;
+    }
+
+    showError((data.error || text || 'Server error (' + res.status + ')'));
   } catch(e) {
-    el.textContent = 'Network error. Check connection and refresh.';
+    showError('Network error. Check connection and refresh.');
   }
+}
+
+async function showInviteBanner() {
+  try {
+    const r = await fetch('/api/auth/invite/' + inviteToken);
+    const inv = await r.json();
+    if (inv.valid) {
+      document.getElementById('inviteBanner').style.display = 'block';
+      document.getElementById('inviteHousehold').textContent = inv.household_name;
+      document.getElementById('inviteDesc').textContent = inv.email
+        ? 'You\'ve been invited as ' + inv.email
+        : 'You\'ve been invited to join this household';
+      document.getElementById('createSection').style.display = 'none';
+      document.getElementById('btnAccept').style.display = 'block';
+      document.getElementById('subtitle').textContent = 'Accept your invitation to join';
+    } else {
+      showStep2Error(inv.error || 'Invalid invite link');
+    }
+  } catch(e) {
+    showStep2Error('Could not verify invite.');
+  }
+}
+
+async function acceptInvite() {
+  const btn = document.getElementById('btnAccept');
+  btn.disabled = true;
+  document.getElementById('step2Error').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      window.location.href = '/';
+    } else {
+      showStep2Error(data.error || 'Could not accept invite.');
+    }
+  } catch(e) {
+    showStep2Error('Network error.');
+  }
+  btn.disabled = false;
+}
+
+async function createHousehold() {
+  const name = document.getElementById('householdName').value.trim();
+  if (!name) {
+    showStep2Error('Please enter a household name.');
+    return;
+  }
+  const btn = document.getElementById('btnCreate');
+  btn.disabled = true;
+  document.getElementById('step2Error').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ household_name: name })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      window.location.href = '/';
+    } else {
+      showStep2Error(data.error || 'Could not create household.');
+    }
+  } catch(e) {
+    showStep2Error('Network error.');
+  }
+  btn.disabled = false;
+}
+
+function goToStep1() {
+  googleCredential = null;
+  document.getElementById('step2').classList.remove('active');
+  document.getElementById('step1').classList.add('active');
+  document.getElementById('householdName').value = '';
+  document.getElementById('step2Error').style.display = 'none';
+  document.getElementById('inviteBanner').style.display = 'none';
+  document.getElementById('createSection').style.display = 'block';
+  document.getElementById('btnAccept').style.display = 'none';
+  document.getElementById('subtitle').textContent = 'Store-smart grocery lists for your household';
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function showStep2Error(msg) {
+  const el = document.getElementById('step2Error');
+  el.textContent = msg;
+  el.style.display = 'block';
 }
 
 init();

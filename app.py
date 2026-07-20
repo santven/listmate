@@ -58,7 +58,7 @@ def login_page():
 
 @app.route("/signup")
 def signup_page():
-    return send_from_directory("static", "signup.html")
+    return redirect("/login")
 
 
 @app.route("/settings")
