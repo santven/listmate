@@ -389,8 +389,10 @@ def register_auth_routes(app):
         try:
             from email_helper import send_invite
             send_invite(email, invite_link, household_name=hh_name, inviter_name=inviter)
-        except Exception:
-            pass
+        except Exception as e:
+            import traceback
+            print(f"[send_invite ERROR] {e}", flush=True)
+            traceback.print_exc()
 
         return jsonify({"ok": True, "invite_link": invite_link, "email": email})
 
