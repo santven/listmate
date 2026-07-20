@@ -85,7 +85,23 @@ if USE_PG:
         _put_conn(conn)
 
     def _insert(sql, params=None):
-        return _run(sql, params)  # PG: just run it
+        """Insert a row and return the new ID (Postgres RETURNING)."""
+        sql_fixed = re.sub(r'\?', '%s', sql)
+        conn = _connect()
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        # Try getting RETURNING id first
+        row = cur.fetchone() if cur.description else None
+        if row:
+            new_id = row[0]
+        else:
+            # No RETURNING — get lastval
+            cur.execute("SELECT lastval()")
+            new_id = cur.fetchone()[0]
+        cur.close()
+        _put_conn(conn)
+        return new_id
 
     _USERS = "auth_users"
     _HH = "auth_households"
