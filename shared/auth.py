@@ -265,25 +265,27 @@ def register_auth_routes(app):
             
             hh_id = user.get("household_id", 0) if user else 0
             
-            # Auto-assign: if no household, find or create one
+            # Auto-assign: only auto-create a household if NO households exist at all (first user ever)
+            # Otherwise leave them unassigned — they need to sign up or accept an invite
             if not hh_id:
-                # Try to find an existing household
-                hhs = _run(f"SELECT id, name FROM {_HH} ORDER BY id LIMIT 1")
-                if hhs:
-                    hh_id = hhs[0]["id"]
-                    hh_name = hhs[0]["name"]
-                else:
-                    # Create first household + seed its stores
+                hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
+                if hh_count and hh_count.get("cnt", 0) == 0:
+                    # First user on a fresh system — create household
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    _run(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
+                    _exec(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
                     _seed_stores(hh_id)
-                
-                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-            else:
+                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                else:
+                    # Households exist but this user isn't in one — they must sign up
+                    # Register the user first so they have an account, then redirect to signup
+                    _set(user["id"], email, name, 0, "")
+                    return jsonify({"ok": False, "needs_signup": True,
+                                    "message": "No household — please complete signup"}), 200
+            if hh_id and not hh_name:
                 hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
                 hh_name = hh.get("name", "") if hh else ""
             
