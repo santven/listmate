@@ -355,6 +355,24 @@ def register_auth_routes(app):
         _run("DELETE FROM invites WHERE token = ? AND household_id = ?", (token, hhid))
         return jsonify({"ok": True})
 
+    @app.route("/api/auth/household/members", methods=["DELETE"])
+    @require_user
+    def auth_remove_member():
+        """Remove a member from the household (owner only)."""
+        hhid = get_household_id()
+        if not hhid: return jsonify({"error": "No household"}), 400
+        data = request.get_json(silent=True) or {}
+        member_id = data.get("user_id")
+        if not member_id: return jsonify({"error": "user_id required"}), 400
+        _init_schema()
+        # Only allow removing from own household; can't remove self
+        me = get_user_id()
+        if member_id == me: return jsonify({"error": "Cannot remove yourself"}), 400
+        member = _one(f"SELECT * FROM {_USERS} WHERE id = ? AND household_id = ?", (member_id, hhid))
+        if not member: return jsonify({"error": "Member not found in your household"}), 404
+        _run(f"UPDATE {_USERS} SET household_id = NULL WHERE id = ?", (member_id,))
+        return jsonify({"ok": True, "removed": member["email"]})
+
     @app.route("/api/auth/household/members", methods=["POST"])
     @require_user
     def auth_add_member():
