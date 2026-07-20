@@ -293,7 +293,6 @@ def register_auth_routes(app):
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
-                    _seed_stores(hh_id)
                     _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
                 else:
                     # Households exist but this user isn't in one — they must sign up
@@ -368,7 +367,6 @@ def register_auth_routes(app):
         import secrets
         code = secrets.token_hex(4).upper()
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", (hname, code))
-        _seed_stores(hhid)
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
