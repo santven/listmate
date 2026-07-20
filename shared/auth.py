@@ -18,11 +18,32 @@ _schema_done = False
 if USE_PG:
     import psycopg2
     from psycopg2 import extras as _extras
+    from psycopg2 import pool as _pgpool
+
+    _pool = None
 
     def _connect():
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        global _pool
+        if _pool is None:
+            _pool = _pgpool.ThreadedConnectionPool(1, 4, os.environ["DATABASE_URL"])
+        conn = _pool.getconn()
         conn.autocommit = True
         return conn
+
+    def _put_conn(conn):
+        global _pool
+        if _pool and conn:
+            try:
+                _pool.putconn(conn)
+            except Exception:
+                try: conn.close()
+                except: pass
+
+    def _pool_close():
+        global _pool
+        if _pool:
+            _pool.closeall()
+            _pool = None
 
     def _one(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
@@ -34,11 +55,11 @@ if USE_PG:
             row = cur.fetchone()
             cols = [d[0] for d in cur.description] if cur.description else []
             cur.close()
-            conn.close()
+            _put_conn(conn)
             return dict(zip(cols, row)) if row else None
         except Exception:
             conn.rollback()
-            conn.close()
+            _put_conn(conn)
             return None
 
     def _run(sql, params=None):
@@ -50,7 +71,7 @@ if USE_PG:
         rows = cur.fetchall() if cur.description else []
         cols = [d[0] for d in cur.description] if cur.description else []
         cur.close()
-        conn.close()
+        _put_conn(conn)
         return [dict(zip(cols, r)) for r in rows]
 
     def _exec(sql, params=None):
@@ -61,7 +82,7 @@ if USE_PG:
         if params: cur.execute(sql_fixed, params)
         else: cur.execute(sql_fixed)
         cur.close()
-        conn.close()
+        _put_conn(conn)
 
     def _insert(sql, params=None):
         return _run(sql, params)  # PG: just run it
