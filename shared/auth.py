@@ -44,19 +44,24 @@ if USE_PG:
     def _run(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        try:
-            cur = conn.cursor()
-            if params: cur.execute(sql_fixed, params)
-            else: cur.execute(sql_fixed)
-            rows = cur.fetchall() if cur.description else []
-            cols = [d[0] for d in cur.description] if cur.description else []
-            cur.close()
-            conn.close()
-            return [dict(zip(cols, r)) for r in rows]
-        except Exception:
-            conn.rollback()
-            conn.close()
-            return []
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        rows = cur.fetchall() if cur.description else []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        cur.close()
+        conn.close()
+        return [dict(zip(cols, r)) for r in rows]
+
+    def _exec(sql, params=None):
+        '''Execute INSERT/UPDATE/DELETE — raises on error.'''
+        sql_fixed = re.sub(r'\?', '%s', sql)
+        conn = _connect()
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        cur.close()
+        conn.close()
 
     def _insert(sql, params=None):
         return _run(sql, params)  # PG: just run it
@@ -393,9 +398,12 @@ def register_auth_routes(app):
 
         import secrets
         token = secrets.token_urlsafe(32)
-        _run(f"""INSERT INTO invites (token, household_id, email, created_by, expires_at)
-               VALUES (?, ?, ?, ?, datetime('now', '+7 days'))""",
-             (token, hhid, email, get_user_id()))
+        import datetime as _dt
+        expires = _dt.datetime.utcnow() + _dt.timedelta(days=7)
+        expires_str = expires.strftime('%Y-%m-%d %H:%M:%S')
+        _exec(f"""INSERT INTO invites (token, household_id, email, created_by, expires_at)
+               VALUES (?, ?, ?, ?, ?)""",
+             (token, hhid, email, get_user_id(), expires_str))
 
         # Get names for email
         hh_name = get_household_name()
@@ -444,7 +452,8 @@ def register_auth_routes(app):
             return jsonify({"error": "This invite is for a different email address"}), 403
 
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
-        _run("UPDATE invites SET used_by = ?, used_at = datetime('now') WHERE id = ?", (uid, invite["id"]))
+        import datetime as _dt2
+        _exec("UPDATE invites SET used_by = ?, used_at = ? WHERE id = ?", (uid, _dt2.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), invite["id"]))
 
         hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (invite["household_id"],))
         hh_name = hh.get("name","") if hh else ""
