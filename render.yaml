@@ -14,6 +14,8 @@ services:
           name: listmate-db
           property: connectionString
       - key: SSO_GOOGLE_CLIENT_ID
+      - key: SENDGRID_API_KEY
+        sync: false
         sync: false
       - key: DB_PATH
         value: listmate.db
