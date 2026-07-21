@@ -59,6 +59,9 @@ def login_page():
 @app.route("/signup")
 def signup_page():
     return redirect("/login")
+@app.route("/privacy")
+def privacy_page():
+    return send_from_directory("static", "privacy.html")
 
 
 @app.route("/settings")
