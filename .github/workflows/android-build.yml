@@ -24,9 +24,10 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Capacitor & sync
+      - name: Install Capacitor & add platforms
         run: |
           npm ci
+          npx cap add android
           npx cap sync android
 
       - name: Make gradlew executable
