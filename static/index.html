@@ -307,27 +307,34 @@ async function loadSuggestions(){
 async function toggleItem(id, showVisitPrompt = true){
   const item = list.find(i=>i.id===id);
   const wasPurchased = item?.purchased;
+  
+  // Visit prompt: check BEFORE toggling (API auto-creates a visit on toggle)
+  let needsVisitPrompt = false;
+  let visitStoreName = '';
+  if(!wasPurchased && showVisitPrompt && item){
+    const res=await fetch(API+'/stores/'+item.store_id+'/visit/today');
+    const data=await res.json();
+    if(!data.active){
+      needsVisitPrompt = true;
+      visitStoreName = stores.find(s=>s.id===item.store_id)?.name||'this store';
+    }
+  }
+  
   await fetch(API+'/list/'+id+'/toggle',{method:'POST'});
   list=await fetch(API+'/list').then(r=>r.json());
   renderHome();
   if(currentStore)renderCatalog($('#catalogSearch').value.trim());
   loadSuggestions();
-  // Visit prompt: fire when checking off first item for a store today
-  if(!wasPurchased && showVisitPrompt && item){
-    const res=await fetch(API+'/stores/'+item.store_id+'/visit/today');
-    const data=await res.json();
-    // Prompt if no visit recorded today, or visit exists but user hasn't confirmed (item count 0)
-    if(!data.active || data.active.items_count === 0){
-      const storeName = stores.find(s=>s.id===item.store_id)?.name||'this store';
-      $('#visitMsg').textContent='Shopping at '+storeName+'?';
-      $('#visitToast').classList.add('show');
-      $('#btnVisitYes').onclick = async ()=>{
-        await fetch(API+'/stores/'+item.store_id+'/visit',{method:'POST'});
-        $('#visitToast').classList.remove('show');
-        loadSuggestions();
-      };
-      $('#btnVisitNo').onclick = ()=>{$('#visitToast').classList.remove('show');};
-    }
+  
+  if(needsVisitPrompt){
+    $('#visitMsg').textContent='Shopping at '+visitStoreName+'?';
+    $('#visitToast').classList.add('show');
+    $('#btnVisitYes').onclick = async ()=>{
+      await fetch(API+'/stores/'+item.store_id+'/visit',{method:'POST'});
+      $('#visitToast').classList.remove('show');
+      loadSuggestions();
+    };
+    $('#btnVisitNo').onclick = ()=>{$('#visitToast').classList.remove('show');};
   }
 }
 async function deleteItem(id){await fetch(API+'/list/'+id,{method:'DELETE'});list=await fetch(API+'/list').then(r=>r.json());renderHome();}
