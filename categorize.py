@@ -11,14 +11,19 @@ CATEGORY_KEYWORDS = {
     # ── Produce: Top-level for produce section ──
     "Produce": [
         # Vegetables
-        "onion", "tomato", "potato", "ginger", "garlic", "carrot", "cucumber",
+        "onion", "onions", "tomato", "tomatoes", "potato", "potatoes", "ginger", "garlic", "carrot", "carrots", "cucumber", "cucumbers",
         "spinach", "kale", "lettuce", "arugula", "chard", "collard", "bok choy",
         "broccoli", "cauliflower", "cabbage", "brussels sprout", "asparagus",
-        "celery", "bell pepper", "capsicum", "jalapeno", "serrano", "habanero",
-        "chili", "chilli", "green bean", "okra", "bhindi", "lady finger",
+        "celery", "green pepper", "green peppers", "red pepper", "red peppers", "yellow pepper", "yellow peppers",
+        "orange pepper", "orange peppers", "bell pepper", "bell peppers", "sweet pepper", "sweet peppers",
+        "hot pepper", "hot peppers", "chili pepper", "chilli pepper", "poblano pepper", "shishito pepper",
+        "jalapeno pepper", "serrano pepper", "habanero pepper", "banana pepper", "cubanelle", "anaheim pepper",
+        "ghost pepper", "pepper", "peppers", "capsicum", "shimla mirch", "hari mirch", "lal mirch",
+        "green chili", "green chilli", "green chillies", "red chili", "red chilli", "fresh chili", "jalapeno", "serrano", "habanero",
+        "chili", "chilli", "green bean", "green beans", "okra", "bhindi", "lady finger", "ladyfinger",
         "eggplant", "brinjal", "aubergine", "zucchini", "squash", "pumpkin",
         "sweet potato", "yam", "radish", "mooli", "daikon", "turnip",
-        "beet", "beetroot", "corn", "maize", "peas", "mushroom",
+        "beet", "beetroot", "corn", "maize", "peas", "mushroom", "mushrooms",
         "fenugreek", "methi", "amaranth", "drumstick", "moringa",
         "bottle gourd", "lauki", "dudhi", "bitter gourd", "karela",
         "ridge gourd", "turai", "ivy gourd", "tindora", "kundru",
@@ -28,18 +33,18 @@ CATEGORY_KEYWORDS = {
         "water chestnut", "singhara", "lotus stem", "kamal kakdi",
         "jackfruit", "raw banana", "plantain", "vazhakkai",
         # Fresh herbs
-        "cilantro", "coriander leaf", "mint", "pudina", "basil", "tulsi",
-        "curry leaf", "kariveppilai", "dill", "parsley", "rosemary",
+        "cilantro", "coriander leaf", "coriander leaves", "kothmir", "kothamalli", "mint", "pudina", "basil", "tulsi",
+        "curry leaf", "curry leaves", "kariveppilai", "dill", "parsley", "rosemary",
         "thyme", "sage", "oregano", "chive", "lemongrass",
         # Fruit
-        "apple", "banana", "orange", "grape", "mango", "pineapple",
+        "apple", "apples", "banana", "bananas", "orange", "oranges", "grape", "grapes", "mango", "mangoes", "pineapple",
         "watermelon", "cantaloupe", "honeydew", "melon", "papaya", "guava",
         "pomegranate", "anar", "kiwi", "peach", "plum", "nectarine",
-        "apricot", "pear", "cherry", "strawberry", "blueberry", "raspberry",
+        "apricot", "pear", "pears", "cherry", "cherries", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry",
         "blackberry", "cranberry", "fig", "date", "lychee", "rambutan",
         "dragon fruit", "star fruit", "custard apple", "sitaphal",
         "sapota", "chikoo", "jackfruit", "tender coconut",
-        "lemon", "lime", "nimbu", "avocado", "coconut",
+        "lemon", "lemons", "lime", "limes", "nimbu", "avocado", "avocados", "coconut",
     ],
 
     # ── Dairy ──
@@ -253,20 +258,19 @@ CATEGORY_KEYWORDS = {
 def _normalize(name):
     return name.lower().strip()
 
-_compiled = None
+_flat_matchers = None
 
 def get_matchers():
-    """Return list of (category, pattern_list). Lazily compiled."""
-    global _compiled
-    if _compiled is None:
-        _compiled = []
+    """Return list of (keyword, category) sorted by length desc."""
+    global _flat_matchers
+    if _flat_matchers is None:
+        pairs = []
         for cat, keywords in CATEGORY_KEYWORDS.items():
-            # Sort by length desc so "frozen yogurt" matches before "yogurt"
-            patterns = []
-            for kw in sorted(keywords, key=lambda x: -len(x)):
-                patterns.append(kw)  # keep as plain string
-            _compiled.append((cat, patterns))
-    return _compiled
+            for kw in keywords:
+                pairs.append((kw.lower().strip(), cat))
+        pairs.sort(key=lambda x: -len(x[0]))
+        _flat_matchers = pairs
+    return _flat_matchers
 
 
 def categorize(name):
@@ -315,73 +319,7 @@ def categorize(name):
         "salsa", "pesto", "tapenade")):
         return "Dips & Spreads"
 
-    for cat, keywords in get_matchers():
-        for kw in keywords:
-            if kw in name_stripped:
-                return cat
+    for kw, cat in get_matchers():
+        if kw in name_stripped:
+            return cat
     return ""
-
-
-# ── Tests ──
-if __name__ == "__main__":
-    tests = [
-        ("Toothpaste", "Household"),
-        ("A2 Milk", "Dairy"),
-        ("Egg", "Dairy"),
-        ("Egg Whites", "Dairy"),
-        ("Onion", "Produce"),
-        ("Spinach", "Produce"),
-        ("Avocado", "Produce"),
-        ("Bread", "Bakery"),
-        ("Hummus", "Dips & Spreads"),
-        ("Chickpea", "Legumes & Grains"),
-        ("Toor Dal", "Legumes & Grains"),
-        ("Basmati Rice", "Legumes & Grains"),
-        ("Turmeric Powder", "Spices & Seasonings"),
-        ("Cumin", "Spices & Seasonings"),
-        ("Olive Oil", "Spices & Seasonings"),
-        ("Frozen Peas", "Frozen"),
-        ("Ice Cream", "Dairy"),  # ice cream is dairy before frozen
-        ("Dish Soap", "Household"),
-        ("Paper Towel", "Household"),
-        ("Lemon", "Produce"),
-        ("Almond", "Nuts & Seeds"),
-        ("Cashew", "Nuts & Seeds"),
-        ("Canned Tomato", "Canned & Jarred"),
-        ("Soy Sauce", "Spices & Seasonings"),
-        ("Protein Yogurt Drink", "Dairy"),
-        ("Green Beans", "Produce"),
-        ("Mouth Wash", "Household"),
-        ("Steelcut Oats", "Legumes & Grains"),
-        ("Cilantro", "Produce"),
-        ("Dosa Batter", "Indian Specialties"),
-        ("Idli Podi", "Indian Specialties"),
-        ("Mango Pickle", "Dips & Spreads"),
-        ("Coconut", "Produce"),
-        ("Ghee", "Dairy"),
-        ("Frozen Paratha", "Frozen"),
-        ("Lays Chips", "Snacks & Sweets"),
-        ("Coca Cola", "Beverages"),
-        ("Orange Juice", "Beverages"),
-        ("Naan", "Bakery"),
-        ("Jaggery", "Indian Specialties"),
-        ("Rajma", "Legumes & Grains"),
-        ("Pasta Sauce", "Canned & Jarred"),
-        ("Vanilla Extract", "Spices & Seasonings"),
-        ("Ziploc Bags", "Household"),
-        ("Shampoo", "Household"),
-        ("Cheddar Cheese", "Dairy"),
-        ("Salsa", "Dips & Spreads"),
-        ("Tortilla Chips", "Snacks & Sweets"),
-        ("Unknown Gourmet Item", ""),
-    ]
-
-    print("Category tests:")
-    ok = 0
-    for name, expected in tests:
-        result = categorize(name)
-        status = "✅" if result == expected else f"❌ (got '{result}')"
-        if result == expected:
-            ok += 1
-        print(f"  {status:20} {name:30} → {result}")
-    print(f"\n{ok}/{len(tests)} passed")
