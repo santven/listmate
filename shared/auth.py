@@ -7,8 +7,8 @@ from flask import request, jsonify, session, send_from_directory
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
-    "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
+GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID", "").strip() or \
+    "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com"
 COOKIE_NAME = "listmate_session"
 COOKIE_SECURE = False
 USE_PG = bool(os.environ.get("DATABASE_URL"))
