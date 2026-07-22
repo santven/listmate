@@ -1,5 +1,5 @@
 {
-  "appId": "app.grocerlist.app",
+  "appId": "com.pvkslabs.listmate",
   "appName": "Listmate",
   "webDir": "static",
   "server": {
