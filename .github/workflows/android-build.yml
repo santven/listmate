@@ -36,6 +36,11 @@ jobs:
           AD_ID="ca-app-pub-8608054862395616~1608999633"
           sed -i "s|<application>|<application>\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$AD_ID\"/>|" android/app/src/main/AndroidManifest.xml
 
+      - name: Setup signing
+        run: |
+          echo "${{ secrets.LISTMATE_KEYSTORE }}" | base64 -d > android/app/listmate-upload.keystore
+          python3 scripts/setup-signing.py android/app/build.gradle "${{ secrets.KEYSTORE_PASSWORD }}" "${{ secrets.KEY_ALIAS }}"
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
