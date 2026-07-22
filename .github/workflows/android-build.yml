@@ -31,10 +31,11 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Inject AdMob App ID
+      - name: Inject AdMob App ID & AD_ID permission
         run: |
           AD_ID="ca-app-pub-8608054862395616~1608999633"
-          sed -i "s|<application>|<application>\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$AD_ID\"/>|" android/app/src/main/AndroidManifest.xml
+          sed -i "s|<application|<uses-permission android:name=\"com.google.android.gms.permission.AD_ID\"/>\n    <application|" android/app/src/main/AndroidManifest.xml
+          sed -i "s|<application|<application>\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$AD_ID\"/>|" android/app/src/main/AndroidManifest.xml
 
       - name: Setup signing
         run: |
