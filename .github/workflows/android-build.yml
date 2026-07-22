@@ -41,6 +41,9 @@ jobs:
         run: |
           echo "${{ secrets.LISTMATE_KEYSTORE }}" | base64 -d > android/app/listmate-upload.keystore
           python3 scripts/setup-signing.py android/app/build.gradle "${{ secrets.KEYSTORE_PASSWORD }}" "${{ secrets.KEY_ALIAS }}"
+          # Bump version code in build.gradle — use GitHub run number
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionCode 2/versionCode ${{ github.run_number }}/" android/app/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
