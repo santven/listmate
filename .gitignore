@@ -6,3 +6,5 @@ shared/__pycache__/
 android/
 ios/
 node_modules/
+listmate-upload.keystore
+version.properties
