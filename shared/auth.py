@@ -281,6 +281,7 @@ def register_auth_routes(app):
                 _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
             
             hh_id = user.get("household_id", 0) if user else 0
+            hh_name = ""
             
             # Auto-assign: only auto-create a household if NO households exist at all (first user ever)
             # Otherwise leave them unassigned — they need to sign up or accept an invite
