@@ -104,6 +104,15 @@
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
 </style>
+
+<style>
+.ad-banner { width: 100%; max-width: 728px; height: 90px; margin: 20px auto 0; 
+  display: flex; align-items: center; justify-content: center; 
+  background: #f3f4f6; border-radius: 8px; color: #9ca3af; font-size: 12px; }
+.ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; 
+  height: 50px; background: #f3f4f6; display: flex; align-items: center; 
+  justify-content: center; z-index: 1000; color: #9ca3af; font-size: 11px; }
+</style>
 </head>
 <body>
 <div class="header">
@@ -379,5 +388,6 @@ $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#m
 (async()=>{if(await checkAuth())loadData();})();
 </script>
 <div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
+<div class="ad-banner-bottom" id="ad-main">Advertisement</div>
 </body>
 </html>
