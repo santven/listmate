@@ -3,4 +3,6 @@ gunicorn
 psycopg2-binary
 requests
 google-auth
+cryptography
+pyasn1-modules
 sendgrid>=6.0
