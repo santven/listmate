@@ -6,6 +6,7 @@ from functools import wraps
 from flask import request, jsonify, session, send_from_directory
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from google.auth.exceptions import GoogleAuthError
 
 GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID", "").strip() or \
     "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com"
@@ -307,9 +308,10 @@ def register_auth_routes(app):
             _set(user["id"], email, name, hh_id, hh_name)
             return jsonify({"ok": True, "name": name, "email": email,
                             "household_id": hh_id, "household_name": hh_name})
-        except id_token.exceptions.InvalidTokenError as e:
-            return jsonify({"error": f"Invalid token: {str(e)}"}), 401
         except Exception as e:
+            # GoogleAuthError (MalformedError, etc) → 401; anything else → 500
+            if isinstance(e, GoogleAuthError):
+                return jsonify({"error": f"Invalid token: {str(e)}"}), 401
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
 
