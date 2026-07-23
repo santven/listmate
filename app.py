@@ -2,8 +2,9 @@
 """Listmate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
-import os, json, sys
+import os, json, sys, time
 from functools import wraps
+from urllib.parse import quote, urlencode
 
 from flask import Flask, request, jsonify, session, redirect, send_from_directory
 
@@ -476,6 +477,7 @@ if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5003, debug=True)
 # ---- Google OAuth (server-side redirect flow) ----
 import secrets as _secrets
+import urllib.parse as _urlparse
 _OAUTH_STATES = {}
 
 @app.route("/auth/google/redirect")
@@ -498,7 +500,7 @@ def auth_google_redirect():
         'state': state,
         'access_type': 'offline',
     }
-    auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + '&'.join(f'{k}={quote(v, safe="")}' for k,v in params.items())
+    auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + '&'.join(f'{k}={_urlparse.quote(v, safe="")}' for k,v in params.items())
     return redirect(auth_url)
 
 
