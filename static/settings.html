@@ -78,6 +78,23 @@
     <button class="btn-save" id="btnSaveLocation" onclick="saveLocation()">Save Location</button>
     <div class="success" id="locSuccess"></div>
     <div class="error" id="locError"></div>
+    <h2 style="margin-top:24px">🥗 Dietary Restrictions</h2>
+    <p class="note">Helps filter store items to match your household preferences.</p>
+    <div id="dietaryCheckboxes" style="text-align:left; margin-top:12px">
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
+        <input type="checkbox" value="vegetarian" onchange="saveDietary()"> Vegetarian
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
+        <input type="checkbox" value="vegan" onchange="saveDietary()"> Vegan
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
+        <input type="checkbox" value="gluten_free" onchange="saveDietary()"> Gluten-Free
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
+        <input type="checkbox" value="halal" onchange="saveDietary()"> Halal
+      </label>
+    </div>
+    <div class="success" id="dietarySuccess"></div>
   </div>
 
   <div class="card">
@@ -153,7 +170,8 @@ async function loadHousehold() {
       document.getElementById('addMemberSection').style.display = 'block';
     }
 
-    // Populate location fields
+    loadDietary();
+      // Populate location fields
     if (hh) {
       document.getElementById('locCountry').value = hh.country || '';
       document.getElementById('locZip').value = hh.zip_code || '';
@@ -240,6 +258,35 @@ async function logout() {
 
 async function removeInvite(token) {
   await fetch('/api/auth/household/invites/' + token, { method: 'DELETE' });
+
+// ---- Dietary Restrictions ----
+async function loadDietary() {
+  try {
+    const r = await fetch('/api/settings/dietary');
+    const d = await r.json();
+    const vals = (d.dietary_restrictions || '').split(',').filter(Boolean);
+    document.querySelectorAll('#dietaryCheckboxes input').forEach(cb => {
+      cb.checked = vals.includes(cb.value);
+    });
+  } catch(e) {}
+}
+
+async function saveDietary() {
+  const checked = [];
+  document.querySelectorAll('#dietaryCheckboxes input:checked').forEach(cb => checked.push(cb.value));
+  try {
+    const r = await fetch('/api/settings/dietary', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({dietary_restrictions: checked.join(',')})
+    });
+    if (r.ok) {
+      document.getElementById('dietarySuccess').textContent = '✓ Saved';
+      setTimeout(() => document.getElementById('dietarySuccess').textContent = '', 2000);
+    }
+  } catch(e) {}
+}
+
+// Call loadDietary in the existing loadSettings
   loadHousehold();
 }
 </script>

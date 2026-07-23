@@ -83,7 +83,7 @@ def save_location():
         return jsonify({"error": "No household"}), 400
 
     fields = {}
-    for f in ("zip_code", "country"):
+    for f in ("zip_code", "country", "dietary_restrictions"):
         val = (data.get(f) or "").strip()
         if val:
             fields[f] = val
@@ -196,6 +196,26 @@ def add_store():
             import traceback; traceback.print_exc()
 
     return jsonify({"ok": True})
+
+@app.route("/api/settings/dietary", methods=["GET", "POST"])
+@require_user
+def dietary_settings():
+    """Get or set household dietary restrictions."""
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+        val = (hh.get("dietary_restrictions") or "") if hh else ""
+        return jsonify({"dietary_restrictions": val})
+    
+    data = request.get_json(silent=True) or {}
+    restrictions = (data.get("dietary_restrictions") or "").strip()
+    authmod._run(f"UPDATE {authmod._HH} SET dietary_restrictions = ? WHERE id = ?", (restrictions, hhid))
+    return jsonify({"ok": True, "dietary_restrictions": restrictions})
+
 
 
 # ── store items (household-scoped) ──

@@ -141,6 +141,8 @@ if USE_PG:
             ("seq", "INTEGER NOT NULL DEFAULT 0"),
             ("zip_code", "TEXT DEFAULT ''"),
             ("country", "TEXT DEFAULT ''"),
+            ("dietary_restrictions", "TEXT DEFAULT ''"),
+            ("dietary_restrictions", "TEXT DEFAULT ''"),
             ("is_premium", "BOOLEAN NOT NULL DEFAULT FALSE"),
             ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
         ]:
