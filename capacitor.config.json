@@ -5,7 +5,10 @@
   "server": {
     "url": "https://grocerlist.app",
     "cleartext": false,
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowNavigation": [
+      "accounts.google.com"
+    ]
   },
   "plugins": {
     "SplashScreen": {
