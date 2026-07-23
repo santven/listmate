@@ -586,10 +586,7 @@ def auth_google_callback():
             hh_name = hh.get('name', '') if hh else ''
         
         authmod._set(user["id"], email, name, hh_id, hh_name)
-        return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
-                '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
-                '<h2>&#x1F44D; Signed in</h2><p>Loading...</p>' +
-                "<script>window.location.replace(\'/\');</script></body></html>")
+        return '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/"></head><body style="display:none"></body></html>'
     
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
