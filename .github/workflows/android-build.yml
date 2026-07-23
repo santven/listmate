@@ -46,8 +46,10 @@ jobs:
         run: |
           echo "${{ secrets.LISTMATE_KEYSTORE }}" | base64 -d > android/app/listmate-upload.keystore
           python3 scripts/setup-signing.py android/app/build.gradle "${{ secrets.KEYSTORE_PASSWORD }}" "${{ secrets.KEY_ALIAS }}"
-          # Bump versionCode to GitHub run number (always unique, always increasing)
-          sed -i "s/versionCode [0-9]\+/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          # Bump versionCode to GitHub run number + 100 (avoids collision with failed builds)
+          VC=$(( ${{ github.run_number }} + 100 ))
+          sed -i "s/versionCode [0-9]\+/versionCode $VC/" android/app/build.gradle
+          echo "versionCode set to: $VC"
           grep "versionCode" android/app/build.gradle
 
       - name: Make gradlew executable
