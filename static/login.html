@@ -8,15 +8,9 @@
 <title>Listmate</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f0f4ed; min-height: 100dvh; display: flex;
-    align-items: center; justify-content: center;
-  }
+  body { font-family: -apple-system, Roboto, sans-serif; background: #f0f4ed; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
   .card { background: #fff; border-radius: 20px; padding: 40px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; max-width: 380px; width: 90%; }
   #subtitle { font-size: 14px; color: #888; margin-bottom: 28px; }
-  #status { font-size: 14px; color: #888; margin: 12px 0; min-height: 24px; }
-  #gsiContainer { display: flex; justify-content: center; margin-top: 16px; min-height: 44px; }
   .step { display: none; }
   .step.active { display: block; }
   .step h2 { font-size: 16px; margin-bottom: 8px; color: #2c5a2c; }
@@ -24,16 +18,16 @@
   input[type=text] { width: 100%; padding: 12px 14px; font-size: 16px; border: 1.5px solid #d8e0d0; border-radius: 10px; outline: none; }
   input[type=text]:focus { border-color: #5ebe7e; }
   .btn { display: block; width: 100%; padding: 14px; margin-top: 20px; background: #5ebe7e; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled { opacity: 0.5; }
   .error { color: #d94a4a; font-size: 13px; margin-top: 10px; display: none; }
   .back-link { text-align: center; margin-top: 14px; }
-  .back-link a { font-size: 13px; color: #5ebe7e; text-decoration: none; cursor: pointer; }
+  .back-link a { font-size: 13px; color: #5ebe7e; text-decoration: none; }
   .invite-banner { background: #e8f5e9; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
   .invite-banner .household { font-weight: 700; color: #2c5a2c; font-size: 16px; margin-bottom: 4px; }
   .invite-banner .desc { font-size: 13px; color: #555; }
   .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
+  .signin-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 280px; padding: 10px 16px; border: 1px solid #dadce0; border-radius: 8px; background: #fff; text-decoration: none; font-size: 14px; font-weight: 500; color: #3c4043; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="card">
@@ -41,8 +35,12 @@
   <p id="subtitle">Store-smart grocery lists for your household</p>
   <div id="error" class="error"></div>
   <div id="step1" class="step active">
-    <div id="status"></div>
-    <div id="gsiContainer"><span style="color:#888;font-size:13px">Loading sign-in button...</span></div>
+    <div style="margin-top:16px">
+      <a href="/auth/google/redirect" class="signin-btn">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign in with Google
+      </a>
+    </div>
   </div>
   <div id="step2" class="step">
     <div id="inviteBanner" class="invite-banner" style="display:none">
@@ -59,73 +57,38 @@
     <div class="error" id="step2Error"></div>
     <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
   </div>
-  
-  <div id="fallbackLink" style="display:none; margin-top: 12px;">
-    <a href="/auth/google/redirect" style="display:inline-block;padding:12px 24px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;color:#3c4043;font-weight:500">Sign in with Google</a>
-  </div>
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
 </div>
 
 <script>
-var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
 var inviteToken = (new URLSearchParams(window.location.search)).get('token');
 var googleCredential = null;
 
-// ---- Google Sign-In via GSI popup (stays in WebView, no navigation) ----
-function onGoogleLibraryLoad() {
+// Check for existing session or redirect-based callback
+(function() {
+  // Session check
   try {
-    google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: handleCredential,
-      ux_mode: 'popup',
-      use_fedcm_for_button: false
+    fetch('/api/auth/config').then(function(r) {
+      if (r.ok) r.json().then(function(c) { if (c.user) window.location.replace('/'); });
     });
-    google.accounts.id.renderButton(
-      document.getElementById('gsiContainer'),
-      { theme: 'outline', size: 'large', text: 'signin_with', width: 280 }
-    );
-    document.getElementById('status').textContent = '';
-  } catch(e) {
-    document.getElementById('gsiContainer').innerHTML = '<p style="color:#d94a4a">Sign-in unavailable. Please try reinstalling the app.</p>';
-    console.error('GSI init error:', e);
+  } catch(e) {}
+
+  // Handle id_token from Google redirect (hash fragment)
+  var hp = new URLSearchParams(window.location.hash.substring(1));
+  var idToken = hp.get('id_token');
+  if (idToken) {
+    history.replaceState(null, '', location.pathname + location.search);
+    handleCredential(idToken);
   }
-}
+})();
 
-// GSI loads async — wait for it
-if (window.google && google.accounts) {
-  onGoogleLibraryLoad();
-} else {
-  window.onload = function() {
-    // Keep checking for GSI library
-    var tries = 0;
-    var check = setInterval(function() {
-      if (tries === 15) {
-        // Show fallback after 3 seconds if GSI hasn't loaded
-        document.getElementById('fallbackLink').style.display = 'block';
-        document.getElementById('gsiContainer').style.display = 'none';
-      }
-      tries++;
-      if (window.google && google.accounts) {
-        clearInterval(check);
-        onGoogleLibraryLoad();
-      } else if (tries > 30) {
-        clearInterval(check);
-        document.getElementById('gsiContainer').innerHTML = '<p style="color:#d94a4a">Could not load sign-in. Check your connection.</p>';
-      }
-    }, 200);
-  };
-}
-
-function handleCredential(response) {
-  googleCredential = response.credential;
-  var s = document.getElementById('status');
-  var e = document.getElementById('error');
-  s.textContent = 'Signing in...'; e.style.display = 'none';
-  
+function handleCredential(credential) {
+  googleCredential = credential;
+  showError('');
   fetch('/api/auth/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({credential: response.credential})
+    body: JSON.stringify({credential: credential})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
@@ -133,7 +96,6 @@ function handleCredential(response) {
       window.location.replace('/'); return;
     }
     if (r.data.needs_signup) {
-      s.textContent = '';
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
       if (inviteToken) { showInviteBanner(); } else {
@@ -143,29 +105,11 @@ function handleCredential(response) {
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
-  }).catch(function() { showError('Network error. Refresh and try again.'); });
+  }).catch(function() { showError('Network error. Try again.'); });
 }
 
-// Also handle id_token from redirect fallback
-(function() {
-  var hp = new URLSearchParams(window.location.hash.substring(1));
-  var idToken = hp.get('id_token');
-  if (idToken) {
-    history.replaceState(null, '', location.pathname + location.search);
-    handleCredential({credential: idToken});
-  }
-})();
-
-// Background session check
-try {
-  fetch('/api/auth/config').then(function(r) {
-    if (r.ok) r.json().then(function(c) { if (c.user) location.replace('/'); });
-  });
-} catch(e) {}
-
-async function showInviteBanner() {
-  try {
-    var r = await fetch('/api/auth/invite/'+inviteToken); var d = await r.json();
+function showInviteBanner() {
+  fetch('/api/auth/invite/'+inviteToken).then(function(r){return r.json()}).then(function(d){
     if (d.valid) {
       document.getElementById('inviteBanner').style.display='block';
       document.getElementById('inviteHousehold').textContent=d.household_name;
@@ -174,26 +118,25 @@ async function showInviteBanner() {
       document.getElementById('btnAccept').style.display='block';
       document.getElementById('subtitle').textContent='Accept your invitation';
     } else { showStep2Error(d.error||'Invalid invite'); }
-  } catch(e) { showStep2Error('Could not verify invite.'); }
+  }).catch(function(){ showStep2Error('Could not verify invite.'); });
 }
 
-async function acceptInvite() {
-  var b=document.getElementById('btnAccept'); b.disabled=true;
-  document.getElementById('step2Error').style.display='none';
-  try { var r=await fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); var d=await r.json();
-    if(d.ok) location.href='/'; else showStep2Error(d.error||'Failed');
-  } catch(e) { showStep2Error('Network error.'); }
+function acceptInvite() {
+  var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
+  fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    if(d.ok) window.location.replace('/'); else showStep2Error(d.error||'Failed');
+  }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
 
-async function createHousehold() {
+function createHousehold() {
   var n=document.getElementById('householdName').value.trim();
   if(!n){showStep2Error('Enter a household name');return;}
-  var b=document.getElementById('btnCreate'); b.disabled=true;
-  document.getElementById('step2Error').style.display='none';
-  try { var r=await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})}); var d=await r.json();
-    if(d.ok) location.href='/'; else showStep2Error(d.error||'Failed');
-  } catch(e) { showStep2Error('Network error.'); }
+  var b=document.getElementById('btnCreate'); b.disabled=true; showStep2Error('');
+  fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})})
+    .then(function(r){return r.json()}).then(function(d){
+    if(d.ok) window.location.replace('/'); else showStep2Error(d.error||'Failed');
+  }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
 
@@ -209,8 +152,8 @@ function goToStep1() {
   document.getElementById('subtitle').textContent='Store-smart grocery lists for your household';
 }
 
-function showError(m){var e=document.getElementById('error');e.textContent=m;e.style.display='block';}
-function showStep2Error(m){var e=document.getElementById('step2Error');e.textContent=m;e.style.display='block';}
+function showError(m){var e=document.getElementById('error');e.textContent=m;e.style.display=m?'block':'none';}
+function showStep2Error(m){var e=document.getElementById('step2Error');e.textContent=m;e.style.display=m?'block':'none';}
 </script>
 </body>
 </html>
