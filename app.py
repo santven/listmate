@@ -110,6 +110,60 @@ def _run_db_migrations():
 _run_db_migrations()
 
 
+# ── Migration helper (runs once per worker, idempotent) ────────────────
+_MIGRATED = False
+
+def _ensure_schema():
+    """Add new columns + backfill seq/premium. Idempotent — safe to call repeatedly."""
+    global _MIGRATED
+    if _MIGRATED:
+        return
+    try:
+        authmod._init_schema()
+        is_pg = bool(os.environ.get("DATABASE_URL"))
+        
+        # Add columns (idempotent)
+        cols = [
+            ("zip_code", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
+            ("dietary_restrictions", "TEXT DEFAULT ''"),
+            ("seq", "INTEGER NOT NULL DEFAULT 0"),
+            ("is_premium", "BOOLEAN NOT NULL DEFAULT FALSE" if is_pg else "INTEGER NOT NULL DEFAULT 0"),
+            ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
+        ]
+        for col, ct in cols:
+            try:
+                authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ct}")
+            except Exception:
+                pass
+        
+        # Backfill
+        if is_pg:
+            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = TRUE, member_limit = 999 WHERE seq <= 100 AND seq > 0")
+        else:
+            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = 1, member_limit = 999 WHERE seq <= 100 AND seq > 0")
+        
+        # Enrich queue table
+        for stmt in [
+            "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, zip_code TEXT, country TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
+            "CREATE INDEX IF NOT EXISTS idx_seq_pending ON store_enrich_queue(status)",
+        ]:
+            try:
+                authmod._exec(stmt)
+            except Exception:
+                pass
+        
+        _MIGRATED = True
+    except Exception:
+        pass  # Try again next request
+@app.before_request
+def _check_migration():
+    """Ensure schema is migrated before handling requests."""
+    _ensure_schema()
+
+
 @app.route("/login")
 def login_page():
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
