@@ -7,6 +7,8 @@ from functools import wraps
 from urllib.parse import quote, urlencode
 
 from flask import Flask, request, jsonify, session, redirect, send_from_directory
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 import shared.auth as authmod
 from shared.auth import (
@@ -483,7 +485,7 @@ _OAUTH_STATES = {}
 @app.route("/auth/google/redirect")
 def auth_google_redirect():
     """Redirect user to Google OAuth consent screen."""
-    redirect_uri = request.url_root.rstrip('/') + '/auth/google/callback'
+    redirect_uri = 'https://grocerlist.app/auth/google/callback'
     state = _secrets.token_hex(16)
     _OAUTH_STATES[state] = time.time()
     # Cleanup old states (>10 min)
@@ -517,7 +519,7 @@ def auth_google_callback():
         return '<h3>Login failed</h3><p>No authorization code received.</p><a href="/login">Try again</a>', 400
     
     # Exchange code for tokens
-    redirect_uri = request.url_root.rstrip('/') + '/auth/google/callback'
+    redirect_uri = 'https://grocerlist.app/auth/google/callback'
     token_data = json.loads(urlopen(Request(
         'https://oauth2.googleapis.com/token',
         data=('code=' + quote(code) + '&client_id=' + authmod.GOOGLE_CLIENT_ID +
