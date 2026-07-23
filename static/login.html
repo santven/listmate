@@ -13,18 +13,10 @@
     background: #f0f4ed; min-height: 100dvh; display: flex;
     align-items: center; justify-content: center;
   }
-  .card {
-    background: #fff; border-radius: 20px; padding: 40px 32px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center;
-    max-width: 380px; width: 90%;
-  }
-  .card h1 { font-size: 22px; margin-bottom: 6px; color: #2c5a2c; }
-  .card p { font-size: 14px; color: #888; margin-bottom: 28px; }
+  .card { background: #fff; border-radius: 20px; padding: 40px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; max-width: 380px; width: 90%; }
+  #subtitle { font-size: 14px; color: #888; margin-bottom: 28px; }
   #status { font-size: 14px; color: #888; margin: 12px 0; min-height: 24px; }
   #gsiContainer { display: flex; justify-content: center; margin-top: 16px; }
-  .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
-
-  /* Step 2 styles */
   .step { display: none; }
   .step.active { display: block; }
   .step h2 { font-size: 16px; margin-bottom: 8px; color: #2c5a2c; }
@@ -39,15 +31,8 @@
   .invite-banner { background: #e8f5e9; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
   .invite-banner .household { font-weight: 700; color: #2c5a2c; font-size: 16px; margin-bottom: 4px; }
   .invite-banner .desc { font-size: 13px; color: #555; }
-</style>
-
-<style>
-.ad-banner { width: 100%; max-width: 728px; height: 90px; margin: 20px auto 0; 
-  display: flex; align-items: center; justify-content: center; 
-  background: #f3f4f6; border-radius: 8px; color: #9ca3af; font-size: 12px; }
-.ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; 
-  height: 50px; background: #f3f4f6; display: flex; align-items: center; 
-  justify-content: center; z-index: 1000; color: #9ca3af; font-size: 11px; }
+  .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
+  .ad-banner { width: 100%; max-width: 728px; height: 90px; margin: 20px auto 0; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px; color: #9ca3af; font-size: 12px; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 </head>
@@ -56,14 +41,10 @@
   <h1>🛒 Listmate</h1>
   <p id="subtitle">Store-smart grocery lists for your household</p>
   <div id="error" class="error"></div>
-
-  <!-- Step 1: Google Sign-In -->
   <div id="step1" class="step active">
     <div id="status"></div>
     <div id="gsiContainer"></div>
   </div>
-
-  <!-- Step 2: Household setup (hidden until needs_signup) -->
   <div id="step2" class="step">
     <div id="inviteBanner" class="invite-banner" style="display:none">
       <div class="household" id="inviteHousehold"></div>
@@ -79,412 +60,120 @@
     <div class="error" id="step2Error"></div>
     <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
   </div>
-
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
 </div>
 
 <script>
-// ---- Google OAuth Client ID ----
-const CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
-const urlParams = new URLSearchParams(window.location.search);
-const inviteToken = urlParams.get('token');
-let googleCredential = null;
+var inviteToken = (new URLSearchParams(window.location.search)).get('token');
+var googleCredential = null;
 
-// ---- INIT ----
-function init() {
-  document.getElementById('status').textContent = '';
-  // Check for credential in hash (return from Google OAuth)
-  var hash = window.location.hash.substring(1);
-  var hashP = new URLSearchParams(hash);
-  var idToken = hashP.get('id_token');
+// Render the sign-in button immediately (server-side OAuth, works in all browsers)
+document.getElementById('gsiContainer').innerHTML =
+  '<a href="/auth/google/redirect" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043;box-shadow:0 1px 2px rgba(0,0,0,0.08)">' +
+    '<svg width="18" height="18" viewBox="0 0 48 48">' +
+      '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
+      '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
+      '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/>' +
+      '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
+    '</svg>' +
+    'Sign in with Google' +
+  '</a>';
+
+// Background: check for existing session
+try {
+  fetch('/api/auth/config').then(function(r) {
+    if (r.ok) r.json().then(function(c) { if (c.user) location.href = '/'; });
+  });
+} catch(e) {}
+
+// ---- AUTH CALLBACK (for redirect-based Google OAuth) ----
+// When Google redirects back, the credential may be in URL hash or search params
+(function() {
+  var hp = new URLSearchParams(window.location.hash.substring(1));
+  var idToken = hp.get('id_token');
   if (idToken) {
-    history.replaceState(null, '', window.location.pathname + window.location.search);
+    history.replaceState(null, '', location.pathname + location.search);
     onSignIn(idToken);
-    return;
   }
+})();
 
-  // Render Google sign-in button immediately
-  renderGoogleBtn();
-  
-  // Background: check server for existing session
-  try {
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, 10000);
-    fetch('/api/auth/config', { signal: ctrl.signal }).then(function(res) {
-      clearTimeout(t);
-      if (!res.ok) return;
-      res.json().then(function(cfg) {
-        if (cfg.user) { window.location.href = '/'; }
-      });
-    });
-  } catch(e) {}
-}
-
-// ---- GOOGLE BUTTON ----
-function renderGoogleBtn() {
-  var nonce = Math.random().toString(36).slice(2);
-  // Server-side OAuth redirect (stays in WebView, no browser escape)
-  var url = window.location.origin + '/auth/google/redirect';
-  document.getElementById('gsiContainer').innerHTML =
-    '<a href="' + url + '" id="googleBtn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043;box-shadow:0 1px 2px rgba(0,0,0,0.08)">' +
-      '<svg width="18" height="18" viewBox="0 0 48 48">' +
-        '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
-        '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
-        '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/>' +
-        '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
-      '</svg>' +
-      'Sign in with Google' +
-    '</a>';
-}
-
-// ---- AUTH CALLBACK ----
 async function onSignIn(credential) {
   googleCredential = credential;
-  var statusEl = document.getElementById('status');
-  var errorEl = document.getElementById('error');
-  statusEl.textContent = 'Signing in...';
-  errorEl.style.display = 'none';
-
+  var s = document.getElementById('status');
+  var e = document.getElementById('error');
+  s.textContent = 'Signing in...'; e.style.display = 'none';
   try {
-    var res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+    var r = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({credential: credential})
     });
-    var data = await res.json();
-
-    if (data.ok) {
-      if (inviteToken) {
-        try { await fetch('/api/auth/invite/' + inviteToken + '/accept', {method: 'POST'}); } catch(e) {}
-      }
-      window.location.href = '/';
-      return;
+    var d = await r.json();
+    if (d.ok) {
+      if (inviteToken) { try { await fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); } catch(e){} }
+      location.href = '/'; return;
     }
-
-    if (data.needs_signup) {
-      statusEl.textContent = '';
+    if (d.needs_signup) {
+      s.textContent = '';
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
-      if (inviteToken) { await showInviteBanner(); } else {
-        document.getElementById('createSection').style.display = 'block';
-        document.getElementById('btnAccept').style.display = 'none';
+      if (inviteToken) { showInviteBanner(); } else {
+        document.getElementById('createSection').style.display='block';
+        document.getElementById('btnAccept').style.display='none';
       }
       return;
     }
-    showError(data.error || ('Server error (' + res.status + ')'));
-  } catch(e) {
-    showError('Network error. Check connection and refresh.');
-  }
-}
-
-// ---- HELPERS ----
-async function showInviteBanner() {
-  try {
-    var r = await fetch('/api/auth/invite/' + inviteToken);
-    var inv = await r.json();
-    if (inv.valid) {
-      document.getElementById('inviteBanner').style.display = 'block';
-      document.getElementById('inviteHousehold').textContent = inv.household_name;
-      document.getElementById('inviteDesc').textContent = inv.email ? ('Invited as ' + inv.email) : 'You have been invited to join';
-      document.getElementById('createSection').style.display = 'none';
-      document.getElementById('btnAccept').style.display = 'block';
-      document.getElementById('subtitle').textContent = 'Accept your invitation';
-    } else { showStep2Error(inv.error || 'Invalid invite'); }
-  } catch(e) { showStep2Error('Could not verify invite'); }
-}
-
-async function acceptInvite() {
-  var btn = document.getElementById('btnAccept'); btn.disabled = true;
-  document.getElementById('step2Error').style.display = 'none';
-  try {
-    var res = await fetch('/api/auth/invite/' + inviteToken + '/accept', {method: 'POST'});
-    var data = await res.json();
-    if (data.ok) { window.location.href = '/'; } else { showStep2Error(data.error || 'Failed'); }
-  } catch(e) { showStep2Error('Network error'); }
-  btn.disabled = false;
-}
-
-async function createHousehold() {
-  var name = document.getElementById('householdName').value.trim();
-  if (!name) { showStep2Error('Enter a household name'); return; }
-  var btn = document.getElementById('btnCreate'); btn.disabled = true;
-  document.getElementById('step2Error').style.display = 'none';
-  try {
-    var res = await fetch('/api/auth/signup', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({household_name: name})
-    });
-    var data = await res.json();
-    if (data.ok) { window.location.href = '/'; } else { showStep2Error(data.error || 'Failed'); }
-  } catch(e) { showStep2Error('Network error'); }
-  btn.disabled = false;
-}
-
-function goToStep1() {
-  googleCredential = null;
-  document.getElementById('step2').classList.remove('active');
-  document.getElementById('step1').classList.add('active');
-  document.getElementById('householdName').value = '';
-  document.getElementById('step2Error').style.display = 'none';
-  document.getElementById('inviteBanner').style.display = 'none';
-  document.getElementById('createSection').style.display = 'block';
-  document.getElementById('btnAccept').style.display = 'none';
-  document.getElementById('subtitle').textContent = 'Store-smart grocery lists';
-}
-
-function showError(msg) {
-  var el = document.getElementById('error'); el.textContent = msg; el.style.display = 'block';
-}
-function showStep2Error(msg) {
-  var el = document.getElementById('step2Error'); el.textContent = msg; el.style.display = 'block';
-}
-
-init();
-</script>
-</head>
-<body>
-<div class="card">
-  <h1>🛒 Listmate</h1>
-  <p id="subtitle">Store-smart grocery lists for your household</p>
-  <div id="error" class="error"></div>
-
-  <!-- Step 1: Google Sign-In -->
-  <div id="step1" class="step active">
-    <div id="status"></div>
-    <div id="gsiContainer"></div>
-  </div>
-
-  <!-- Step 2: Household setup (hidden until needs_signup) -->
-  <div id="step2" class="step">
-    <div id="inviteBanner" class="invite-banner" style="display:none">
-      <div class="household" id="inviteHousehold"></div>
-      <div class="desc" id="inviteDesc"></div>
-    </div>
-    <div id="createSection">
-      <h2>Set up your household</h2>
-      <label for="householdName">Household Name</label>
-      <input type="text" id="householdName" placeholder="e.g. Raghav household" maxlength="60">
-      <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
-    </div>
-    <button class="btn" id="btnAccept" onclick="acceptInvite()" style="display:none">Accept Invitation</button>
-    <div class="error" id="step2Error"></div>
-    <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
-  </div>
-
-  <div class="privacy-note">🔒 Only members of your household can see your list.</div>
-</div>
-
-<script>
-let clientId = null;
-let googleCredential = null;
-
-const urlParams = new URLSearchParams(window.location.search);
-const inviteToken = urlParams.get('token');
-
-// Hardcoded Google OAuth Client ID — button renders instantly, no server needed
-const CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
-
-async function init() {
-  var status = document.getElementById('status');
-  
-  // Render the Google sign-in button IMMEDIATELY
-  clientId = CLIENT_ID;
-  renderGoogleBtn();
-  status.textContent = '';
-  
-  // Background: optional server check (session, fresh client ID)
-  try {
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, 10000);
-    var res = await fetch('/api/auth/config', { signal: ctrl.signal });
-    clearTimeout(t);
-    if (res.ok) {
-      var cfg = await res.json();
-      if (cfg.user) { window.location.href = '/'; return; }
-      if (cfg.client_id) { clientId = cfg.client_id; renderGoogleBtn(); }
-    }
-  } catch(e) { /* server unreachable — fallback works fine */ }
-
-  // (server check runs in background)
-
-  // Render Google Sign-In button — uses raw OAuth redirect (works everywhere,
-  // including older Android WebViews like the Pixel Slate)
-  function renderGoogleBtn() {
-    document.getElementById('gsiContainer').innerHTML = '';
-    const nonce = Math.random().toString(36).slice(2);
-    const oauthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-      'client_id=' + clientId +
-      '&redirect_uri=' + encodeURIComponent(window.location.origin + '/login') +
-      '&response_type=id_token' +
-      '&scope=openid%20email%20profile' +
-      '&nonce=' + nonce;
-    document.getElementById('gsiContainer').innerHTML =
-      '<a href="' + oauthUrl + '" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043;box-shadow:0 1px 2px rgba(0,0,0,0.08)">' +
-        '<svg width="18" height="18" viewBox="0 0 48 48">' +
-          '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
-          '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
-          '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/>' +
-          '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
-        '</svg>' +
-        'Sign in with Google' +
-      '</a>';
-  }
-  renderGoogleBtn();
-}
-
-async function onSignIn(response) {
-  googleCredential = response.credential;
-  const statusEl = document.getElementById('status');
-  const errorEl = document.getElementById('error');
-  statusEl.textContent = 'Signing in...';
-  errorEl.style.display = 'none';
-
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential })
-    });
-
-    const text = await res.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch(e) {}
-
-    if (data.ok) {
-      // If invite token present, accept it
-      if (inviteToken) {
-        try { await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' }); } catch(e) {}
-      }
-      window.location.href = '/';
-      return;
-    }
-
-    if (data.needs_signup) {
-      statusEl.textContent = '';
-      document.getElementById('step1').classList.remove('active');
-      document.getElementById('step2').classList.add('active');
-
-      if (inviteToken) {
-        await showInviteBanner();
-      } else {
-        document.getElementById('createSection').style.display = 'block';
-        document.getElementById('btnAccept').style.display = 'none';
-      }
-      return;
-    }
-
-    showError((data.error || text || 'Server error (' + res.status + ')'));
-  } catch(e) {
-    showError('Network error. Check connection and refresh.');
-  }
+    showError(d.error||('Server error ('+r.status+')'));
+  } catch(x) { showError('Network error. Refresh and try again.'); }
 }
 
 async function showInviteBanner() {
   try {
-    const r = await fetch('/api/auth/invite/' + inviteToken);
-    const inv = await r.json();
-    if (inv.valid) {
-      document.getElementById('inviteBanner').style.display = 'block';
-      document.getElementById('inviteHousehold').textContent = inv.household_name;
-      document.getElementById('inviteDesc').textContent = inv.email
-        ? 'You\'ve been invited as ' + inv.email
-        : 'You\'ve been invited to join this household';
-      document.getElementById('createSection').style.display = 'none';
-      document.getElementById('btnAccept').style.display = 'block';
-      document.getElementById('subtitle').textContent = 'Accept your invitation to join';
-    } else {
-      showStep2Error(inv.error || 'Invalid invite link');
-    }
-  } catch(e) {
-    showStep2Error('Could not verify invite.');
-  }
+    var r = await fetch('/api/auth/invite/'+inviteToken); var d = await r.json();
+    if (d.valid) {
+      document.getElementById('inviteBanner').style.display='block';
+      document.getElementById('inviteHousehold').textContent=d.household_name;
+      document.getElementById('inviteDesc').textContent=d.email?('Invited as '+d.email):'You have been invited to join';
+      document.getElementById('createSection').style.display='none';
+      document.getElementById('btnAccept').style.display='block';
+      document.getElementById('subtitle').textContent='Accept your invitation';
+    } else { showStep2Error(d.error||'Invalid invite'); }
+  } catch(e) { showStep2Error('Could not verify invite.'); }
 }
 
 async function acceptInvite() {
-  const btn = document.getElementById('btnAccept');
-  btn.disabled = true;
-  document.getElementById('step2Error').style.display = 'none';
-
-  try {
-    const res = await fetch('/api/auth/invite/' + inviteToken + '/accept', { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) {
-      window.location.href = '/';
-    } else {
-      showStep2Error(data.error || 'Could not accept invite.');
-    }
-  } catch(e) {
-    showStep2Error('Network error.');
-  }
-  btn.disabled = false;
+  var b=document.getElementById('btnAccept'); b.disabled=true;
+  document.getElementById('step2Error').style.display='none';
+  try { var r=await fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); var d=await r.json();
+    if(d.ok) location.href='/'; else showStep2Error(d.error||'Failed');
+  } catch(e) { showStep2Error('Network error.'); }
+  b.disabled=false;
 }
 
 async function createHousehold() {
-  const name = document.getElementById('householdName').value.trim();
-  if (!name) {
-    showStep2Error('Please enter a household name.');
-    return;
-  }
-  const btn = document.getElementById('btnCreate');
-  btn.disabled = true;
-  document.getElementById('step2Error').style.display = 'none';
-
-  try {
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ household_name: name })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      window.location.href = '/';
-    } else {
-      showStep2Error(data.error || 'Could not create household.');
-    }
-  } catch(e) {
-    showStep2Error('Network error.');
-  }
-  btn.disabled = false;
+  var n=document.getElementById('householdName').value.trim();
+  if(!n){showStep2Error('Enter a household name');return;}
+  var b=document.getElementById('btnCreate'); b.disabled=true;
+  document.getElementById('step2Error').style.display='none';
+  try { var r=await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})}); var d=await r.json();
+    if(d.ok) location.href='/'; else showStep2Error(d.error||'Failed');
+  } catch(e) { showStep2Error('Network error.'); }
+  b.disabled=false;
 }
 
 function goToStep1() {
-  googleCredential = null;
+  googleCredential=null;
   document.getElementById('step2').classList.remove('active');
   document.getElementById('step1').classList.add('active');
-  document.getElementById('householdName').value = '';
-  document.getElementById('step2Error').style.display = 'none';
-  document.getElementById('inviteBanner').style.display = 'none';
-  document.getElementById('createSection').style.display = 'block';
-  document.getElementById('btnAccept').style.display = 'none';
-  document.getElementById('subtitle').textContent = 'Store-smart grocery lists for your household';
+  document.getElementById('householdName').value='';
+  document.getElementById('step2Error').style.display='none';
+  document.getElementById('inviteBanner').style.display='none';
+  document.getElementById('createSection').style.display='block';
+  document.getElementById('btnAccept').style.display='none';
+  document.getElementById('subtitle').textContent='Store-smart grocery lists for your household';
 }
 
-function showError(msg) {
-  const el = document.getElementById('error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-function showStep2Error(msg) {
-  const el = document.getElementById('step2Error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-
-  // Handle credential from Google OAuth redirect (id_token in hash fragment)
-  const hash = window.location.hash.substring(1);  // Remove leading #
-  const hashParams = new URLSearchParams(hash);
-  const idToken = hashParams.get('id_token');
-  if (idToken) {
-    // Clean URL
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-    // Process the credential
-    onSignIn({ credential: idToken });
-    return;
-  }
-
-init();
+function showError(m){var e=document.getElementById('error');e.textContent=m;e.style.display='block';}
+function showStep2Error(m){var e=document.getElementById('step2Error');e.textContent=m;e.style.display='block';}
 </script>
 </body>
 </html>
