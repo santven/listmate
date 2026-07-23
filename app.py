@@ -509,6 +509,7 @@ def auth_google_redirect():
 @app.route("/auth/google/callback")
 def auth_google_callback():
     """Handle Google OAuth callback — exchange code for id_token, verify, set session."""
+    import sys, traceback
     from urllib.request import urlopen, Request
     from urllib.parse import quote
     
@@ -518,62 +519,73 @@ def auth_google_callback():
     if not code:
         return '<h3>Login failed</h3><p>No authorization code received.</p><a href="/login">Try again</a>', 400
     
-    # Exchange code for tokens
-    redirect_uri = 'https://grocerlist.app/auth/google/callback'
-    token_data = json.loads(urlopen(Request(
-        'https://oauth2.googleapis.com/token',
-        data=('code=' + quote(code) + '&client_id=' + authmod.GOOGLE_CLIENT_ID +
-              '&client_secret=' + os.environ.get('SSO_GOOGLE_CLIENT_SECRET', '') +
-              '&redirect_uri=' + quote(redirect_uri) +
-              '&grant_type=authorization_code').encode(),
-        headers={'Content-Type': 'application/x-www-form-urlencoded'}
-    ), timeout=10).read().decode())
-    
-    id_token_str = token_data.get('id_token', '')
-    if not id_token_str:
-        return '<h3>Login failed</h3><p>Could not get ID token.</p><a href="/login">Try again</a>', 500
-    
-    # Verify and process (same logic as auth_google)
     try:
+        # Exchange code for tokens
+        redirect_uri = 'https://grocerlist.app/auth/google/callback'
+        client_secret = os.environ.get('SSO_GOOGLE_CLIENT_SECRET', '')
+        token_url = 'https://oauth2.googleapis.com/token'
+        post_data = (
+            'code=' + quote(code) +
+            '&client_id=' + authmod.GOOGLE_CLIENT_ID +
+            '&client_secret=' + client_secret +
+            '&redirect_uri=' + quote(redirect_uri) +
+            '&grant_type=authorization_code'
+        )
+        token_resp = urlopen(Request(token_url, data=post_data.encode(),
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}), timeout=10).read().decode()
+        token_data = json.loads(token_resp)
+        
+        if 'error' in token_data:
+            return '<h3>Login failed</h3><p>Google error: ' + token_data.get('error_description', token_data['error']) + '</p><a href="/login">Try again</a>', 500
+        
+        id_token_str = token_data.get('id_token', '')
+        if not id_token_str:
+            return '<h3>Login failed</h3><p>No ID token received.</p><a href="/login">Try again</a>', 500
+        
+        # Verify id_token
         info = id_token.verify_oauth2_token(id_token_str, google_requests.Request(), authmod.GOOGLE_CLIENT_ID)
-    except Exception as e:
-        return f'<h3>Login failed</h3><p>Token verification error: {e}</p><a href="/login">Try again</a>', 401
+        email = info.get('email', '')
+        name = info.get('name', email.split('@')[0] if email else 'User')
+        
+        # Get or create user
+        authmod._init_schema()
+        user = authmod._one(
+            f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+        if not user:
+            user = authmod._one(
+                f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
+        
+        if not user:
+            authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                         (info['sub'], email, name))
+            user = authmod._one(
+                f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
+        
+        hh_id = user.get('household_id', 0) if user else 0
+        hh_name = ''
+        
+        if not hh_id:
+            hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+            if hh_count and hh_count.get('cnt', 0) == 0:
+                code_hh = _secrets.token_hex(4).upper()
+                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
+                hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+                hh_id = hh['id'] if hh else 1
+                hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
+                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user['id']))
+            else:
+                authmod._set(user['id'], email, name, 0, '')
+                return redirect('/login?needs_signup=1')
+        
+        if hh_id and not hh_name:
+            hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+            hh_name = hh.get('name', '') if hh else ''
+        
+        authmod._set(user['id'], email, name, hh_id, hh_name)
+        return redirect('/')
     
-    # Use the existing auth flow
-    email = info.get('email', '')
-    name = info.get('name', email.split('@')[0] if email else 'User')
-    
-    authmod._init_schema()
-    user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
-    if not user:
-        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
-    
-    if not user:
-        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                     (info['sub'], email, name))
-        user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
-    
-    hh_id = user.get('household_id', 0) if user else 0
-    hh_name = ''
-    
-    if not hh_id:
-        hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
-        if hh_count and hh_count.get('cnt', 0) == 0:
-            code_hh = _secrets.token_hex(4).upper()
-            authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
-            hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
-            hh_id = hh['id'] if hh else 1
-            hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
-            authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user['id']))
-        else:
-            authmod._set(user['id'], email, name, 0, '')
-            return redirect('/login?needs_signup=1')
-    
-    if hh_id and not hh_name:
-        hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
-        hh_name = hh.get('name', '') if hh else ''
-    
-    authmod._set(user['id'], email, name, hh_id, hh_name)
-    return redirect('/')
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        return '<h3>Login failed</h3><p>Server error: ' + str(exc) + '</p><a href="/login">Try again</a>', 500
 
 
