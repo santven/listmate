@@ -96,8 +96,14 @@ def _run_db_migrations():
     
     # Store enrich queue table
     try:
-        from db_pg import _init_schema as init_db
-        init_db()
+        for stmt in [
+            "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, zip_code TEXT, country TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
+            "CREATE INDEX IF NOT EXISTS idx_seq_pending ON store_enrich_queue(status)",
+        ]:
+            if is_pg:
+                authmod._exec(stmt)
+            else:
+                authmod._run(stmt)
     except Exception:
         pass
 
