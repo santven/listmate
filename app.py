@@ -575,14 +575,19 @@ def auth_google_callback():
                 authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user['id']))
             else:
                 authmod._set(user['id'], email, name, 0, '')
-                return redirect('/login?needs_signup=1')
+                return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+                        '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
+                        "<script>window.location.replace(\'/login?needs_signup=1\');</script></body></html>")
         
         if hh_id and not hh_name:
             hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
             hh_name = hh.get('name', '') if hh else ''
         
-        authmod._set(user['id'], email, name, hh_id, hh_name)
-        return redirect('/')
+        authmod._set(user["id"], email, name, hh_id, hh_name)
+        return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+                '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
+                '<h2>&#x1F44D; Signed in</h2><p>Loading...</p>' +
+                "<script>window.location.replace(\'/\');</script></body></html>")
     
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
