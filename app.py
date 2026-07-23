@@ -484,27 +484,30 @@ _OAUTH_STATES = {}
 
 @app.route("/auth/google/redirect")
 def auth_google_redirect():
-    """Redirect user to Google OAuth consent screen."""
+    """Return HTML page that redirects to Google OAuth via JS — avoids Capacitor interception."""
     redirect_uri = 'https://grocerlist.app/auth/google/callback'
     state = _secrets.token_hex(16)
     _OAUTH_STATES[state] = time.time()
-    # Cleanup old states (>10 min)
     now = time.time()
     for s in list(_OAUTH_STATES.keys()):
         if now - _OAUTH_STATES[s] > 600:
             del _OAUTH_STATES[s]
     
-    params = {
-        'client_id': authmod.GOOGLE_CLIENT_ID,
-        'redirect_uri': redirect_uri,
-        'response_type': 'code',
-        'scope': 'openid email profile',
-        'state': state,
-        'access_type': 'offline',
-    }
-    auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + '&'.join(f'{k}={_urlparse.quote(v, safe="")}' for k,v in params.items())
-    return redirect(auth_url)
-
+    auth_url = ('https://accounts.google.com/o/oauth2/v2/auth?'
+        'client_id=' + authmod.GOOGLE_CLIENT_ID +
+        '&redirect_uri=' + _urlparse.quote(redirect_uri, safe='') +
+        '&response_type=code' +
+        '&scope=openid%20email%20profile' +
+        '&state=' + state +
+        '&access_type=offline')
+    
+    # Return an HTML page that immediately redirects via JS
+    # This keeps the navigation inside the WebView
+    return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+            '<body style="text-align:center;font-family:sans-serif;padding-top:40px;color:#888">' +
+            '<p>Redirecting to Google Sign-In...</p>' +
+            '<script>window.location.replace("' + auth_url + '");</script>' +
+            '</body></html>')
 
 @app.route("/auth/google/callback")
 def auth_google_callback():
