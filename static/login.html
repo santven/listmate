@@ -122,11 +122,19 @@ async function init() {
       client_id: clientId,
       callback: onSignIn,
       auto_select: false,
+      ux_mode: 'popup',
     });
-    google.accounts.id.renderButton(
-      document.getElementById('gsiContainer'),
-      { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
-    );
+    // Fallback: if popup fails (WebView), try redirect
+    try {
+      google.accounts.id.renderButton(
+        document.getElementById('gsiContainer'),
+        { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
+      );
+    } catch(e) {
+      // WebView fallback — use redirect-based auth
+      const btn = document.getElementById('gsiContainer');
+      btn.innerHTML = '<button class="gsi-btn" onclick="location.href=\'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+encodeURIComponent(window.location.origin + \'/login\')+'&response_type=token&scope=email%20profile&nonce='+Math.random().toString(36).slice(2)+'\'" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;cursor:pointer;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043"><svg width="18" height="18"><circle cx="9" cy="9" r="8" fill="#fff" stroke="#dadce0"/></svg>Sign in with Google</button>';
+    }
   };
   document.head.appendChild(script);
 }
