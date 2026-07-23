@@ -90,33 +90,45 @@ let googleCredential = null;
 const urlParams = new URLSearchParams(window.location.search);
 const inviteToken = urlParams.get('token');
 
+// Google OAuth Client ID (also fetched from server for forward compat)
+const FALLBACK_CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
+
 async function init() {
   const status = document.getElementById('status');
+  // Render button immediately with fallback ID — server check happens in parallel
+  clientId = FALLBACK_CLIENT_ID;
+  renderGoogleBtn();
+  status.textContent = 'Connecting to server...';
 
-  // Warm up the server first — Render free tier sleeps after 15min
-  for (let i = 0; i < 3; i++) {
+  // Wake up Render (free tier sleeps after 15min idle — cold start ~15-30s)
+  // Try 5 times with increasingly longer waits
+  for (let i = 0; i < 5; i++) {
     try {
-      const res = await fetch('/api/auth/config');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000); // 15s per attempt
+      const res = await fetch('/api/auth/config', { signal: controller.signal });
+      clearTimeout(timeout);
       if (res.ok) {
         const cfg = await res.json();
         if (cfg.user) { window.location.href = '/'; return; }
-        clientId = cfg.client_id;
+        clientId = cfg.client_id || FALLBACK_CLIENT_ID;
+        status.textContent = '';
+        // Re-render with server-provided client ID
+        renderGoogleBtn();
         break;
       }
     } catch(e) {}
-    if (i < 2) await new Promise(r => setTimeout(r, 2000));
+    if (i < 4) {
+      status.textContent = 'Waking server... (' + (i+1) + '/5)';
+      await new Promise(r => setTimeout(r, 3000));
+    }
   }
-
-  if (!clientId) {
-    status.textContent = 'Server unavailable. Please refresh.';
-    return;
-  }
-
   status.textContent = '';
 
   // Render Google Sign-In button — uses raw OAuth redirect (works everywhere,
   // including older Android WebViews like the Pixel Slate)
   function renderGoogleBtn() {
+    document.getElementById('gsiContainer').innerHTML = '';
     const nonce = Math.random().toString(36).slice(2);
     const oauthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
       'client_id=' + clientId +
