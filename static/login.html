@@ -114,27 +114,24 @@ async function init() {
 
   status.textContent = '';
 
-  // Load Google Sign-In
+  // Load Google Sign-In with WebView support
   const script = document.createElement('script');
   script.src = 'https://accounts.google.com/gsi/client';
   script.onload = () => {
+    // Detect if we're in an environment where popups may be blocked
+    // (Android WebView, in-app browsers, older tablets like Pixel Slate)
     google.accounts.id.initialize({
       client_id: clientId,
       callback: onSignIn,
       auto_select: false,
-      ux_mode: 'popup',
+      ux_mode: 'redirect',
+      login_uri: window.location.origin + '/login',
     });
-    // Fallback: if popup fails (WebView), try redirect
-    try {
-      google.accounts.id.renderButton(
-        document.getElementById('gsiContainer'),
-        { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
-      );
-    } catch(e) {
-      // WebView fallback — use redirect-based auth
-      const btn = document.getElementById('gsiContainer');
-      btn.innerHTML = '<button class="gsi-btn" onclick="location.href=\'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+encodeURIComponent(window.location.origin + \'/login\')+'&response_type=token&scope=email%20profile&nonce='+Math.random().toString(36).slice(2)+'\'" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;cursor:pointer;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043"><svg width="18" height="18"><circle cx="9" cy="9" r="8" fill="#fff" stroke="#dadce0"/></svg>Sign in with Google</button>';
-    }
+    
+    google.accounts.id.renderButton(
+      document.getElementById('gsiContainer'),
+      { theme: 'outline', size: 'large', width: '280', text: 'signin_with' }
+    );
   };
   document.head.appendChild(script);
 }
@@ -277,6 +274,18 @@ function showStep2Error(msg) {
   el.textContent = msg;
   el.style.display = 'block';
 }
+
+
+  // Handle credential from Google redirect (WebView/tablet compatible)
+  const params = new URLSearchParams(window.location.search);
+  const credFromUrl = params.get('credential');
+  if (credFromUrl) {
+    // Clean URL
+    history.replaceState(null, '', window.location.pathname);
+    // Process the credential
+    onSignIn({ credential: credFromUrl });
+    return;
+  }
 
 init();
 </script>
