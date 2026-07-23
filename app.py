@@ -53,6 +53,57 @@ def _hh():
 
 # ── Pages ───────────────────────────────────────────────────
 
+# ── DB Migration (idempotent — runs once on startup) ────────────────────
+def _run_db_migrations():
+    """Add new columns if they don't exist yet. Run once per deploy."""
+    authmod._init_schema()
+    
+    cols_pg = {
+        "zip_code": "TEXT DEFAULT ''",
+        "country": "TEXT DEFAULT ''",
+        "dietary_restrictions": "TEXT DEFAULT ''",
+        "seq": "INTEGER NOT NULL DEFAULT 0",
+        "is_premium": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "member_limit": "INTEGER NOT NULL DEFAULT 2",
+    }
+    cols_sqlite = {
+        "zip_code": "TEXT DEFAULT ''",
+        "country": "TEXT DEFAULT ''",
+        "dietary_restrictions": "TEXT DEFAULT ''",
+        "seq": "INTEGER NOT NULL DEFAULT 0",
+        "is_premium": "INTEGER NOT NULL DEFAULT 0",
+        "member_limit": "INTEGER NOT NULL DEFAULT 2",
+    }
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    cols = cols_pg if is_pg else cols_sqlite
+    
+    for col, col_type in cols.items():
+        try:
+            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # Column already exists
+    
+    # Backfill seq and premium for existing households
+    try:
+        if is_pg:
+            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = TRUE, member_limit = 999 WHERE seq <= 100 AND seq > 0")
+        else:
+            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = 1, member_limit = 999 WHERE seq <= 100 AND seq > 0")
+    except Exception:
+        pass
+    
+    # Store enrich queue table
+    try:
+        from db_pg import _init_schema as init_db
+        init_db()
+    except Exception:
+        pass
+
+_run_db_migrations()
+
+
 @app.route("/login")
 def login_page():
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
@@ -83,7 +134,7 @@ def save_location():
         return jsonify({"error": "No household"}), 400
 
     fields = {}
-    for f in ("zip_code", "country", "dietary_restrictions"):
+    for f in ("zip_code", "country"):
         val = (data.get(f) or "").strip()
         if val:
             fields[f] = val
