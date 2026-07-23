@@ -136,30 +136,6 @@ if USE_PG:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
-        # Migration: add premium + location columns to auth_households (idempotent)
-        for col, coldef in [
-            ("seq", "INTEGER NOT NULL DEFAULT 0"),
-            ("zip_code", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
-            ("dietary_restrictions", "TEXT DEFAULT ''"),
-            ("dietary_restrictions", "TEXT DEFAULT ''"),
-            ("is_premium", "BOOLEAN NOT NULL DEFAULT FALSE"),
-            ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
-        ]:
-            try:
-                _run(f"ALTER TABLE {_HH} ADD COLUMN {col} {coldef}")
-            except Exception:
-                pass
-        # Backfill seq for existing households where seq = 0 (first-time migration)
-        try:
-            _run(f"UPDATE {_HH} SET seq = id WHERE seq = 0")
-        except Exception:
-            pass
-        # First 100 households get premium
-        try:
-            _run(f"UPDATE {_HH} SET is_premium = TRUE, member_limit = 999 WHERE seq <= 100")
-        except Exception:
-            pass
         _schema_done = True
 
 else:
@@ -229,28 +205,6 @@ else:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
-        # Migration: add premium + location columns to auth_households (idempotent)
-        for col, coldef in [
-            ("seq", "INTEGER NOT NULL DEFAULT 0"),
-            ("zip_code", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
-            ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
-            ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
-        ]:
-            try:
-                _run(f"ALTER TABLE {_HH} ADD COLUMN {col} {coldef}")
-            except Exception:
-                pass
-        # Backfill seq for existing households where seq = 0
-        try:
-            _run(f"UPDATE {_HH} SET seq = id WHERE seq = 0")
-        except Exception:
-            pass
-        # First 100 households get premium
-        try:
-            _run(f"UPDATE {_HH} SET is_premium = 1, member_limit = 999 WHERE seq <= 100")
-        except Exception:
-            pass
         _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -337,12 +291,7 @@ def register_auth_routes(app):
                     # First user on a fresh system — create household
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    max_seq = _one(f"SELECT COALESCE(MAX(seq), 0) as n FROM {_HH}")
-                    new_seq = int(max_seq.get('n', 0)) + 1
-                    is_premium = new_seq <= 100
-                    member_limit = 999 if is_premium else 2
-                    _exec(f"INSERT INTO {_HH} (name, invite_code, seq, is_premium, member_limit) VALUES (?,?,?,?,?)",
-                          ("Root Household", code, new_seq, is_premium, member_limit))
+                    _exec(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -420,18 +369,10 @@ def register_auth_routes(app):
         
         import secrets
         code = secrets.token_hex(4).upper()
-        # Get next seq number
-        max_seq = _one(f"SELECT COALESCE(MAX(seq), 0) as n FROM {_HH}")
-        new_seq = int(max_seq.get('n', 0)) + 1
-        is_premium = new_seq <= 100
-        member_limit = 999 if is_premium else 2
-        hhid = _insert(
-            f"INSERT INTO {_HH} (name, invite_code, seq, is_premium, member_limit) VALUES (?,?,?,?,?)",
-            (hname, code, new_seq, is_premium, member_limit))
+        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", (hname, code))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
-        return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code,
-                        "is_premium": is_premium, "member_limit": member_limit})
+        return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
 
     @app.route("/api/auth/household")
     @require_user
@@ -549,15 +490,6 @@ def register_auth_routes(app):
 
         if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
             return jsonify({"error": "This invite is for a different email address"}), 403
-
-        # Check member limit
-        hhrow = _one(f"SELECT * FROM {_HH} WHERE id = ?", (invite["household_id"],))
-        if hhrow:
-            count = _one(f"SELECT COUNT(*) as cnt FROM {_USERS} WHERE household_id = ?", (invite["household_id"],))
-            member_count = int(count.get('cnt', 0))
-            member_limit = int(hhrow.get('member_limit', 2))
-            if member_count >= member_limit:
-                return jsonify({"error": "Household member limit reached. Upgrade to Premium to add more members."}), 403
 
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
         import datetime as _dt2

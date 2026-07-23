@@ -53,117 +53,6 @@ def _hh():
 
 # ── Pages ───────────────────────────────────────────────────
 
-# ── DB Migration (idempotent — runs once on startup) ────────────────────
-def _run_db_migrations():
-    """Add new columns if they don't exist yet. Run once per deploy."""
-    authmod._init_schema()
-    
-    cols_pg = {
-        "zip_code": "TEXT DEFAULT ''",
-        "country": "TEXT DEFAULT ''",
-        "dietary_restrictions": "TEXT DEFAULT ''",
-        "seq": "INTEGER NOT NULL DEFAULT 0",
-        "is_premium": "BOOLEAN NOT NULL DEFAULT FALSE",
-        "member_limit": "INTEGER NOT NULL DEFAULT 2",
-    }
-    cols_sqlite = {
-        "zip_code": "TEXT DEFAULT ''",
-        "country": "TEXT DEFAULT ''",
-        "dietary_restrictions": "TEXT DEFAULT ''",
-        "seq": "INTEGER NOT NULL DEFAULT 0",
-        "is_premium": "INTEGER NOT NULL DEFAULT 0",
-        "member_limit": "INTEGER NOT NULL DEFAULT 2",
-    }
-    is_pg = bool(os.environ.get("DATABASE_URL"))
-    cols = cols_pg if is_pg else cols_sqlite
-    
-    for col, col_type in cols.items():
-        try:
-            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {col_type}")
-        except Exception:
-            pass  # Column already exists
-    
-    # Backfill seq and premium for existing households
-    try:
-        if is_pg:
-            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = TRUE, member_limit = 999 WHERE seq <= 100 AND seq > 0")
-        else:
-            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = 1, member_limit = 999 WHERE seq <= 100 AND seq > 0")
-    except Exception:
-        pass
-    
-    # Store enrich queue table
-    try:
-        for stmt in [
-            "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, zip_code TEXT, country TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
-            "CREATE INDEX IF NOT EXISTS idx_seq_pending ON store_enrich_queue(status)",
-        ]:
-            if is_pg:
-                authmod._exec(stmt)
-            else:
-                authmod._run(stmt)
-    except Exception:
-        pass
-
-_run_db_migrations()
-
-
-# ── Migration helper (runs once per worker, idempotent) ────────────────
-_MIGRATED = False
-
-def _ensure_schema():
-    """Add new columns + backfill seq/premium. Idempotent — safe to call repeatedly."""
-    global _MIGRATED
-    if _MIGRATED:
-        return
-    try:
-        authmod._init_schema()
-        is_pg = bool(os.environ.get("DATABASE_URL"))
-        
-        # Add columns (idempotent)
-        cols = [
-            ("zip_code", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
-            ("dietary_restrictions", "TEXT DEFAULT ''"),
-            ("seq", "INTEGER NOT NULL DEFAULT 0"),
-            ("is_premium", "BOOLEAN NOT NULL DEFAULT FALSE" if is_pg else "INTEGER NOT NULL DEFAULT 0"),
-            ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
-        ]
-        for col, ct in cols:
-            try:
-                authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ct}")
-            except Exception:
-                pass
-        
-        # Backfill
-        if is_pg:
-            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = TRUE, member_limit = 999 WHERE seq <= 100 AND seq > 0")
-        else:
-            authmod._run(f"UPDATE {authmod._HH} SET seq = id WHERE seq = 0")
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = 1, member_limit = 999 WHERE seq <= 100 AND seq > 0")
-        
-        # Enrich queue table
-        for stmt in [
-            "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, zip_code TEXT, country TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
-            "CREATE INDEX IF NOT EXISTS idx_seq_pending ON store_enrich_queue(status)",
-        ]:
-            try:
-                authmod._exec(stmt)
-            except Exception:
-                pass
-        
-        _MIGRATED = True
-    except Exception:
-        pass  # Try again next request
-@app.before_request
-def _check_migration():
-    """Ensure schema is migrated before handling requests."""
-    _ensure_schema()
-
-
 @app.route("/login")
 def login_page():
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
@@ -182,37 +71,6 @@ def privacy_page():
 @require_user
 def settings_page():
     return send_from_directory("static", "settings.html")
-
-
-@app.route("/api/settings/location", methods=["POST"])
-@require_user
-def save_location():
-    """Save household location for store enrichment (Premium feature)."""
-    data = request.get_json(silent=True) or {}
-    hhid = _hh()
-    if not hhid:
-        return jsonify({"error": "No household"}), 400
-
-    fields = {}
-    for f in ("zip_code", "country"):
-        val = (data.get(f) or "").strip()
-        if val:
-            fields[f] = val
-
-    if not fields:
-        return jsonify({"error": "No location fields provided"}), 400
-
-    authmod._init_schema()
-    set_parts = ", ".join(f"{k} = ?" for k in fields)
-    vals = list(fields.values())
-    vals.append(hhid)
-    try:
-        authmod._exec(f"UPDATE {authmod._HH} SET {set_parts} WHERE id = ?", tuple(vals))
-    except Exception:
-        # Fallback for SQLite
-        for k, v in fields.items():
-            authmod._run(f"UPDATE {authmod._HH} SET {k} = ? WHERE id = ?", (v, hhid))
-    return jsonify({"ok": True, "saved": list(fields.keys())})
 
 
 @app.route("/api/health")
@@ -275,58 +133,9 @@ def add_store():
             (_hh(), name),
         )
         db.commit()
-        # Get store id for enrichment
-        store = db.execute(
-            "SELECT id FROM stores WHERE household_id = ? AND name = ?",
-            (_hh(), name),
-        ).fetchone()
-        store_id = store["id"] if store else None
     finally:
         db.close()
-
-    # Enqueue for store enrichment if premium and household has city
-    if store_id:
-        try:
-            authmod._init_schema()
-            hh = authmod._one(
-                f"SELECT is_premium, city, state, country, zip_code FROM {authmod._HH} WHERE id = ?",
-                (_hh(),))
-            if hh:
-                is_premium = bool(hh.get("is_premium"))
-                if is_premium and (hh.get("city") or "").strip():
-                    db2 = get_db()
-                    try:
-                        db2.execute(
-                            "INSERT INTO store_enrich_queue (store_id, household_id, city, state, country, zip_code) VALUES (?, ?, ?, ?, ?, ?)",
-                            (store_id, _hh(), hh.get("city"), hh.get("state"), hh.get("country"), hh.get("zip_code")),
-                        )
-                        db2.commit()
-                    finally:
-                        db2.close()
-        except Exception:
-            import traceback; traceback.print_exc()
-
     return jsonify({"ok": True})
-
-@app.route("/api/settings/dietary", methods=["GET", "POST"])
-@require_user
-def dietary_settings():
-    """Get or set household dietary restrictions."""
-    hhid = _hh()
-    if not hhid:
-        return jsonify({"error": "No household"}), 400
-    authmod._init_schema()
-    
-    if request.method == "GET":
-        hh = authmod._one(f"SELECT dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
-        val = (hh.get("dietary_restrictions") or "") if hh else ""
-        return jsonify({"dietary_restrictions": val})
-    
-    data = request.get_json(silent=True) or {}
-    restrictions = (data.get("dietary_restrictions") or "").strip()
-    authmod._run(f"UPDATE {authmod._HH} SET dietary_restrictions = ? WHERE id = ?", (restrictions, hhid))
-    return jsonify({"ok": True, "dietary_restrictions": restrictions})
-
 
 
 # ── store items (household-scoped) ──
@@ -696,7 +505,8 @@ def auth_google_redirect():
     # This keeps the navigation inside the WebView
     return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
             '<body style="text-align:center;font-family:sans-serif;padding-top:40px;color:#888">' +
-            '<script>location.replace("' + auth_url + '");</script>' +
+            '<p>Redirecting to Google Sign-In...</p>' +
+            '<script>window.location.replace("' + auth_url + '");</script>' +
             '</body></html>')
 
 @app.route("/auth/google/callback")
@@ -761,13 +571,7 @@ def auth_google_callback():
             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
             if hh_count and hh_count.get('cnt', 0) == 0:
                 code_hh = _secrets.token_hex(4).upper()
-                max_seq = authmod._one(f"SELECT COALESCE(MAX(seq), 0) as n FROM {authmod._HH}")
-                new_seq = int(max_seq.get('n', 0)) + 1
-                is_premium = new_seq <= 100
-                member_limit = 999 if is_premium else 2
-                authmod._exec(
-                    f"INSERT INTO {authmod._HH} (name, invite_code, seq, is_premium, member_limit) VALUES (?,?,?,?,?)",
-                    ("Root Household", code_hh, new_seq, is_premium, member_limit))
+                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh['id'] if hh else 1
                 hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
@@ -783,11 +587,10 @@ def auth_google_callback():
             hh_name = hh.get('name', '') if hh else ''
         
         authmod._set(user["id"], email, name, hh_id, hh_name)
-        return ('<!DOCTYPE html><html><head>'
-    '<meta http-equiv="refresh" content="0;url=/">'
-    '</head><body style="display:none">'
-    '<script>location.replace("/");</script>'
-    '</body></html>')
+        return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+                '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
+                '<h2>&#x1F44D; Signed in</h2><p>Loading...</p>' +
+                "<script>window.location.replace(\'/\');</script></body></html>")
     
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)

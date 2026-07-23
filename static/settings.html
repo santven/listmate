@@ -33,22 +33,12 @@
   .add-member button { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .add-member button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .form-group { margin-bottom: 12px; }
-  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .form-group input { width: 100%; padding: 10px 12px; font-size: 14px; border: 1.5px solid var(--border); border-radius: 8px; outline: none; }
-  .form-group input:focus { border-color: var(--green); }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-  .btn-save { display: block; width: 100%; padding: 12px; background: var(--green); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
-  .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-logout { display: block; width: 100%; padding: 12px; background: #fff; border: 1.5px solid #d94a4a; color: #d94a4a; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
   .btn-back { display: block; padding: 12px; text-align: center; color: var(--green); font-size: 14px; text-decoration: none; }
 
   .error { color: #d94a4a; font-size: 12px; margin-top: 6px; display: none; }
   .success { color: #3a7a4a; font-size: 12px; margin-top: 6px; display: none; }
   .you-badge { font-size: 10px; color: var(--green); font-weight: 600; margin-left: 4px; }
-  .premium-badge { font-size: 11px; color: #b8860b; background: #fff8e1; padding: 2px 8px; border-radius: 6px; display: inline-block; margin-top: 4px; }
-  .note { font-size: 11px; color: var(--muted); font-style: italic; margin-bottom: 12px; }
 </style>
 </head>
 <body>
@@ -60,41 +50,6 @@
   <div class="card">
     <h2 id="householdTitle">Household</h2>
     <p id="householdDesc"></p>
-  </div>
-
-  <div class="card">
-    <h2>📍 Your Location</h2>
-    <p class="note">Helps auto-populate store items (Premium feature). Only ZIP and country are collected.</p>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="locZip">ZIP / Postal Code</label>
-        <input type="text" id="locZip" placeholder="e.g. 60601">
-      </div>
-      <div class="form-group">
-        <label for="locCountry">Country</label>
-        <input type="text" id="locCountry" placeholder="e.g. USA">
-      </div>
-    </div>
-    <button class="btn-save" id="btnSaveLocation" onclick="saveLocation()">Save Location</button>
-    <div class="success" id="locSuccess"></div>
-    <div class="error" id="locError"></div>
-    <h2 style="margin-top:24px">🥗 Dietary Restrictions</h2>
-    <p class="note">Helps filter store items to match your household preferences.</p>
-    <div id="dietaryCheckboxes" style="text-align:left; margin-top:12px">
-      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
-        <input type="checkbox" value="vegetarian" onchange="saveDietary()"> Vegetarian
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
-        <input type="checkbox" value="vegan" onchange="saveDietary()"> Vegan
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
-        <input type="checkbox" value="gluten_free" onchange="saveDietary()"> Gluten-Free
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:15px">
-        <input type="checkbox" value="halal" onchange="saveDietary()"> Halal
-      </label>
-    </div>
-    <div class="success" id="dietarySuccess"></div>
   </div>
 
   <div class="card">
@@ -169,47 +124,9 @@ async function loadHousehold() {
     if (householdData.is_owner) {
       document.getElementById('addMemberSection').style.display = 'block';
     }
-
-    loadDietary();
-      // Populate location fields
-    if (hh) {
-      document.getElementById('locCountry').value = hh.country || '';
-      document.getElementById('locZip').value = hh.zip_code || '';
-    }
   } catch(e) {
     document.getElementById('memberList').textContent = 'Error loading household.';
   }
-}
-
-async function saveLocation() {
-  document.getElementById('locError').style.display = 'none';
-  document.getElementById('locSuccess').style.display = 'none';
-
-  const data = {
-    zip_code: document.getElementById('locZip').value.trim(),
-    country: document.getElementById('locCountry').value.trim(),
-  };
-
-  document.getElementById('btnSaveLocation').disabled = true;
-  try {
-    const res = await fetch('/api/settings/location', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    const r = await res.json();
-    if (r.ok) {
-      document.getElementById('locSuccess').style.display = 'block';
-      document.getElementById('locSuccess').textContent = '✅ Location saved! Store enrichment is now active.';
-    } else {
-      document.getElementById('locError').style.display = 'block';
-      document.getElementById('locError').textContent = r.error || 'Save failed.';
-    }
-  } catch(e) {
-    document.getElementById('locError').style.display = 'block';
-    document.getElementById('locError').textContent = 'Network error.';
-  }
-  document.getElementById('btnSaveLocation').disabled = false;
 }
 
 async function addMember() {
@@ -258,35 +175,6 @@ async function logout() {
 
 async function removeInvite(token) {
   await fetch('/api/auth/household/invites/' + token, { method: 'DELETE' });
-
-// ---- Dietary Restrictions ----
-async function loadDietary() {
-  try {
-    const r = await fetch('/api/settings/dietary');
-    const d = await r.json();
-    const vals = (d.dietary_restrictions || '').split(',').filter(Boolean);
-    document.querySelectorAll('#dietaryCheckboxes input').forEach(cb => {
-      cb.checked = vals.includes(cb.value);
-    });
-  } catch(e) {}
-}
-
-async function saveDietary() {
-  const checked = [];
-  document.querySelectorAll('#dietaryCheckboxes input:checked').forEach(cb => checked.push(cb.value));
-  try {
-    const r = await fetch('/api/settings/dietary', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({dietary_restrictions: checked.join(',')})
-    });
-    if (r.ok) {
-      document.getElementById('dietarySuccess').textContent = '✓ Saved';
-      setTimeout(() => document.getElementById('dietarySuccess').textContent = '', 2000);
-    }
-  } catch(e) {}
-}
-
-// Call loadDietary in the existing loadSettings
   loadHousehold();
 }
 </script>
