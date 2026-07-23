@@ -16,7 +16,7 @@
   .card { background: #fff; border-radius: 20px; padding: 40px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; max-width: 380px; width: 90%; }
   #subtitle { font-size: 14px; color: #888; margin-bottom: 28px; }
   #status { font-size: 14px; color: #888; margin: 12px 0; min-height: 24px; }
-  #gsiContainer { display: flex; justify-content: center; margin-top: 16px; }
+  #gsiContainer { display: flex; justify-content: center; margin-top: 16px; min-height: 44px; }
   .step { display: none; }
   .step.active { display: block; }
   .step h2 { font-size: 16px; margin-bottom: 8px; color: #2c5a2c; }
@@ -32,9 +32,8 @@
   .invite-banner .household { font-weight: 700; color: #2c5a2c; font-size: 16px; margin-bottom: 4px; }
   .invite-banner .desc { font-size: 13px; color: #555; }
   .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
-  .ad-banner { width: 100%; max-width: 728px; height: 90px; margin: 20px auto 0; display: flex; align-items: center; justify-content: center; background: #f3f4f6; border-radius: 8px; color: #9ca3af; font-size: 12px; }
 </style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="card">
@@ -43,7 +42,7 @@
   <div id="error" class="error"></div>
   <div id="step1" class="step active">
     <div id="status"></div>
-    <div id="gsiContainer"></div>
+    <div id="gsiContainer"><span style="color:#888;font-size:13px">Loading sign-in button...</span></div>
   </div>
   <div id="step2" class="step">
     <div id="inviteBanner" class="invite-banner" style="display:none">
@@ -60,61 +59,80 @@
     <div class="error" id="step2Error"></div>
     <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
   </div>
+  
+  <div id="fallbackLink" style="display:none; margin-top: 12px;">
+    <a href="/auth/google/redirect" style="display:inline-block;padding:12px 24px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;color:#3c4043;font-weight:500">Sign in with Google</a>
+  </div>
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
 </div>
 
 <script>
+var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
 var inviteToken = (new URLSearchParams(window.location.search)).get('token');
 var googleCredential = null;
 
-// Server-side OAuth — keeps auth flow inside WebView (no Chrome escape)
-// allowNavigation: ["accounts.google.com"] is in the AAB config
-var googleBtnUrl = '/auth/google/redirect';
-document.getElementById('gsiContainer').innerHTML =
-  '<a id="googleBtn" href="' + googleBtnUrl + '" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043;box-shadow:0 1px 2px rgba(0,0,0,0.08)">' +
-    '<svg width="18" height="18" viewBox="0 0 48 48">' +
-      '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
-      '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
-      '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/>' +
-      '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
-    '</svg>' +
-    'Sign in with Google' +
-  '</a>';
-
-// Background: check for existing session
-try {
-  fetch('/api/auth/config').then(function(r) {
-    if (r.ok) r.json().then(function(c) { if (c.user) location.href = '/'; });
-  });
-} catch(e) {}
-
-// ---- AUTH CALLBACK (for redirect-based Google OAuth) ----
-// When Google redirects back, the credential may be in URL hash or search params
-(function() {
-  var hp = new URLSearchParams(window.location.hash.substring(1));
-  var idToken = hp.get('id_token');
-  if (idToken) {
-    history.replaceState(null, '', location.pathname + location.search);
-    onSignIn(idToken);
+// ---- Google Sign-In via GSI popup (stays in WebView, no navigation) ----
+function onGoogleLibraryLoad() {
+  try {
+    google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: handleCredential,
+      ux_mode: 'popup',
+      use_fedcm_for_button: false
+    });
+    google.accounts.id.renderButton(
+      document.getElementById('gsiContainer'),
+      { theme: 'outline', size: 'large', text: 'signin_with', width: 280 }
+    );
+    document.getElementById('status').textContent = '';
+  } catch(e) {
+    document.getElementById('gsiContainer').innerHTML = '<p style="color:#d94a4a">Sign-in unavailable. Please try reinstalling the app.</p>';
+    console.error('GSI init error:', e);
   }
-})();
+}
 
-async function onSignIn(credential) {
-  googleCredential = credential;
+// GSI loads async — wait for it
+if (window.google && google.accounts) {
+  onGoogleLibraryLoad();
+} else {
+  window.onload = function() {
+    // Keep checking for GSI library
+    var tries = 0;
+    var check = setInterval(function() {
+      if (tries === 15) {
+        // Show fallback after 3 seconds if GSI hasn't loaded
+        document.getElementById('fallbackLink').style.display = 'block';
+        document.getElementById('gsiContainer').style.display = 'none';
+      }
+      tries++;
+      if (window.google && google.accounts) {
+        clearInterval(check);
+        onGoogleLibraryLoad();
+      } else if (tries > 30) {
+        clearInterval(check);
+        document.getElementById('gsiContainer').innerHTML = '<p style="color:#d94a4a">Could not load sign-in. Check your connection.</p>';
+      }
+    }, 200);
+  };
+}
+
+function handleCredential(response) {
+  googleCredential = response.credential;
   var s = document.getElementById('status');
   var e = document.getElementById('error');
   s.textContent = 'Signing in...'; e.style.display = 'none';
-  try {
-    var r = await fetch('/api/auth/login', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({credential: credential})
-    });
-    var d = await r.json();
-    if (d.ok) {
-      if (inviteToken) { try { await fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); } catch(e){} }
-      location.href = '/'; return;
+  
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({credential: response.credential})
+  }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
+  .then(function(r) {
+    if (r.data.ok) {
+      if (inviteToken) { fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); }
+      window.location.replace('/'); return;
     }
-    if (d.needs_signup) {
+    if (r.data.needs_signup) {
       s.textContent = '';
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
@@ -124,9 +142,26 @@ async function onSignIn(credential) {
       }
       return;
     }
-    showError(d.error||('Server error ('+r.status+')'));
-  } catch(x) { showError('Network error. Refresh and try again.'); }
+    showError(r.data.error||('Server error ('+r.status+')'));
+  }).catch(function() { showError('Network error. Refresh and try again.'); });
 }
+
+// Also handle id_token from redirect fallback
+(function() {
+  var hp = new URLSearchParams(window.location.hash.substring(1));
+  var idToken = hp.get('id_token');
+  if (idToken) {
+    history.replaceState(null, '', location.pathname + location.search);
+    handleCredential({credential: idToken});
+  }
+})();
+
+// Background session check
+try {
+  fetch('/api/auth/config').then(function(r) {
+    if (r.ok) r.json().then(function(c) { if (c.user) location.replace('/'); });
+  });
+} catch(e) {}
 
 async function showInviteBanner() {
   try {
