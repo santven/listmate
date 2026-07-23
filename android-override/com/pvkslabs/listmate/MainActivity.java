@@ -1,4 +1,4 @@
-package app.grocerlist.app;
+package com.pvkslabs.listmate;
 
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -22,10 +22,8 @@ public class MainActivity extends BridgeActivity {
                     host.equals("accounts.google.com") ||
                     host.equals("oauth2.googleapis.com")
                 )) {
-                    // Keep in WebView — don't hand off to system browser
                     return false;
                 }
-                // Delegate to original Capacitor handler
                 if (original != null) {
                     return original.shouldOverrideUrlLoading(view, url);
                 }

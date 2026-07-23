@@ -32,7 +32,9 @@ jobs:
           npx cap sync android
 
       - name: Copy custom MainActivity (WebView URL override)
-        run: cp android-override/app/src/main/java/app/grocerlist/app/MainActivity.java android/app/src/main/java/app/grocerlist/app/MainActivity.java
+        run: |
+          mkdir -p android/app/src/main/java/com/pvkslabs/listmate
+          cp android-override/com/pvkslabs/listmate/MainActivity.java android/app/src/main/java/com/pvkslabs/listmate/MainActivity.java
 
       - name: Inject AdMob App ID & AD_ID permission
         run: |
