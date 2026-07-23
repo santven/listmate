@@ -31,6 +31,16 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Copy app icons (replace Capacitor defaults)
+        run: |
+          for dir in icon-override/mipmap-*; do
+            folder=$(basename $dir)
+            cp $dir/ic_launcher.png android/app/src/main/res/$folder/ic_launcher.png
+            cp $dir/ic_launcher_round.png android/app/src/main/res/$folder/ic_launcher_round.png
+            cp $dir/ic_launcher_foreground.png android/app/src/main/res/$folder/ic_launcher_foreground.png
+          done
+          echo "Icons replaced"
+
       - name: Copy custom MainActivity (WebView URL override)
         run: |
           mkdir -p android/app/src/main/java/com/pvkslabs/listmate
