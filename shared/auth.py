@@ -139,10 +139,8 @@ if USE_PG:
         # Migration: add premium + location columns to auth_households (idempotent)
         for col, coldef in [
             ("seq", "INTEGER NOT NULL DEFAULT 0"),
-            ("city", "TEXT DEFAULT ''"),
-            ("state", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
             ("zip_code", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
             ("is_premium", "BOOLEAN NOT NULL DEFAULT FALSE"),
             ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
         ]:
@@ -232,10 +230,8 @@ else:
         # Migration: add premium + location columns to auth_households (idempotent)
         for col, coldef in [
             ("seq", "INTEGER NOT NULL DEFAULT 0"),
-            ("city", "TEXT DEFAULT ''"),
-            ("state", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
             ("zip_code", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
             ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
             ("member_limit", "INTEGER NOT NULL DEFAULT 2"),
         ]:

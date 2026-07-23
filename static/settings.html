@@ -64,25 +64,15 @@
 
   <div class="card">
     <h2>📍 Your Location</h2>
-    <p class="note">Your location helps us auto-populate store items (Premium feature).</p>
+    <p class="note">Helps auto-populate store items (Premium feature). Only ZIP and country are collected.</p>
     <div class="form-row">
       <div class="form-group">
-        <label for="locCity">City</label>
-        <input type="text" id="locCity" placeholder="e.g. Chicago">
+        <label for="locZip">ZIP / Postal Code</label>
+        <input type="text" id="locZip" placeholder="e.g. 60601">
       </div>
-      <div class="form-group">
-        <label for="locState">State</label>
-        <input type="text" id="locState" placeholder="e.g. IL">
-      </div>
-    </div>
-    <div class="form-row">
       <div class="form-group">
         <label for="locCountry">Country</label>
-        <input type="text" id="locCountry" placeholder="e.g. US">
-      </div>
-      <div class="form-group">
-        <label for="locZip">ZIP Code</label>
-        <input type="text" id="locZip" placeholder="e.g. 60601">
+        <input type="text" id="locCountry" placeholder="e.g. USA">
       </div>
     </div>
     <button class="btn-save" id="btnSaveLocation" onclick="saveLocation()">Save Location</button>
@@ -165,8 +155,6 @@ async function loadHousehold() {
 
     // Populate location fields
     if (hh) {
-      document.getElementById('locCity').value = hh.city || '';
-      document.getElementById('locState').value = hh.state || '';
       document.getElementById('locCountry').value = hh.country || '';
       document.getElementById('locZip').value = hh.zip_code || '';
     }
@@ -180,10 +168,8 @@ async function saveLocation() {
   document.getElementById('locSuccess').style.display = 'none';
 
   const data = {
-    city: document.getElementById('locCity').value.trim(),
-    state: document.getElementById('locState').value.trim(),
-    country: document.getElementById('locCountry').value.trim(),
     zip_code: document.getElementById('locZip').value.trim(),
+    country: document.getElementById('locCountry').value.trim(),
   };
 
   document.getElementById('btnSaveLocation').disabled = true;

@@ -83,7 +83,7 @@ def save_location():
         return jsonify({"error": "No household"}), 400
 
     fields = {}
-    for f in ("city", "state", "country", "zip_code"):
+    for f in ("zip_code", "country"):
         val = (data.get(f) or "").strip()
         if val:
             fields[f] = val
