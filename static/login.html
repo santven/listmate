@@ -123,12 +123,8 @@ function init() {
 // ---- GOOGLE BUTTON ----
 function renderGoogleBtn() {
   var nonce = Math.random().toString(36).slice(2);
-  var url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-    'client_id=' + CLIENT_ID +
-    '&redirect_uri=' + encodeURIComponent(window.location.origin + '/login') +
-    '&response_type=id_token' +
-    '&scope=openid%20email%20profile' +
-    '&nonce=' + nonce;
+  // Server-side OAuth redirect (stays in WebView, no browser escape)
+  var url = window.location.origin + '/auth/google/redirect';
   document.getElementById('gsiContainer').innerHTML =
     '<a href="' + url + '" id="googleBtn" style="display:flex;align-items:center;justify-content:center;gap:10px;width:280px;padding:10px 16px;border:1px solid #dadce0;border-radius:8px;background:#fff;text-decoration:none;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;color:#3c4043;box-shadow:0 1px 2px rgba(0,0,0,0.08)">' +
       '<svg width="18" height="18" viewBox="0 0 48 48">' +

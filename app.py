@@ -474,3 +474,102 @@ if __name__ == "__main__":
     from db import init_db
     init_db()
     app.run(host="127.0.0.1", port=5003, debug=True)
+# ---- Google OAuth (server-side redirect flow) ----
+import secrets as _secrets
+_OAUTH_STATES = {}
+
+@app.route("/auth/google/redirect")
+def auth_google_redirect():
+    """Redirect user to Google OAuth consent screen."""
+    redirect_uri = request.url_root.rstrip('/') + '/auth/google/callback'
+    state = _secrets.token_hex(16)
+    _OAUTH_STATES[state] = time.time()
+    # Cleanup old states (>10 min)
+    now = time.time()
+    for s in list(_OAUTH_STATES.keys()):
+        if now - _OAUTH_STATES[s] > 600:
+            del _OAUTH_STATES[s]
+    
+    params = {
+        'client_id': authmod.GOOGLE_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'offline',
+    }
+    auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + '&'.join(f'{k}={quote(v, safe="")}' for k,v in params.items())
+    return redirect(auth_url)
+
+
+@app.route("/auth/google/callback")
+def auth_google_callback():
+    """Handle Google OAuth callback — exchange code for id_token, verify, set session."""
+    from urllib.request import urlopen, Request
+    from urllib.parse import quote
+    
+    code = request.args.get('code', '')
+    state = request.args.get('state', '')
+    
+    if not code:
+        return '<h3>Login failed</h3><p>No authorization code received.</p><a href="/login">Try again</a>', 400
+    
+    # Exchange code for tokens
+    redirect_uri = request.url_root.rstrip('/') + '/auth/google/callback'
+    token_data = json.loads(urlopen(Request(
+        'https://oauth2.googleapis.com/token',
+        data=('code=' + quote(code) + '&client_id=' + authmod.GOOGLE_CLIENT_ID +
+              '&client_secret=' + os.environ.get('SSO_GOOGLE_CLIENT_SECRET', '') +
+              '&redirect_uri=' + quote(redirect_uri) +
+              '&grant_type=authorization_code').encode(),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}
+    ), timeout=10).read().decode())
+    
+    id_token_str = token_data.get('id_token', '')
+    if not id_token_str:
+        return '<h3>Login failed</h3><p>Could not get ID token.</p><a href="/login">Try again</a>', 500
+    
+    # Verify and process (same logic as auth_google)
+    try:
+        info = id_token.verify_oauth2_token(id_token_str, google_requests.Request(), authmod.GOOGLE_CLIENT_ID)
+    except Exception as e:
+        return f'<h3>Login failed</h3><p>Token verification error: {e}</p><a href="/login">Try again</a>', 401
+    
+    # Use the existing auth flow
+    email = info.get('email', '')
+    name = info.get('name', email.split('@')[0] if email else 'User')
+    
+    authmod._init_schema()
+    user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+    if not user:
+        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
+    
+    if not user:
+        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                     (info['sub'], email, name))
+        user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
+    
+    hh_id = user.get('household_id', 0) if user else 0
+    hh_name = ''
+    
+    if not hh_id:
+        hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+        if hh_count and hh_count.get('cnt', 0) == 0:
+            code_hh = _secrets.token_hex(4).upper()
+            authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
+            hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+            hh_id = hh['id'] if hh else 1
+            hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
+            authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user['id']))
+        else:
+            authmod._set(user['id'], email, name, 0, '')
+            return redirect('/login?needs_signup=1')
+    
+    if hh_id and not hh_name:
+        hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+        hh_name = hh.get('name', '') if hh else ''
+    
+    authmod._set(user['id'], email, name, hh_id, hh_name)
+    return redirect('/')
+
+
