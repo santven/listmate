@@ -64,6 +64,27 @@ def init_db():
     for tbl in ("store_items", "list_items"):
         _add_column_if_missing(db, tbl, "category", "TEXT NOT NULL DEFAULT ''")
 
+    # Migrate: add cuisine + auto_populated to stores
+    _add_column_if_missing(db, "stores", "cuisine", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "stores", "auto_populated", "INTEGER NOT NULL DEFAULT 0")
+
+    # Create store_enrich_queue table if not exists
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS store_enrich_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            store_id INTEGER NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            city TEXT,
+            state TEXT,
+            country TEXT,
+            zip_code TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP,
+            FOREIGN KEY (store_id) REFERENCES stores(id)
+        );
+    """)
+
     # Recreate indexes (add if missing)
     try:
         db.execute("CREATE INDEX IF NOT EXISTS idx_list_household ON list_items(household_id, purchased)")

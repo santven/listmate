@@ -73,6 +73,37 @@ def settings_page():
     return send_from_directory("static", "settings.html")
 
 
+@app.route("/api/settings/location", methods=["POST"])
+@require_user
+def save_location():
+    """Save household location for store enrichment (Premium feature)."""
+    data = request.get_json(silent=True) or {}
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+
+    fields = {}
+    for f in ("city", "state", "country", "zip_code"):
+        val = (data.get(f) or "").strip()
+        if val:
+            fields[f] = val
+
+    if not fields:
+        return jsonify({"error": "No location fields provided"}), 400
+
+    authmod._init_schema()
+    set_parts = ", ".join(f"{k} = ?" for k in fields)
+    vals = list(fields.values())
+    vals.append(hhid)
+    try:
+        authmod._exec(f"UPDATE {authmod._HH} SET {set_parts} WHERE id = ?", tuple(vals))
+    except Exception:
+        # Fallback for SQLite
+        for k, v in fields.items():
+            authmod._run(f"UPDATE {authmod._HH} SET {k} = ? WHERE id = ?", (v, hhid))
+    return jsonify({"ok": True, "saved": list(fields.keys())})
+
+
 @app.route("/api/health")
 def health():
     return jsonify({
@@ -133,8 +164,37 @@ def add_store():
             (_hh(), name),
         )
         db.commit()
+        # Get store id for enrichment
+        store = db.execute(
+            "SELECT id FROM stores WHERE household_id = ? AND name = ?",
+            (_hh(), name),
+        ).fetchone()
+        store_id = store["id"] if store else None
     finally:
         db.close()
+
+    # Enqueue for store enrichment if premium and household has city
+    if store_id:
+        try:
+            authmod._init_schema()
+            hh = authmod._one(
+                f"SELECT is_premium, city, state, country, zip_code FROM {authmod._HH} WHERE id = ?",
+                (_hh(),))
+            if hh:
+                is_premium = bool(hh.get("is_premium"))
+                if is_premium and (hh.get("city") or "").strip():
+                    db2 = get_db()
+                    try:
+                        db2.execute(
+                            "INSERT INTO store_enrich_queue (store_id, household_id, city, state, country, zip_code) VALUES (?, ?, ?, ?, ?, ?)",
+                            (store_id, _hh(), hh.get("city"), hh.get("state"), hh.get("country"), hh.get("zip_code")),
+                        )
+                        db2.commit()
+                    finally:
+                        db2.close()
+        except Exception:
+            import traceback; traceback.print_exc()
+
     return jsonify({"ok": True})
 
 
@@ -570,7 +630,13 @@ def auth_google_callback():
             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
             if hh_count and hh_count.get('cnt', 0) == 0:
                 code_hh = _secrets.token_hex(4).upper()
-                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
+                max_seq = authmod._one(f"SELECT COALESCE(MAX(seq), 0) as n FROM {authmod._HH}")
+                new_seq = int(max_seq.get('n', 0)) + 1
+                is_premium = new_seq <= 100
+                member_limit = 999 if is_premium else 2
+                authmod._exec(
+                    f"INSERT INTO {authmod._HH} (name, invite_code, seq, is_premium, member_limit) VALUES (?,?,?,?,?)",
+                    ("Root Household", code_hh, new_seq, is_premium, member_limit))
                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh['id'] if hh else 1
                 hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
