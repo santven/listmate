@@ -505,8 +505,7 @@ def auth_google_redirect():
     # This keeps the navigation inside the WebView
     return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
             '<body style="text-align:center;font-family:sans-serif;padding-top:40px;color:#888">' +
-            '<p>Redirecting to Google Sign-In...</p>' +
-            '<script>window.location.replace("' + auth_url + '");</script>' +
+            '<script>location.replace("' + auth_url + '");</script>' +
             '</body></html>')
 
 @app.route("/auth/google/callback")
