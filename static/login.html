@@ -59,7 +59,7 @@
 
   <!-- Step 1: Google Sign-In -->
   <div id="step1" class="step active">
-    <div id="status">Connecting to server...</div>
+    <div id="status"></div>
     <div id="gsiContainer"></div>
   </div>
 
@@ -92,6 +92,7 @@ let googleCredential = null;
 
 // ---- INIT ----
 function init() {
+  document.getElementById('status').textContent = '';
   // Check for credential in hash (return from Google OAuth)
   var hash = window.location.hash.substring(1);
   var hashP = new URLSearchParams(hash);
@@ -253,7 +254,7 @@ init();
 
   <!-- Step 1: Google Sign-In -->
   <div id="step1" class="step active">
-    <div id="status">Connecting to server...</div>
+    <div id="status"></div>
     <div id="gsiContainer"></div>
   </div>
 
