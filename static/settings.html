@@ -88,15 +88,14 @@
     <div class="form-row" style="margin-top:12px">
       <div class="form-group">
         <label for="locZip">ZIP / Postal Code</label>
-        <input type="text" id="locZip" placeholder="e.g. 60601">
+        <input type="text" id="locZip" placeholder="e.g. 60601" onchange="saveLocation()">
       </div>
       <div class="form-group">
         <label for="locCountry">Country</label>
-        <input type="text" id="locCountry" placeholder="e.g. USA">
+        <input type="text" id="locCountry" placeholder="e.g. USA" onchange="saveLocation()">
       </div>
     </div>
-    <button class="btn-save" id="btnSaveLocation" onclick="saveLocation()">Save Location</button>
-    <div class="success" id="locSuccess" style="margin-top:8px;"></div>
+    <div class="success" id="locSuccess" style="margin-top:4px;margin-bottom:4px;"></div>
 
   </div>
 
