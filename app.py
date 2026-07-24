@@ -46,6 +46,36 @@ def _ensure_schema():
             try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
             except Exception: pass
         
+        # Ensure store tables exist (they were in db_pg._init_schema before rollback)
+        store_tables = [
+            """CREATE TABLE IF NOT EXISTS stores (
+                id SERIAL PRIMARY KEY, name TEXT NOT NULL,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE TABLE IF NOT EXISTS store_items (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '',
+                household_id INTEGER NOT NULL DEFAULT 1)""",
+            """CREATE TABLE IF NOT EXISTS list_items (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '',
+                added_by TEXT NOT NULL DEFAULT '', added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                purchased BOOLEAN NOT NULL DEFAULT FALSE,
+                purchased_by TEXT, purchased_at TIMESTAMP,
+                household_id INTEGER NOT NULL DEFAULT 1)""",
+            """CREATE TABLE IF NOT EXISTS store_visits (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                household_id INTEGER NOT NULL DEFAULT 1,
+                visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
+            """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
+        ]
+        for stmt in store_tables:
+            try: authmod._exec(stmt)
+            except Exception: pass
+        
         _MIGRATED = True
     except Exception:
         pass  # graceful failure — endpoint will still try init_schema
