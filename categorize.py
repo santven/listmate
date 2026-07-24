@@ -292,7 +292,12 @@ def categorize(name):
     # But NOT if it's a dairy/protein drink
     is_dairy_drink = any(w in name_stripped for w in ("protein yogurt", "protein yoghurt", "yogurt drink",
         "lassi", "buttermilk", "kefir", "skyr", "probiotic", "milk", "yoghurt drink"))
-    if not is_dairy_drink and any(w in name_stripped for w in ("juice", "soda", "coke", "pepsi", "sprite", "seltzer",
+    def _match_kw(kw, text):
+        if len(kw) <= 4:
+            return bool(re.search(r'\b' + re.escape(kw) + r'\b', text))
+        return kw in text
+
+    if not is_dairy_drink and any(_match_kw(w, name_stripped) for w in ("juice", "soda", "coke", "pepsi", "sprite", "seltzer",
         "lemonade", "smoothie", "beer", "wine", "liquor", "kombucha",
         "coffee", "tea", "chai", "espresso", "latte", "cappuccino",
         "water", "gatorade", "powerade", "tonic", "ginger ale",
@@ -317,7 +322,7 @@ def categorize(name):
 
     for cat, keywords in get_matchers():
         for kw in keywords:
-            if kw in name_stripped:
+            if _match_kw(kw, name_stripped):
                 return cat
     return ""
 
