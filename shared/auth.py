@@ -35,10 +35,11 @@ if USE_PG:
         global _pool
         if _pool and conn:
             try:
-                _pool.putconn(conn)
+                if not getattr(conn, 'closed', False):
+                    _pool.putconn(conn)
             except Exception:
                 try: conn.close()
-                except: pass
+                except Exception: pass
 
     def _pool_close():
         global _pool
@@ -49,60 +50,77 @@ if USE_PG:
     def _one(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
+        cur = None
         try:
             cur = conn.cursor()
             if params: cur.execute(sql_fixed, params)
             else: cur.execute(sql_fixed)
             row = cur.fetchone()
             cols = [d[0] for d in cur.description] if cur.description else []
-            cur.close()
-            _put_conn(conn)
             return dict(zip(cols, row)) if row else None
         except Exception:
-            conn.rollback()
-            _put_conn(conn)
             return None
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _run(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        rows = cur.fetchall() if cur.description else []
-        cols = [d[0] for d in cur.description] if cur.description else []
-        cur.close()
-        _put_conn(conn)
-        return [dict(zip(cols, r)) for r in rows]
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            rows = cur.fetchall() if cur.description else []
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception:
+            return []
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _exec(sql, params=None):
         '''Execute INSERT/UPDATE/DELETE — raises on error.'''
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        cur.close()
-        _put_conn(conn)
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _insert(sql, params=None):
         """Insert a row and return the new ID (Postgres RETURNING)."""
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        # Try getting RETURNING id first
-        row = cur.fetchone() if cur.description else None
-        if row:
-            new_id = row[0]
-        else:
-            # No RETURNING — get lastval
-            cur.execute("SELECT lastval()")
-            new_id = cur.fetchone()[0]
-        cur.close()
-        _put_conn(conn)
-        return new_id
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            row = cur.fetchone() if cur.description else None
+            if row:
+                new_id = row[0]
+            else:
+                cur.execute("SELECT lastval()")
+                new_id = cur.fetchone()[0]
+            return new_id
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     _USERS = "auth_users"
     _HH = "auth_households"
