@@ -248,14 +248,8 @@ function renderHome() {
     if (!title.querySelector('.share-btn')) {
       const btn = document.createElement('button');
       btn.className = 'share-btn';
-      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
-      if (isMobile) {
-        btn.textContent = '📤 Share';
-        btn.onclick = (e) => { e.stopPropagation(); shareStoreList(storeId, name); };
-      } else {
-        btn.textContent = '📋 Copy';
-        btn.onclick = (e) => { e.stopPropagation(); copyStoreList(storeId, name); };
-      }
+      btn.textContent = '📤 Share';
+      btn.onclick = (e) => { e.stopPropagation(); shareStoreList(storeId, name); };
       title.appendChild(btn);
     }
   });
@@ -432,14 +426,14 @@ async function shareStoreList(storeId, storeName) {
   const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
   if (!items.length) { toast('No active items in ' + storeName); return; }
   const text = items.join('\n');
-  try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); }
-  catch (e) {} // user cancelled
-}
 
-async function copyStoreList(storeId, storeName) {
-  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
-  if (!items.length) { toast('No active items in ' + storeName); return; }
-  const text = items.join('\n');
+  // Try native share sheet first (Chrome/Safari on mobile)
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); return; }
+    catch (e) {} // user cancelled share sheet
+  }
+
+  // Fallback: copy to clipboard (desktop browsers, Android WebView)
   try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
   catch (e) {
     const ta = document.createElement('textarea'); ta.value = text;
