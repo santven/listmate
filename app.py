@@ -71,10 +71,10 @@ def _ensure_schema():
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
         ]
         for stmt in store_tables:
             try: authmod._exec(stmt)
@@ -308,9 +308,10 @@ def add_store_item(store_id):
         (_hh(), store_id, name, category),
     )
     db.commit()
-    rowid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) ORDER BY id DESC LIMIT 1",
+                     (store_id, _hh(), name)).fetchone()
     db.close()
-    return jsonify({"ok": True, "id": rowid})
+    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 # ── grocery list (household-scoped) ──
@@ -378,9 +379,10 @@ def add_to_list():
         (_hh(), store_id, name, existing_category, get_display_name()),
     )
     db.commit()
-    rowid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) ORDER BY id DESC LIMIT 1",
+                     (store_id, _hh(), name)).fetchone()
     db.close()
-    return jsonify({"ok": True, "id": rowid})
+    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 @app.route("/api/list/<int:item_id>/toggle", methods=["POST"])
@@ -466,10 +468,13 @@ def move_list_item(item_id):
     )
 
     # Also ensure the item exists in the target store's catalog for autocomplete
-    db.execute(
-        "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-        (_hh(), target_store_id, item["name"]),
-    )
+    try:
+        db.execute(
+            "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
+            (_hh(), target_store_id, item["name"]),
+        )
+    except Exception:
+        pass  # already exists
 
     db.commit()
     db.close()
