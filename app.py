@@ -267,10 +267,16 @@ def add_to_list():
         )
         existing_category = cat
 
-    db.execute(
-        "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
-        (_hh(), store_id, name, existing_category, get_display_name()),
-    )
+    try:
+        db.execute(
+            "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
+            (_hh(), store_id, name, existing_category, get_display_name()),
+        )
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        db.close()
+        return jsonify({"error": "Database error"}), 500
     db.commit()
     rowid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.close()
@@ -360,10 +366,13 @@ def move_list_item(item_id):
     )
 
     # Also ensure the item exists in the target store's catalog for autocomplete
-    db.execute(
-        "INSERT OR IGNORE INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
-        (_hh(), target_store_id, item["name"]),
-    )
+    try:
+        db.execute(
+            "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
+            (_hh(), target_store_id, item["name"]),
+        )
+    except Exception:
+        pass  # already exists
 
     db.commit()
     db.close()
