@@ -62,7 +62,7 @@
   .modal-store-option:hover, .modal-store-option:active { background: #e8f5e9; }
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
-  .visit-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+  .visit-toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
   .visit-toast.show { display: block; }
   .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
   .visit-toast .btn-yes { background: var(--green); color: #fff; }
@@ -85,7 +85,7 @@
   .btn-danger { display: block; width: 100%; padding: 14px; margin-top: 16px; background: var(--card); border: 1.5px dashed #d0cccc; border-radius: 12px; font-size: 14px; color: #999; cursor: pointer; text-align: center; }
   .btn-danger:hover { border-color: #d94a4a; color: #d94a4a; }
 
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .toast.show { opacity: 1; }
 
   @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; } .header-meta .user { display: inline; } }
