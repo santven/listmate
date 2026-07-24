@@ -11,8 +11,8 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; }
-  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
-  .header h1 { font-size: 16px; font-weight: 700; flex: 1; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; min-height: 56px; }
+  .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
   .header a { color: rgba(255,255,255,0.8); font-size: 13px; text-decoration: none; }
   .container { max-width: 500px; margin: 0 auto; padding: 16px; }
   .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
@@ -43,8 +43,9 @@
 </head>
 <body>
 <div class="header">
-  <h1>⚙️ Settings</h1>
-  <a href="/">← Back to list</a>
+  <a href="/" style="color:rgba(255,255,255,0.9);font-size:15px;text-decoration:none;flex-shrink:0;">← Back</a>
+  <h1 style="text-align:center;">⚙️ Settings</h1>
+  <span style="width:40px;flex-shrink:0;"></span>
 </div>
 <div class="container" id="app">
   <div class="card">

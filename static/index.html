@@ -248,8 +248,13 @@ function renderHome() {
     if (!title.querySelector('.share-btn')) {
       const btn = document.createElement('button');
       btn.className = 'share-btn';
-      btn.textContent = '📋 Copy';
-      btn.onclick = (e) => { e.stopPropagation(); copyStoreList(storeId, name); };
+      if (navigator.share) {
+        btn.textContent = '📤 Share';
+        btn.onclick = (e) => { e.stopPropagation(); shareStoreList(storeId, name); };
+      } else {
+        btn.textContent = '📋 Copy';
+        btn.onclick = (e) => { e.stopPropagation(); copyStoreList(storeId, name); };
+      }
       title.appendChild(btn);
     }
   });
@@ -420,6 +425,14 @@ $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#m
 // ---- Share / Copy to Text ----
 function isMobile() {
   return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
+}
+
+async function shareStoreList(storeId, storeName) {
+  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
+  if (!items.length) { toast('No active items in ' + storeName); return; }
+  const text = items.join('\n');
+  try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); }
+  catch (e) {} // user cancelled
 }
 
 async function copyStoreList(storeId, storeName) {
