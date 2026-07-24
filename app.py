@@ -231,16 +231,31 @@ def add_store():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+    hh = _hh()
     db = get_db()
     try:
-        db.execute(
-            "INSERT INTO stores (household_id, name) VALUES (?, ?) ON CONFLICT (household_id, name) DO NOTHING",
-            (_hh(), name),
-        )
+        # Check if store already exists for this household
+        existing = db.execute(
+            "SELECT id FROM stores WHERE household_id = ? AND LOWER(name) = LOWER(?)",
+            (hh, name),
+        ).fetchone()
+        if existing:
+            return jsonify({"ok": True, "existing": True, "id": existing["id"]})
+        # Insert new store
+        db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
         db.commit()
+        # Return the new store ID so frontend can show the tile
+        new_store = db.execute(
+            "SELECT id FROM stores WHERE household_id = ? AND LOWER(name) = LOWER(?)",
+            (hh, name),
+        ).fetchone()
+        return jsonify({"ok": True, "id": new_store["id"] if new_store else 0, "name": name})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
-    return jsonify({"ok": True})
 
 
 # ── store items (household-scoped) ──
