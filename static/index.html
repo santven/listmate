@@ -212,20 +212,8 @@ async function loadData() {
 
 function renderHome() {
   const counts={}; list.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
-  $('#storeGrid').innerHTML=stores.map(s=>{
-    const c = counts[s.id]||0;
-    const shareIcon = isMobile() ? '<span class="share-icon" data-sid="'+s.id+'" data-name="'+s.name+'" style="float:right;font-size:16px;cursor:pointer;padding:2px 4px" title="Share list">📤</span>' : '';
-    return '<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+c+' items</span>'+shareIcon+'</div>';
-  }).join('');
-
-  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',(e)=>{
-    if(e.target.classList.contains('share-icon')) {
-      e.stopPropagation();
-      shareStoreList(parseInt(e.target.dataset.sid), e.target.dataset.name);
-      return;
-    }
-    openStore(parseInt(b.dataset.id));
-  }));
+  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
+  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
   
@@ -268,19 +256,25 @@ function renderHome() {
   if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store to add items</div>';
   $('#listView').innerHTML=html;
   
-  // Attach share buttons to store group titles (desktop hidden via CSS)
-  if(isMobile()) {
-    $$('#listView .store-group-title').forEach(title => {
-      const sid = title.querySelector('.shop-btn')?.dataset.sid;
-      const name = title.childNodes[0]?.textContent?.trim() || 'Store';
-      if(sid && !title.querySelector('.share-btn')) {
-        const btn = document.createElement('button');
-        btn.className = 'share-btn'; btn.textContent = '📤 Share';
+  // Attach share buttons to store group titles
+  $$('#listView .store-group-title').forEach(title => {
+    const sid = title.querySelector('.shop-btn')?.dataset.sid;
+    if (!sid) return;
+    // Only add to non-purchased sections (they have a .shop-btn)
+    const name = title.childNodes[0]?.textContent?.trim() || 'Store';
+    if (!title.querySelector('.share-btn')) {
+      const btn = document.createElement('button');
+      btn.className = 'share-btn';
+      if (navigator.share) {
+        btn.textContent = '📤 Share';
         btn.onclick = (e) => { e.stopPropagation(); shareStoreList(parseInt(sid), name); };
-        title.appendChild(btn);
+      } else {
+        btn.textContent = '📋 Copy';
+        btn.onclick = (e) => { e.stopPropagation(); copyStoreList(parseInt(sid), name); };
       }
-    });
-  }
+      title.appendChild(btn);
+    }
+  });
   
   // Toggle purchased section
   const toggle = document.getElementById('purchasedToggle');
@@ -455,17 +449,20 @@ async function shareStoreList(storeId, storeName) {
   const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
   if (!items.length) { toast('No active items in ' + storeName); return; }
   const text = items.join('\n');
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); }
-    catch (e) {}
-  } else {
-    try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
-    catch (e) {
-      const ta = document.createElement('textarea'); ta.value = text;
-      ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();
-      document.execCommand('copy');document.body.removeChild(ta);
-      toast('✅ ' + items.length + ' items copied!');
-    }
+  try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); }
+  catch (e) {} // user cancelled
+}
+
+async function copyStoreList(storeId, storeName) {
+  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
+  if (!items.length) { toast('No active items in ' + storeName); return; }
+  const text = items.join('\n');
+  try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text;
+    ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('✅ ' + items.length + ' items copied!');
   }
 }
 </script>
