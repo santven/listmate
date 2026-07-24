@@ -15,11 +15,10 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
-  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
-  .header h1 { font-size: 16px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
+  .header h1 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; }
   .header-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .header-meta .user { font-size: 11px; opacity: 0.8; display: none; }
-  .btn-logout { background: rgba(255,255,255,0.15); border: none; color: rgba(255,255,255,0.8); font-size: 11px; cursor: pointer; padding: 4px 10px; border-radius: 8px; }
   .btn-back { background: rgba(255,255,255,0.15); border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 4px 10px; border-radius: 8px; display: none; }
 
   .container { max-width: 600px; margin: 0 auto; padding: 16px; }
@@ -62,7 +61,7 @@
   .modal-store-option:hover, .modal-store-option:active { background: #e8f5e9; }
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
-  .visit-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+  .visit-toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
   .visit-toast.show { display: block; }
   .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
   .visit-toast .btn-yes { background: var(--green); color: #fff; }
@@ -85,7 +84,7 @@
   .btn-danger { display: block; width: 100%; padding: 14px; margin-top: 16px; background: var(--card); border: 1.5px dashed #d0cccc; border-radius: 12px; font-size: 14px; color: #999; cursor: pointer; text-align: center; }
   .btn-danger:hover { border-color: #d94a4a; color: #d94a4a; }
 
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .toast.show { opacity: 1; }
 
   @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; } .header-meta .user { display: inline; } }
@@ -103,6 +102,16 @@
   .shared-nav a .nav-icon { font-size: 20px; margin-bottom: 2px; }
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
+
+  .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
+  .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 100; min-width: 160px; overflow: hidden; }
+  .burger-dropdown.show { display: block; }
+  .burger-dropdown a, .burger-dropdown button { display: block; width: 100%; padding: 14px 18px; border: none; background: none; font-size: 15px; text-align: left; cursor: pointer; color: #333; text-decoration: none; font-family: inherit; }
+  .burger-dropdown a:hover, .burger-dropdown button:hover { background: #f5f7f2; }
+  .burger-dropdown .divider { border-top: 1px solid var(--border); }
+  .burger-dropdown .danger { color: #d94a4a; }
+  .burger-overlay { display: none; position: fixed; inset: 0; z-index: 99; }
+  .burger-overlay.show { display: block; }
 </style>
 
 <style>
@@ -118,11 +127,17 @@
 <body>
 <div class="header">
   <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
-  <h1 id="headerTitle">🛒 Grocery List</h1>
+    <div id="cartIcon" style="width:40px;height:40px;min-width:40px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);">🛒</div>
+  <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
-    <button class="btn-logout" onclick="location.href='/settings'" title="Household Settings">⚙️ Settings</button>
-    <button class="btn-logout" id="btnLogout">Logout</button>
+    <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
+    <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
+    <div class="burger-dropdown" id="burgerMenu">
+      <a href="/settings">⚙️ Settings</a>
+      <div class="divider"></div>
+      <a href="/logout" class="danger">🚪 Log out</a>
+    </div>
   </div>
 </div>
 <div class="container">
@@ -161,6 +176,11 @@
 </div>
 
 <script>
+function toggleBurger() {
+  document.getElementById("burgerMenu").classList.toggle("show");
+  document.getElementById("burgerOverlay").classList.toggle("show");
+}
+
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 let stores=[], list=[], currentStore=null, allStoreItems={};
 
@@ -251,7 +271,7 @@ function renderHome() {
 
 async function openStore(sid) {
   currentStore=stores.find(s=>s.id===sid);
-  $('#headerTitle').textContent='🛒 '+currentStore.name;
+  $('#headerTitle').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value='';
   if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
@@ -280,9 +300,13 @@ function renderCatalog(filter) {
     if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
       toast('⚠️ Already on list: '+name); return;
     }
-    await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+    try{
+      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+      const d=await r.json();
+      if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
+    }catch(e){toast('Network error');return;}
     if(!allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())){
-      await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+      try{await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});}catch(e){}
       allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
     }
     toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
@@ -293,7 +317,7 @@ function renderCatalog(filter) {
 $('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
-function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='🛒 Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
+function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
 
 async function loadSuggestions(){
   try{
@@ -351,8 +375,14 @@ async function deleteItem(id){await fetch(API+'/list/'+id,{method:'DELETE'});lis
 
 $('#btnNewStore').addEventListener('click',async()=>{
   const name=$('#newStoreInput').value.trim(); if(!name)return;
-  await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  $('#btnNewStore').disabled=true;
+  try{
+    let r=await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    let d=await r.json();
+    if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
+  } catch(e){toast('Network error');return;}
   $('#newStoreInput').value=''; toast('Store added: '+name); loadData();
+  $('#btnNewStore').disabled=false;
 });
 $('#newStoreInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewStore').click();});
 
@@ -361,7 +391,6 @@ $('#btnClear').addEventListener('click',async()=>{
   await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
 });
 
-$('#btnLogout').addEventListener('click',async()=>{await fetch(API+'/auth/logout',{method:'POST'});localStorage.clear();window.location.href='/login';});
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 

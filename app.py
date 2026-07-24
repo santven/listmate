@@ -26,6 +26,68 @@ CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
+# ── Schema migration: dietary_restrictions (added Jul 2026, idempotent) ──
+
+_MIGRATED = False
+
+def _ensure_schema():
+    global _MIGRATED
+    if _MIGRATED:
+        return
+    try:
+        authmod._init_schema()
+        col_type = "TEXT DEFAULT ''"
+        try:
+            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN dietary_restrictions {col_type}")
+        except Exception:
+            pass  # column already exists
+    # zip_code + country
+        for col in [("zip_code", "TEXT DEFAULT ''"), ("country", "TEXT DEFAULT ''")]:
+            try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
+            except Exception: pass
+        
+        # Ensure store tables exist (they were in db_pg._init_schema before rollback)
+        store_tables = [
+            """CREATE TABLE IF NOT EXISTS stores (
+                id SERIAL PRIMARY KEY, name TEXT NOT NULL,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE TABLE IF NOT EXISTS store_items (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '',
+                household_id INTEGER NOT NULL DEFAULT 1)""",
+            """CREATE TABLE IF NOT EXISTS list_items (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '',
+                added_by TEXT NOT NULL DEFAULT '', added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                purchased BOOLEAN NOT NULL DEFAULT FALSE,
+                purchased_by TEXT, purchased_at TIMESTAMP,
+                household_id INTEGER NOT NULL DEFAULT 1)""",
+            """CREATE TABLE IF NOT EXISTS store_visits (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
+                household_id INTEGER NOT NULL DEFAULT 1,
+                visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
+            """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
+        ]
+        for stmt in store_tables:
+            try: authmod._exec(stmt)
+            except Exception: pass
+        
+        _MIGRATED = True
+    except Exception:
+        pass  # graceful failure — endpoint will still try init_schema
+
+@app.before_request
+def _check_migration():
+    _ensure_schema()
+
 # Database: PostgreSQL on Render (DATABASE_URL), SQLite locally
 _DATABASE_URL = os.environ.get("DATABASE_URL") or ""
 _use_pg = "postgres" in _DATABASE_URL.lower() or "RENDER" in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
@@ -71,6 +133,49 @@ def privacy_page():
 @require_user
 def settings_page():
     return send_from_directory("static", "settings.html")
+
+
+# ── Dietary restrictions (household-level) ──
+
+@app.route("/api/settings/dietary", methods=["GET", "POST"])
+@require_user
+def dietary_settings():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+        val = (hh.get("dietary_restrictions") or "") if hh else ""
+        return jsonify({"dietary_restrictions": val})
+    
+    data = request.get_json(silent=True) or {}
+    restrictions = (data.get("dietary_restrictions") or "").strip()
+    authmod._run(f"UPDATE {authmod._HH} SET dietary_restrictions = ? WHERE id = ?", (restrictions, hhid))
+    return jsonify({"ok": True, "dietary_restrictions": restrictions})
+
+@app.route("/api/settings/location", methods=["GET", "POST"])
+@require_user
+def location_settings():
+    """Get or set household location (zip + country)."""
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT zip_code, country FROM {authmod._HH} WHERE id = ?", (hhid,))
+        return jsonify({
+            "zip_code": (hh.get("zip_code") or "") if hh else "",
+            "country": (hh.get("country") or "") if hh else ""
+        })
+    
+    data = request.get_json(silent=True) or {}
+    zip_code = (data.get("zip_code") or "").strip()
+    country = (data.get("country") or "").strip()
+    authmod._run(f"UPDATE {authmod._HH} SET zip_code = ?, country = ? WHERE id = ?", (zip_code, country, hhid))
+    return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
 @app.route("/api/health")
@@ -235,55 +340,56 @@ def add_to_list():
     if not name or not store_id:
         return jsonify({"error": "store_id and name required"}), 400
     db = get_db()
-
-    # Verify store ownership
-    store = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (store_id, _hh()),
-    ).fetchone()
-    if not store:
-        db.close()
-        return jsonify({"error": "store not found"}), 404
-
-    existing = db.execute(
-        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0",
-        (store_id, _hh(), name),
-    ).fetchone()
-    if existing:
-        db.close()
-        return jsonify({"ok": False, "duplicate": True, "existing_id": existing["id"]})
-
-    # Ensure store item exists for auto-complete, and copy its category
-    cat_row = db.execute(
-        "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
-        (store_id, _hh(), name),
-    ).fetchone()
-    existing_category = (cat_row["category"] if cat_row else "")
-
-    if not cat_row:
-        # Auto-categorize new item
-        cat = categorize(name)
-        db.execute(
-            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-            (_hh(), store_id, name, cat),
-        )
-        existing_category = cat
-
     try:
+        # Verify store ownership
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, _hh()),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        existing = db.execute(
+            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+            (store_id, _hh(), name),
+        ).fetchone()
+        if existing:
+            return jsonify({"ok": False, "duplicate": True, "existing_id": existing["id"]})
+
+        # Ensure store item exists for auto-complete, and copy its category
+        cat_row = db.execute(
+            "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+            (store_id, _hh(), name),
+        ).fetchone()
+        existing_category = (cat_row["category"] if cat_row else "")
+
+        if not cat_row:
+            # Auto-categorize new item
+            cat = categorize(name)
+            try:
+                db.execute(
+                    "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                    (_hh(), store_id, name, cat),
+                )
+            except Exception:
+                pass
+            existing_category = cat
+
         db.execute(
             "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
             (_hh(), store_id, name, existing_category, get_display_name()),
         )
-    except Exception:
+        db.commit()
+
+        row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                         (store_id, _hh(), name)).fetchone()
+        return jsonify({"ok": True, "id": row["id"] if row else 0})
+    except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
         db.close()
-        return jsonify({"error": "Database error"}), 500
-    db.commit()
-    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0 ORDER BY id DESC LIMIT 1",
-                     (store_id, _hh(), name)).fetchone()
-    db.close()
-    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 @app.route("/api/list/<int:item_id>/toggle", methods=["POST"])
@@ -298,10 +404,10 @@ def toggle_list_item(item_id):
         db.close()
         return jsonify({"error": "not found"}), 404
     if item["purchased"]:
-        db.execute("UPDATE list_items SET purchased=0, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+        db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
     else:
         db.execute(
-            "UPDATE list_items SET purchased=1, purchased_by=?, purchased_at=datetime('now') WHERE id=?",
+            "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
             (get_display_name(), item_id),
         )
         # Auto-record a visit for this store today
@@ -342,52 +448,52 @@ def move_list_item(item_id):
     target_store_id = data.get("store_id")
     if not target_store_id:
         return jsonify({"error": "store_id required"}), 400
-
     db = get_db()
-    # Verify item belongs to this household
-    item = db.execute(
-        "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
-        (item_id, _hh()),
-    ).fetchone()
-    if not item:
-        db.close()
-        return jsonify({"error": "not found"}), 404
-
-    # Verify target store belongs to this household
-    target = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (target_store_id, _hh()),
-    ).fetchone()
-    if not target:
-        db.close()
-        return jsonify({"error": "target store not found"}), 404
-
-    # Move the item
-    db.execute(
-        "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
-        (target_store_id, item_id, _hh()),
-    )
-
-    # Also ensure the item exists in the target store's catalog for autocomplete
     try:
+        # Verify item belongs to this household
+        item = db.execute(
+            "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
+            (item_id, _hh()),
+        ).fetchone()
+        if not item:
+            return jsonify({"error": "not found"}), 404
+
+        # Verify target store belongs to this household
+        target = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (target_store_id, _hh()),
+        ).fetchone()
+        if not target:
+            return jsonify({"error": "target store not found"}), 404
+
+        # Move the item
         db.execute(
-            "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
-            (_hh(), target_store_id, item["name"]),
+            "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
+            (target_store_id, item_id, _hh()),
         )
-    except Exception:
-        pass  # already exists
 
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+        # Also ensure the item exists in the target store's catalog for autocomplete
+        try:
+            db.execute(
+                "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
+                (_hh(), target_store_id, item["name"]),
+            )
+        except Exception:
+            pass
 
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 @app.route("/api/list/clear", methods=["POST"])
 @require_user
 def clear_list():
     db = get_db()
     db.execute(
-        "DELETE FROM list_items WHERE purchased = 0 AND household_id = ?",
+        "DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?",
         (_hh(),),
     )
     db.commit()
@@ -422,7 +528,7 @@ def mark_visit(store_id):
         (store_id, _hh(), today)
     ).fetchone()
     if existing:
-        db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = datetime('now') WHERE id = ?", (existing["id"],))
+        db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = NOW() WHERE id = ?", (existing["id"],))
     else:
         db.execute(
             "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
@@ -451,7 +557,7 @@ def get_suggestions():
             FROM store_visits sv
             JOIN list_items li ON li.store_id = sv.store_id
                 AND li.household_id = sv.household_id
-                AND li.purchased = 1
+                AND li.purchased = TRUE
                 AND li.purchased_at >= datetime(sv.visit_date)
                 AND li.purchased_at < datetime(sv.visit_date, '+1 day')
             WHERE sv.store_id = ? AND sv.household_id = ?
@@ -464,7 +570,7 @@ def get_suggestions():
         # Filter out items already on the current list
         on_list = set(
             r["name"].lower() for r in
-            db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = 0", (sid, _hh())).fetchall()
+            db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = FALSE", (sid, _hh())).fetchall()
         )
 
         store_suggestions = []

@@ -120,6 +120,11 @@ if USE_PG:
             """CREATE TABLE IF NOT EXISTS auth_households (
                 id SERIAL PRIMARY KEY, name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
+                dietary_restrictions TEXT DEFAULT '',
+                zip_code TEXT DEFAULT '',
+                country TEXT DEFAULT '',
+                zip_code TEXT DEFAULT '',
+                country TEXT DEFAULT '',
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL REFERENCES auth_users(id),
@@ -189,6 +194,7 @@ else:
             """CREATE TABLE IF NOT EXISTS auth_households (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
+                dietary_restrictions TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL, feature TEXT NOT NULL,
