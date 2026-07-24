@@ -34,22 +34,26 @@ def _ensure_schema():
     global _MIGRATED
     if _MIGRATED:
         return
+    _MIGRATED = True
     try:
         authmod._init_schema()
         col_type = "TEXT DEFAULT ''"
-        try:
-            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN dietary_restrictions {col_type}")
-        except Exception:
-            pass  # column already exists
-    # zip_code + country
-        for col in [("zip_code", "TEXT DEFAULT ''"), ("country", "TEXT DEFAULT ''")]:
-            try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
-            except Exception: pass
         prem_type = "BOOLEAN DEFAULT FALSE" if _use_pg else "INTEGER DEFAULT 0"
-        try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN is_premium {prem_type}")
-        except Exception: pass
         
-        # Ensure store tables exist (they were in db_pg._init_schema before rollback)
+        for col, ctype in [
+            ("dietary_restrictions", col_type),
+            ("zip_code", col_type),
+            ("country", col_type),
+            ("is_premium", prem_type)
+        ]:
+            try:
+                if _use_pg:
+                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
+                else:
+                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
+            except Exception:
+                pass
+
         store_tables = [
             """CREATE TABLE IF NOT EXISTS stores (
                 id SERIAL PRIMARY KEY, name TEXT NOT NULL,
@@ -71,6 +75,12 @@ def _ensure_schema():
                 household_id INTEGER NOT NULL DEFAULT 1,
                 visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE TABLE IF NOT EXISTS store_enrich_queue (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                processed_at TIMESTAMP)""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
@@ -79,17 +89,14 @@ def _ensure_schema():
         for stmt in store_tables:
             try: authmod._exec(stmt)
             except Exception: pass
-        
-        # Also ensure store tables via the main db connection (may be separate schema)
+
         try:
             from db_pg import init_db as init_store_db
             init_store_db()
         except Exception:
             pass
-        
-        _MIGRATED = True
     except Exception:
-        pass  # graceful failure — endpoint will still try init_schema
+        pass
 
 @app.before_request
 def _check_migration():
