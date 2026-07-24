@@ -340,59 +340,56 @@ def add_to_list():
     if not name or not store_id:
         return jsonify({"error": "store_id and name required"}), 400
     db = get_db()
-
-    # Verify store ownership
-    store = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (store_id, _hh()),
-    ).fetchone()
-    if not store:
-        db.close()
-        return jsonify({"error": "store not found"}), 404
-
-    existing = db.execute(
-        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
-        (store_id, _hh(), name),
-    ).fetchone()
-    if existing:
-        db.close()
-        return jsonify({"ok": False, "duplicate": True, "existing_id": existing["id"]})
-
-    # Ensure store item exists for auto-complete, and copy its category
-    cat_row = db.execute(
-        "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
-        (store_id, _hh(), name),
-    ).fetchone()
-    existing_category = (cat_row["category"] if cat_row else "")
-
-    if not cat_row:
-        # Auto-categorize new item
-        cat = categorize(name)
-        try:
-            db.execute(
-                "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-                (_hh(), store_id, name, cat),
-            )
-        except Exception:
-            pass  # may already exist from concurrent add
-        existing_category = cat
-
     try:
+        # Verify store ownership
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, _hh()),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        existing = db.execute(
+            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+            (store_id, _hh(), name),
+        ).fetchone()
+        if existing:
+            return jsonify({"ok": False, "duplicate": True, "existing_id": existing["id"]})
+
+        # Ensure store item exists for auto-complete, and copy its category
+        cat_row = db.execute(
+            "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+            (store_id, _hh(), name),
+        ).fetchone()
+        existing_category = (cat_row["category"] if cat_row else "")
+
+        if not cat_row:
+            # Auto-categorize new item
+            cat = categorize(name)
+            try:
+                db.execute(
+                    "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                    (_hh(), store_id, name, cat),
+                )
+            except Exception:
+                pass
+            existing_category = cat
+
         db.execute(
             "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
             (_hh(), store_id, name, existing_category, get_display_name()),
         )
         db.commit()
+
+        row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                         (store_id, _hh(), name)).fetchone()
+        return jsonify({"ok": True, "id": row["id"] if row else 0})
     except Exception as e:
         import traceback
         traceback.print_exc()
-        db.close()
         return jsonify({"error": str(e)}), 500
-
-    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
-                     (store_id, _hh(), name)).fetchone()
-    db.close()
-    return jsonify({"ok": True, "id": row["id"] if row else 0})
+    finally:
+        db.close()
 
 
 @app.route("/api/list/<int:item_id>/toggle", methods=["POST"])
@@ -451,45 +448,45 @@ def move_list_item(item_id):
     target_store_id = data.get("store_id")
     if not target_store_id:
         return jsonify({"error": "store_id required"}), 400
-
     db = get_db()
-    # Verify item belongs to this household
-    item = db.execute(
-        "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
-        (item_id, _hh()),
-    ).fetchone()
-    if not item:
-        db.close()
-        return jsonify({"error": "not found"}), 404
-
-    # Verify target store belongs to this household
-    target = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (target_store_id, _hh()),
-    ).fetchone()
-    if not target:
-        db.close()
-        return jsonify({"error": "target store not found"}), 404
-
-    # Move the item
-    db.execute(
-        "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
-        (target_store_id, item_id, _hh()),
-    )
-
-    # Also ensure the item exists in the target store's catalog for autocomplete
     try:
+        # Verify item belongs to this household
+        item = db.execute(
+            "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
+            (item_id, _hh()),
+        ).fetchone()
+        if not item:
+            return jsonify({"error": "not found"}), 404
+
+        # Verify target store belongs to this household
+        target = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (target_store_id, _hh()),
+        ).fetchone()
+        if not target:
+            return jsonify({"error": "target store not found"}), 404
+
+        # Move the item
         db.execute(
-            "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
-            (_hh(), target_store_id, item["name"]),
+            "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
+            (target_store_id, item_id, _hh()),
         )
-    except Exception:
-        pass  # already exists
 
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+        # Also ensure the item exists in the target store's catalog for autocomplete
+        try:
+            db.execute(
+                "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
+                (_hh(), target_store_id, item["name"]),
+            )
+        except Exception:
+            pass
 
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 @app.route("/api/list/clear", methods=["POST"])
 @require_user
