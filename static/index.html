@@ -125,43 +125,7 @@
   height: 50px; background: #f3f4f6; display: flex; align-items: center; 
   justify-content: center; z-index: 1000; color: #9ca3af; font-size: 11px; }
 </style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous">
-// ---- Share / Copy to Text ----
-function isMobile() {
-  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
-}
-
-async function shareStoreList(storeId, storeName) {
-  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
-  if (!items.length) { toast('No active items in ' + storeName); return; }
-  
-  const text = items.join('\n');
-  
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: 'Grocery List — ' + storeName,
-        text: text
-      });
-    } catch (e) {
-      // User cancelled — no-op
-    }
-  } else {
-    // Fallback: copy to clipboard
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('✅ ' + items.length + ' items copied!');
-    } catch (e) {
-      // Old-school fallback
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); document.body.removeChild(ta);
-      toast('✅ ' + items.length + ' items copied!');
-    }
-  }
-}
-</script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 </head>
 <body>
 <div class="header">
@@ -481,6 +445,29 @@ $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remov
 $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#moveModal').classList.remove('active');});
 
 (async()=>{if(await checkAuth())loadData();})();
+
+// ---- Share / Copy to Text ----
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
+}
+
+async function shareStoreList(storeId, storeName) {
+  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
+  if (!items.length) { toast('No active items in ' + storeName); return; }
+  const text = items.join('\n');
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); }
+    catch (e) {}
+  } else {
+    try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
+    catch (e) {
+      const ta = document.createElement('textarea'); ta.value = text;
+      ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();
+      document.execCommand('copy');document.body.removeChild(ta);
+      toast('✅ ' + items.length + ' items copied!');
+    }
+  }
+}
 </script>
 <div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
 <ins class="adsbygoogle ad-banner-bottom" style="display:block" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665" data-ad-format="auto" data-full-width-responsive="true"></ins>
