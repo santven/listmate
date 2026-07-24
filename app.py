@@ -368,18 +368,28 @@ def add_to_list():
     if not cat_row:
         # Auto-categorize new item
         cat = categorize(name)
-        db.execute(
-            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-            (_hh(), store_id, name, cat),
-        )
+        try:
+            db.execute(
+                "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                (_hh(), store_id, name, cat),
+            )
+        except Exception:
+            pass  # may already exist from concurrent add
         existing_category = cat
 
-    db.execute(
-        "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
-        (_hh(), store_id, name, existing_category, get_display_name()),
-    )
-    db.commit()
-    row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) ORDER BY id DESC LIMIT 1",
+    try:
+        db.execute(
+            "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
+            (_hh(), store_id, name, existing_category, get_display_name()),
+        )
+        db.commit()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.close()
+        return jsonify({"error": str(e)}), 500
+
+    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0 ORDER BY id DESC LIMIT 1",
                      (store_id, _hh(), name)).fetchone()
     db.close()
     return jsonify({"ok": True, "id": row["id"] if row else 0})
