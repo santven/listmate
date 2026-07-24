@@ -45,6 +45,9 @@ def _ensure_schema():
         for col in [("zip_code", "TEXT DEFAULT ''"), ("country", "TEXT DEFAULT ''")]:
             try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
             except Exception: pass
+        prem_type = "BOOLEAN DEFAULT FALSE" if _use_pg else "INTEGER DEFAULT 0"
+        try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN is_premium {prem_type}")
+        except Exception: pass
         
         # Ensure store tables exist (they were in db_pg._init_schema before rollback)
         store_tables = [
@@ -180,6 +183,26 @@ def location_settings():
     country = (data.get("country") or "").strip()
     authmod._run(f"UPDATE {authmod._HH} SET zip_code = ?, country = ? WHERE id = ?", (zip_code, country, hhid))
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
+
+@app.route("/api/settings/premium", methods=["GET", "POST"])
+@require_user
+def premium_settings():
+    """Get or set household premium status."""
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT is_premium FROM {authmod._HH} WHERE id = ?", (hhid,))
+        is_prem = bool(hh.get("is_premium")) if hh else False
+        return jsonify({"is_premium": is_prem})
+
+    data = request.get_json(silent=True) or {}
+    is_premium = bool(data.get("is_premium", False))
+    val = is_premium if _use_pg else (1 if is_premium else 0)
+    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
+    return jsonify({"ok": True, "is_premium": is_premium})
 
 
 @app.route("/logout")

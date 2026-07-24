@@ -147,30 +147,47 @@ def main():
     try:
         conn, cur, pg = get_db()
 
-        # Query stores created in the last 15 minutes
+        # Query stores created in the last 15 minutes for premium households
         if pg:
             sql_stores = (
                 "SELECT s.id AS store_id, s.name AS store_name, s.household_id, s.created_at "
                 "FROM stores s "
+                "JOIN auth_households h ON s.household_id = h.id "
                 "WHERE s.created_at >= NOW() - INTERVAL '15 minutes' "
+                "AND h.is_premium = TRUE "
                 "ORDER BY s.created_at DESC LIMIT 5"
             )
         else:
             sql_stores = (
                 "SELECT s.id AS store_id, s.name AS store_name, s.household_id, s.created_at "
                 "FROM stores s "
+                "JOIN auth_households h ON s.household_id = h.id "
                 "WHERE s.created_at >= datetime('now', '-15 minutes') "
+                "AND h.is_premium = 1 "
                 "ORDER BY s.created_at DESC LIMIT 5"
             )
-
         new_stores = run_sql(cur, pg, sql_stores)
 
         # Fallback to store_enrich_queue if table exists and no stores returned by created_at
         if not new_stores:
             try:
-                queue_rows = run_sql(cur, pg,
-                    "SELECT id AS queue_id, store_id, household_id FROM store_enrich_queue "
-                    "WHERE status='pending' ORDER BY created_at LIMIT 5")
+                if pg:
+                    sql_queue = (
+                        "SELECT q.id AS queue_id, q.store_id, q.household_id "
+                        "FROM store_enrich_queue q "
+                        "JOIN auth_households h ON q.household_id = h.id "
+                        "WHERE q.status='pending' AND h.is_premium = TRUE "
+                        "ORDER BY q.created_at LIMIT 5"
+                    )
+                else:
+                    sql_queue = (
+                        "SELECT q.id AS queue_id, q.store_id, q.household_id "
+                        "FROM store_enrich_queue q "
+                        "JOIN auth_households h ON q.household_id = h.id "
+                        "WHERE q.status='pending' AND h.is_premium = 1 "
+                        "ORDER BY q.created_at LIMIT 5"
+                    )
+                queue_rows = run_sql(cur, pg, sql_queue)
                 for q in queue_rows:
                     st = run_sql(cur, pg, "SELECT id AS store_id, name AS store_name, household_id FROM stores WHERE id=?", (q["store_id"],))
                     if st:
@@ -180,7 +197,7 @@ def main():
                 pass
 
         if not new_stores:
-            log("No stores created in the last 15 minutes.")
+            log("No stores needing enrichment for premium households.")
             return
 
         log(f"Found {len(new_stores)} store(s) created in last 15 minutes to enrich.")

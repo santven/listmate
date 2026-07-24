@@ -67,6 +67,19 @@
   </div>
 
   <div class="card">
+    <h2>⭐ Household Plan</h2>
+    <p>Premium households get AI store auto-enrichment and trip detection.</p>
+    <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;background:#fffdf0;padding:12px 16px;border-radius:10px;border:1.5px solid #ffe082;margin-top:8px;">
+      <input type="checkbox" id="premiumToggle" onchange="savePremium()" style="width:18px;height:18px;cursor:pointer;">
+      <div>
+        <div style="font-weight:700;color:#2c3e2e;">🌟 Premium Membership</div>
+        <div style="font-size:12px;color:#7a6d4d;">Enable AI store item enrichment & smart location features</div>
+      </div>
+    </label>
+    <div class="success" id="premiumSuccess" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
     <h2>🥗 Dietary Restrictions</h2>
     <p>Household-level preferences for meal planning and grocery suggestions.</p>
     <div id="dietaryCheckboxes" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
@@ -108,6 +121,8 @@ let householdData = null;
 
   // Load household data
   await loadHousehold();
+  // Load premium plan
+  await loadPremium();
   // Load dietary preferences
   await loadDietary();
     loadLocation();
@@ -232,6 +247,29 @@ async function saveDietary() {
     if (r.ok) {
       document.getElementById('dietarySuccess').textContent = '✓ Saved';
       setTimeout(() => document.getElementById('dietarySuccess').textContent = '', 2000);
+    }
+  } catch(e) {}
+}
+
+// ---- Premium Settings ----
+async function loadPremium() {
+  try {
+    const r = await fetch('/api/settings/premium');
+    const d = await r.json();
+    document.getElementById('premiumToggle').checked = !!d.is_premium;
+  } catch(e) {}
+}
+
+async function savePremium() {
+  const is_premium = document.getElementById('premiumToggle').checked;
+  try {
+    const r = await fetch('/api/settings/premium', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({is_premium})
+    });
+    if (r.ok) {
+      document.getElementById('premiumSuccess').textContent = '✓ Plan updated';
+      setTimeout(() => document.getElementById('premiumSuccess').textContent = '', 2000);
     }
   } catch(e) {}
 }

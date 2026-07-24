@@ -123,8 +123,7 @@ if USE_PG:
                 dietary_restrictions TEXT DEFAULT '',
                 zip_code TEXT DEFAULT '',
                 country TEXT DEFAULT '',
-                zip_code TEXT DEFAULT '',
-                country TEXT DEFAULT '',
+                is_premium BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL REFERENCES auth_users(id),
@@ -141,6 +140,10 @@ if USE_PG:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
+        try:
+            _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE")
+        except Exception:
+            pass
         _schema_done = True
 
 else:
@@ -195,6 +198,9 @@ else:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
                 dietary_restrictions TEXT DEFAULT '',
+                zip_code TEXT DEFAULT '',
+                country TEXT DEFAULT '',
+                is_premium INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL, feature TEXT NOT NULL,
@@ -211,6 +217,16 @@ else:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
+        for col, coltype in [
+            ("dietary_restrictions", "TEXT DEFAULT ''"),
+            ("zip_code", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
+            ("is_premium", "INTEGER NOT NULL DEFAULT 0")
+        ]:
+            try:
+                _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
+            except Exception:
+                pass
         _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -391,7 +407,7 @@ def register_auth_routes(app):
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code","")},
+            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": bool(hh.get("is_premium", False))},
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
                           "role": "owner" if m["id"] == uid else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],
