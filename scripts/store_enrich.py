@@ -31,17 +31,14 @@ def log(msg):
 
 def get_key():
     """Retrieve Gemini API key from SECRET_KEY environment variable (set in Render)."""
-    # 1. Primary: SECRET_KEY environment variable in Render
     key = os.environ.get("SECRET_KEY")
     if key and key.strip():
         return key.strip()
 
-    # 2. Fallback: GEMINI_API_KEY environment variable
     key = os.environ.get("GEMINI_API_KEY")
     if key and key.strip():
         return key.strip()
 
-    # 3. Fallback: Check local/shared config files
     try:
         for path in ["/opt/shared/.env", ".env"]:
             if os.path.exists(path):
@@ -64,7 +61,6 @@ def gemini_query(prompt, key):
     """Query Gemini 3.1 Flash Lite API with strict rate limiting (max 5 calls/min)."""
     global _last_call_timestamp
 
-    # Enforce rate limit (max 5 calls per minute)
     now = time.time()
     elapsed = now - _last_call_timestamp
     if elapsed < MIN_CALL_INTERVAL:
@@ -82,7 +78,6 @@ def gemini_query(prompt, key):
         }
     }
 
-    # API Endpoint using Gemini 3.1 Flash Lite
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
     req = urllib.request.Request(
         url,
@@ -145,9 +140,13 @@ def main():
         log("ERROR: No SECRET_KEY or GEMINI_API_KEY found in environment")
         return
 
-    conn, cur, pg = get_db()
+    conn = None
+    cur = None
+    pg = False
 
     try:
+        conn, cur, pg = get_db()
+
         # Query stores created in the last 15 minutes
         if pg:
             sql_stores = (
@@ -294,8 +293,16 @@ def main():
                     conn.commit()
 
     finally:
-        if not pg and conn:
-            conn.close()
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
         log("=== Store Enrichment Job Complete ===")
 
 if __name__ == "__main__":
