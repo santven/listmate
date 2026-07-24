@@ -65,6 +65,26 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>🥗 Dietary Restrictions</h2>
+    <p>Household-level preferences for meal planning and grocery suggestions.</p>
+    <div id="dietaryCheckboxes" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;background:#f7faf5;padding:8px 14px;border-radius:8px;border:1.5px solid var(--border);">
+        <input type="checkbox" value="Vegetarian" onchange="saveDietary()"> 🥬 Vegetarian
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;background:#f7faf5;padding:8px 14px;border-radius:8px;border:1.5px solid var(--border);">
+        <input type="checkbox" value="Vegan" onchange="saveDietary()"> 🌱 Vegan
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;background:#f7faf5;padding:8px 14px;border-radius:8px;border:1.5px solid var(--border);">
+        <input type="checkbox" value="Gluten-Free" onchange="saveDietary()"> 🌾 Gluten-Free
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;background:#f7faf5;padding:8px 14px;border-radius:8px;border:1.5px solid var(--border);">
+        <input type="checkbox" value="Halal" onchange="saveDietary()"> 🍖 Halal
+      </label>
+    </div>
+    <div class="success" id="dietarySuccess" style="margin-top:8px;"></div>
+  </div>
+
   <button class="btn-logout" onclick="logout()">Sign Out</button>
   <a class="btn-back" href="/">← Back to list</a>
 </div>
@@ -79,6 +99,8 @@ let householdData = null;
 
   // Load household data
   await loadHousehold();
+  // Load dietary preferences
+  await loadDietary();
 })();
 
 async function loadHousehold() {
@@ -176,6 +198,32 @@ async function logout() {
 async function removeInvite(token) {
   await fetch('/api/auth/household/invites/' + token, { method: 'DELETE' });
   loadHousehold();
+}
+
+async function loadDietary() {
+  try {
+    const r = await fetch('/api/settings/dietary');
+    const d = await r.json();
+    const vals = (d.dietary_restrictions || '').split(',').filter(Boolean);
+    document.querySelectorAll('#dietaryCheckboxes input').forEach(cb => {
+      cb.checked = vals.includes(cb.value);
+    });
+  } catch(e) {}
+}
+
+async function saveDietary() {
+  const checked = [];
+  document.querySelectorAll('#dietaryCheckboxes input:checked').forEach(cb => checked.push(cb.value));
+  try {
+    const r = await fetch('/api/settings/dietary', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({dietary_restrictions: checked.join(',')})
+    });
+    if (r.ok) {
+      document.getElementById('dietarySuccess').textContent = '✓ Saved';
+      setTimeout(() => document.getElementById('dietarySuccess').textContent = '', 2000);
+    }
+  } catch(e) {}
 }
 </script>
 </body>

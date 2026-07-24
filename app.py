@@ -26,6 +26,29 @@ CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
+# ── Schema migration: dietary_restrictions (added Jul 2026, idempotent) ──
+
+_MIGRATED = False
+
+def _ensure_schema():
+    global _MIGRATED
+    if _MIGRATED:
+        return
+    try:
+        authmod._init_schema()
+        col_type = "TEXT DEFAULT ''"
+        try:
+            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN dietary_restrictions {col_type}")
+        except Exception:
+            pass  # column already exists
+        _MIGRATED = True
+    except Exception:
+        pass  # graceful failure — endpoint will still try init_schema
+
+@app.before_request
+def _check_migration():
+    _ensure_schema()
+
 # Database: PostgreSQL on Render (DATABASE_URL), SQLite locally
 _DATABASE_URL = os.environ.get("DATABASE_URL") or ""
 _use_pg = "postgres" in _DATABASE_URL.lower() or "RENDER" in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
@@ -71,6 +94,27 @@ def privacy_page():
 @require_user
 def settings_page():
     return send_from_directory("static", "settings.html")
+
+
+# ── Dietary restrictions (household-level) ──
+
+@app.route("/api/settings/dietary", methods=["GET", "POST"])
+@require_user
+def dietary_settings():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+        val = (hh.get("dietary_restrictions") or "") if hh else ""
+        return jsonify({"dietary_restrictions": val})
+    
+    data = request.get_json(silent=True) or {}
+    restrictions = (data.get("dietary_restrictions") or "").strip()
+    authmod._run(f"UPDATE {authmod._HH} SET dietary_restrictions = ? WHERE id = ?", (restrictions, hhid))
+    return jsonify({"ok": True, "dietary_restrictions": restrictions})
 
 
 @app.route("/api/health")
