@@ -233,10 +233,13 @@ def add_store():
         return jsonify({"error": "name required"}), 400
     db = get_db()
     try:
-        db.execute(
-            "INSERT INTO stores (household_id, name) VALUES (?, ?) ON CONFLICT (household_id, name) DO NOTHING",
-            (_hh(), name),
-        )
+        existing = db.execute(
+            "SELECT id FROM stores WHERE household_id = ? AND LOWER(name) = LOWER(?)",
+            (hh, name),
+        ).fetchone()
+        if existing:
+            return jsonify({"ok": True, "existing": True, "id": existing["id"]})
+        db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
         db.commit()
     finally:
         db.close()

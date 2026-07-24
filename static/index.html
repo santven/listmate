@@ -351,7 +351,12 @@ async function deleteItem(id){await fetch(API+'/list/'+id,{method:'DELETE'});lis
 
 $('#btnNewStore').addEventListener('click',async()=>{
   const name=$('#newStoreInput').value.trim(); if(!name)return;
-  await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  $('#btnNewStore').disabled=true;
+  try{
+    let r=await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    let d=await r.json();
+    if(!r.ok){toast('Error: '+(d.error||'Failed'));$('#btnNewStore').disabled=false;return;}
+  } catch(e){toast('Network error');$('#btnNewStore').disabled=false;return;}
   $('#newStoreInput').value=''; toast('Store added: '+name); loadData();
 });
 $('#newStoreInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewStore').click();});
