@@ -71,14 +71,18 @@ def _ensure_schema():
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
-            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, name)""",
-            """CREATE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, name)""",
+            """CREATE INDEX IF NOT EXISTS idx_si_store_name ON store_items(household_id, store_id, name)""",
         ]
         for stmt in store_tables:
             try: authmod._exec(stmt)
             except Exception: pass
+        
+        # Also ensure store tables via the main db connection (may be separate schema)
+        try:
+            from db_pg import init_db as init_store_db
+            init_store_db()
+        except Exception:
+            pass
         
         _MIGRATED = True
     except Exception:
