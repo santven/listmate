@@ -100,8 +100,12 @@ function handleCredential(credential) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
-      if (inviteToken) { fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); }
-      location.replace('/'); return;
+      if (inviteToken) {
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
+      } else {
+        location.replace('/');
+      }
+      return;
     }
     if (r.data.needs_signup) {
       document.getElementById('step1').classList.remove('active');
