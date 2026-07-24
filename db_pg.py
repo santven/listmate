@@ -20,20 +20,28 @@ def get_db():
 
 def close_db(conn):
     if conn:
-        try: conn._conn.commit()
-        except: pass
-        try: _get_pool().putconn(conn._conn)
-        except: pass
-
+        try: conn.close()
+        except Exception: pass
 
 class PgConnection:
     def __init__(self, conn):
         self._conn = conn
         self._cur = None
         self._last_rowcount = 0
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def execute(self, sql, params=None):
         sql = re.sub(r'\?', '%s', sql)
+        if self._cur:
+            try: self._cur.close()
+            except Exception: pass
+            self._cur = None
         self._cur = self._conn.cursor()
         if params: self._cur.execute(sql, params)
         else: self._cur.execute(sql)
@@ -52,25 +60,42 @@ class PgConnection:
         return dict(zip([d[0] for d in self._cur.description], row))
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         if self._cur:
             try: self._cur.close()
-            except: pass
+            except Exception: pass
             self._cur = None
-        try: self._conn.commit()
-        except: pass
-        try: _get_pool().putconn(self._conn)
-        except: pass
+        if self._conn:
+            try:
+                if not getattr(self._conn, 'closed', False):
+                    self._conn.commit()
+            except Exception: pass
+            try:
+                if not getattr(self._conn, 'closed', False):
+                    _get_pool().putconn(self._conn)
+            except Exception:
+                try: self._conn.close()
+                except Exception: pass
+            self._conn = None
 
-    def commit(self): self._conn.commit()
-    def rollback(self): self._conn.rollback()
+    def commit(self):
+        if self._conn and not getattr(self._conn, 'closed', False):
+            self._conn.commit()
+
+    def rollback(self):
+        if self._conn and not getattr(self._conn, 'closed', False):
+            self._conn.rollback()
+
     total_changes = property(lambda self: self._last_rowcount)
-
 
 _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS stores (id SERIAL PRIMARY KEY, name TEXT NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS store_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1)",
     "CREATE TABLE IF NOT EXISTS list_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL DEFAULT '', added_at TIMESTAMP NOT NULL DEFAULT NOW(), purchased BOOLEAN NOT NULL DEFAULT FALSE, purchased_by TEXT, purchased_at TIMESTAMP, household_id INTEGER NOT NULL DEFAULT 1)",
     "CREATE TABLE IF NOT EXISTS store_visits (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), household_id INTEGER NOT NULL DEFAULT 1, visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
     "CREATE INDEX IF NOT EXISTS idx_si_store ON store_items(store_id, household_id)",
     "CREATE INDEX IF NOT EXISTS idx_si_name ON store_items(LOWER(name))",
     "CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)",

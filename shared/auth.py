@@ -35,10 +35,11 @@ if USE_PG:
         global _pool
         if _pool and conn:
             try:
-                _pool.putconn(conn)
+                if not getattr(conn, 'closed', False):
+                    _pool.putconn(conn)
             except Exception:
                 try: conn.close()
-                except: pass
+                except Exception: pass
 
     def _pool_close():
         global _pool
@@ -49,60 +50,77 @@ if USE_PG:
     def _one(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
+        cur = None
         try:
             cur = conn.cursor()
             if params: cur.execute(sql_fixed, params)
             else: cur.execute(sql_fixed)
             row = cur.fetchone()
             cols = [d[0] for d in cur.description] if cur.description else []
-            cur.close()
-            _put_conn(conn)
             return dict(zip(cols, row)) if row else None
         except Exception:
-            conn.rollback()
-            _put_conn(conn)
             return None
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _run(sql, params=None):
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        rows = cur.fetchall() if cur.description else []
-        cols = [d[0] for d in cur.description] if cur.description else []
-        cur.close()
-        _put_conn(conn)
-        return [dict(zip(cols, r)) for r in rows]
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            rows = cur.fetchall() if cur.description else []
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception:
+            return []
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _exec(sql, params=None):
         '''Execute INSERT/UPDATE/DELETE — raises on error.'''
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        cur.close()
-        _put_conn(conn)
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     def _insert(sql, params=None):
         """Insert a row and return the new ID (Postgres RETURNING)."""
         sql_fixed = re.sub(r'\?', '%s', sql)
         conn = _connect()
-        cur = conn.cursor()
-        if params: cur.execute(sql_fixed, params)
-        else: cur.execute(sql_fixed)
-        # Try getting RETURNING id first
-        row = cur.fetchone() if cur.description else None
-        if row:
-            new_id = row[0]
-        else:
-            # No RETURNING — get lastval
-            cur.execute("SELECT lastval()")
-            new_id = cur.fetchone()[0]
-        cur.close()
-        _put_conn(conn)
-        return new_id
+        cur = None
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            row = cur.fetchone() if cur.description else None
+            if row:
+                new_id = row[0]
+            else:
+                cur.execute("SELECT lastval()")
+                new_id = cur.fetchone()[0]
+            return new_id
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
 
     _USERS = "auth_users"
     _HH = "auth_households"
@@ -123,8 +141,7 @@ if USE_PG:
                 dietary_restrictions TEXT DEFAULT '',
                 zip_code TEXT DEFAULT '',
                 country TEXT DEFAULT '',
-                zip_code TEXT DEFAULT '',
-                country TEXT DEFAULT '',
+                is_premium BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL REFERENCES auth_users(id),
@@ -141,6 +158,10 @@ if USE_PG:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
+        try:
+            _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE")
+        except Exception:
+            pass
         _schema_done = True
 
 else:
@@ -195,6 +216,9 @@ else:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
                 invite_code TEXT UNIQUE,
                 dietary_restrictions TEXT DEFAULT '',
+                zip_code TEXT DEFAULT '',
+                country TEXT DEFAULT '',
+                is_premium INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL, feature TEXT NOT NULL,
@@ -211,6 +235,16 @@ else:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
+        for col, coltype in [
+            ("dietary_restrictions", "TEXT DEFAULT ''"),
+            ("zip_code", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
+            ("is_premium", "INTEGER NOT NULL DEFAULT 0")
+        ]:
+            try:
+                _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
+            except Exception:
+                pass
         _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -331,10 +365,17 @@ def register_auth_routes(app):
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()
-            resp["user_info"] = {"id": get_user_id(), "name": get_display_name(),
-                "email": get_email(), "household_id": get_household_id(),
-                "household_name": get_household_name()}
             uid = get_user_id()
+            hh_id = get_household_id()
+            is_prem = False
+            if hh_id:
+                _init_schema()
+                hh = _one(f"SELECT is_premium FROM {_HH} WHERE id = ?", (hh_id,))
+                is_prem = bool(hh.get("is_premium")) if hh else False
+            resp["is_premium"] = is_prem
+            resp["user_info"] = {"id": uid, "name": get_display_name(),
+                "email": get_email(), "household_id": hh_id,
+                "household_name": get_household_name(), "is_premium": is_prem}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))
@@ -391,7 +432,7 @@ def register_auth_routes(app):
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code","")},
+            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": bool(hh.get("is_premium", False))},
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
                           "role": "owner" if m["id"] == uid else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],

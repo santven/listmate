@@ -34,19 +34,26 @@ def _ensure_schema():
     global _MIGRATED
     if _MIGRATED:
         return
+    _MIGRATED = True
     try:
         authmod._init_schema()
         col_type = "TEXT DEFAULT ''"
-        try:
-            authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN dietary_restrictions {col_type}")
-        except Exception:
-            pass  # column already exists
-    # zip_code + country
-        for col in [("zip_code", "TEXT DEFAULT ''"), ("country", "TEXT DEFAULT ''")]:
-            try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
-            except Exception: pass
+        prem_type = "BOOLEAN DEFAULT FALSE" if _use_pg else "INTEGER DEFAULT 0"
         
-        # Ensure store tables exist (they were in db_pg._init_schema before rollback)
+        for col, ctype in [
+            ("dietary_restrictions", col_type),
+            ("zip_code", col_type),
+            ("country", col_type),
+            ("is_premium", prem_type)
+        ]:
+            try:
+                if _use_pg:
+                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
+                else:
+                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
+            except Exception:
+                pass
+
         store_tables = [
             """CREATE TABLE IF NOT EXISTS stores (
                 id SERIAL PRIMARY KEY, name TEXT NOT NULL,
@@ -68,6 +75,12 @@ def _ensure_schema():
                 household_id INTEGER NOT NULL DEFAULT 1,
                 visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE TABLE IF NOT EXISTS store_enrich_queue (
+                id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                processed_at TIMESTAMP)""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
@@ -76,17 +89,14 @@ def _ensure_schema():
         for stmt in store_tables:
             try: authmod._exec(stmt)
             except Exception: pass
-        
-        # Also ensure store tables via the main db connection (may be separate schema)
+
         try:
             from db_pg import init_db as init_store_db
             init_store_db()
         except Exception:
             pass
-        
-        _MIGRATED = True
     except Exception:
-        pass  # graceful failure — endpoint will still try init_schema
+        pass
 
 @app.before_request
 def _check_migration():
@@ -181,6 +191,26 @@ def location_settings():
     authmod._run(f"UPDATE {authmod._HH} SET zip_code = ?, country = ? WHERE id = ?", (zip_code, country, hhid))
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
+@app.route("/api/settings/premium", methods=["GET", "POST"])
+@require_user
+def premium_settings():
+    """Get or set household premium status."""
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT is_premium FROM {authmod._HH} WHERE id = ?", (hhid,))
+        is_prem = bool(hh.get("is_premium")) if hh else False
+        return jsonify({"is_premium": is_prem})
+
+    data = request.get_json(silent=True) or {}
+    is_premium = bool(data.get("is_premium", False))
+    val = is_premium if _use_pg else (1 if is_premium else 0)
+    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
+    return jsonify({"ok": True, "is_premium": is_premium})
+
 
 @app.route("/logout")
 def logout_page():
@@ -245,6 +275,13 @@ def add_store():
     db = get_db()
     try:
         db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
+        st = db.execute("SELECT id FROM stores WHERE household_id = ? AND name = ? ORDER BY id DESC LIMIT 1", (hh, name)).fetchone()
+        if st:
+            store_id = st.get("id") if isinstance(st, dict) else st[0]
+            try:
+                db.execute("INSERT INTO store_enrich_queue (store_id, household_id) VALUES (?, ?)", (store_id, hh))
+            except Exception:
+                pass
         db.commit()
     except Exception:
         try: db.rollback()
@@ -260,23 +297,25 @@ def add_store():
 @require_user
 def list_store_items(store_id):
     db = get_db()
-    # Verify store belongs to this household
-    store = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (store_id, _hh()),
-    ).fetchone()
-    if not store:
-        db.close()
-        return jsonify({"error": "not found"}), 404
+    try:
+        # Verify store belongs to this household
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, _hh()),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "not found"}), 404
 
-    items = db.execute(
-        "SELECT * FROM store_items WHERE store_id = ? AND household_id = ? ORDER BY COALESCE(NULLIF(category,''),'ZZZ'), name",
-        (store_id, _hh()),
-    ).fetchall()
-    db.close()
-    resp = jsonify([dict(r) for r in items])
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    return resp
+        items = db.execute(
+            "SELECT * FROM store_items WHERE store_id = ? AND household_id = ? ORDER BY COALESCE(NULLIF(category,''),'ZZZ'), name",
+            (store_id, _hh()),
+        ).fetchall()
+
+        resp = jsonify([dict(r) for r in items])
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return resp
+    finally:
+        db.close()
 
 
 @app.route("/api/stores/<int:store_id>/items", methods=["POST"])
@@ -287,41 +326,43 @@ def add_store_item(store_id):
     category = (data.get("category") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+
     db = get_db()
-    # Verify store ownership
-    store = db.execute(
-        "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-        (store_id, _hh()),
-    ).fetchone()
-    if not store:
+    try:
+        # Verify store ownership
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, _hh()),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        existing = db.execute(
+            "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+            (store_id, _hh(), name),
+        ).fetchone()
+        if existing:
+            # Update category if provided
+            if category:
+                db.execute("UPDATE store_items SET category = ? WHERE id = ?", (category, existing["id"]))
+                db.commit()
+            return jsonify({"ok": True, "existing": True, "id": existing["id"]})
+
+        # Auto-categorize if not provided
+        if not category:
+            category = categorize(name)
+
+        db.execute(
+            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+            (_hh(), store_id, name, category),
+        )
+        db.commit()
+
+        row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                         (store_id, _hh(), name)).fetchone()
+        return jsonify({"ok": True, "id": row["id"] if row else 0})
+    finally:
         db.close()
-        return jsonify({"error": "store not found"}), 404
-
-    existing = db.execute(
-        "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
-        (store_id, _hh(), name),
-    ).fetchone()
-    if existing:
-        # Update category if provided
-        if category:
-            db.execute("UPDATE store_items SET category = ? WHERE id = ?", (category, existing["id"]))
-            db.commit()
-        db.close()
-        return jsonify({"ok": True, "existing": True, "id": existing["id"]})
-
-    # Auto-categorize if not provided
-    if not category:
-        category = categorize(name)
-
-    db.execute(
-        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-        (_hh(), store_id, name, category),
-    )
-    db.commit()
-    row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) ORDER BY id DESC LIMIT 1",
-                     (store_id, _hh(), name)).fetchone()
-    db.close()
-    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 # ── grocery list (household-scoped) ──
@@ -330,15 +371,17 @@ def add_store_item(store_id):
 @require_user
 def list_grocery():
     db = get_db()
-    items = db.execute("""
-        SELECT l.*, s.name as store_name
-        FROM list_items l
-        JOIN stores s ON l.store_id = s.id AND s.household_id = ?
-        WHERE l.household_id = ?
-        ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
-    """, (_hh(), _hh())).fetchall()
-    db.close()
-    return jsonify([dict(r) for r in items])
+    try:
+        items = db.execute("""
+            SELECT l.*, s.name as store_name
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id AND s.household_id = ?
+            WHERE l.household_id = ?
+            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+        """, (_hh(), _hh())).fetchall()
+        return jsonify([dict(r) for r in items])
+    finally:
+        db.close()
 
 
 @app.route("/api/list", methods=["POST"])
@@ -406,49 +449,53 @@ def add_to_list():
 @require_user
 def toggle_list_item(item_id):
     db = get_db()
-    item = db.execute(
-        "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
-        (item_id, _hh()),
-    ).fetchone()
-    if not item:
-        db.close()
-        return jsonify({"error": "not found"}), 404
-    if item["purchased"]:
-        db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
-    else:
-        db.execute(
-            "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
-            (get_display_name(), item_id),
-        )
-        # Auto-record a visit for this store today
-        today = __import__('datetime').date.today().isoformat()
-        sv = db.execute(
-            "SELECT id FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
-            (item["store_id"], _hh(), today)
+    try:
+        item = db.execute(
+            "SELECT * FROM list_items WHERE id = ? AND household_id = ?",
+            (item_id, _hh()),
         ).fetchone()
-        if sv:
-            db.execute("UPDATE store_visits SET items_count = items_count + 1 WHERE id = ?", (sv["id"],))
+        if not item:
+            return jsonify({"error": "not found"}), 404
+
+        if item["purchased"]:
+            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
         else:
             db.execute(
-                "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
-                (item["store_id"], _hh(), today)
+                "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
+                (get_display_name(), item_id),
             )
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+            # Auto-record a visit for this store today
+            today = __import__('datetime').date.today().isoformat()
+            sv = db.execute(
+                "SELECT id FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+                (item["store_id"], _hh(), today)
+            ).fetchone()
+            if sv:
+                db.execute("UPDATE store_visits SET items_count = items_count + 1 WHERE id = ?", (sv["id"],))
+            else:
+                db.execute(
+                    "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+                    (item["store_id"], _hh(), today)
+                )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 @app.route("/api/list/<int:item_id>", methods=["DELETE"])
 @require_user
 def delete_list_item(item_id):
     db = get_db()
-    db.execute(
-        "DELETE FROM list_items WHERE id = ? AND household_id = ?",
-        (item_id, _hh()),
-    )
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+    try:
+        db.execute(
+            "DELETE FROM list_items WHERE id = ? AND household_id = ?",
+            (item_id, _hh()),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 @app.route("/api/list/<int:item_id>/move", methods=["PUT"])
@@ -502,13 +549,15 @@ def move_list_item(item_id):
 @require_user
 def clear_list():
     db = get_db()
-    db.execute(
-        "DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?",
-        (_hh(),),
-    )
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+    try:
+        db.execute(
+            "DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?",
+            (_hh(),),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 # ── store visits ───────────────────────────────────────────
@@ -518,13 +567,15 @@ def clear_list():
 def check_visit_today(store_id):
     """Has there been a visit to this store today?"""
     db = get_db()
-    today = __import__('datetime').date.today().isoformat()
-    visit = db.execute(
-        "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
-        (store_id, _hh(), today)
-    ).fetchone()
-    db.close()
-    return jsonify({"active": dict(visit) if visit else None})
+    try:
+        today = __import__('datetime').date.today().isoformat()
+        visit = db.execute(
+            "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+            (store_id, _hh(), today)
+        ).fetchone()
+        return jsonify({"active": dict(visit) if visit else None})
+    finally:
+        db.close()
 
 
 @app.route("/api/stores/<int:store_id>/visit", methods=["POST"])
@@ -532,21 +583,23 @@ def check_visit_today(store_id):
 def mark_visit(store_id):
     """Record a store visit for today."""
     db = get_db()
-    today = __import__('datetime').date.today().isoformat()
-    existing = db.execute(
-        "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
-        (store_id, _hh(), today)
-    ).fetchone()
-    if existing:
-        db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = NOW() WHERE id = ?", (existing["id"],))
-    else:
-        db.execute(
-            "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+    try:
+        today = __import__('datetime').date.today().isoformat()
+        existing = db.execute(
+            "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
             (store_id, _hh(), today)
-        )
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
+        ).fetchone()
+        if existing:
+            db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = NOW() WHERE id = ?", (existing["id"],))
+        else:
+            db.execute(
+                "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+                (store_id, _hh(), today)
+            )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 @app.route("/api/suggestions")
@@ -554,52 +607,72 @@ def mark_visit(store_id):
 def get_suggestions():
     """Suggest items based on visit history (5+ visits required)."""
     db = get_db()
-    stores = db.execute("SELECT id, name FROM stores WHERE household_id = ?", (_hh(),)).fetchall()
+    try:
+        stores = db.execute("SELECT id, name FROM stores WHERE household_id = ?", (_hh(),)).fetchall()
 
-    suggestions = {}
-    for s in stores:
-        sid = s["id"]
-        # Find items bought in >5 visits
-        items = db.execute("""
-            SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
-                   MAX(sv.visit_date) as last_visit,
-                   julianday('now') - julianday(MAX(sv.visit_date)) as days_since
-            FROM store_visits sv
-            JOIN list_items li ON li.store_id = sv.store_id
-                AND li.household_id = sv.household_id
-                AND li.purchased = TRUE
-                AND li.purchased_at >= datetime(sv.visit_date)
-                AND li.purchased_at < datetime(sv.visit_date, '+1 day')
-            WHERE sv.store_id = ? AND sv.household_id = ?
-            GROUP BY LOWER(li.name)
-            HAVING visit_count >= 5
-            ORDER BY days_since DESC
-            LIMIT 6
-        """, (sid, _hh())).fetchall()
+        suggestions = {}
+        for s in stores:
+            sid = s["id"]
+            if _use_pg:
+                items = db.execute("""
+                    SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
+                           MAX(sv.visit_date) as last_visit,
+                           (CURRENT_DATE - MAX(sv.visit_date)) as days_since
+                    FROM store_visits sv
+                    JOIN list_items li ON li.store_id = sv.store_id
+                        AND li.household_id = sv.household_id
+                        AND li.purchased = TRUE
+                        AND li.purchased_at >= sv.visit_date::timestamp
+                        AND li.purchased_at < (sv.visit_date::timestamp + INTERVAL '1 day')
+                    WHERE sv.store_id = ? AND sv.household_id = ?
+                    GROUP BY li.name, li.category
+                    HAVING COUNT(DISTINCT sv.visit_date) >= 5
+                    ORDER BY days_since DESC
+                    LIMIT 6
+                """, (sid, _hh())).fetchall()
+            else:
+                items = db.execute("""
+                    SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
+                           MAX(sv.visit_date) as last_visit,
+                           julianday('now') - julianday(MAX(sv.visit_date)) as days_since
+                    FROM store_visits sv
+                    JOIN list_items li ON li.store_id = sv.store_id
+                        AND li.household_id = sv.household_id
+                        AND li.purchased = TRUE
+                        AND li.purchased_at >= datetime(sv.visit_date)
+                        AND li.purchased_at < datetime(sv.visit_date, '+1 day')
+                    WHERE sv.store_id = ? AND sv.household_id = ?
+                    GROUP BY LOWER(li.name)
+                    HAVING visit_count >= 5
+                    ORDER BY days_since DESC
+                    LIMIT 6
+                """, (sid, _hh())).fetchall()
 
-        # Filter out items already on the current list
-        on_list = set(
-            r["name"].lower() for r in
-            db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = FALSE", (sid, _hh())).fetchall()
-        )
+            # Filter out items already on the current list
+            on_list = set(
+                r["name"].lower() for r in
+                db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = FALSE", (sid, _hh())).fetchall()
+            )
 
-        store_suggestions = []
-        for item in items:
-            if item["name"].lower() not in on_list:
-                avg_interval = max(1, (365 * 4) / item["visit_count"])  # rough: 1 visit ~ every N days
-                store_suggestions.append({
-                    "name": item["name"],
-                    "times": item["visit_count"],
-                    "days_since": round(item["days_since"]),
-                    "avg_interval": round(avg_interval),
-                })
-
-        if store_suggestions:
-            suggestions[s["name"]] = store_suggestions
-
-    db.close()
-    return jsonify(suggestions)
-
+            store_suggestions = []
+            for item in items:
+                if item["name"].lower() not in on_list:
+                    avg_interval = max(1, (365 * 4) / item["visit_count"])  # rough: 1 visit ~ every N days
+                    days_s = float(item["days_since"] or 0)
+                    store_suggestions.append({
+                        "name": item["name"],
+                        "times": item["visit_count"],
+                        "days_since": round(days_s),
+                        "avg_interval": round(avg_interval),
+                    })
+            if store_suggestions:
+                suggestions[s["name"]] = store_suggestions
+        return jsonify(suggestions)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     from db import init_db
