@@ -89,19 +89,7 @@
 
   @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; } .header-meta .user { display: inline; } }
 
-  /* Shared bottom nav */
-  .shared-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: #fff; border-top: 1px solid #e0e0e0; display: flex; justify-content: center; box-shadow: 0 -1px 6px rgba(0,0,0,0.06); padding-bottom: env(safe-area-inset-bottom); }
-  .shared-nav a { flex: 1; max-width: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 8px; text-decoration: none; color: #999; font-size: 11px; font-weight: 500; border-top: 3px solid transparent; }
-  .shared-nav a.active { color: #333; border-top-color: #5ebe7e; font-weight: 600; }
-  @keyframes wiggle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-1.5deg); } 75% { transform: rotate(1.5deg); } }
-  .suggestion-chip { display: inline-block; background: #fff9c4; border: 1px solid #fdd835; border-radius: 14px; padding: 4px 10px; margin: 3px 4px; font-size: 12px; cursor: pointer; animation: wiggle 0.4s ease-in-out infinite; user-select: none; }
-  .suggestion-chip.was-suggested { animation: none; opacity: 0.7; }
-  .suggestion-chip:hover { background: #fff176; }
-  .suggestion-wrap { padding: 4px 0 8px; min-height: 8px; }
-  .shared-nav a.other-app.active { border-top-color: #4a6fa5; }
-  .shared-nav a .nav-icon { font-size: 20px; margin-bottom: 2px; }
-  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-
+  /* Shared bottom nav *
 
   .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
   .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 100; min-width: 160px; overflow: hidden; }
@@ -410,7 +398,6 @@ $('#btnClear').addEventListener('click',async()=>{
   if(!confirm('Remove all open items from the list?'))return;
   await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
 });
-
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
