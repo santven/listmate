@@ -455,7 +455,8 @@ def register_auth_routes(app):
         hh_name = get_household_name()
         inviter = get_display_name()
 
-        invite_link = f"https://grocerlist.app/login?token={token}"
+        base = request.host_url.rstrip('/')
+        invite_link = f"{base}/login?token={token}"
 
         # Send email via SendGrid
         try:

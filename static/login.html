@@ -60,11 +60,13 @@
 
 <script>
 var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
-var inviteToken = (new URLSearchParams(window.location.search)).get('token');
+var inviteToken = (new URLSearchParams(window.location.search)).get('token') || sessionStorage.getItem('listmate_invite');
+if (inviteToken) sessionStorage.removeItem('listmate_invite');
 var googleCredential = null;
 
 // Direct JavaScript navigation — Capacitor respects allowNavigation for user-initiated navigations
 function doSignIn() {
+  if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
   var nonce = Math.random().toString(36).slice(2);
   var url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
     'client_id=' + CLIENT_ID +
@@ -100,8 +102,12 @@ function handleCredential(credential) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
-      if (inviteToken) { fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}); }
-      location.replace('/'); return;
+      if (inviteToken) {
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
+      } else {
+        location.replace('/');
+      }
+      return;
     }
     if (r.data.needs_signup) {
       document.getElementById('step1').classList.remove('active');
