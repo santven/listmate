@@ -178,6 +178,29 @@ def location_settings():
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
+
+@app.route("/api/debug/stores")
+def debug_stores():
+    """DEBUG ONLY — show what's in the stores table. Remove after fixing #38."""
+    db = get_db()
+    try:
+        stores = db.execute("SELECT * FROM stores ORDER BY id").fetchall()
+        tables = db.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+        ).fetchall()
+        return jsonify({
+            "store_count": len(stores),
+            "stores": stores,
+            "tables": [t.get("table_name","") for t in tables] if tables else [],
+            "household_id": _hh(),
+            "datasource": str(type(db).__name__),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()})
+    finally:
+        db.close()
+
 @app.route("/api/health")
 def health():
     return jsonify({
