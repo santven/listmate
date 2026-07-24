@@ -365,10 +365,17 @@ def register_auth_routes(app):
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()
-            resp["user_info"] = {"id": get_user_id(), "name": get_display_name(),
-                "email": get_email(), "household_id": get_household_id(),
-                "household_name": get_household_name()}
             uid = get_user_id()
+            hh_id = get_household_id()
+            is_prem = False
+            if hh_id:
+                _init_schema()
+                hh = _one(f"SELECT is_premium FROM {_HH} WHERE id = ?", (hh_id,))
+                is_prem = bool(hh.get("is_premium")) if hh else False
+            resp["is_premium"] = is_prem
+            resp["user_info"] = {"id": uid, "name": get_display_name(),
+                "email": get_email(), "household_id": hh_id,
+                "household_name": get_household_name(), "is_premium": is_prem}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))
