@@ -351,7 +351,7 @@ def add_to_list():
         return jsonify({"error": "store not found"}), 404
 
     existing = db.execute(
-        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0",
+        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
         (store_id, _hh(), name),
     ).fetchone()
     if existing:
@@ -389,7 +389,7 @@ def add_to_list():
         db.close()
         return jsonify({"error": str(e)}), 500
 
-    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0 ORDER BY id DESC LIMIT 1",
+    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
                      (store_id, _hh(), name)).fetchone()
     db.close()
     return jsonify({"ok": True, "id": row["id"] if row else 0})
@@ -407,10 +407,10 @@ def toggle_list_item(item_id):
         db.close()
         return jsonify({"error": "not found"}), 404
     if item["purchased"]:
-        db.execute("UPDATE list_items SET purchased=0, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+        db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
     else:
         db.execute(
-            "UPDATE list_items SET purchased=1, purchased_by=?, purchased_at=datetime('now') WHERE id=?",
+            "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
             (get_display_name(), item_id),
         )
         # Auto-record a visit for this store today
@@ -496,7 +496,7 @@ def move_list_item(item_id):
 def clear_list():
     db = get_db()
     db.execute(
-        "DELETE FROM list_items WHERE purchased = 0 AND household_id = ?",
+        "DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?",
         (_hh(),),
     )
     db.commit()
@@ -531,7 +531,7 @@ def mark_visit(store_id):
         (store_id, _hh(), today)
     ).fetchone()
     if existing:
-        db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = datetime('now') WHERE id = ?", (existing["id"],))
+        db.execute("UPDATE store_visits SET items_count = items_count + 1, created_at = NOW() WHERE id = ?", (existing["id"],))
     else:
         db.execute(
             "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
@@ -560,7 +560,7 @@ def get_suggestions():
             FROM store_visits sv
             JOIN list_items li ON li.store_id = sv.store_id
                 AND li.household_id = sv.household_id
-                AND li.purchased = 1
+                AND li.purchased = TRUE
                 AND li.purchased_at >= datetime(sv.visit_date)
                 AND li.purchased_at < datetime(sv.visit_date, '+1 day')
             WHERE sv.store_id = ? AND sv.household_id = ?
@@ -573,7 +573,7 @@ def get_suggestions():
         # Filter out items already on the current list
         on_list = set(
             r["name"].lower() for r in
-            db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = 0", (sid, _hh())).fetchall()
+            db.execute("SELECT name FROM list_items WHERE store_id = ? AND household_id = ? AND purchased = FALSE", (sid, _hh())).fetchall()
         )
 
         store_suggestions = []
