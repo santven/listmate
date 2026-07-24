@@ -427,13 +427,15 @@ async function shareStoreList(storeId, storeName) {
   if (!items.length) { toast('No active items in ' + storeName); return; }
   const text = items.join('\n');
 
-  // Try native share sheet first (Chrome/Safari on mobile)
+  // Try native share sheet first (Chrome/Safari on mobile browser)
   if (navigator.share) {
-    try { await navigator.share({ title: 'Grocery List — ' + storeName, text: text }); return; }
-    catch (e) {} // user cancelled share sheet
+    try { await navigator.share({ title: 'Grocery List', text: text }); return; }
+    catch (e) {
+      // share sheet failed or unavailable — fall through to clipboard
+    }
   }
 
-  // Fallback: copy to clipboard (desktop browsers, Android WebView)
+  // Fallback: copy to clipboard (desktop, Android WebView)
   try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
   catch (e) {
     const ta = document.createElement('textarea'); ta.value = text;
