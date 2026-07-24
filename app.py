@@ -181,9 +181,8 @@ def location_settings():
 @app.route("/logout")
 def logout_page():
     """Log the user out and redirect to login."""
-    resp = flask.redirect("/login")
-    resp.set_cookie("session_id", "", expires=0)
-    return resp
+    session.clear()
+    return redirect("/login")
 
 @app.route("/api/health")
 def health():
