@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""PostgreSQL — direct connections (same pattern as auth module, which works)."""
+"""PostgreSQL — connection pool (ThreadedConnectionPool) for Render/Neon."""
 import os, re, psycopg2
+from psycopg2 import pool as _pool
+
+_pool_ctx = None
+
+def _get_pool():
+    global _pool_ctx
+    if _pool_ctx is None:
+        url = os.environ.get("DATABASE_URL")
+        if not url:
+            raise RuntimeError("DATABASE_URL not set")
+        # Neon free tier: keep min=1, max=4 connections
+        _pool_ctx = _pool.ThreadedConnectionPool(1, 4, url)
+    return _pool_ctx
 
 def get_db():
-    url = os.environ.get("DATABASE_URL")
-    if not url: raise RuntimeError("DATABASE_URL not set")
-    conn = psycopg2.connect(url)
-    conn.autocommit = False
-    return PgConnection(conn)
+    return PgConnection(_get_pool().getconn())
 
 def close_db(conn):
     if conn:
-        try: conn._conn.close()
+        try: conn._conn.commit()
+        except: pass
+        try: _get_pool().putconn(conn._conn)
         except: pass
 
 
@@ -47,7 +58,7 @@ class PgConnection:
             self._cur = None
         try: self._conn.commit()
         except: pass
-        try: self._conn.close()
+        try: _get_pool().putconn(self._conn)
         except: pass
 
     def commit(self): self._conn.commit()
