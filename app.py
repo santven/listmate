@@ -275,6 +275,13 @@ def add_store():
     db = get_db()
     try:
         db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
+        st = db.execute("SELECT id FROM stores WHERE household_id = ? AND name = ? ORDER BY id DESC LIMIT 1", (hh, name)).fetchone()
+        if st:
+            store_id = st.get("id") if isinstance(st, dict) else st[0]
+            try:
+                db.execute("INSERT INTO store_enrich_queue (store_id, household_id) VALUES (?, ?)", (store_id, hh))
+            except Exception:
+                pass
         db.commit()
     except Exception:
         try: db.rollback()

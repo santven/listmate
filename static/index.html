@@ -110,6 +110,11 @@
 .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; 
   height: 50px; background: #f3f4f6; display: flex; align-items: center; 
   justify-content: center; z-index: 1000; color: #9ca3af; font-size: 11px; }
+body.is-premium .ad-banner-bottom, body.has-no-ads .ad-banner-bottom { display: none !important; }
+body.has-ads .container { padding-bottom: 95px !important; }
+body.is-premium .container, body.has-no-ads .container { padding-bottom: 24px; }
+body.has-ads .visit-toast, body.has-ads .toast { bottom: 115px; }
+body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toast, body.has-no-ads .toast { bottom: 30px; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 </head>
@@ -179,7 +184,19 @@ async function checkAuth() {
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
       $('#healthNavLink').style.display = '';
     }
-    return true;
+    
+    if (cfg.is_premium) {
+      document.body.classList.add('is-premium');
+      document.body.classList.remove('has-ads');
+      const ad = document.querySelector('.ad-banner-bottom');
+      if (ad) ad.style.display = 'none';
+    } else {
+      document.body.classList.add('has-ads');
+      document.body.classList.remove('is-premium');
+      const ad = document.querySelector('.ad-banner-bottom');
+      if (ad) ad.style.display = 'flex';
+    }
+return true;
   } catch(e) { window.location.href='/login'; return false; }
 }
 
