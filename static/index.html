@@ -248,7 +248,8 @@ function renderHome() {
     if (!title.querySelector('.share-btn')) {
       const btn = document.createElement('button');
       btn.className = 'share-btn';
-      if (navigator.share) {
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
+      if (isMobile) {
         btn.textContent = '📤 Share';
         btn.onclick = (e) => { e.stopPropagation(); shareStoreList(storeId, name); };
       } else {
