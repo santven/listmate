@@ -103,6 +103,17 @@
   .shared-nav a .nav-icon { font-size: 20px; margin-bottom: 2px; }
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
+
+  /* Burger menu */
+  .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
+  .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 100; min-width: 160px; overflow: hidden; }
+  .burger-dropdown.show { display: block; }
+  .burger-dropdown a, .burger-dropdown button { display: block; width: 100%; padding: 14px 18px; border: none; background: none; font-size: 15px; text-align: left; cursor: pointer; color: #333; text-decoration: none; font-family: inherit; }
+  .burger-dropdown a:hover, .burger-dropdown button:hover { background: #f5f7f2; }
+  .burger-dropdown .divider { border-top: 1px solid var(--border); }
+  .burger-dropdown .danger { color: #d94a4a; }
+  .burger-overlay { display: none; position: fixed; inset: 0; z-index: 99; }
+  .burger-overlay.show { display: block; }
 </style>
 
 <style>
@@ -121,7 +132,13 @@
   <h1 id="headerTitle">🛒 Grocery List</h1>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
-    <button class="btn-logout" onclick="location.href='/settings'" title="Household Settings">⚙️ Settings</button>
+    <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
+    <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
+    <div class="burger-dropdown" id="burgerMenu">
+      <a href="/settings">⚙️ Settings</a>
+      <div class="divider"></div>
+      <a href="/logout" class="danger">🚪 Log out</a>
+    </div>
     <button class="btn-logout" id="btnLogout">Logout</button>
   </div>
 </div>
@@ -159,6 +176,12 @@
     <button class="modal-cancel" id="btnMoveCancel">Cancel</button>
   </div>
 </div>
+
+<script>
+function toggleBurger() {
+  document.getElementById('burgerMenu').classList.toggle('show');
+  document.getElementById('burgerOverlay').classList.toggle('show');
+}
 
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
