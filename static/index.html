@@ -355,9 +355,10 @@ $('#btnNewStore').addEventListener('click',async()=>{
   try{
     let r=await fetch(API+'/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
     let d=await r.json();
-    if(!r.ok){toast('Error: '+(d.error||'Failed'));$('#btnNewStore').disabled=false;return;}
-  } catch(e){toast('Network error');$('#btnNewStore').disabled=false;return;}
+    if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
+  } catch(e){toast('Network error');return;}
   $('#newStoreInput').value=''; toast('Store added: '+name); loadData();
+  $('#btnNewStore').disabled=false;
 });
 $('#newStoreInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewStore').click();});
 
