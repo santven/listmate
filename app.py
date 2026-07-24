@@ -71,9 +71,9 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
+            """CREATE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
-            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
+            """CREATE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
         ]
         for stmt in store_tables:
@@ -231,11 +231,19 @@ def add_store():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+    hh = _hh()
     db = get_db()
     try:
+        existing = db.execute(
+            "SELECT id FROM stores WHERE household_id = ? AND LOWER(name) = LOWER(?)",
+            (hh, name),
+        ).fetchone()
+        if existing:
+            db.close()
+            return jsonify({"ok": True, "existing": True, "id": existing["id"]})
         db.execute(
-            "INSERT INTO stores (household_id, name) VALUES (?, ?) ON CONFLICT (household_id, name) DO NOTHING",
-            (_hh(), name),
+            "INSERT INTO stores (household_id, name) VALUES (?, ?)",
+            (hh, name),
         )
         db.commit()
     finally:
