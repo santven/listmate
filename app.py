@@ -178,6 +178,13 @@ def location_settings():
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
+@app.route("/logout")
+def logout_page():
+    """Log the user out and redirect to login."""
+    resp = flask.redirect("/login")
+    resp.set_cookie("session_id", "", expires=0)
+    return resp
+
 @app.route("/api/health")
 def health():
     return jsonify({
