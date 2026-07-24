@@ -15,7 +15,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
-  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
   .header h1 { font-size: 16px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; }
   .header-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .header-meta .user { font-size: 11px; opacity: 0.8; display: none; }
@@ -118,7 +118,8 @@
 <body>
 <div class="header">
   <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
-  <h1 id="headerTitle">🛒 Grocery List</h1>
+  <span id="cartIcon" style="font-size:20px;flex-shrink:0;">🛒</span>
+  <h1 id="headerTitle" style="margin-left:4px;">Grocery List</h1>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
     <button class="btn-logout" onclick="location.href='/settings'" title="Household Settings">⚙️ Settings</button>
@@ -251,7 +252,7 @@ function renderHome() {
 
 async function openStore(sid) {
   currentStore=stores.find(s=>s.id===sid);
-  $('#headerTitle').textContent='🛒 '+currentStore.name;
+  $('#headerTitle').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value='';
   if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
@@ -297,7 +298,7 @@ function renderCatalog(filter) {
 $('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
-function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='🛒 Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
+function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
 
 async function loadSuggestions(){
   try{
