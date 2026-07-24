@@ -71,6 +71,10 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_si_uniq ON store_items(household_id, store_id, LOWER(name))""",
         ]
         for stmt in store_tables:
             try: authmod._exec(stmt)
@@ -230,7 +234,7 @@ def add_store():
     db = get_db()
     try:
         db.execute(
-            "INSERT OR IGNORE INTO stores (household_id, name) VALUES (?, ?)",
+            "INSERT INTO stores (household_id, name) VALUES (?, ?) ON CONFLICT (household_id, name) DO NOTHING",
             (_hh(), name),
         )
         db.commit()
@@ -462,7 +466,7 @@ def move_list_item(item_id):
 
     # Also ensure the item exists in the target store's catalog for autocomplete
     db.execute(
-        "INSERT OR IGNORE INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
+        "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
         (_hh(), target_store_id, item["name"]),
     )
 
