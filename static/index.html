@@ -304,6 +304,20 @@ function renderHome() {
   if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store to add items</div>';
   $('#listView').innerHTML=html;
   
+  // Attach share buttons to store group titles (desktop hidden via CSS)
+  if(isMobile()) {
+    $$('#listView .store-group-title').forEach(title => {
+      const sid = title.querySelector('.shop-btn')?.dataset.sid;
+      const name = title.childNodes[0]?.textContent?.trim() || 'Store';
+      if(sid && !title.querySelector('.share-btn')) {
+        const btn = document.createElement('button');
+        btn.className = 'share-btn'; btn.textContent = '📤 Share';
+        btn.onclick = (e) => { e.stopPropagation(); shareStoreList(parseInt(sid), name); };
+        title.appendChild(btn);
+      }
+    });
+  }
+  
   // Toggle purchased section
   const toggle = document.getElementById('purchasedToggle');
   const panel = document.getElementById('purchasedItems');
