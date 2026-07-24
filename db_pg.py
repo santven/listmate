@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """PostgreSQL — connection pool (ThreadedConnectionPool) for Render/Neon."""
+
 import os, re, psycopg2
 from psycopg2 import pool as _pool
 
@@ -42,11 +43,26 @@ class PgConnection:
             try: self._cur.close()
             except Exception: pass
             self._cur = None
-        self._cur = self._conn.cursor()
-        if params: self._cur.execute(sql, params)
-        else: self._cur.execute(sql)
-        self._last_rowcount = self._cur.rowcount
-        return self
+
+        try:
+            self._cur = self._conn.cursor()
+            if params: self._cur.execute(sql, params)
+            else: self._cur.execute(sql)
+            self._last_rowcount = self._cur.rowcount
+            return self
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # Connection dropped (e.g. SSL closed unexpectedly after idle timeout).
+            # Discard dead connection, request a fresh one from the pool, and retry statement.
+            try:
+                _get_pool().putconn(self._conn, close=True)
+            except Exception:
+                pass
+            self._conn = _get_pool().getconn()
+            self._cur = self._conn.cursor()
+            if params: self._cur.execute(sql, params)
+            else: self._cur.execute(sql)
+            self._last_rowcount = self._cur.rowcount
+            return self
 
     def fetchall(self):
         if self._cur is None or self._cur.description is None: return []
@@ -68,13 +84,14 @@ class PgConnection:
             except Exception: pass
             self._cur = None
         if self._conn:
-            try:
-                if not getattr(self._conn, 'closed', False):
+            is_broken = getattr(self._conn, 'closed', False) != 0
+            if not is_broken:
+                try:
                     self._conn.commit()
-            except Exception: pass
+                except Exception:
+                    is_broken = True
             try:
-                if not getattr(self._conn, 'closed', False):
-                    _get_pool().putconn(self._conn)
+                _get_pool().putconn(self._conn, close=is_broken)
             except Exception:
                 try: self._conn.close()
                 except Exception: pass
