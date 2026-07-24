@@ -126,13 +126,14 @@ def add_store():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+    hh = _hh()
     db = get_db()
     try:
-        db.execute(
-            "INSERT OR IGNORE INTO stores (household_id, name) VALUES (?, ?)",
-            (_hh(), name),
-        )
+        db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
         db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
     finally:
         db.close()
     return jsonify({"ok": True})
@@ -202,9 +203,10 @@ def add_store_item(store_id):
         (_hh(), store_id, name, category),
     )
     db.commit()
-    rowid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) ORDER BY id DESC LIMIT 1",
+                     (store_id, _hh(), name)).fetchone()
     db.close()
-    return jsonify({"ok": True, "id": rowid})
+    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 # ── grocery list (household-scoped) ──
@@ -278,9 +280,10 @@ def add_to_list():
         db.close()
         return jsonify({"error": "Database error"}), 500
     db.commit()
-    rowid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = 0 ORDER BY id DESC LIMIT 1",
+                     (store_id, _hh(), name)).fetchone()
     db.close()
-    return jsonify({"ok": True, "id": rowid})
+    return jsonify({"ok": True, "id": row["id"] if row else 0})
 
 
 @app.route("/api/list/<int:item_id>/toggle", methods=["POST"])
