@@ -83,6 +83,21 @@
       </label>
     </div>
     <div class="success" id="dietarySuccess" style="margin-top:8px;"></div>
+    <h2 style="margin-top:24px">📍 Your Location</h2>
+    <p class="note">Helps auto-populate store items for your area (Premium feature).</p>
+    <div class="form-row" style="margin-top:12px">
+      <div class="form-group">
+        <label for="locZip">ZIP / Postal Code</label>
+        <input type="text" id="locZip" placeholder="e.g. 60601">
+      </div>
+      <div class="form-group">
+        <label for="locCountry">Country</label>
+        <input type="text" id="locCountry" placeholder="e.g. USA">
+      </div>
+    </div>
+    <button class="btn-save" id="btnSaveLocation" onclick="saveLocation()">Save Location</button>
+    <div class="success" id="locSuccess" style="margin-top:8px;"></div>
+
   </div>
 
   <button class="btn-logout" onclick="logout()">Sign Out</button>
@@ -101,6 +116,7 @@ let householdData = null;
   await loadHousehold();
   // Load dietary preferences
   await loadDietary();
+    loadLocation();
 })();
 
 async function loadHousehold() {
@@ -222,6 +238,31 @@ async function saveDietary() {
     if (r.ok) {
       document.getElementById('dietarySuccess').textContent = '✓ Saved';
       setTimeout(() => document.getElementById('dietarySuccess').textContent = '', 2000);
+    }
+  } catch(e) {}
+}
+
+// ---- Location Settings ----
+async function loadLocation() {
+  try {
+    const r = await fetch('/api/settings/location');
+    const d = await r.json();
+    document.getElementById('locZip').value = d.zip_code || '';
+    document.getElementById('locCountry').value = d.country || '';
+  } catch(e) {}
+}
+
+async function saveLocation() {
+  const zip_code = document.getElementById('locZip').value.trim();
+  const country = document.getElementById('locCountry').value.trim();
+  try {
+    const r = await fetch('/api/settings/location', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({zip_code, country})
+    });
+    if (r.ok) {
+      document.getElementById('locSuccess').textContent = '✓ Saved';
+      setTimeout(() => document.getElementById('locSuccess').textContent = '', 2000);
     }
   } catch(e) {}
 }

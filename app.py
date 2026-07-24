@@ -41,6 +41,11 @@ def _ensure_schema():
             authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN dietary_restrictions {col_type}")
         except Exception:
             pass  # column already exists
+    # zip_code + country
+        for col in [("zip_code", "TEXT DEFAULT ''"), ("country", "TEXT DEFAULT ''")]:
+            try: authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col[0]} {col[1]}")
+            except Exception: pass
+        
         _MIGRATED = True
     except Exception:
         pass  # graceful failure — endpoint will still try init_schema
@@ -115,6 +120,28 @@ def dietary_settings():
     restrictions = (data.get("dietary_restrictions") or "").strip()
     authmod._run(f"UPDATE {authmod._HH} SET dietary_restrictions = ? WHERE id = ?", (restrictions, hhid))
     return jsonify({"ok": True, "dietary_restrictions": restrictions})
+
+@app.route("/api/settings/location", methods=["GET", "POST"])
+@require_user
+def location_settings():
+    """Get or set household location (zip + country)."""
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    
+    if request.method == "GET":
+        hh = authmod._one(f"SELECT zip_code, country FROM {authmod._HH} WHERE id = ?", (hhid,))
+        return jsonify({
+            "zip_code": (hh.get("zip_code") or "") if hh else "",
+            "country": (hh.get("country") or "") if hh else ""
+        })
+    
+    data = request.get_json(silent=True) or {}
+    zip_code = (data.get("zip_code") or "").strip()
+    country = (data.get("country") or "").strip()
+    authmod._run(f"UPDATE {authmod._HH} SET zip_code = ?, country = ? WHERE id = ?", (zip_code, country, hhid))
+    return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
 @app.route("/api/health")
