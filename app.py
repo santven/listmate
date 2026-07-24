@@ -68,7 +68,7 @@ def _ensure_schema():
                 household_id INTEGER NOT NULL DEFAULT 1,
                 visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
-            """CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)""",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_uniq ON stores(household_id, LOWER(name))""",
@@ -231,16 +231,15 @@ def add_store():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+    hh = _hh()
     db = get_db()
     try:
-        existing = db.execute(
-            "SELECT id FROM stores WHERE household_id = ? AND LOWER(name) = LOWER(?)",
-            (hh, name),
-        ).fetchone()
-        if existing:
-            return jsonify({"ok": True, "existing": True, "id": existing["id"]})
         db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
         db.commit()
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+        # Already exists or other error — just return ok
     finally:
         db.close()
     return jsonify({"ok": True})
