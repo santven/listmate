@@ -280,7 +280,7 @@ function renderHome() {
   function renderGroup(storeId, items, isPurchased) {
     return '<div class="store-group">'+
       '<div class="store-group-title">'+storeMap[storeId]+' <span>'+items.length+'</span>'+
-      (isPurchased?'':' <button class="shop-btn" data-sid="'+storeId+'">+ Add</button>'+(isMobile()?' <button class="share-btn" data-sid="'+storeId+'" data-name="'+storeMap[storeId]+'" onclick="event.stopPropagation();shareStoreList('+parseInt(storeId)+',\''+storeMap[storeId].replace(/'/g,"\\'")+'\')">📤 Share</button>':''))+
+      (isPurchased?'':' <button class="shop-btn" data-sid="'+storeId+'">+ Add</button>')+
       '</div><div class="suggestion-wrap" id="sug-'+storeId+'"></div>'+
       items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('')+
       '</div>';
