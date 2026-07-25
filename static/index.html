@@ -504,9 +504,7 @@ function isMobile() {
 async function shareStoreList(storeId, storeName) {
   const activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
   if (!activeItems.length) { toast('No active items in ' + storeName); return; }
-  const text = '🛒 ' + storeName + ' Grocery List:
-' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('
-');
+  const text = 'r❠ ' + storeName + ' Grocery List:\n' + activeItems.map(i => i.quantity ? 'p `' + i.quantity + ' ' + i.name : '  ' + i.name).join('\n');
 
   // Try native share sheet first (Chrome/Safari on mobile browser)
   if (navigator.share) {
