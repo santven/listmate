@@ -267,6 +267,7 @@ def main():
         prompt = (
             f"Below is a list of {len(new_stores)} grocery/retail store(s) to enrich. For EACH store, identify its cuisine/store type, and list top 25 commonly bought items that strictly adhere to any specified dietary restrictions.\n\n"
             f"{stores_block}\n\n"
+            f"Include an optimal physical aisle/walking order ('category_order') array for a shopper traversing this store (e.g. ['Produce', 'Bakery', 'Deli', 'Pantry', 'Dairy', 'Frozen', 'Household']).\n"
             f"Categorize each item under a standard category (e.g., Produce, Dairy, Bakery, Meat & Seafood, Pantry, Legumes & Grains, Spices & Seasonings, Snacks & Sweets, Beverages, Frozen, Household, Canned & Jarred, Nuts & Seeds, Dips & Spreads, Indian Specialties, General).\n"
             f"Return valid JSON ONLY as an object with a \"stores\" array containing an entry for EVERY store:\n"
             f"{{\n"
@@ -336,7 +337,12 @@ def main():
 
                 # Update cuisine in stores table
                 try:
-                    run_exec(cur, pg, "UPDATE stores SET cuisine=?, auto_populated=? WHERE id=?", (cuisine, True, sid))
+                    cat_order_list = s_obj.get("category_order", [])
+                    if isinstance(cat_order_list, list):
+                        cat_order_str = ",".join([str(c).strip() for c in cat_order_list if str(c).strip()])
+                    else:
+                        cat_order_str = str(cat_order_list or "").strip()
+                    run_exec(cur, pg, "UPDATE stores SET cuisine=?, auto_populated=?, category_order=? WHERE id=?", (cuisine, True, cat_order_str, sid))
                 except Exception:
                     pass
 

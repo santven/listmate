@@ -505,7 +505,7 @@ def list_grocery():
     db = get_db()
     try:
         items = db.execute("""
-            SELECT l.*, s.name as store_name
+            SELECT l.*, s.name as store_name, s.category_order as store_category_order
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?

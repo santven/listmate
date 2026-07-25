@@ -60,6 +60,9 @@ def init_db():
     for tbl in ("stores", "store_items", "list_items"):
         _add_column_if_missing(db, tbl, "household_id", "INTEGER NOT NULL DEFAULT 1")
 
+    _add_column_if_missing(db, "stores", "category_order", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "stores", "cuisine", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "stores", "auto_populated", "INTEGER DEFAULT 0")
     # Migrate: add category column
     for tbl in ("store_items", "list_items"):
         _add_column_if_missing(db, tbl, "category", "TEXT NOT NULL DEFAULT ''")
@@ -83,6 +86,18 @@ def init_db():
     db.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_store_hh_name ON stores(household_id, name COLLATE NOCASE)
     """)
+
+    
+    # Seed default smart aisle category orders
+    default_aisle_orders = {
+        "Costco": "Produce,Bakery,Deli,Meat & Seafood,Pantry,Snacks & Sweets,Beverages,Frozen,Household",
+        "Patel / IndiaCo": "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Snacks & Sweets,Frozen,Dairy",
+        "Whole Foods": "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household",
+        "Jewel": "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household",
+        "Valli": "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household"
+    }
+    for name, order in default_aisle_orders.items():
+        db.execute("UPDATE stores SET category_order = ? WHERE name = ? AND (category_order IS NULL OR category_order = '')", (order, name))
 
     db.commit()
 
