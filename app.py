@@ -291,6 +291,62 @@ def add_store():
     return jsonify({"ok": True})
 
 
+@app.route("/api/stores/<int:store_id>", methods=["DELETE"])
+@require_user
+def delete_store(store_id):
+    hh = _hh()
+    db = get_db()
+    try:
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, hh),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        try: db.execute("DELETE FROM store_enrich_queue WHERE store_id = ? AND household_id = ?", (store_id, hh))
+        except Exception: pass
+        try: db.execute("DELETE FROM store_visits WHERE store_id = ? AND household_id = ?", (store_id, hh))
+        except Exception: pass
+        try: db.execute("DELETE FROM store_items WHERE store_id = ? AND household_id = ?", (store_id, hh))
+        except Exception: pass
+        try: db.execute("DELETE FROM list_items WHERE store_id = ? AND household_id = ?", (store_id, hh))
+        except Exception: pass
+
+        db.execute("DELETE FROM stores WHERE id = ? AND household_id = ?", (store_id, hh))
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route("/api/stores/<int:store_id>", methods=["PUT"])
+@require_user
+def rename_store(store_id):
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    hh = _hh()
+    db = get_db()
+    try:
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, hh),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        db.execute(
+            "UPDATE stores SET name = ? WHERE id = ? AND household_id = ?",
+            (name, store_id, hh),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
 # ── store items (household-scoped) ──
 
 @app.route("/api/stores/<int:store_id>/items")
@@ -361,6 +417,67 @@ def add_store_item(store_id):
         row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
                          (store_id, _hh(), name)).fetchone()
         return jsonify({"ok": True, "id": row["id"] if row else 0})
+    finally:
+        db.close()
+
+
+@app.route("/api/stores/<int:store_id>/items/<int:item_id>", methods=["DELETE"])
+@require_user
+def delete_store_item(store_id, item_id):
+    hh = _hh()
+    db = get_db()
+    try:
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, hh),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        db.execute(
+            "DELETE FROM store_items WHERE id = ? AND store_id = ? AND household_id = ?",
+            (item_id, store_id, hh),
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route("/api/stores/<int:store_id>/items/<int:item_id>", methods=["PUT"])
+@require_user
+def update_store_item(store_id, item_id):
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    category = (data.get("category") or "").strip()
+    hh = _hh()
+    db = get_db()
+    try:
+        store = db.execute(
+            "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, hh),
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "store not found"}), 404
+
+        if name and category:
+            db.execute(
+                "UPDATE store_items SET name = ?, category = ? WHERE id = ? AND store_id = ? AND household_id = ?",
+                (name, category, item_id, store_id, hh),
+            )
+        elif name:
+            db.execute(
+                "UPDATE store_items SET name = ? WHERE id = ? AND store_id = ? AND household_id = ?",
+                (name, item_id, store_id, hh),
+            )
+        elif category:
+            db.execute(
+                "UPDATE store_items SET category = ? WHERE id = ? AND store_id = ? AND household_id = ?",
+                (category, item_id, store_id, hh),
+            )
+
+        db.commit()
+        return jsonify({"ok": True})
     finally:
         db.close()
 

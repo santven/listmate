@@ -145,6 +145,13 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
   </div>
   <div class="catalog" id="screenCatalog">
+    <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
+      <div style="font-weight:600; font-size:15px; color:var(--text);" id="catalogStoreName">Store Catalog</div>
+      <div style="display:flex; gap:8px;">
+        <button id="btnRenameStore" style="background:#f0f4ed; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Rename Store">✏️ Rename</button>
+        <button id="btnDeleteStore" style="background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Delete Store">🗑 Delete</button>
+      </div>
+    </div>
     <div class="catalog-search">
       <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off">
     </div>
@@ -290,6 +297,7 @@ function renderHome() {
 async function openStore(sid) {
   currentStore=stores.find(s=>s.id===sid);
   $('#headerTitle').textContent=currentStore.name;
+  if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value='';
   if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
@@ -308,16 +316,20 @@ function renderCatalog(filter) {
   const catOrder=Object.keys(cats).sort();
   for(const cat of catOrder){
     if(cat) html+='<div class="cat-header" style="grid-column:1/-1;margin-top:4px">'+cat+'</div>';
-    html+=cats[cat].map(i=>'<div class="catalog-item'+(onList.has(i.name.toLowerCase())?' on-list':'')+'" data-id="'+i.id+'" data-name="'+i.name+'">'+(onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+'</div>').join('');
+    html+=cats[cat].map(i=>
+      '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
+        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
+          (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
+        '</div>'+
+        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+      '</div>'
+    ).join('');
   }
   if(!html&&!filter) html='<div class="empty-state" style="grid-column:1/-1"><div class="emoji">📝</div>Search to add your first item</div>';
   $('#catalogItems').innerHTML=html;
   $$('#catalogItems .catalog-item').forEach(el=>el.addEventListener('click',async()=>{
-    const name=el.dataset.new||el.dataset.name;
-    // Check if already on the list (not purchased)
-    if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
-      toast('⚠️ Already on list: '+name); return;
-    }
+    const name=el.dataset.new;
+    if(!name) return;
     try{
       const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
       const d=await r.json();
@@ -330,9 +342,59 @@ function renderCatalog(filter) {
     toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
     $('#catalogSearch').value=''; renderCatalog(''); renderHome();
   }));
+  $$('#catalogItems .catalog-item-btn').forEach(el=>el.addEventListener('click',async()=>{
+    const name=el.dataset.name;
+    if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
+      toast('⚠️ Already on list: '+name); return;
+    }
+    try{
+      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+      const d=await r.json();
+      if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
+    }catch(e){toast('Network error');return;}
+    toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
+    $('#catalogSearch').value=''; renderCatalog(''); renderHome();
+  }));
+  $$('#catalogItems .btn-delete-catalog-item').forEach(el=>el.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const id=el.dataset.id;
+    const name=el.dataset.name;
+    if(!confirm('Remove "'+name+'" from '+currentStore.name+' catalog?')) return;
+    try{
+      const r=await fetch(API+'/stores/'+currentStore.id+'/items/'+id,{method:'DELETE'});
+      if(!r.ok){toast('Error deleting item');return;}
+      toast('🗑 Removed '+name);
+      allStoreItems[currentStore.id]=(allStoreItems[currentStore.id]||[]).filter(i=>i.id!==parseInt(id));
+      renderCatalog($('#catalogSearch').value.trim());
+    }catch(err){toast('Network error');}
+  }));
 }
 
 $('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
+$('#btnRenameStore').addEventListener('click',async()=>{
+  if(!currentStore) return;
+  const newName=prompt('Enter new store name:', currentStore.name);
+  if(!newName||!newName.trim()||newName.trim()===currentStore.name) return;
+  try{
+    const r=await fetch(API+'/stores/'+currentStore.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName.trim()})});
+    if(!r.ok){toast('Error renaming store');return;}
+    toast('✅ Renamed to '+newName.trim());
+    currentStore.name=newName.trim();
+    $('#headerTitle').textContent=currentStore.name;
+    if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
+    loadData();
+  }catch(err){toast('Network error');}
+});
+$('#btnDeleteStore').addEventListener('click',async()=>{
+  if(!currentStore) return;
+  if(!confirm('Delete store "'+currentStore.name+'"? This will remove the store and its items.')) return;
+  try{
+    const r=await fetch(API+'/stores/'+currentStore.id,{method:'DELETE'});
+    if(!r.ok){toast('Error deleting store');return;}
+    toast('🗑 Store deleted: '+currentStore.name);
+    showScreen('home');
+  }catch(err){toast('Network error');}
+});
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
 function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
