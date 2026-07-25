@@ -277,15 +277,8 @@ function renderHome() {
       return a.name.localeCompare(b.name);
     });
 
-    let lastCat = null;
     const itemsHtml = sortedItems.map(i => {
-      let catSubheader = '';
-      const currentCat = (i.category || '').trim() || 'General';
-      if (!isPurchased && currentCat !== lastCat) {
-        lastCat = currentCat;
-        catSubheader = '<div class="aisle-cat-header" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted,#777); margin:8px 0 2px 2px; display:flex; align-items:center; gap:4px;"><span>📍 ' + currentCat + '</span></div>';
-      }
-      return catSubheader + '<div class="item-row' + (i.purchased ? ' purchased' : '') + '">' +
+      return '<div class="item-row' + (i.purchased ? ' purchased' : '') + '">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
         '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + '</div>' +
         '<div class="item-meta">' + (i.purchased ? '✓ ' + i.purchased_by : 'by ' + i.added_by) + '</div>' +
@@ -382,20 +375,16 @@ function renderCatalog(filter) {
   let html='';
   if(filter&&!items.find(i=>i.name.toLowerCase()===filter.toLowerCase()))
     html+='<div class="catalog-item" data-new="'+filter+'">+ Add "'+filter+'"</div>';
-  // Group by category — show category headers in store view
-  const cats={}; const uncat=''; filtered.forEach(i=>{const c=i.category||uncat;if(!cats[c])cats[c]=[];cats[c].push(i);});
-  const catOrder=Object.keys(cats).sort();
-  for(const cat of catOrder){
-    if(cat) html+='<div class="cat-header" style="grid-column:1/-1;margin-top:4px">'+cat+'</div>';
-    html+=cats[cat].map(i=>
-      '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
-        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
-          (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
-        '</div>'+
-        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
-      '</div>'
-    ).join('');
-  }
+  // Display store catalog items cleanly (sorted alphabetically)
+  const sortedCatalog = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  html += sortedCatalog.map(i =>
+    '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
+      '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
+        (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
+      '</div>'+
+      '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+    '</div>'
+  ).join('');
   if(!html&&!filter) html='<div class="empty-state" style="grid-column:1/-1"><div class="emoji">📝</div>Search to add your first item</div>';
   $('#catalogItems').innerHTML=html;
   $$('#catalogItems .catalog-item').forEach(el=>el.addEventListener('click',async()=>{
