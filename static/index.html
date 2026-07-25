@@ -375,16 +375,52 @@ function renderCatalog(filter) {
   let html='';
   if(filter&&!items.find(i=>i.name.toLowerCase()===filter.toLowerCase()))
     html+='<div class="catalog-item" data-new="'+filter+'">+ Add "'+filter+'"</div>';
-  // Display store catalog items cleanly (sorted alphabetically)
-  const sortedCatalog = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-  html += sortedCatalog.map(i =>
-    '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
-      '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
-        (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
-      '</div>'+
-      '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
-    '</div>'
-  ).join('');
+  // Group store items by category with category headers
+  const cats = {};
+  filtered.forEach(i => {
+    const c = (i.category || 'General').trim() || 'General';
+    if (!cats[c]) cats[c] = [];
+    cats[c].push(i);
+  });
+
+  let aisleOrderStr = (currentStore && currentStore.category_order) || '';
+  if (!aisleOrderStr) {
+    if (/patel|indiaco|indian|desi|bazar|apna/i.test((currentStore && currentStore.name) || '')) {
+      aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+    } else {
+      aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+    }
+  }
+  const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
+
+  const catOrder = Object.keys(cats).sort((a, b) => {
+    let idxA = aisleOrder.findIndex(c => c.toLowerCase() === a.toLowerCase());
+    let idxB = aisleOrder.findIndex(c => c.toLowerCase() === b.toLowerCase());
+    if (idxA === -1) {
+      if (/household|cleaning|paper/i.test(a)) idxA = 998;
+      else if (/general/i.test(a)) idxA = 999;
+      else idxA = 500;
+    }
+    if (idxB === -1) {
+      if (/household|cleaning|paper/i.test(b)) idxB = 998;
+      else if (/general/i.test(b)) idxB = 999;
+      else idxB = 500;
+    }
+    if (idxA !== idxB) return idxA - idxB;
+    return a.localeCompare(b);
+  });
+
+  for (const cat of catOrder) {
+    if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
+    html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i =>
+      '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
+        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
+          (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
+        '</div>'+
+        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+      '</div>'
+    ).join('');
+  }
   if(!html&&!filter) html='<div class="empty-state" style="grid-column:1/-1"><div class="emoji">📝</div>Search to add your first item</div>';
   $('#catalogItems').innerHTML=html;
   $$('#catalogItems .catalog-item').forEach(el=>el.addEventListener('click',async()=>{
