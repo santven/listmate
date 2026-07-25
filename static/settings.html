@@ -131,6 +131,17 @@
 
   </div>
 
+  <!-- Danger Zone: Account Deletion -->
+  <div class="card" style="border:1px solid #fecaca; background:#fffdfd; margin-top:20px;">
+    <h2 style="color:#d94a4a; margin-bottom:8px;">⚠️ Danger Zone</h2>
+    <p style="font-size:13px; color:#666; margin-bottom:14px; line-height:1.4;">
+      Permanently delete your account and remove all associated grocery data. This action cannot be undone.
+    </p>
+    <button onclick="deleteAccount()" id="btnDeleteAccount" style="width:100%; padding:12px; background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">
+      Delete Account
+    </button>
+  </div>
+
   <a class="btn-back" href="/">← Back to list</a>
 </div>
 
@@ -325,6 +336,37 @@ async function saveLocation() {
       setTimeout(() => document.getElementById('locSuccess').textContent = '', 2000);
     }
   } catch(e) {}
+}
+
+async function deleteAccount() {
+  const confirmed = confirm('Are you sure you want to permanently delete your account and all associated grocery data? This action cannot be undone.');
+  if (!confirmed) return;
+  const doubleCheck = prompt('To confirm account deletion, please type "DELETE":');
+  if (doubleCheck !== 'DELETE') {
+    alert('Account deletion cancelled.');
+    return;
+  }
+
+  const btn = document.getElementById('btnDeleteAccount');
+  btn.disabled = true;
+  btn.textContent = 'Deleting Account...';
+
+  try {
+    const res = await fetch('/api/auth/delete-account', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      alert('Your account has been deleted successfully.');
+      window.location.href = '/login';
+    } else {
+      alert('Error deleting account: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.textContent = 'Delete Account';
+    }
+  } catch(e) {
+    alert('Network error while deleting account.');
+    btn.disabled = false;
+    btn.textContent = 'Delete Account';
+  }
 }
 </script>
 </body>
