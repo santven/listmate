@@ -237,22 +237,43 @@ function renderHome() {
   
   function renderGroup(storeId, items, isPurchased) {
     const store = stores.find(s => s.id === storeId);
-    const aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
-    const aisleOrder = aisleOrderStr ? aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean) : [];
+    const storeName = (store && store.name) || (items[0] && items[0].store_name) || '';
+    
+    let aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
+    if (!aisleOrderStr) {
+      if (/patel|indiaco|indian|desi|bazar|apna/i.test(storeName)) {
+        aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+      } else {
+        aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+      }
+    }
+    const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
 
     const sortedItems = [...items].sort((a, b) => {
       if (a.purchased !== b.purchased) return a.purchased ? 1 : -1;
-      if (aisleOrder.length > 0) {
-        const catA = (a.category || '').trim();
-        const catB = (b.category || '').trim();
-        let idxA = aisleOrder.findIndex(c => c.toLowerCase() === catA.toLowerCase());
-        let idxB = aisleOrder.findIndex(c => c.toLowerCase() === catB.toLowerCase());
-        if (idxA === -1) idxA = 999;
-        if (idxB === -1) idxB = 999;
-        if (idxA !== idxB) return idxA - idxB;
+
+      const catA = (a.category || 'General').trim();
+      const catB = (b.category || 'General').trim();
+
+      let idxA = aisleOrder.findIndex(c => c.toLowerCase() === catA.toLowerCase());
+      let idxB = aisleOrder.findIndex(c => c.toLowerCase() === catB.toLowerCase());
+
+      if (idxA === -1) {
+        if (/household|cleaning|paper/i.test(catA)) idxA = 998;
+        else if (/general/i.test(catA)) idxA = 999;
+        else idxA = 500;
       }
-      const catComp = (a.category || 'General').localeCompare(b.category || 'General');
+      if (idxB === -1) {
+        if (/household|cleaning|paper/i.test(catB)) idxB = 998;
+        else if (/general/i.test(catB)) idxB = 999;
+        else idxB = 500;
+      }
+
+      if (idxA !== idxB) return idxA - idxB;
+
+      const catComp = catA.localeCompare(catB);
       if (catComp !== 0) return catComp;
+
       return a.name.localeCompare(b.name);
     });
 
@@ -279,6 +300,7 @@ function renderHome() {
       '</div><div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
+  }
   }
   
   let html = '';
@@ -554,23 +576,56 @@ function isMobile() {
 async function shareStoreList(storeId, storeName) {
   const activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
   if (!activeItems.length) { toast('No active items in ' + storeName); return; }
+  
   const text = '🛒 ' + storeName + ' Grocery List:\n' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n');
 
-  // Try native share sheet first (Chrome/Safari on mobile browser)
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Grocery List', text: text }); return; }
-    catch (e) {
-      // share sheet failed or unavailable — fall through to clipboard
+  // 1. Check Capacitor Share plugin (if running inside Android/iOS native app wrapper)
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+    try {
+      await window.Capacitor.Plugins.Share.share({
+        title: storeName + ' Grocery List',
+        text: text,
+        dialogTitle: 'Share ' + storeName + ' List'
+      });
+      return;
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('cancel')))) return;
     }
   }
 
-  // Fallback: copy to clipboard (desktop, Android WebView)
-  try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
-  catch (e) {
-    const ta = document.createElement('textarea'); ta.value = text;
-    ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();
-    document.execCommand('copy');document.body.removeChild(ta);
-    toast('✅ ' + items.length + ' items copied!');
+  // 2. Try native Web Share API (Mobile Browsers: Chrome, Samsung Internet, Safari)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: storeName + ' Grocery List',
+        text: text
+      });
+      return;
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('cancel')))) {
+        return; // User cancelled share modal, don't fall back to clipboard
+      }
+      console.warn('navigator.share error:', e);
+    }
+  }
+
+  // 3. Fallback: Copy to clipboard (Desktop / WebViews)
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    toast('📋 ' + activeItems.length + ' item(s) copied to clipboard!');
+  } catch (e) {
+    toast('❌ Could not share or copy list');
   }
 }
 </script>

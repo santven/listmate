@@ -289,7 +289,10 @@ def add_store():
     hh = _hh()
     db = get_db()
     try:
-        db.execute("INSERT INTO stores (household_id, name) VALUES (?, ?)", (hh, name))
+        cat_order = "Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household"
+        if any(k in name.lower() for k in ["patel", "indiaco", "indian", "desi", "bazar", "apna"]):
+            cat_order = "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"
+        db.execute("INSERT INTO stores (household_id, name, category_order) VALUES (?, ?, ?)", (hh, name, cat_order))
         st = db.execute("SELECT id FROM stores WHERE household_id = ? AND name = ? ORDER BY id DESC LIMIT 1", (hh, name)).fetchone()
         if st:
             store_id = st.get("id") if isinstance(st, dict) else st[0]
