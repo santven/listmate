@@ -203,13 +203,28 @@ def premium_settings():
     if request.method == "GET":
         hh = authmod._one(f"SELECT is_premium FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
-        return jsonify({"is_premium": is_prem})
+        is_early = bool(hhid and int(hhid) <= 100)
+        if is_early and not is_prem:
+            is_prem = True
+            val = True if _use_pg else 1
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
+        return jsonify({
+            "is_premium": is_prem,
+            "household_id": hhid,
+            "is_early_adopter": is_early
+        })
 
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium if _use_pg else (1 if is_premium else 0)
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
-    return jsonify({"ok": True, "is_premium": is_premium})
+    is_early = bool(hhid and int(hhid) <= 100)
+    return jsonify({
+        "ok": True,
+        "is_premium": is_premium or is_early,
+        "household_id": hhid,
+        "is_early_adopter": is_early
+    })
 
 
 @app.route("/logout")

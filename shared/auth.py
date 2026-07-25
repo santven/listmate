@@ -373,7 +373,7 @@ def register_auth_routes(app):
                 _init_schema()
                 hh = _one(f"SELECT is_premium FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
-                if hh_id <= 100 and not is_prem:
+                if int(hh_id) <= 100 and not is_prem:
                     is_prem = True
                     val = True if USE_PG else 1
                     _run(f"UPDATE {_HH} SET is_premium = ? WHERE id = ?", (val, hh_id))
