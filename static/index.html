@@ -152,8 +152,9 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
         <button id="btnDeleteStore" style="background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Delete Store">🗑 Delete</button>
       </div>
     </div>
-    <div class="catalog-search">
-      <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off">
+    <div class="catalog-search" style="display:flex; gap:8px;">
+      <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off" style="flex:2;">
+      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:100px; padding:14px 12px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
     </div>
     <div class="catalog-grid" id="catalogItems"></div>
     <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
@@ -239,7 +240,7 @@ function renderHome() {
       '<div class="store-group-title">'+storeMap[storeId]+' <span>'+items.length+'</span>'+
       (isPurchased?'':' <button class="shop-btn" data-sid="'+storeId+'">+ Add</button>')+
       '</div><div class="suggestion-wrap" id="sug-'+storeId+'"></div>'+
-      items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('')+
+      items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+(i.quantity?' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">('+i.quantity+')</span>':'')+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-qty" data-lid="'+i.id+'" data-qty="'+(i.quantity||'')+'" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('')+
       '</div>';
   }
   
@@ -291,6 +292,18 @@ function renderHome() {
   $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
   $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
   $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
+  $$('.btn-qty').forEach(el=>el.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const id=el.dataset.lid;
+    const currentQty=el.dataset.qty||'';
+    const newQty=prompt('Enter quantity (e.g. 2, 500g, 1 lb):', currentQty);
+    if(newQty===null) return;
+    try {
+      const r=await fetch(API+'/list/'+id+'/quantity',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:newQty.trim()})});
+      if(r.ok){ list=await fetch(API+'/list').then(res=>res.json()); renderHome(); }
+    }catch(err){ toast('Network error'); }
+  }));
+
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
 }
 
@@ -299,7 +312,7 @@ async function openStore(sid) {
   $('#headerTitle').textContent=currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
-  $('#catalogSearch').value='';
+  $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
   renderCatalog();
 }
@@ -331,7 +344,7 @@ function renderCatalog(filter) {
     const name=el.dataset.new;
     if(!name) return;
     try{
-      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name,quantity:($('#catalogQty')?$('#catalogQty').value.trim():'')})});
       const d=await r.json();
       if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
     }catch(e){toast('Network error');return;}
@@ -340,7 +353,7 @@ function renderCatalog(filter) {
       allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
     }
     toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
-    $('#catalogSearch').value=''; renderCatalog(''); renderHome();
+    $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
   }));
   $$('#catalogItems .catalog-item-btn').forEach(el=>el.addEventListener('click',async()=>{
     const name=el.dataset.name;
@@ -348,12 +361,12 @@ function renderCatalog(filter) {
       toast('⚠️ Already on list: '+name); return;
     }
     try{
-      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name})});
+      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name,quantity:($('#catalogQty')?$('#catalogQty').value.trim():'')})});
       const d=await r.json();
       if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
     }catch(e){toast('Network error');return;}
     toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
-    $('#catalogSearch').value=''; renderCatalog(''); renderHome();
+    $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
   }));
   $$('#catalogItems .btn-delete-catalog-item').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
@@ -397,7 +410,7 @@ $('#btnDeleteStore').addEventListener('click',async()=>{
 });
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
-function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value='';loadData();}}
+function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';loadData();}}
 
 async function loadSuggestions(){
   try{
@@ -502,9 +515,9 @@ function isMobile() {
 }
 
 async function shareStoreList(storeId, storeName) {
-  const items = list.filter(i => i.store_id === storeId && !i.purchased).map(i => i.name);
-  if (!items.length) { toast('No active items in ' + storeName); return; }
-  const text = items.join('\n');
+  const activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
+  if (!activeItems.length) { toast('No active items in ' + storeName); return; }
+  const text = '🛒 ' + storeName + ' Grocery List:\n' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n');
 
   // Try native share sheet first (Chrome/Safari on mobile browser)
   if (navigator.share) {
