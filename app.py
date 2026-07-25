@@ -560,8 +560,11 @@ def add_to_list():
                 pass
             existing_category = cat
 
+        quantity = (data.get("quantity") or "").strip()
         db.execute(
-            "INSERT INTO list_items (household_id, store_id, name, category, added_by) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+            (_hh(), store_id, name, existing_category, quantity, get_display_name()),
+        )
             (_hh(), store_id, name, existing_category, get_display_name()),
         )
         db.commit()
@@ -576,6 +579,24 @@ def add_to_list():
     finally:
         db.close()
 
+
+
+
+@app.route("/api/list/<int:item_id>/quantity", methods=["PUT"])
+@require_user
+def update_item_quantity(item_id):
+    data = request.get_json(silent=True) or {}
+    quantity = (data.get("quantity") or "").strip()
+    db = get_db()
+    try:
+        db.execute(
+            "UPDATE list_items SET quantity = ? WHERE id = ? AND household_id = ?",
+            (quantity, item_id, _hh()),
+        )
+        db.commit()
+        return jsonify({"ok": True, "id": item_id, "quantity": quantity})
+    finally:
+        db.close()
 
 @app.route("/api/list/<int:item_id>/toggle", methods=["POST"])
 @require_user

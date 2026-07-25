@@ -63,6 +63,7 @@ def init_db():
     # Migrate: add category column
     for tbl in ("store_items", "list_items"):
         _add_column_if_missing(db, tbl, "category", "TEXT NOT NULL DEFAULT ''")
+    _add_column_if_missing(db, "list_items", "quantity", "TEXT DEFAULT ''")
 
     # Recreate indexes (add if missing)
     try:
