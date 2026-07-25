@@ -565,8 +565,6 @@ def add_to_list():
             "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
             (_hh(), store_id, name, existing_category, quantity, get_display_name()),
         )
-            (_hh(), store_id, name, existing_category, get_display_name()),
-        )
         db.commit()
 
         row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
