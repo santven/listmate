@@ -385,6 +385,44 @@ def register_auth_routes(app):
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout(): _clear(); return jsonify({"ok": True})
 
+    @app.route("/api/auth/delete-account", methods=["POST", "DELETE"])
+    @require_user
+    def auth_delete_account():
+        uid = get_user_id()
+        hhid = get_household_id()
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        _init_schema()
+
+        # 1. Delete feature flags
+        try: _run(f"DELETE FROM {_FLAGS} WHERE user_id = ?", (uid,))
+        except Exception: pass
+
+        # 2. Check remaining members in household
+        members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,)) if hhid else []
+        is_last_member = len(members) <= 1
+
+        # 3. Delete user record
+        _run(f"DELETE FROM {_USERS} WHERE id = ?", (uid,))
+
+        # 4. If last member, purge household data
+        if hhid and is_last_member:
+            for stmt in [
+                "DELETE FROM store_enrich_queue WHERE household_id = ?",
+                "DELETE FROM store_visits WHERE household_id = ?",
+                "DELETE FROM list_items WHERE household_id = ?",
+                "DELETE FROM store_items WHERE household_id = ?",
+                "DELETE FROM stores WHERE household_id = ?",
+                "DELETE FROM invites WHERE household_id = ?",
+                f"DELETE FROM {_HH} WHERE id = ?",
+            ]:
+                try: _run(stmt, (hhid,))
+                except Exception: pass
+
+        _clear()
+        return jsonify({"ok": True, "message": "Account deleted successfully"})
+
     @app.route("/api/auth/me")
     def auth_me():
         if not is_logged_in(): return jsonify({"logged_in": False})
