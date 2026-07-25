@@ -214,6 +214,15 @@ async function loadData() {
     fetch(API+'/list').then(r=>r.json())
   ]);
   stores=s; list=l; renderHome(); loadSuggestions();
+  allStoreItems = {};
+  if(currentStore) {
+    try {
+      const items = await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
+      allStoreItems[currentStore.id] = items;
+      const searchEl = document.querySelector("#catalogSearch");
+      renderCatalog(searchEl ? searchEl.value.trim() : '');
+    } catch(e){}
+  }
 }
 
 function renderHome() {
@@ -364,7 +373,10 @@ async function openStore(sid) {
   if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
-  if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
+  try {
+    const res = await fetch(API+'/stores/'+sid+'/items');
+    if(res.ok) allStoreItems[sid] = await res.json();
+  } catch(e) { if(!allStoreItems[sid]) allStoreItems[sid] = []; }
   renderCatalog();
 }
 

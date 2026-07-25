@@ -343,10 +343,14 @@ def main():
                 category = determine_category(item_clean, g_cat)
 
                 try:
-                    existing = query_all(db, "SELECT id FROM store_items WHERE store_id=? AND LOWER(name)=LOWER(?) AND household_id=?", (sid, item_clean, hhid))
+                    existing = query_all(db, "SELECT id, category FROM store_items WHERE store_id=? AND LOWER(name)=LOWER(?) AND household_id=?", (sid, item_clean, hhid))
                     if not existing:
                         exec_sql(db, "INSERT INTO store_items (store_id, name, category, household_id) VALUES (?, ?, ?, ?)", (sid, item_clean, category, hhid))
                         added += 1
+                    else:
+                        old_cat = (existing[0].get("category") or "").strip()
+                        if (not old_cat or old_cat.lower() in ["general", "auto", "gemini_auto"]) and category and category.lower() not in ["general", "auto", "gemini_auto"]:
+                            exec_sql(db, "UPDATE store_items SET category=? WHERE id=?", (category, existing[0]["id"]))
                 except Exception as e_item:
                     log(f"  ✗ Error inserting item '{item_clean}' for store_id={sid}: {e_item}")
 
