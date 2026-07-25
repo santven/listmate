@@ -43,9 +43,18 @@
 </head>
 <body>
 <div class="header">
-  <span style="font-size:22px;flex-shrink:0;">⚙️</span>
-  <h1 style="font-size:18px;font-weight:700;flex:1;">Settings</h1>
-  <a href="/" style="color:rgba(255,255,255,0.9);font-size:15px;text-decoration:none;flex-shrink:0;">← Back to list</a>
+  <div style="width:40px;height:40px;min-width:40px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);">⚙️</div>
+  <h1 style="margin-left:6px;font-size:18px;font-weight:700;flex:1;">Settings</h1>
+  <a href="/" style="color:rgba(255,255,255,0.9);font-size:14px;text-decoration:none;flex-shrink:0;margin-right:8px;">← Back</a>
+  <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
+  <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
+  <div class="burger-dropdown" id="burgerMenu">
+    <a href="/">📋 List</a>
+    <div class="divider"></div>
+    <a href="/settings">⚙️ Settings</a>
+    <div class="divider"></div>
+    <a href="/logout" class="danger">🚪 Log out</a>
+  </div>
 </div>
 <div class="container" id="app">
   <div class="card">
@@ -107,11 +116,15 @@
 
   </div>
 
-  <button class="btn-logout" onclick="logout()">Sign Out</button>
   <a class="btn-back" href="/">← Back to list</a>
 </div>
 
 <script>
+function toggleBurger() {
+  document.getElementById("burgerMenu").classList.toggle("show");
+  document.getElementById("burgerOverlay").classList.toggle("show");
+}
+
 let householdData = null;
 
 (async function init() {
