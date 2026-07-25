@@ -214,6 +214,10 @@ def main():
                             st[0]["queue_id"] = q["queue_id"]
                             new_stores.append(st[0])
                             seen_store_ids.add(sid)
+                    else:
+                        for st in new_stores:
+                            if st["store_id"] == sid and "queue_id" not in st:
+                                st["queue_id"] = q["queue_id"]
             except Exception:
                 pass
 
@@ -325,11 +329,12 @@ def main():
 
                 if not s_obj or not isinstance(s_obj, dict):
                     log(f"  ✗ Omitted or missing response data for store '{sname}' (id={sid})")
-                    if queue_id:
-                        try:
-                            run_exec(cur, pg, "UPDATE store_enrich_queue SET status='failed', processed_at=NOW() WHERE id=?", (queue_id,))
-                        except Exception:
-                            pass
+                    try:
+                        if queue_id:
+                            run_exec(cur, pg, "UPDATE store_enrich_queue SET status='failed', processed_at=CURRENT_TIMESTAMP WHERE id=?", (queue_id,))
+                        run_exec(cur, pg, "UPDATE store_enrich_queue SET status='failed', processed_at=CURRENT_TIMESTAMP WHERE store_id=? AND status='pending'", (sid,))
+                    except Exception as e:
+                        log(f"  ✗ Error marking queue as failed for store {sid}: {e}")
                     continue
 
                 cuisine = (s_obj.get("cuisine") or "").strip()
@@ -343,8 +348,8 @@ def main():
                     else:
                         cat_order_str = str(cat_order_list or "").strip()
                     run_exec(cur, pg, "UPDATE stores SET cuisine=?, auto_populated=?, category_order=? WHERE id=?", (cuisine, True, cat_order_str, sid))
-                except Exception:
-                    pass
+                except Exception as e:
+                    log(f"  ✗ Error updating stores table for '{sname}' (id={sid}): {e}")
 
                 # Insert items into store_items table with proper categorization
                 added = 0
@@ -371,17 +376,26 @@ def main():
                             (sid, item_clean, category, hhid))
                         added += 1
 
-                # Update queue status if queue_id exists
-                if queue_id:
-                    try:
-                        run_exec(cur, pg, "UPDATE store_enrich_queue SET status='done', processed_at=NOW() WHERE id=?", (queue_id,))
-                    except Exception:
-                        pass
+                # Update queue status (both by queue_id and by store_id)
+                try:
+                    if queue_id:
+                        run_exec(cur, pg, "UPDATE store_enrich_queue SET status='done', processed_at=CURRENT_TIMESTAMP WHERE id=?", (queue_id,))
+                    run_exec(cur, pg, "UPDATE store_enrich_queue SET status='done', processed_at=CURRENT_TIMESTAMP WHERE store_id=? AND status='pending'", (sid,))
+                except Exception as e:
+                    log(f"  ✗ Error updating store_enrich_queue to done for store {sid}: {e}")
 
                 log(f"  ✓ Store '{sname}' (id={sid}): updated cuisine='{cuisine}', added {added} items")
+                if conn:
+                    try:
+                        conn.commit()
+                    except Exception as e:
+                        log(f"  ✗ Error committing store {sid}: {e}")
 
-            if not pg and conn:
-                conn.commit()
+            if conn:
+                try:
+                    conn.commit()
+                except Exception as e:
+                    log(f"  ✗ Database commit error: {e}")
 
         except Exception as e:
             log(f"  ✗ Error executing batched Gemini store enrichment: {e}")
