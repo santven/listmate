@@ -331,7 +331,8 @@ def register_auth_routes(app):
                     # First user on a fresh system — create household
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    _exec(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", ("Root Household", code))
+                    prem_val = True if USE_PG else 1
+                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?)", ("Root Household", code, prem_val))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -372,6 +373,10 @@ def register_auth_routes(app):
                 _init_schema()
                 hh = _one(f"SELECT is_premium FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
+                if hh_id <= 100 and not is_prem:
+                    is_prem = True
+                    val = True if USE_PG else 1
+                    _run(f"UPDATE {_HH} SET is_premium = ? WHERE id = ?", (val, hh_id))
             resp["is_premium"] = is_prem
             resp["user_info"] = {"id": uid, "name": get_display_name(),
                 "email": get_email(), "household_id": hh_id,
@@ -454,7 +459,14 @@ def register_auth_routes(app):
         
         import secrets
         code = secrets.token_hex(4).upper()
-        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code) VALUES (?,?)", (hname, code))
+        count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
+        existing_cnt = count_row.get("cnt", 0) if count_row else 0
+        is_early = existing_cnt < 100
+        prem_val = is_early if USE_PG else (1 if is_early else 0)
+        if USE_PG:
+            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?) RETURNING id", (hname, code, prem_val))
+        else:
+            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?)", (hname, code, prem_val))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
