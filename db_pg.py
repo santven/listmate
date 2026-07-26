@@ -120,6 +120,10 @@ _SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_li_user ON list_items(household_id)",
     "CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)",
     "CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)",
+    "CREATE TABLE IF NOT EXISTS recipes (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, title TEXT NOT NULL, description TEXT DEFAULT '', prep_time TEXT DEFAULT '', cook_time TEXT DEFAULT '', servings TEXT DEFAULT '', dietary_tags TEXT DEFAULT '', instructions TEXT DEFAULT '', ingredients TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS idx_recipes_hh ON recipes(household_id)",
+    "CREATE TABLE IF NOT EXISTS recipe_generations (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS idx_recipe_gen_hh ON recipe_generations(household_id, created_at)",
 ]
 
 def init_db():
@@ -128,5 +132,35 @@ def init_db():
         for s in _SCHEMA: db.execute(s)
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
         except Exception: pass
+        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
+        except Exception: pass
+        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
+        except Exception: pass
+        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS auto_populated BOOLEAN DEFAULT FALSE")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
+        except Exception: pass
+
+        default_aisle_patterns = [
+            ("%patel%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+            ("%indiaco%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+            ("%indian%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+            ("%costco%", "Produce,Bakery,Deli,Meat & Seafood,Pantry,Snacks & Sweets,Beverages,Frozen,Household,Dairy"),
+            ("%whole foods%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household"),
+            ("%jewel%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household"),
+            ("%valli%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household")
+        ]
+        for pattern, order in default_aisle_patterns:
+            try: db.execute("UPDATE stores SET category_order = %s WHERE name ILIKE %s AND (category_order IS NULL OR category_order = '' OR category_order NOT LIKE '%Spices%')", (order, pattern))
+            except Exception: pass
+        try: db.execute("UPDATE stores SET category_order = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household' WHERE (category_order IS NULL OR category_order = '')")
+        except Exception: pass
+
         db.commit()
     finally: close_db(db)
