@@ -129,7 +129,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="#" onclick="showRecipesScreen(); toggleBurger(); return false;">🍳 Recipe Planner (PRO)</a>
+      <a href="#" onclick="showRecipesScreen(); toggleBurger(); return false;">🍳 Recipe Planner</a>
       <a href="/settings">⚙️ Settings</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
@@ -141,7 +141,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Stores & Grocery List</div>
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-        🍳 Recipe Planner <span style="font-size:10px; background:rgba(255,255,255,0.25); padding:2px 6px; border-radius:12px; font-weight:700;">PRO</span>
+        🍳 Recipe Planner
       </button>
     </div>
     <div class="store-grid" id="storeGrid"></div>
@@ -231,11 +231,16 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 
     <div id="recipeIngredientsMappingList" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
 
-    <div style="display:flex; gap:10px;">
-      <button onclick="closeRecipeStoreModal()" style="flex:1; padding:14px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; font-size:14px; cursor:pointer;">← Cancel</button>
-      <button onclick="confirmAddRecipeToList()" style="flex:2; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-weight:700; font-size:15px; cursor:pointer;">✅ Add Items to List</button>
+        <div style="display:flex; gap:10px;">
+      <button onclick="closeRecipeStoreModal()" style="flex:1; padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; color:var(--text); font-weight:600; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
+        <span>← Cancel</span>
+        <span style="font-size:10px; font-weight:500; color:var(--muted);">(does not save recipe)</span>
+      </button>
+      <button onclick="confirmAddRecipeToList()" style="flex:2; padding:10px 14px; border-radius:12px; border:none; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-weight:700; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
+        <span>✅ Add Items to List</span>
+        <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
+      </button>
     </div>
-  </div>
 </div>
 
 <!-- Premium Modal -->
@@ -1004,13 +1009,15 @@ function renderFormattedRecipe(r) {
     </li>`
   ).join('');
 
-  const actionButtons = `
+    const actionButtons = `
     <div style="display:flex; gap:10px; margin:16px 0;">
-      <button onclick="openRecipeStoreModal()" style="flex:2; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
-        🛒 Select Stores & Add to List
+      <button onclick="openRecipeStoreModal()" style="flex:2; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px 14px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
+        <span style="display:flex; align-items:center; gap:6px;">🛒 Select Stores & Add to List</span>
+        <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
       </button>
-      <button onclick="saveCurrentRecipe()" style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:14px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer;">
-        💾 Save Recipe
+      <button onclick="saveCurrentRecipe()" style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:10px 14px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
+        <span style="display:flex; align-items:center; gap:6px;">💾 Save Recipe</span>
+        <span style="font-size:10px; font-weight:500; opacity:0.85;">(save to library)</span>
       </button>
     </div>
   `;
