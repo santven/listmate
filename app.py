@@ -341,9 +341,13 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
                     "User-Agent": "aistudio-build"
                 }
             )
+            print(f"[GEMINI REQUEST] Model: {model_name} | URL: {url}", flush=True)
+            print(f"[GEMINI REQUEST BODY] {json.dumps(body)}", flush=True)
             try:
                 with urllib.request.urlopen(req, timeout=12) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+                    raw_resp = resp.read().decode("utf-8")
+                    print(f"[GEMINI RESPONSE RAW] {raw_resp}", flush=True)
+                    data = json.loads(raw_resp)
                     candidates = data.get("candidates", [])
                     if candidates:
                         part_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
@@ -357,9 +361,16 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
                         if isinstance(recipe_data, dict) and "title" in recipe_data:
                             return recipe_data
             except Exception as e:
-                print(f"Gemini call to {model_name} failed: {e}")
+                print(f"[GEMINI ERROR] Call to {model_name} failed: {e}", flush=True)
+                if hasattr(e, 'read'):
+                    try:
+                        err_resp = e.read().decode("utf-8")
+                        print(f"[GEMINI ERROR DETAILS] {err_resp}", flush=True)
+                    except Exception:
+                        pass
                 continue
-
+    else:
+        print("[GEMINI WARNING] No API key found. Falling back to local smart recipe generator.", flush=True)
     return _generate_fallback_recipe(prompt, dietary_restrictions)
 
 
