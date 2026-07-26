@@ -301,17 +301,33 @@ def _clear(): session.pop(COOKIE_NAME, None)
 def _get():
     s = session.get(COOKIE_NAME)
     if not s:
-        s = {"user_id": 1, "email": "dev@listmate.local", "name": "Dev User", "household_id": 1, "household_name": "Dev Household"}
-        session[COOKIE_NAME] = s
-        session.permanent = True
-        session.modified = True
+        is_dev = not bool(os.environ.get("DATABASE_URL")) and "RENDER" not in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
+        if is_dev:
+            s = {"user_id": 1, "email": "dev@listmate.local", "name": "Dev User", "household_id": 1, "household_name": "Dev Household"}
+            session[COOKIE_NAME] = s
+            session.permanent = True
+            session.modified = True
+        else:
+            return None
     return s
-def is_logged_in(): return bool(_get())
-def get_user_id(): return _get().get("user_id")
-def get_display_name(): return _get().get("name", "")
-def get_email(): return _get().get("email", "")
-def get_household_id(): return _get().get("household_id", 0)
-def get_household_name(): return _get().get("household_name", "")
+def is_logged_in(): 
+    s = _get()
+    return bool(s)
+def get_user_id(): 
+    s = _get()
+    return s.get("user_id") if s else None
+def get_display_name(): 
+    s = _get()
+    return s.get("name", "") if s else ""
+def get_email(): 
+    s = _get()
+    return s.get("email", "") if s else ""
+def get_household_id(): 
+    s = _get()
+    return s.get("household_id", 0) if s else 0
+def get_household_name(): 
+    s = _get()
+    return s.get("household_name", "") if s else ""
 
 def require_user(fn):
     @wraps(fn)
