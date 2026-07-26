@@ -179,6 +179,15 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <!-- CREATE RECIPE TAB CONTENT -->
     <div id="recipeTabCreate">
       <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+        <div id="recipeWeeklyUsageBanner" style="background:#f0fdf4; border:1px solid #bbf7d0; padding:10px 14px; border-radius:12px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <span style="font-weight:700; font-size:13px; color:#166534;">📊 Weekly Recipe Quota (Sun–Sat):</span>
+            <span id="recipeUsageText" style="font-size:13px; color:#15803d; font-weight:600; margin-left:4px;">0 / 7 generated</span>
+          </div>
+          <div id="recipeRemainingTag" style="font-size:12px; font-weight:700; background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:16px;">
+            7 remaining
+          </div>
+        </div>
         <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Chef AI Meal & Recipe Generator</div>
         <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">Type any recipe or meal request. Chef AI considers your household dietary preferences to craft a complete recipe & grocery mapping.</div>
 
@@ -611,6 +620,8 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
     $('#headerTitle').textContent='Recipe Planner';
+    checkDietaryStatus();
+    loadRecipeUsage();
     $('#btnBack').style.display='block';
   }
 }
@@ -853,7 +864,60 @@ function switchRecipeTab(tab) {
   }
 }
 
-async function generateRecipe() {  const prompt = $('#recipePromptInput').value.trim();  if (!prompt) {    toast('Please enter what recipe or meal you want!');    return;  }    const btn = $('#btnGenerateRecipe');  btn.disabled = true;  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';    try {    const res = await fetch(API + '/recipes/generate', {      method: 'POST',      headers: { 'Content-Type': 'application/json' },      body: JSON.stringify({ prompt })    });        if (res.status === 403) {      closePremiumModal();      const pModal = $('#premiumModal');      if (pModal) pModal.classList.add('active');      return;    }        let data = {};    try {      data = await res.json();    } catch (parseErr) {      console.error('Non-JSON response received:', parseErr);    }        if (!res.ok || !data.ok) {      toast(data.error || 'Failed to generate recipe');      return;    }        currentDraftRecipe = data.recipe;    renderFormattedRecipe(data.recipe);    toast('✨ Recipe generated successfully!');  } catch (err) {    console.error('Recipe generation error:', err);    toast('Error connecting to recipe generator');  } finally {    btn.disabled = false;    btn.innerHTML = '✨ Generate Recipe (1 Credit)';  }}
+async function generateRecipe() {
+  const prompt = $('#recipePromptInput').value.trim();
+  if (!prompt) {
+    toast('Please enter what recipe or meal you want!');
+    return;
+  }
+  
+  const btn = $('#btnGenerateRecipe');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';
+  
+  try {
+    const res = await fetch(API + '/recipes/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    
+    if (res.status === 403) {
+      closePremiumModal();
+      const pModal = $('#premiumModal');
+      if (pModal) pModal.classList.add('active');
+      return;
+    }
+    
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      console.error('Non-JSON response received:', parseErr);
+    }
+    
+    if (!res.ok || !data.ok) {
+      if (data.code === 'WEEKLY_LIMIT_REACHED' || data.remaining === 0) {
+        updateRecipeUsageUI(7, 7, 0);
+      }
+      toast(data.error || 'Failed to generate recipe');
+      return;
+    }
+    
+    if (data.weekly_usage) {
+      updateRecipeUsageUI(data.weekly_usage.used, data.weekly_usage.limit, data.weekly_usage.remaining);
+    }
+    
+    currentDraftRecipe = data.recipe;
+    renderFormattedRecipe(data.recipe);
+    toast('✨ Recipe generated successfully!');
+  } catch (err) {
+    console.error('Recipe generation error:', err);
+    toast('Error connecting to recipe generator');
+  } finally {
+    loadRecipeUsage();
+  }
+}
 
 function renderFormattedRecipe(r) {
   const container = $('#recipeOutput');
@@ -930,6 +994,25 @@ function renderFormattedRecipe(r) {
   `;
 }
 
+
+function toggleIngRowState(idx) {
+  const chk = $('#ingCheck_' + idx);
+  const row = $('#ingRow_' + idx);
+  const badge = $('#ingStatusBadge_' + idx);
+  if (!chk || !row || !badge) return;
+  if (chk.checked) {
+    row.style.opacity = '1';
+    badge.textContent = 'Add to list';
+    badge.style.background = '#dcfce7';
+    badge.style.color = '#15803d';
+  } else {
+    row.style.opacity = '0.55';
+    badge.textContent = 'Already at home';
+    badge.style.background = '#f3f4f6';
+    badge.style.color = '#6b7280';
+  }
+}
+
 function openRecipeStoreModal(recipe = null) {
   const r = recipe || currentDraftRecipe;
   if (!r) {
@@ -947,7 +1030,7 @@ function openRecipeStoreModal(recipe = null) {
   });
   storeOpts += `<option value="__new__">+ Create New Store...</option>`;
   bulkSel.innerHTML = storeOpts;
-
+  
   // Build per-item store mapping list
   const listContainer = $('#recipeIngredientsMappingList');
   let itemsHtml = '';
@@ -960,12 +1043,18 @@ function openRecipeStoreModal(recipe = null) {
       options += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
     });
     options += `<option value="__new__">+ New store...</option>`;
-
+    
     itemsHtml += `
-      <div class="recipe-ing-row" data-idx="${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+      <div class="recipe-ing-row" id="ingRow_${idx}" data-idx="${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-weight:600; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
-          <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">${escapeHtml(ing.amount || '')}</span>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;">
+            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_${idx}" onchange="toggleIngRowState(${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
+            <span style="font-weight:600; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
+          </label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">${escapeHtml(ing.amount || '')}</span>
+            <span id="ingStatusBadge_${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
+          </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
@@ -976,7 +1065,6 @@ function openRecipeStoreModal(recipe = null) {
       </div>
     `;
   });
-
   listContainer.innerHTML = itemsHtml;
   
   const modal = $('#recipeStoreModal');
@@ -984,12 +1072,12 @@ function openRecipeStoreModal(recipe = null) {
 }
 
 function closeRecipeStoreModal() {
-  const modal = $('#recipeStoreModal');
+  const modal = ;
   if (modal) modal.classList.remove('active');
 }
 
 async function applyBulkStore() {
-  const val = $('#bulkStoreSelect').value;
+  const val = .value;
   if (!val) return;
   
   let targetStoreId = val;
@@ -1005,15 +1093,14 @@ async function applyBulkStore() {
       if (res.id) {
         stores.push(res);
         targetStoreId = res.id;
-        toast(`Store '${res.name}' created!`);
+        toast();
       }
     } catch (e) {
       toast('Failed to create store');
       return;
     }
   }
-
-  $$('.ing-store-select').forEach(sel => {
+  4924('.ing-store-select').forEach(sel => {
     sel.value = targetStoreId;
   });
 }
@@ -1022,10 +1109,20 @@ async function confirmAddRecipeToList() {
   const r = currentDraftRecipe;
   if (!r) return;
   
-  const selects = $$('.ing-store-select');
+  const rows = $$('.recipe-ing-row');
   const itemsToAdd = [];
+  let skippedCount = 0;
   
-  for (const sel of selects) {
+  for (const row of rows) {
+    const chk = row.querySelector('.ing-include-checkbox');
+    if (chk && !chk.checked) {
+      skippedCount++;
+      continue;
+    }
+    
+    const sel = row.querySelector('.ing-store-select');
+    if (!sel) continue;
+    
     let storeId = sel.value;
     const ingName = sel.getAttribute('data-ing-name');
     const ingAmount = sel.getAttribute('data-ing-amount');
@@ -1057,12 +1154,17 @@ async function confirmAddRecipeToList() {
       });
     }
   }
-
+  
   if (itemsToAdd.length === 0) {
-    toast('No items or valid stores selected');
+    if (skippedCount > 0) {
+      toast('All ingredients were marked as already at home.');
+      closeRecipeStoreModal();
+    } else {
+      toast('No items selected to add');
+    }
     return;
   }
-
+  
   try {
     const res = await fetch(API + '/recipes/add-to-list', {
       method: 'POST',
@@ -1072,21 +1174,26 @@ async function confirmAddRecipeToList() {
         items: itemsToAdd
       })
     }).then(r => r.json());
-
+    
     if (res.ok) {
       closeRecipeStoreModal();
-      toast(`🛒 Added ${res.added_count} ingredients from '${r.title}' to your list!`);
+      let msg = `🛒 Added ${res.added_count} ingredients from '${r.title}' to your list!`;
+      if (skippedCount > 0) {
+        msg += ` (${skippedCount} skipped as already at home)`;
+      }
+      toast(msg);
       showScreen('home');
       loadData();
     } else {
-      toast('Failed to add recipe items');
+      toast(res.error || 'Failed to add items to list');
     }
   } catch (err) {
-    toast('Error adding ingredients to list');
+    console.error('Error adding recipe to list:', err);
+    toast('Error adding ingredients to shopping list');
   }
 }
 
-async function saveCurrentRecipe() {
+function saveCurrentRecipe() {
   const r = currentDraftRecipe;
   if (!r) {
     toast('No recipe to save');

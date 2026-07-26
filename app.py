@@ -363,6 +363,57 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
     return _generate_fallback_recipe(prompt, dietary_restrictions)
 
 
+def _get_weekly_recipe_count(db, hhid):
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc)
+    days_since_sunday = (now.weekday() + 1) % 7
+    start_of_week = (now - datetime.timedelta(days=days_since_sunday)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_str = start_of_week.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        if _use_pg:
+            db.execute("CREATE TABLE IF NOT EXISTS recipe_generations (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())")
+            row = db.execute("SELECT COUNT(*) as cnt FROM recipe_generations WHERE household_id = ? AND created_at >= ?", (hhid, start_of_week)).fetchone()
+        else:
+            db.execute("CREATE TABLE IF NOT EXISTS recipe_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not _use_pg:
+                db.commit()
+            row = db.execute("SELECT COUNT(*) as cnt FROM recipe_generations WHERE household_id = ? AND created_at >= ?", (hhid, start_str)).fetchone()
+        return row["cnt"] if row else 0
+    except Exception as e:
+        print(f"Error checking weekly recipe count: {e}")
+        return 0
+
+
+def _record_recipe_generation(db, hhid):
+    try:
+        if _use_pg:
+            db.execute("INSERT INTO recipe_generations (household_id) VALUES (?)", (hhid,))
+        else:
+            db.execute("INSERT INTO recipe_generations (household_id) VALUES (?)", (hhid,))
+            db.commit()
+    except Exception as e:
+        print(f"Error recording recipe generation: {e}")
+
+
+@app.route("/api/recipes/usage", methods=["GET"])
+@require_user
+def recipe_usage_endpoint():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    db = get_db()
+    try:
+        used = _get_weekly_recipe_count(db, hhid)
+        return jsonify({
+            "ok": True,
+            "used": used,
+            "limit": 7,
+            "remaining": max(0, 7 - used)
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/recipes/generate", methods=["POST"])
 @require_user
 def generate_recipe_endpoint():
@@ -378,21 +429,51 @@ def generate_recipe_endpoint():
             "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",
             "code": "PREMIUM_REQUIRED"
         }), 403
-    data = request.get_json(silent=True) or {}
-    prompt = (data.get("prompt") or "").strip()
-    if not prompt:
-        return jsonify({"error": "Please enter what recipe you want to make."}), 400
-    dietary = (hh.get("dietary_restrictions") or "").strip() if hh else ""
+
+    db = get_db()
     try:
-        recipe_data = _call_gemini_recipe(prompt, dietary)
-        return jsonify({"ok": True, "recipe": recipe_data})
-    except Exception as e:
-        print(f"Error calling _call_gemini_recipe: {e}")
+        used = _get_weekly_recipe_count(db, hhid)
+        if used >= 7:
+            return jsonify({
+                "error": "Weekly limit reached (7 of 7 recipes generated this week). Quota resets on Sunday.",
+                "code": "WEEKLY_LIMIT_REACHED",
+                "used": used,
+                "limit": 7,
+                "remaining": 0
+            }), 400
+
+        data = request.get_json(silent=True) or {}
+        prompt = (data.get("prompt") or "").strip()
+        if not prompt:
+            return jsonify({"error": "Please enter what recipe you want to make."}), 400
+        dietary = (hh.get("dietary_restrictions") or "").strip() if hh else ""
+
+        recipe_data = None
         try:
-            recipe_data = _generate_fallback_recipe(prompt, dietary)
-            return jsonify({"ok": True, "recipe": recipe_data})
-        except Exception as fallback_e:
-            return jsonify({"error": f"Failed to generate recipe: {str(fallback_e)}"}), 500
+            recipe_data = _call_gemini_recipe(prompt, dietary)
+        except Exception as e:
+            print(f"Error calling _call_gemini_recipe: {e}")
+            try:
+                recipe_data = _generate_fallback_recipe(prompt, dietary)
+            except Exception as fallback_e:
+                return jsonify({"error": f"Failed to generate recipe: {str(fallback_e)}"}), 500
+
+        if recipe_data:
+            _record_recipe_generation(db, hhid)
+            new_used = used + 1
+            return jsonify({
+                "ok": True,
+                "recipe": recipe_data,
+                "weekly_usage": {
+                    "used": new_used,
+                    "limit": 7,
+                    "remaining": max(0, 7 - new_used)
+                }
+            })
+        else:
+            return jsonify({"error": "Failed to generate recipe"}), 500
+    finally:
+        db.close()
 
 
 @app.route("/api/recipes", methods=["GET", "POST"])
