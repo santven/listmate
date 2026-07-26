@@ -67,6 +67,23 @@ def init_db():
             purchased_at TIMESTAMP,
             FOREIGN KEY (store_id) REFERENCES stores(id)
         );
+        CREATE TABLE IF NOT EXISTS store_visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            store_id INTEGER NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            visit_date TEXT NOT NULL,
+            items_count INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (store_id) REFERENCES stores(id)
+        );
+        CREATE TABLE IF NOT EXISTS store_enrich_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            store_id INTEGER NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP
+        );
     """)
 
     # Migrate: add household_id columns

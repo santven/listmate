@@ -287,7 +287,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             if key: break
 
     # Prioritize Gemini 3.6 Flash and Gemini 3.1 Flash Lite (higher allowance/free tier friendly)
-    models_to_try = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
+    models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-latest"]
 
     if key:
         system_instruction = (
@@ -342,7 +342,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
                 }
             )
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urllib.request.urlopen(req, timeout=12) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     candidates = data.get("candidates", [])
                     if candidates:
@@ -561,7 +561,7 @@ def list_stores():
         stores = db.execute(
             "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
         ).fetchall()
-        return jsonify(stores)
+        return jsonify([dict(s) for s in stores])
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500

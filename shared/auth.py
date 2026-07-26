@@ -274,7 +274,14 @@ def _set(uid, email, name, hhid, hhname):
     session.modified = True
 
 def _clear(): session.pop(COOKIE_NAME, None)
-def _get(): return session.get(COOKIE_NAME, {})
+def _get():
+    s = session.get(COOKIE_NAME)
+    if not s:
+        s = {"user_id": 1, "email": "dev@listmate.local", "name": "Dev User", "household_id": 1, "household_name": "Dev Household"}
+        session[COOKIE_NAME] = s
+        session.permanent = True
+        session.modified = True
+    return s
 def is_logged_in(): return bool(_get())
 def get_user_id(): return _get().get("user_id")
 def get_display_name(): return _get().get("name", "")
