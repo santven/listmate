@@ -120,6 +120,8 @@ _SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_li_user ON list_items(household_id)",
     "CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)",
     "CREATE INDEX IF NOT EXISTS idx_stores_hh ON stores(household_id)",
+    "CREATE TABLE IF NOT EXISTS recipes (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, title TEXT NOT NULL, description TEXT DEFAULT '', prep_time TEXT DEFAULT '', cook_time TEXT DEFAULT '', servings TEXT DEFAULT '', dietary_tags TEXT DEFAULT '', instructions TEXT DEFAULT '', ingredients TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS idx_recipes_hh ON recipes(household_id)",
 ]
 
 def init_db():
@@ -127,6 +129,8 @@ def init_db():
     try:
         for s in _SCHEMA: db.execute(s)
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
         except Exception: pass

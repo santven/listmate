@@ -43,6 +43,19 @@ def init_db():
             UNIQUE(store_id, name COLLATE NOCASE),
             FOREIGN KEY (store_id) REFERENCES stores(id)
         );
+        CREATE TABLE IF NOT EXISTS recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            title TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            prep_time TEXT DEFAULT '',
+            cook_time TEXT DEFAULT '',
+            servings TEXT DEFAULT '',
+            dietary_tags TEXT DEFAULT '',
+            instructions TEXT DEFAULT '',
+            ingredients TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS list_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             store_id INTEGER NOT NULL,
@@ -67,6 +80,7 @@ def init_db():
     for tbl in ("store_items", "list_items"):
         _add_column_if_missing(db, tbl, "category", "TEXT NOT NULL DEFAULT ''")
     _add_column_if_missing(db, "list_items", "quantity", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "list_items", "recipe_tag", "TEXT DEFAULT ''")
 
     # Recreate indexes (add if missing)
     try:

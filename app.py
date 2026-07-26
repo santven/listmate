@@ -2,7 +2,7 @@
 """Listmate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
-import os, json, sys, time
+import os, json, sys, time, re, urllib.request
 from functools import wraps
 from urllib.parse import quote, urlencode
 
@@ -225,6 +225,259 @@ def premium_settings():
         "household_id": hhid,
         "is_early_adopter": is_early
     })
+
+
+
+
+# ── Recipe Planner & AI Recipe Generator (Premium Feature) ──
+
+def _call_gemini_recipe(prompt, dietary_restrictions=""):
+    """Call Gemini API to generate structured recipe JSON."""
+    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("SECRET_KEY") or ""
+    if not key or not key.startswith("AIza"):
+        for path in ["/opt/shared/.env", ".env"]:
+            if os.path.exists(path):
+                try:
+                    for line in open(path):
+                        if line.strip().startswith("GEMINI_API_KEY="):
+                            k = line.split("=", 1)[1].strip().strip("'").strip('"')
+                            if k: key = k; break
+                except Exception:
+                    pass
+    if not key:
+        raise ValueError("GEMINI_API_KEY is not configured on the server.")
+
+    system_instruction = (
+        "You are a professional chef and meal planner assistant. "
+        "Your job is to generate a detailed, delicious, properly formatted recipe in JSON based on the user request. "
+        "Always respect any specified dietary restrictions. "
+        "Produce ONLY a valid JSON object matching this structure with no markdown formatting:\n"
+        "{\n"
+        '  "title": "Recipe Name",\n'
+        '  "description": "Short description of the dish",\n'
+        '  "prep_time": "15 mins",\n'
+        '  "cook_time": "25 mins",\n'
+        '  "servings": "4 servings",\n'
+        '  "dietary_tags": ["Gluten-Free", "Vegetarian"],\n'
+        '  "ingredients": [\n'
+        '    {"name": "Ingredient Name", "amount": "1.5 lbs", "category": "Produce"}\n'
+        '  ],\n'
+        '  "instructions": [\n'
+        '    "Step 1...",\n'
+        '    "Step 2..."\n'
+        '  ]\n'
+        "}"
+    )
+
+    user_prompt = f"Recipe request: {prompt}"
+    if dietary_restrictions:
+        user_prompt += f"\nImportant Household Dietary Restrictions: {dietary_restrictions}"
+
+    body = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": system_instruction + "\n\n" + user_prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.4,
+            "responseMimeType": "application/json"
+        }
+    }
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": key,
+            "User-Agent": "aistudio-build"
+        }
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            if not candidates:
+                raise ValueError("No recipe response returned from Gemini.")
+            part_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            clean_text = part_text.strip()
+            if clean_text.startswith("```"):
+                clean_text = clean_text.replace("```json", "").replace("```", "").strip()
+                
+            return json.loads(clean_text)
+    except Exception as e:
+        url_lite = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+        req_lite = urllib.request.Request(
+            url_lite,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": key, "User-Agent": "aistudio-build"}
+        )
+        with urllib.request.urlopen(req_lite, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            part_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "") if candidates else ""
+            clean_text = part_text.strip()
+            if clean_text.startswith("```"):
+                clean_text = clean_text.replace("```json", "").replace("```", "").strip()
+                
+            return json.loads(clean_text)
+
+
+@app.route("/api/recipes/generate", methods=["POST"])
+@require_user
+def generate_recipe_endpoint():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+
+    authmod._init_schema()
+    hh = authmod._one(f"SELECT is_premium, dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+    is_prem = bool(hh.get("is_premium")) if hh else False
+    is_early = bool(hhid and int(hhid) <= 100)
+    if not (is_prem or is_early):
+        return jsonify({
+            "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",
+            "code": "PREMIUM_REQUIRED"
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "Please enter what recipe you want to make."}), 400
+
+    dietary = (hh.get("dietary_restrictions") or "").strip() if hh else ""
+
+    try:
+        recipe_data = _call_gemini_recipe(prompt, dietary)
+        return jsonify({"ok": True, "recipe": recipe_data})
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate recipe: {str(e)}"}), 500
+
+
+@app.route("/api/recipes", methods=["GET", "POST"])
+@require_user
+def recipes_endpoint():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+
+    db = get_db()
+    try:
+        if request.method == "GET":
+            rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hhid,)).fetchall()
+            recipes = []
+            for r in rows:
+                rec = dict(r)
+                try: rec["dietary_tags"] = json.loads(rec.get("dietary_tags") or "[]")
+                except Exception: rec["dietary_tags"] = []
+                try: rec["instructions"] = json.loads(rec.get("instructions") or "[]")
+                except Exception: rec["instructions"] = []
+                try: rec["ingredients"] = json.loads(rec.get("ingredients") or "[]")
+                except Exception: rec["ingredients"] = []
+                recipes.append(rec)
+            return jsonify({"recipes": recipes})
+
+        # POST: Save recipe
+        data = request.get_json(silent=True) or {}
+        title = (data.get("title") or "Untitled Recipe").strip()
+        desc = (data.get("description") or "").strip()
+        prep = (data.get("prep_time") or "").strip()
+        cook = (data.get("cook_time") or "").strip()
+        servings = (data.get("servings") or "").strip()
+        tags_json = json.dumps(data.get("dietary_tags") or [])
+        instr_json = json.dumps(data.get("instructions") or [])
+        ingr_json = json.dumps(data.get("ingredients") or [])
+
+        if _use_pg:
+            cur = db.execute(
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+            )
+            recipe_id = cur.fetchall()[0]["id"]
+        else:
+            cur = db.execute(
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+            )
+            db.commit()
+            recipe_id = cur.lastrowid
+
+        return jsonify({"ok": True, "recipe_id": recipe_id, "title": title})
+    finally:
+        db.close()
+
+
+@app.route("/api/recipes/<int:recipe_id>", methods=["DELETE"])
+@require_user
+def delete_recipe_endpoint(recipe_id):
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    db = get_db()
+    try:
+        db.execute("DELETE FROM recipes WHERE id = ? AND household_id = ?", (recipe_id, hhid))
+        if not _use_pg:
+            db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route("/api/recipes/add-to-list", methods=["POST"])
+@require_user
+def add_recipe_to_list_endpoint():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+
+    data = request.get_json(silent=True) or {}
+    recipe_title = (data.get("recipe_title") or "Recipe").strip()
+    items = data.get("items") or []
+
+    if not items:
+        return jsonify({"error": "No ingredients provided"}), 400
+
+    db = get_db()
+    try:
+        user_name = get_display_name() if authmod else "User"
+
+        added_count = 0
+        for item in items:
+            name = (item.get("name") or "").strip()
+            if not name:
+                continue
+            store_id = item.get("store_id")
+            if not store_id:
+                continue
+            category = (item.get("category") or "General").strip()
+            quantity = (item.get("amount") or item.get("quantity") or "").strip()
+
+            if _use_pg:
+                db.execute(
+                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                )
+            else:
+                db.execute(
+                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                )
+                db.commit()
+            added_count += 1
+
+        return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
+    finally:
+        db.close()
+
 
 
 @app.route("/logout")
