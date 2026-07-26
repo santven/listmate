@@ -1368,6 +1368,25 @@ async function confirmAddRecipeToList() {
         msg += ` (${skippedCount} skipped as already at home)`;
       }
       toast(msg);
+
+      // Auto-save recipe if not already saved (has no id)
+      if (!r.id) {
+        try {
+          const saveRes = await fetch(API + '/recipes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(r)
+          }).then(res => res.json());
+          if (saveRes.ok) {
+            r.id = saveRes.recipe_id;
+            toast(`💾 Recipe '${r.title}' automatically saved to library!`);
+            loadSavedRecipes();
+          }
+        } catch (saveErr) {
+          console.error('Error auto-saving recipe:', saveErr);
+        }
+      }
+
       showScreen('home');
       loadData();
     } else {
@@ -1392,8 +1411,8 @@ async function saveCurrentRecipe() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(r)
     }).then(r => r.json());
-
     if (res.ok) {
+      r.id = res.recipe_id;
       toast('💾 Recipe saved to your saved library!');
       loadSavedRecipes();
     } else {

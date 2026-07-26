@@ -584,8 +584,27 @@ def add_recipe_to_list_endpoint():
             store_id = item.get("store_id")
             if not store_id:
                 continue
-            category = (item.get("category") or "General").strip()
             quantity = (item.get("amount") or item.get("quantity") or "").strip()
+
+            # Ensure store item exists for auto-complete, and copy its category
+            cat_row = db.execute(
+                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                (store_id, hhid, name),
+            ).fetchone()
+
+            if cat_row:
+                category = cat_row["category"] if isinstance(cat_row, dict) else cat_row[0]
+            else:
+                category = (item.get("category") or "").strip()
+                if not category:
+                    category = categorize(name)
+                try:
+                    db.execute(
+                        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                        (hhid, store_id, name, category),
+                    )
+                except Exception:
+                    pass
 
             if _use_pg:
                 db.execute(
@@ -601,12 +620,9 @@ def add_recipe_to_list_endpoint():
                 )
                 db.commit()
             added_count += 1
-
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
     finally:
         db.close()
-
-
 
 @app.route("/logout")
 def logout_page():
