@@ -162,6 +162,18 @@ if USE_PG:
             _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE")
         except Exception:
             pass
+
+        # Seed dev household and user if they don't exist
+        try:
+            h = _one("SELECT id FROM auth_households WHERE id = 1")
+            if not h:
+                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
+            u = _one("SELECT id FROM auth_users WHERE id = 1")
+            if not u:
+                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
+        except Exception as e:
+            print(f'[seed dev error] {e}', flush=True)
+
         _schema_done = True
 
 else:
@@ -245,6 +257,18 @@ else:
                 _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
             except Exception:
                 pass
+
+        # Seed dev household and user if they don't exist
+        try:
+            h = _one("SELECT id FROM auth_households WHERE id = 1")
+            if not h:
+                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
+            u = _one("SELECT id FROM auth_users WHERE id = 1")
+            if not u:
+                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
+        except Exception as e:
+            print(f'[seed dev error] {e}', flush=True)
+
         _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────

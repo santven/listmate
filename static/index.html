@@ -604,6 +604,70 @@ $('#btnDeleteStore').addEventListener('click',async()=>{
 });
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
+
+async function checkDietaryStatus() {
+  try {
+    const res = await fetch(API + '/settings/dietary').then(r => r.json());
+    if (res && res.dietary_restrictions) {
+      const bannerText = $('#dietaryBannerText');
+      const banner = $('#dietaryBanner');
+      if (bannerText) bannerText.textContent = res.dietary_restrictions;
+      if (banner) banner.style.display = 'block';
+    } else {
+      const banner = $('#dietaryBanner');
+      if (banner) banner.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('Failed to check dietary status:', e);
+  }
+}
+
+async function loadRecipeUsage() {
+  try {
+    const res = await fetch(API + '/recipes/usage').then(r => r.json());
+    if (res && res.ok) {
+      updateRecipeUsageUI(res.used, res.limit, res.remaining);
+    }
+  } catch (e) {
+    console.error('Failed to load recipe usage:', e);
+  }
+}
+
+function updateRecipeUsageUI(used, limit, remaining) {
+  const usageText = $('#recipeUsageText');
+  const remTag = $('#recipeRemainingTag');
+  const btn = $('#btnGenerateRecipe');
+
+  if (usageText) usageText.textContent = `${used} / ${limit} generated this week`;
+
+  if (remTag) {
+    if (remaining <= 0) {
+      remTag.textContent = '0 remaining (Resets Sun)';
+      remTag.style.background = '#fee2e2';
+      remTag.style.color = '#991b1b';
+    } else {
+      remTag.textContent = `${remaining} remaining`;
+      remTag.style.background = '#dcfce7';
+      remTag.style.color = '#15803d';
+    }
+  }
+
+  if (btn) {
+    if (remaining <= 0) {
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.style.cursor = 'not-allowed';
+      btn.innerHTML = '⚠️ Weekly Limit Reached (7/7 Generated) • Resets Sun';
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      btn.innerHTML = `✨ Generate Recipe (${remaining} left this week)`;
+    }
+  }
+}
+
+
 function showScreen(name){
   if(name==='home'){
     currentStore=null;
