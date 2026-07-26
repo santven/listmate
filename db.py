@@ -43,6 +43,19 @@ def init_db():
             UNIQUE(store_id, name COLLATE NOCASE),
             FOREIGN KEY (store_id) REFERENCES stores(id)
         );
+        CREATE TABLE IF NOT EXISTS recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            title TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            prep_time TEXT DEFAULT '',
+            cook_time TEXT DEFAULT '',
+            servings TEXT DEFAULT '',
+            dietary_tags TEXT DEFAULT '',
+            instructions TEXT DEFAULT '',
+            ingredients TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS list_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             store_id INTEGER NOT NULL,
@@ -54,16 +67,42 @@ def init_db():
             purchased_at TIMESTAMP,
             FOREIGN KEY (store_id) REFERENCES stores(id)
         );
+        CREATE TABLE IF NOT EXISTS store_visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            store_id INTEGER NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            visit_date TEXT NOT NULL,
+            items_count INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (store_id) REFERENCES stores(id)
+        );
+        CREATE TABLE IF NOT EXISTS recipe_generations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS store_enrich_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            store_id INTEGER NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP
+        );
     """)
 
     # Migrate: add household_id columns
     for tbl in ("stores", "store_items", "list_items"):
         _add_column_if_missing(db, tbl, "household_id", "INTEGER NOT NULL DEFAULT 1")
 
+    _add_column_if_missing(db, "stores", "category_order", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "stores", "cuisine", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "stores", "auto_populated", "INTEGER DEFAULT 0")
     # Migrate: add category column
     for tbl in ("store_items", "list_items"):
         _add_column_if_missing(db, tbl, "category", "TEXT NOT NULL DEFAULT ''")
     _add_column_if_missing(db, "list_items", "quantity", "TEXT DEFAULT ''")
+    _add_column_if_missing(db, "list_items", "recipe_tag", "TEXT DEFAULT ''")
 
     # Recreate indexes (add if missing)
     try:
@@ -83,6 +122,23 @@ def init_db():
     db.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_store_hh_name ON stores(household_id, name COLLATE NOCASE)
     """)
+
+    
+    # Seed default smart aisle category orders
+    default_aisle_patterns = [
+        ("%patel%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+        ("%indiaco%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+        ("%indian%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
+        ("%costco%", "Produce,Bakery,Deli,Meat & Seafood,Pantry,Snacks & Sweets,Beverages,Frozen,Household,Dairy"),
+        ("%whole foods%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household"),
+        ("%jewel%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household"),
+        ("%valli%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household")
+    ]
+    for pattern, order in default_aisle_patterns:
+        try: db.execute("UPDATE stores SET category_order = ? WHERE LOWER(name) LIKE ? AND (category_order IS NULL OR category_order = '' OR category_order NOT LIKE '%Spices%')", (order, pattern))
+        except Exception: pass
+    try: db.execute("UPDATE stores SET category_order = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household' WHERE (category_order IS NULL OR category_order = '')")
+    except Exception: pass
 
     db.commit()
 

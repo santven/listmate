@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Store enrichment cron job for Render.
+"""
+Store enrichment cron job for Render.
 Runs every 15 minutes to enrich stores created in the last 15 minutes or queued for premium households.
 Uses Gemini 3.1 Flash Lite. Batches up to 10 pending stores into a SINGLE Gemini API call!
 """
@@ -9,12 +10,14 @@ import sys
 import json
 import time
 import re
+import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime
 
-# Add root directory to sys.path so we can import categorize module
+# Add root directory to sys.path so we can import db_pg, db, and categorize modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 try:
     import categorize
 except Exception:
@@ -40,11 +43,9 @@ def get_key():
     key = os.environ.get("GEMINI_API_KEY")
     if key and key.strip():
         return key.strip()
-
     key = os.environ.get("SECRET_KEY")
     if key and key.strip() and key.strip().startswith("AIza"):
         return key.strip()
-
     try:
         for path in ["/opt/shared/.env", ".env"]:
             if os.path.exists(path):
@@ -59,7 +60,6 @@ def get_key():
                             return val
     except Exception:
         pass
-
     return ""
 
 def gemini_query(prompt, key):
@@ -100,54 +100,32 @@ def determine_category(item_name, gemini_cat=""):
                 return cat.strip()
         except Exception:
             pass
-
     if gemini_cat and str(gemini_cat).strip():
         gcat = str(gemini_cat).strip().title()
         if gcat.lower() not in ["gemini_auto", "auto", "unknown", "none", "null"]:
             return gcat
-
     return "General"
 
-def get_db():
-    """Connect to DB — PostgreSQL on Render, SQLite locally."""
+def get_db_conn():
+    """Connect to DB using standard app modules (db_pg for PostgreSQL on Render, db for SQLite)."""
     dburi = os.environ.get("DATABASE_URL")
     if dburi:
-        import psycopg2
-        import psycopg2.extras
-        conn = psycopg2.connect(dburi)
-        conn.autocommit = True
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        pg = True
+        import db_pg
+        return db_pg.get_db(), True
     else:
-        import sqlite3
-        conn = sqlite3.connect(os.environ.get("DB_PATH", "listmate.db"))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        cur = conn
-        pg = False
-    return conn, cur, pg
+        import db
+        return db.get_db(), False
 
-def run_sql(cur, pg, sql, params=None):
-    if pg:
-        sql = re.sub(r'\?', '%s', sql)
-        cur.execute(sql, params or ())
-        try:
-            return [dict(r) for r in cur.fetchall()] if cur.description else []
-        except Exception:
-            return []
-    else:
-        if params:
-            rows = cur.execute(sql, params).fetchall()
-        else:
-            rows = cur.execute(sql).fetchall()
-        return [dict(r) for r in rows]
+def query_all(db, sql, params=None):
+    res = db.execute(sql, params or ())
+    if hasattr(res, "fetchall"):
+        return res.fetchall()
+    elif hasattr(db, "fetchall"):
+        return db.fetchall()
+    return []
 
-def run_exec(cur, pg, sql, params=None):
-    if pg:
-        sql = re.sub(r'\?', '%s', sql)
-        cur.execute(sql, params or ())
-    else:
-        cur.execute(sql, params or ())
+def exec_sql(db, sql, params=None):
+    db.execute(sql, params or ())
 
 def main():
     log("=== Starting Store Enrichment Job (Batched Gemini API) ===")
@@ -156,14 +134,13 @@ def main():
         log("ERROR: No GEMINI_API_KEY found in environment")
         return
 
-    conn = None
-    cur = None
-    pg = False
+    db = None
     try:
-        conn, cur, pg = get_db()
+        db, is_pg = get_db_conn()
+        log(f"Database connected successfully (PostgreSQL={is_pg})")
 
-        # Query up to 10 stores created in the last 15 minutes for premium households
-        if pg:
+        # 1. Query stores created in the last 15 minutes for premium households
+        if is_pg:
             sql_stores = (
                 "SELECT s.id AS store_id, s.name AS store_name, s.household_id, s.created_at "
                 "FROM stores s "
@@ -182,20 +159,20 @@ def main():
                 "ORDER BY s.created_at DESC LIMIT 10"
             )
 
-        new_stores = run_sql(cur, pg, sql_stores)
+        new_stores = query_all(db, sql_stores)
         seen_store_ids = {s["store_id"] for s in new_stores}
 
-        # Fallback to store_enrich_queue if fewer than 10 stores returned
+        # 2. Fallback to store_enrich_queue if fewer than 10 stores returned
         if len(new_stores) < 10:
             try:
                 limit_needed = 10 - len(new_stores)
-                if pg:
+                if is_pg:
                     sql_queue = (
                         "SELECT q.id AS queue_id, q.store_id, q.household_id "
                         "FROM store_enrich_queue q "
                         "JOIN auth_households h ON q.household_id = h.id "
                         "WHERE q.status='pending' AND h.is_premium = TRUE "
-                        "ORDER BY q.created_at LIMIT %s" % limit_needed
+                        "ORDER BY q.created_at LIMIT " + str(limit_needed)
                     )
                 else:
                     sql_queue = (
@@ -203,25 +180,30 @@ def main():
                         "FROM store_enrich_queue q "
                         "JOIN auth_households h ON q.household_id = h.id "
                         "WHERE q.status='pending' AND h.is_premium = 1 "
-                        "ORDER BY q.created_at LIMIT %d" % limit_needed
+                        "ORDER BY q.created_at LIMIT " + str(limit_needed)
                     )
-                queue_rows = run_sql(cur, pg, sql_queue)
+                queue_rows = query_all(db, sql_queue)
                 for q in queue_rows:
                     sid = q["store_id"]
                     if sid not in seen_store_ids:
-                        st = run_sql(cur, pg, "SELECT id AS store_id, name AS store_name, household_id FROM stores WHERE id=?", (sid,))
+                        st = query_all(db, "SELECT id AS store_id, name AS store_name, household_id FROM stores WHERE id=?", (sid,))
                         if st:
                             st[0]["queue_id"] = q["queue_id"]
                             new_stores.append(st[0])
                             seen_store_ids.add(sid)
-            except Exception:
-                pass
+                    else:
+                        for st in new_stores:
+                            if st["store_id"] == sid and "queue_id" not in st:
+                                st["queue_id"] = q["queue_id"]
+            except Exception as q_err:
+                log(f"Warning querying store_enrich_queue: {q_err}")
 
         if not new_stores:
             log("No stores needing enrichment for premium households.")
             return
 
-        log(f"Found {len(new_stores)} store(s) to enrich. Building single batched Gemini request...")
+        store_names = [s["store_name"] for s in new_stores]
+        log(f"Found {len(new_stores)} store(s) to enrich: {store_names}. Building single batched Gemini request...")
 
         # Gather household metadata for each store
         prompt_stores = []
@@ -230,8 +212,7 @@ def main():
             sname = store["store_name"]
             hhid = store["household_id"]
 
-            hh_rows = run_sql(cur, pg,
-                "SELECT zip_code, country, dietary_restrictions FROM auth_households WHERE id=?", (hhid,))
+            hh_rows = query_all(db, "SELECT zip_code, country, dietary_restrictions FROM auth_households WHERE id=?", (hhid,))
             zip_code = (hh_rows[0].get("zip_code") or "").strip() if hh_rows else ""
             country = (hh_rows[0].get("country") or "USA").strip() if hh_rows else "USA"
             dietary_raw = (hh_rows[0].get("dietary_restrictions") or "").strip() if hh_rows else ""
@@ -263,10 +244,10 @@ def main():
             )
 
         stores_block = "\n\n".join(prompt_stores)
-
         prompt = (
             f"Below is a list of {len(new_stores)} grocery/retail store(s) to enrich. For EACH store, identify its cuisine/store type, and list top 25 commonly bought items that strictly adhere to any specified dietary restrictions.\n\n"
             f"{stores_block}\n\n"
+            f"Include an optimal physical aisle/walking order ('category_order') array for a shopper traversing this store (e.g. ['Produce', 'Bakery', 'Deli', 'Pantry', 'Dairy', 'Frozen', 'Household']).\n"
             f"Categorize each item under a standard category (e.g., Produce, Dairy, Bakery, Meat & Seafood, Pantry, Legumes & Grains, Spices & Seasonings, Snacks & Sweets, Beverages, Frozen, Household, Canned & Jarred, Nuts & Seeds, Dips & Spreads, Indian Specialties, General).\n"
             f"Return valid JSON ONLY as an object with a \"stores\" array containing an entry for EVERY store:\n"
             f"{{\n"
@@ -282,116 +263,133 @@ def main():
             f"}}\n"
         )
 
-        try:
-            result = gemini_query(prompt, key)
-            candidates = result.get("candidates", [])
-            if not candidates:
-                log("  ✗ No response candidates from Gemini batch query")
-                return
+        result = gemini_query(prompt, key)
+        candidates = result.get("candidates", [])
+        if not candidates:
+            log("  ✗ No response candidates from Gemini batch query")
+            return
 
-            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            tokens = result.get("usageMetadata", {}).get("totalTokenCount", "?")
-            log(f"  ✓ Single Gemini API call successful! ({tokens} tokens used for {len(new_stores)} stores)")
+        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        tokens = result.get("usageMetadata", {}).get("totalTokenCount", "?")
+        log(f"  ✓ Single Gemini API call successful! ({tokens} tokens used for {len(new_stores)} stores)")
 
-            # Clean markdown JSON block formatting if present
-            text = text.strip()
-            if text.startswith("```"):
-                text = re.sub(r'^```(?:json)?\s*', '', text)
-                text = re.sub(r'```\s*$', '', text)
+        text = text.strip()
+        if text.startswith("```"):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'```\s*$', '', text)
 
-            data = json.loads(text)
-            stores_output = data.get("stores", [])
+        data = json.loads(text)
+        stores_output = data.get("stores", [])
 
-            # Create lookup maps by store_id and index
-            store_resp_map = {}
-            for s_obj in stores_output:
-                if isinstance(s_obj, dict):
-                    sid_val = str(s_obj.get("store_id", "")).strip()
-                    if sid_val:
-                        store_resp_map[sid_val] = s_obj
+        store_resp_map = {}
+        for s_obj in stores_output:
+            if isinstance(s_obj, dict):
+                sid_val = str(s_obj.get("store_id", "")).strip()
+                if sid_val:
+                    store_resp_map[sid_val] = s_obj
 
-            # Process each store
-            for idx, store in enumerate(new_stores):
-                sid = store["store_id"]
-                sname = store["store_name"]
-                hhid = store["household_id"]
-                queue_id = store.get("queue_id")
+        for idx, store in enumerate(new_stores):
+            sid = store["store_id"]
+            sname = store["store_name"]
+            hhid = store["household_id"]
+            queue_id = store.get("queue_id")
 
-                # Retrieve response object by store_id or index fallback
-                s_obj = store_resp_map.get(str(sid))
-                if not s_obj and idx < len(stores_output):
-                    s_obj = stores_output[idx]
+            log(f"--> Processing enrichment results for store '{sname}' (id={sid}, queue_id={queue_id}, household_id={hhid})...")
 
-                if not s_obj or not isinstance(s_obj, dict):
-                    log(f"  ✗ Omitted or missing response data for store '{sname}' (id={sid})")
+            s_obj = store_resp_map.get(str(sid))
+            if not s_obj and idx < len(stores_output):
+                s_obj = stores_output[idx]
+
+            if not s_obj or not isinstance(s_obj, dict):
+                log(f"  ✗ Omitted or missing response data for store '{sname}' (id={sid})")
+                try:
+                    exec_sql(db, "UPDATE store_enrich_queue SET status='failed', processed_at=CURRENT_TIMESTAMP WHERE store_id=? AND status='pending'", (sid,))
                     if queue_id:
-                        try:
-                            run_exec(cur, pg, "UPDATE store_enrich_queue SET status='failed', processed_at=NOW() WHERE id=?", (queue_id,))
-                        except Exception:
-                            pass
+                        exec_sql(db, "UPDATE store_enrich_queue SET status='failed', processed_at=CURRENT_TIMESTAMP WHERE id=?", (queue_id,))
+                    if hasattr(db, "commit"):
+                        db.commit()
+                except Exception as ex_fail:
+                    log(f"  ✗ Exception updating queue failure: {ex_fail}")
+                continue
+
+            cuisine = (s_obj.get("cuisine") or "").strip()
+            raw_items = s_obj.get("items", [])[:25]
+
+            # Update stores table
+            try:
+                cat_order_list = s_obj.get("category_order", [])
+                if isinstance(cat_order_list, list):
+                    cat_order_str = ",".join([str(c).strip() for c in cat_order_list if str(c).strip()])
+                else:
+                    cat_order_str = str(cat_order_list or "").strip()
+                exec_sql(db, "UPDATE stores SET cuisine=?, auto_populated=?, category_order=? WHERE id=?", (cuisine, True, cat_order_str, sid))
+                log(f"  [DB] Updated stores table for store_id={sid}")
+            except Exception as e_st:
+                log(f"  ✗ Error updating stores table for '{sname}' (id={sid}): {e_st}")
+
+            # Insert items into store_items table
+            added = 0
+            for raw_item in raw_items:
+                if isinstance(raw_item, dict):
+                    item_clean = str(raw_item.get("name") or "").strip()
+                    g_cat = str(raw_item.get("category") or "").strip()
+                else:
+                    item_clean = str(raw_item).strip()
+                    g_cat = ""
+
+                if not item_clean:
                     continue
 
-                cuisine = (s_obj.get("cuisine") or "").strip()
-                raw_items = s_obj.get("items", [])[:25]
+                category = determine_category(item_clean, g_cat)
 
-                # Update cuisine in stores table
                 try:
-                    run_exec(cur, pg, "UPDATE stores SET cuisine=?, auto_populated=? WHERE id=?", (cuisine, True, sid))
-                except Exception:
-                    pass
-
-                # Insert items into store_items table with proper categorization
-                added = 0
-                for raw_item in raw_items:
-                    if isinstance(raw_item, dict):
-                        item_clean = str(raw_item.get("name") or "").strip()
-                        g_cat = str(raw_item.get("category") or "").strip()
-                    else:
-                        item_clean = str(raw_item).strip()
-                        g_cat = ""
-
-                    if not item_clean:
-                        continue
-
-                    category = determine_category(item_clean, g_cat)
-
-                    # Check if item already exists for this store
-                    existing = run_sql(cur, pg,
-                        "SELECT id FROM store_items WHERE store_id=? AND LOWER(name)=LOWER(?) AND household_id=?",
-                        (sid, item_clean, hhid))
+                    existing = query_all(db, "SELECT id, category FROM store_items WHERE store_id=? AND LOWER(name)=LOWER(?) AND household_id=?", (sid, item_clean, hhid))
                     if not existing:
-                        run_exec(cur, pg,
-                            "INSERT INTO store_items (store_id, name, category, household_id) VALUES (?, ?, ?, ?)",
-                            (sid, item_clean, category, hhid))
+                        exec_sql(db, "INSERT INTO store_items (store_id, name, category, household_id) VALUES (?, ?, ?, ?)", (sid, item_clean, category, hhid))
                         added += 1
+                    else:
+                        old_cat = (existing[0].get("category") or "").strip()
+                        if (not old_cat or old_cat.lower() in ["general", "auto", "gemini_auto"]) and category and category.lower() not in ["general", "auto", "gemini_auto"]:
+                            exec_sql(db, "UPDATE store_items SET category=? WHERE id=?", (category, existing[0]["id"]))
+                except Exception as e_item:
+                    log(f"  ✗ Error inserting item '{item_clean}' for store_id={sid}: {e_item}")
 
-                # Update queue status if queue_id exists
+            # Update store_enrich_queue status
+            try:
+                exec_sql(db, "UPDATE store_enrich_queue SET status='done', processed_at=CURRENT_TIMESTAMP WHERE store_id=? AND status='pending'", (sid,))
                 if queue_id:
-                    try:
-                        run_exec(cur, pg, "UPDATE store_enrich_queue SET status='done', processed_at=NOW() WHERE id=?", (queue_id,))
-                    except Exception:
-                        pass
+                    exec_sql(db, "UPDATE store_enrich_queue SET status='done', processed_at=CURRENT_TIMESTAMP WHERE id=?", (queue_id,))
+                log(f"  [DB] Updated store_enrich_queue status='done' for store_id={sid}")
+            except Exception as e_q:
+                log(f"  ✗ Error updating store_enrich_queue to done for store {sid}: {e_q}")
 
-                log(f"  ✓ Store '{sname}' (id={sid}): updated cuisine='{cuisine}', added {added} items")
+            # Commit explicitly after store processing
+            if hasattr(db, "commit"):
+                try:
+                    db.commit()
+                    log(f"  [DB] Explicit commit completed for store_id={sid}")
+                except Exception as e_cm:
+                    log(f"  ✗ Error committing store_id={sid}: {e_cm}")
 
-            if not pg and conn:
-                conn.commit()
+            # Post-commit verification query
+            try:
+                st_items = query_all(db, "SELECT COUNT(*) as cnt FROM store_items WHERE store_id=?", (sid,))
+                item_cnt = st_items[0]["cnt"] if st_items else 0
+                q_status_rows = query_all(db, "SELECT status FROM store_enrich_queue WHERE store_id=? ORDER BY id DESC LIMIT 1", (sid,))
+                q_status = q_status_rows[0]["status"] if q_status_rows else "no queue row"
+                log(f"  ✓ Store '{sname}' (id={sid}): updated cuisine='{cuisine}', added {added} items. Verification -> store_items in DB: {item_cnt}, queue status: '{q_status}'")
+            except Exception as e_ver:
+                log(f"  Warning during post-commit verification for store_id={sid}: {e_ver}")
 
-        except Exception as e:
-            log(f"  ✗ Error executing batched Gemini store enrichment: {e}")
-
+    except Exception as e:
+        log(f"  ✗ Error executing store enrichment job: {e}")
+        log(traceback.format_exc())
     finally:
-        if cur:
+        if db and hasattr(db, "close"):
             try:
-                cur.close()
+                db.close()
             except Exception:
                 pass
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
     log("=== Store Enrichment Job Complete ===")
 
 if __name__ == "__main__":
