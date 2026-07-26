@@ -101,8 +101,6 @@
 
   .share-btn { background: none; border: 1px solid var(--green); color: var(--green); font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; font-weight: 500; margin-left: 8px; white-space: nowrap; }
   .share-btn:hover, .share-btn:active { background: var(--green); color: #fff; }
-  .suggestion-chip { display: inline-block; padding: 6px 12px; background: #f0f4ed; border: 1px solid var(--border); border-radius: 16px; font-size: 13px; color: var(--text); cursor: pointer; margin-right: 6px; margin-bottom: 6px; transition: all .15s; }
-  .suggestion-chip:hover { background: #e8f5e9; border-color: var(--green); }
 </style>
 
 <style>
@@ -120,7 +118,6 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 </head>
-</head>
 <body>
 <div class="header">
   <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
@@ -131,7 +128,6 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="#" onclick="showRecipesScreen(); toggleBurger(); return false;">🍳 Recipe Planner</a>
       <a href="/settings">⚙️ Settings</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
@@ -140,24 +136,10 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </div>
 <div class="container">
   <div id="screenHome">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Stores & Grocery List</div>
-      <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-        🍳 Recipe Planner
-      </button>
-    </div>
-    
     <div class="store-grid" id="storeGrid"></div>
     <div class="new-store-wrap">
       <input type="text" id="newStoreInput" placeholder="+ New store..." autocomplete="off">
       <button id="btnNewStore">+</button>
-    </div>
-
-    <div style="display:flex; gap:8px; margin-top:16px;">
-      <select id="recipeFilter" onchange="renderHome()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
-        <option value="">All Recipes</option>
-      </select>
-      <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share All</button>
     </div>
     <div id="listView"></div>
     <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
@@ -177,102 +159,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <div class="catalog-grid" id="catalogItems"></div>
     <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
   </div>
-
-  <!-- Recipe Planner Screen -->
-  <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
-    <!-- Tabs Header -->
-    <div style="display:flex; gap:8px; margin-bottom:16px;">
-      <button id="tabRecipeCreate" onclick="switchRecipeTab('create')" style="flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--green); background:#f0fdf4; font-weight:600; font-size:14px; cursor:pointer; color:var(--green-dark);">✨ Generate Recipe</button>
-      <button id="tabRecipeSaved" onclick="switchRecipeTab('saved')" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; font-size:14px; cursor:pointer; color:var(--muted);">📚 Saved Recipes (<span id="savedRecipeCount">0</span>)</button>
-    </div>
-
-    <!-- CREATE RECIPE TAB CONTENT -->
-    <div id="recipeTabCreate">
-      <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
-        <div id="recipeWeeklyUsageBanner" style="background:#f0fdf4; border:1px solid #bbf7d0; padding:10px 14px; border-radius:12px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <div>
-            <span style="font-weight:700; font-size:13px; color:#166534;">📊 Weekly Recipe Quota (Sun–Sat):</span>
-            <span id="recipeUsageText" style="font-size:13px; color:#15803d; font-weight:600; margin-left:4px;">0 / 7 generated</span>
-          </div>
-          <div id="recipeRemainingTag" style="font-size:12px; font-weight:700; background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:16px;">
-            7 remaining
-          </div>
-        </div>
-        <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Chef AI Meal & Recipe Generator</div>
-        <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">Type any recipe or meal request. Chef AI considers your household dietary preferences to craft a complete recipe & grocery mapping.</div>
-
-        <div id="dietaryBanner" style="display:none; background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:10px; font-size:12px; margin-bottom:12px; font-weight:500;">
-          🥗 Household Dietary Restrictions Active: <span id="dietaryBannerText"></span>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          <input type="text" id="recipePromptInput" placeholder="e.g. Creamy Paneer Butter Masala for 4, Quick Gluten-Free Pasta..." autocomplete="off" style="width:100%; padding:14px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
-          <button id="btnGenerateRecipe" onclick="generateRecipe()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-weight:600; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
-            ✨ Generate Recipe (1 Credit)
-          </button>
-        </div>
-      </div>
-
-      <!-- FORMATTED RECIPE CONTAINER -->
-      <div id="recipeOutput" style="display:none;"></div>
-    </div>
-
-    <!-- SAVED RECIPES TAB CONTENT -->
-    <div id="recipeTabSaved" style="display:none;">
-      <div id="savedRecipesList"></div>
-    </div>
-  </div>
 </div>
-<!-- Recipe Store Selection Modal -->
-<div class="modal-overlay" id="recipeStoreModal">
-  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h3 style="margin:0; font-size:17px; font-weight:700;">Select Stores for Ingredients</h3>
-      <button onclick="closeRecipeStoreModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
-    </div>
-    <div style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.4;">Assign each ingredient to your preferred store. <strong>Uncheck any items you already have at home</strong> to exclude them from your shopping list.</div>
-
-    <!-- Bulk Assign Bar -->
-    <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:12px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <span style="font-size:13px; font-weight:600; color:#166534;">Set store for all:</span>
-      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:13px; outline:none; background:#fff; min-width:140px;"></select>
-      <button onclick="applyBulkStore()" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Apply All</button>
-    </div>
-
-    <div id="recipeIngredientsMappingList" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
-
-        <div style="display:flex; gap:10px;">
-      <button onclick="closeRecipeStoreModal()" style="flex:1; padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; color:var(--text); font-weight:600; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-        <span>← Cancel</span>
-        <span style="font-size:10px; font-weight:500; color:var(--muted);">(does not save recipe)</span>
-      </button>
-      <button onclick="confirmAddRecipeToList()" style="flex:2; padding:10px 14px; border-radius:12px; border:none; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-weight:700; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-        <span>✅ Add Items to List</span>
-        <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
-      </button>
-    </div>
-</div>
-
-<!-- Premium Modal -->
-<div class="modal-overlay" id="premiumModal">
-  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
-    <div style="font-size:48px; margin-bottom:12px;">⭐</div>
-    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Recipe Planner is Premium</h3>
-    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
-      Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.
-    </p>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <button onclick="activateEarlyAdopterPremium()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
-        🎁 Enable Early Adopter Premium Access
-      </button>
-      <a href="/settings" style="display:block; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); text-decoration:none; font-weight:600; font-size:14px;">
-        ⚙️ Manage Premium in Settings
-      </a>
-      <button onclick="closePremiumModal()" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">Close</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <!-- Move Item Modal -->
@@ -292,19 +179,18 @@ function toggleBurger() {
 }
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
-function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+let stores=[], list=[], currentStore=null, allStoreItems={};
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
   try {
-    const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); window.currentCfg = cfg;
+    const cfg = await (await fetch(API+'/auth/config')).json();
     if (!cfg.user) { window.location.href='/login'; return false; }
     $('#headerUser').textContent = cfg.display_name||cfg.user;
     // Show Health nav link only if health_dashboard feature is enabled
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
-      const healthLink = $('#healthNavLink');
-      if (healthLink) healthLink.style.display = '';
+      $('#healthNavLink').style.display = '';
     }
     
     if (cfg.is_premium) {
@@ -322,50 +208,24 @@ return true;
   } catch(e) { window.location.href='/login'; return false; }
 }
 
-let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
 async function loadData() {
-  const [s, l, r] = await Promise.all([
-    fetch(API+'/stores').then(r=>r.json()).catch(e=>[]),
-    fetch(API+'/list').then(r=>r.json()).catch(e=>[]),
-    fetch(API+'/recipes').then(r=>r.json()).catch(e=>[])
+  const [s, l] = await Promise.all([
+    fetch(API+'/stores').then(r=>r.json()),
+    fetch(API+'/list').then(r=>r.json())
   ]);
-  stores=s; list=l; recipes=r.recipes || []; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
-  
-  const filter = $('#recipeFilter');
-  if (filter) {
-    const selected = filter.value;
-    filter.innerHTML = '<option value="">All Recipes</option>' + (Array.isArray(recipes) ? recipes.map(r => '<option value="'+r.id+'">'+(r.title || 'Unnamed Recipe')+'</option>').join('') : '');
-    filter.value = selected;
-  }
-
-  allStoreItems = {};
-  if(currentStore) {
-    try {
-      const items = await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
-      allStoreItems[currentStore.id] = items;
-      const searchEl = document.querySelector("#catalogSearch");
-      renderCatalog(searchEl ? searchEl.value.trim() : '');
-    } catch(e){}
-  }
+  stores=s; list=l; renderHome(); loadSuggestions();
 }
 
-
 function renderHome() {
-  const filterRecipeName = $('#recipeFilter') ? $('#recipeFilter').value : '';
-  let filteredList = list;
-  if (filterRecipeName) {
-    filteredList = list.filter(i => i.recipe_tag === filterRecipeName);
-  }
-  
-  const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
+  const counts={}; list.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
   $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
   $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
   
   // Separate active and purchased items
-  const activeItems = filteredList.filter(i=>!i.purchased);
-  const purchasedItems = filteredList.filter(i=>i.purchased);
+  const activeItems = list.filter(i=>!i.purchased);
+  const purchasedItems = list.filter(i=>i.purchased);
   
   // Group active items by store
   const activeGroups = {};
@@ -376,62 +236,11 @@ function renderHome() {
   purchasedItems.forEach(i=>{ if(!purchasedGroups[i.store_id])purchasedGroups[i.store_id]=[]; purchasedGroups[i.store_id].push(i); });
   
   function renderGroup(storeId, items, isPurchased) {
-    const store = stores.find(s => s.id === storeId);
-    const storeName = (store && store.name) || (items[0] && items[0].store_name) || '';
-    
-    let aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
-    if (!aisleOrderStr) {
-      if (/patel|indiaco|indian|desi|bazar|apna/i.test(storeName)) {
-        aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
-      } else {
-        aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
-      }
-    }
-    const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
-
-    const sortedItems = [...items].sort((a, b) => {
-      if (a.purchased !== b.purchased) return a.purchased ? 1 : -1;
-
-      const catA = (a.category || 'General').trim();
-      const catB = (b.category || 'General').trim();
-
-      let idxA = aisleOrder.findIndex(c => c.toLowerCase() === catA.toLowerCase());
-      let idxB = aisleOrder.findIndex(c => c.toLowerCase() === catB.toLowerCase());
-
-      if (idxA === -1) {
-        if (/household|cleaning|paper/i.test(catA)) idxA = 998;
-        else if (/general/i.test(catA)) idxA = 999;
-        else idxA = 500;
-      }
-      if (idxB === -1) {
-        if (/household|cleaning|paper/i.test(catB)) idxB = 998;
-        else if (/general/i.test(catB)) idxB = 999;
-        else idxB = 500;
-      }
-
-      if (idxA !== idxB) return idxA - idxB;
-
-      const catComp = catA.localeCompare(catB);
-      if (catComp !== 0) return catComp;
-
-      return a.name.localeCompare(b.name);
-    });
-
-    const itemsHtml = sortedItems.map(i => {
-      return '<div class="item-row' + (i.purchased ? ' purchased' : '') + '">' +
-        '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
-        '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
-        '<div class="item-meta">' + (i.purchased ? '✓ ' + i.purchased_by : 'by ' + i.added_by) + '</div>' +
-        (i.purchased ? '' : '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + i.name + '" title="Move to another store">⇄</button>') +
-        '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
-        '</div>';
-    }).join('');
-
-    return '<div class="store-group">' +
-      '<div class="store-group-title">' + storeMap[storeId] + ' <span>' + items.length + '</span>' +
-      (isPurchased ? '' : ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>') +
-      '</div><div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
-      itemsHtml +
+    return '<div class="store-group">'+
+      '<div class="store-group-title">'+storeMap[storeId]+' <span>'+items.length+'</span>'+
+      (isPurchased?'':' <button class="shop-btn" data-sid="'+storeId+'">+ Add</button>')+
+      '</div><div class="suggestion-wrap" id="sug-'+storeId+'"></div>'+
+      items.map(i=>'<div class="item-row'+(i.purchased?' purchased':'')+'"><div class="item-check" data-lid="'+i.id+'">✓</div><div class="item-name">'+i.name+(i.quantity?' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">('+i.quantity+')</span>':'')+'</div><div class="item-meta">'+(i.purchased?'✓ '+i.purchased_by:'by '+i.added_by)+'</div>'+(i.purchased?'':'<button class="btn-qty" data-lid="'+i.id+'" data-qty="'+(i.quantity||'')+'" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="'+i.id+'" data-name="'+i.name+'" title="Move to another store">⇄</button>')+'<button class="btn-delete" data-lid="'+i.id+'">×</button></div>').join('')+
       '</div>';
   }
   
@@ -504,10 +313,7 @@ async function openStore(sid) {
   if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
-  try {
-    const res = await fetch(API+'/stores/'+sid+'/items');
-    if(res.ok) allStoreItems[sid] = await res.json();
-  } catch(e) { if(!allStoreItems[sid]) allStoreItems[sid] = []; }
+  if(!allStoreItems[sid]) allStoreItems[sid]=await fetch(API+'/stores/'+sid+'/items').then(r=>r.json());
   renderCatalog();
 }
 
@@ -518,44 +324,12 @@ function renderCatalog(filter) {
   let html='';
   if(filter&&!items.find(i=>i.name.toLowerCase()===filter.toLowerCase()))
     html+='<div class="catalog-item" data-new="'+filter+'">+ Add "'+filter+'"</div>';
-  // Group store items by category with category headers
-  const cats = {};
-  filtered.forEach(i => {
-    const c = (i.category || 'General').trim() || 'General';
-    if (!cats[c]) cats[c] = [];
-    cats[c].push(i);
-  });
-
-  let aisleOrderStr = (currentStore && currentStore.category_order) || '';
-  if (!aisleOrderStr) {
-    if (/patel|indiaco|indian|desi|bazar|apna/i.test((currentStore && currentStore.name) || '')) {
-      aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
-    } else {
-      aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
-    }
-  }
-  const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
-
-  const catOrder = Object.keys(cats).sort((a, b) => {
-    let idxA = aisleOrder.findIndex(c => c.toLowerCase() === a.toLowerCase());
-    let idxB = aisleOrder.findIndex(c => c.toLowerCase() === b.toLowerCase());
-    if (idxA === -1) {
-      if (/household|cleaning|paper/i.test(a)) idxA = 998;
-      else if (/general/i.test(a)) idxA = 999;
-      else idxA = 500;
-    }
-    if (idxB === -1) {
-      if (/household|cleaning|paper/i.test(b)) idxB = 998;
-      else if (/general/i.test(b)) idxB = 999;
-      else idxB = 500;
-    }
-    if (idxA !== idxB) return idxA - idxB;
-    return a.localeCompare(b);
-  });
-
-  for (const cat of catOrder) {
-    if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
-    html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i =>
+  // Group by category — show category headers in store view
+  const cats={}; const uncat=''; filtered.forEach(i=>{const c=i.category||uncat;if(!cats[c])cats[c]=[];cats[c].push(i);});
+  const catOrder=Object.keys(cats).sort();
+  for(const cat of catOrder){
+    if(cat) html+='<div class="cat-header" style="grid-column:1/-1;margin-top:4px">'+cat+'</div>';
+    html+=cats[cat].map(i=>
       '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
         '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
           (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
@@ -636,91 +410,7 @@ $('#btnDeleteStore').addEventListener('click',async()=>{
 });
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
 
-
-async function checkDietaryStatus() {
-  try {
-    const res = await fetch(API + '/settings/dietary').then(r => r.json());
-    if (res && res.dietary_restrictions) {
-      const bannerText = $('#dietaryBannerText');
-      const banner = $('#dietaryBanner');
-      if (bannerText) bannerText.textContent = res.dietary_restrictions;
-      if (banner) banner.style.display = 'block';
-    } else {
-      const banner = $('#dietaryBanner');
-      if (banner) banner.style.display = 'none';
-    }
-  } catch (e) {
-    console.error('Failed to check dietary status:', e);
-  }
-}
-
-async function loadRecipeUsage() {
-  try {
-    const res = await fetch(API + '/recipes/usage').then(r => r.json());
-    if (res && res.ok) {
-      updateRecipeUsageUI(res.used, res.limit, res.remaining);
-    }
-  } catch (e) {
-    console.error('Failed to load recipe usage:', e);
-  }
-}
-
-function updateRecipeUsageUI(used, limit, remaining) {
-  const usageText = $('#recipeUsageText');
-  const remTag = $('#recipeRemainingTag');
-  const btn = $('#btnGenerateRecipe');
-
-  if (usageText) usageText.textContent = `${used} / ${limit} generated this week`;
-
-  if (remTag) {
-    if (remaining <= 0) {
-      remTag.textContent = '0 remaining (Resets Sun)';
-      remTag.style.background = '#fee2e2';
-      remTag.style.color = '#991b1b';
-    } else {
-      remTag.textContent = `${remaining} remaining`;
-      remTag.style.background = '#dcfce7';
-      remTag.style.color = '#15803d';
-    }
-  }
-
-  if (btn) {
-    if (remaining <= 0) {
-      btn.disabled = true;
-      btn.style.opacity = '0.6';
-      btn.style.cursor = 'not-allowed';
-      btn.innerHTML = '⚠️ Weekly Limit Reached (7/7 Generated) • Resets Sun';
-    } else {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-      btn.style.cursor = 'pointer';
-      btn.innerHTML = `✨ Generate Recipe (${remaining} left this week)`;
-    }
-  }
-}
-
-
-function showScreen(name){
-  if(name==='home'){
-    currentStore=null;
-    $('#headerTitle').textContent='Grocery List';
-    $('#btnBack').style.display='none';
-    $('#screenHome').style.display='block';
-    $('#screenCatalog').classList.remove('active');
-    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
-    $('#catalogSearch').value='';
-    if($('#catalogQty'))$('#catalogQty').value='';
-    loadData();
-  } else if(name==='recipes'){
-    if($('#screenHome')) $('#screenHome').style.display='none';
-    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
-    if($('#screenRecipes')) $('#screenRecipes').style.display='block';
-    $('#headerTitle').textContent='Recipe Planner';
-    checkDietaryStatus();
-    loadRecipeUsage();
-    $('#btnBack').style.display='block';
-  }
-}
+function showScreen(name){ if(name==='home'){currentStore=null;$('#headerTitle').textContent='Grocery List';$('#btnBack').style.display='none';$('#screenHome').style.display='block';$('#screenCatalog').classList.remove('active');$('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';loadData();}}
 
 async function loadSuggestions(){
   try{
@@ -730,7 +420,7 @@ async function loadSuggestions(){
       if(!store) continue;
       const wrap = $('#sug-'+store.id);
       if(!wrap) continue;
-      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">'+i.name+'</span>').join('');
+      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">💡 '+i.name+'</span>').join('');
     }
     $$('.suggestion-chip').forEach(el=>el.addEventListener('click',async()=>{
       const sid=parseInt(el.dataset.store), name=el.dataset.name;
@@ -824,763 +514,28 @@ function isMobile() {
   return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
 }
 
-async function shareAllLists() {
-  const activeItems = list.filter(i => !i.purchased);
-  if (!activeItems.length) { toast('No active items'); return; }
-  
-  // Group by store name
-  const itemsByStore = {};
-  activeItems.forEach(i => {
-    const store = stores.find(s => s.id === i.store_id);
-    const storeName = store ? store.name : 'Unknown';
-    if (!itemsByStore[storeName]) itemsByStore[storeName] = [];
-    itemsByStore[storeName].push(i);
-  });
-  
-  let text = '🛒 Grocery List:\n\n';
-  for (const [storeName, items] of Object.entries(itemsByStore)) {
-    text += storeName + ':\n' + items.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n') + '\n\n';
-  }
-
-  // Sharing logic
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-    try {
-      await window.Capacitor.Plugins.Share.share({
-        title: 'Grocery List',
-        text: text,
-        dialogTitle: 'Share Grocery List'
-      });
-      return;
-    } catch (e) {}
-  }
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: 'Grocery List',
-        text: text
-      });
-      return;
-    } catch (e) {}
-  }
-  
-  // Fallback to clipboard
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('✅ List copied to clipboard');
-  } catch (e) {
-    toast('❌ Failed to copy to clipboard');
-  }
-}
-
 async function shareStoreList(storeId, storeName) {
   const activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
   if (!activeItems.length) { toast('No active items in ' + storeName); return; }
-  
   const text = '🛒 ' + storeName + ' Grocery List:\n' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n');
 
-  // 1. Check Capacitor Share plugin (if running inside Android/iOS native app wrapper)
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-    try {
-      await window.Capacitor.Plugins.Share.share({
-        title: storeName + ' Grocery List',
-        text: text,
-        dialogTitle: 'Share ' + storeName + ' List'
-      });
-      return;
-    } catch (e) {
-      if (e && (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('cancel')))) return;
-    }
-  }
-
-  // 2. Try native Web Share API (Mobile Browsers: Chrome, Samsung Internet, Safari)
+  // Try native share sheet first (Chrome/Safari on mobile browser)
   if (navigator.share) {
-    try {
-      await navigator.share({
-        title: storeName + ' Grocery List',
-        text: text
-      });
-      return;
-    } catch (e) {
-      if (e && (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('cancel')))) {
-        return; // User cancelled share modal, don't fall back to clipboard
-      }
-      console.warn('navigator.share error:', e);
+    try { await navigator.share({ title: 'Grocery List', text: text }); return; }
+    catch (e) {
+      // share sheet failed or unavailable — fall through to clipboard
     }
   }
 
-  // 3. Fallback: Copy to clipboard (Desktop / WebViews)
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-    toast('📋 ' + activeItems.length + ' item(s) copied to clipboard!');
-  } catch (e) {
-    toast('❌ Could not share or copy list');
+  // Fallback: copy to clipboard (desktop, Android WebView)
+  try { await navigator.clipboard.writeText(text); toast('✅ ' + items.length + ' items copied!'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text;
+    ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('✅ ' + items.length + ' items copied!');
   }
 }
-
-
-// ── Recipe Planner & AI Generator (US-112) ──
-let currentDraftRecipe = null;
-let savedRecipesList = [];
-
-async function showRecipesScreen() {
-  if (!window.currentCfg || !window.currentCfg.is_premium) {
-    const pModal = $('#premiumModal');
-    if (pModal) pModal.classList.add('active');
-    return;
-  }
-  showScreen('recipes');
-  
-  // Load dietary preferences banner
-  try {
-    const res = await fetch(API + '/settings/dietary').then(r => r.json());
-    if (res.dietary_restrictions) {
-      $('#dietaryBannerText').textContent = res.dietary_restrictions;
-      $('#dietaryBanner').style.display = 'block';
-    } else {
-      $('#dietaryBanner').style.display = 'none';
-    }
-  } catch (e) {}
-
-  loadSavedRecipes();
-}
-
-function closePremiumModal() {
-  const pModal = $('#premiumModal');
-  if (pModal) pModal.classList.remove('active');
-}
-
-async function activateEarlyAdopterPremium() {
-  try {
-    const res = await fetch(API + '/settings/premium', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_premium: true })
-    }).then(r => r.json());
-    
-    if (res.ok) {
-      if (!window.currentCfg) window.currentCfg = {};
-      window.currentCfg.is_premium = true;
-      document.body.classList.add('is-premium');
-      closePremiumModal();
-      toast('⭐ Premium Unlocked! Welcome Early Adopter!');
-      showRecipesScreen();
-    }
-  } catch (e) {
-    toast('Error updating premium status');
-  }
-}
-
-function switchRecipeTab(tab) {
-  if (tab === 'create') {
-    $('#tabRecipeCreate').style.border = '1.5px solid var(--green)';
-    $('#tabRecipeCreate').style.background = '#f0fdf4';
-    $('#tabRecipeCreate').style.color = 'var(--green-dark)';
-    
-    $('#tabRecipeSaved').style.border = '1px solid var(--border)';
-    $('#tabRecipeSaved').style.background = '#f3f4f6';
-    $('#tabRecipeSaved').style.color = 'var(--muted)';
-    
-    $('#recipeTabCreate').style.display = 'block';
-    $('#recipeTabSaved').style.display = 'none';
-  } else {
-    $('#tabRecipeSaved').style.border = '1.5px solid var(--green)';
-    $('#tabRecipeSaved').style.background = '#f0fdf4';
-    $('#tabRecipeSaved').style.color = 'var(--green-dark)';
-    
-    $('#tabRecipeCreate').style.border = '1px solid var(--border)';
-    $('#tabRecipeCreate').style.background = '#f3f4f6';
-    $('#tabRecipeCreate').style.color = 'var(--muted)';
-    
-    $('#recipeTabSaved').style.display = 'block';
-    $('#recipeTabCreate').style.display = 'none';
-    loadSavedRecipes();
-  }
-}
-
-async function generateRecipe() {
-  const prompt = $('#recipePromptInput').value.trim();
-  if (!prompt) {
-    toast('Please enter what recipe or meal you want!');
-    return;
-  }
-  
-  const btn = $('#btnGenerateRecipe');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';
-  
-  try {
-    const res = await fetch(API + '/recipes/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-    
-    if (res.status === 403) {
-      closePremiumModal();
-      const pModal = $('#premiumModal');
-      if (pModal) pModal.classList.add('active');
-      return;
-    }
-    
-    let data = {};
-    try {
-      data = await res.json();
-    } catch (parseErr) {
-      console.error('Non-JSON response received:', parseErr);
-    }
-    
-    if (!res.ok || !data.ok) {
-      if (data.code === 'WEEKLY_LIMIT_REACHED' || data.remaining === 0) {
-        updateRecipeUsageUI(7, 7, 0);
-      }
-      toast(data.error || 'Failed to generate recipe');
-      return;
-    }
-    
-    if (data.weekly_usage) {
-      updateRecipeUsageUI(data.weekly_usage.used, data.weekly_usage.limit, data.weekly_usage.remaining);
-    }
-    
-    currentDraftRecipe = data.recipe;
-    renderFormattedRecipe(data.recipe);
-    toast('✨ Recipe generated successfully!');
-  } catch (err) {
-    console.error('Recipe generation error:', err);
-    toast('Error connecting to recipe generator');
-  } finally {
-    loadRecipeUsage();
-  }
-}
-
-function renderFormattedRecipe(r) {
-  const container = $('#recipeOutput');
-  container.style.display = 'block';
-  
-  const dietaryBadges = (r.dietary_tags || []).map(t => 
-    `<span style="background:#dcfce7; color:#15803d; font-size:11px; font-weight:600; padding:3px 8px; border-radius:12px;">${escapeHtml(t)}</span>`
-  ).join(' ');
-
-  const ingredientsList = (r.ingredients || []).map(ing => 
-    `<li style="padding:8px 0; border-bottom:1px dashed #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-      <span style="font-weight:500; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
-      <span style="font-size:13px; color:var(--muted); font-weight:600;">${escapeHtml(ing.amount || '')}</span>
-    </li>`
-  ).join('');
-
-  const instructionsList = (r.instructions || []).map((step, idx) => 
-    `<li style="margin-bottom:10px; line-height:1.5; font-size:14px; color:var(--text);">
-      <strong style="color:var(--green-dark);">Step ${idx + 1}:</strong> ${escapeHtml(step)}
-    </li>`
-  ).join('');
-
-    const actionButtons = `
-    <div style="display:flex; gap:10px; margin:16px 0;">
-      <button onclick="openRecipeStoreModal()" style="flex:2; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px 14px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-        <span style="display:flex; align-items:center; gap:6px;">🛒 Select Stores & Add to List</span>
-        <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
-      </button>
-      <button onclick="saveCurrentRecipe()" style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:10px 14px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-        <span style="display:flex; align-items:center; gap:6px;">💾 Save Recipe</span>
-        <span style="font-size:10px; font-weight:500; opacity:0.85;">(save to library)</span>
-      </button>
-    </div>
-  `;
-
-  container.innerHTML = `
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:18px; padding:20px; box-shadow:0 4px 16px rgba(0,0,0,0.04);">
-      <!-- TOP ACTION BUTTONS -->
-      ${actionButtons}
-
-      <div style="border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:16px;">
-        <h2 style="margin:0 0 6px 0; font-size:20px; font-weight:800; color:var(--text);">${escapeHtml(r.title)}</h2>
-        <p style="margin:0 0 10px 0; font-size:13px; color:var(--muted); line-height:1.4;">${escapeHtml(r.description || '')}</p>
-        
-        <div style="display:flex; gap:14px; flex-wrap:wrap; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:8px;">
-          <span>⏱ Prep: ${escapeHtml(r.prep_time || '10 mins')}</span>
-          <span>🔥 Cook: ${escapeHtml(r.cook_time || '20 mins')}</span>
-          <span>🍽 Servings: ${escapeHtml(r.servings || '4')}</span>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">${dietaryBadges}</div>
-      </div>
-
-      <!-- INGREDIENTS SECTION -->
-      <div style="margin-bottom:20px;">
-        <h3 style="margin:0 0 10px 0; font-size:15px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px;">
-          🥬 Needed Ingredients (${(r.ingredients || []).length})
-        </h3>
-        <ul style="list-style:none; padding:0; margin:0;">
-          ${ingredientsList}
-        </ul>
-        <div style="font-size:12px; color:var(--muted); margin-top:10px; display:flex; align-items:center; gap:6px; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px 12px; border-radius:8px; font-weight:500;">
-          <span>💡</span>
-          <span>You can mark items as <strong>Already at home</strong> in the next step!</span>
-        </div>
-      </div>
-
-      <!-- INSTRUCTIONS SECTION -->
-      <div style="margin-bottom:16px;">
-        <h3 style="margin:0 0 10px 0; font-size:15px; font-weight:700; color:var(--text);">
-          👨‍🍳 Instructions
-        </h3>
-        <ol style="padding-left:18px; margin:0;">
-          ${instructionsList}
-        </ol>
-      </div>
-
-      <!-- BOTTOM ACTION BUTTONS -->
-      ${actionButtons}
-    </div>
-  `;
-}
-
-
-function getIntelligentDefaultStoreId() {
-  if (currentStore && currentStore.id) {
-    return currentStore.id;
-  }
-  if (stores && stores.length > 0) {
-    const counts = {};
-    if (Array.isArray(list)) {
-      list.filter(i => !i.purchased).forEach(i => {
-        counts[i.store_id] = (counts[i.store_id] || 0) + 1;
-      });
-    }
-    let maxStoreId = stores[0].id;
-    let maxCount = -1;
-    stores.forEach(s => {
-      const count = counts[s.id] || 0;
-      if (count > maxCount) {
-        maxCount = count;
-        maxStoreId = s.id;
-      }
-    });
-    return maxStoreId;
-  }
-  return '';
-}
-
-function toggleIngRowState(idx) {
-  const chk = $('#ingCheck_' + idx);
-  const row = $('#ingRow_' + idx);
-  const badge = $('#ingStatusBadge_' + idx);
-  if (!chk || !row || !badge) return;
-  
-  const labelText = row.querySelector('label span');
-  if (chk.checked) {
-    row.style.opacity = '1';
-    badge.textContent = 'Add to list';
-    badge.style.background = '#dcfce7';
-    badge.style.color = '#15803d';
-    if (labelText) labelText.style.textDecoration = 'none';
-  } else {
-    row.style.opacity = '0.55';
-    badge.textContent = 'Already at home';
-    badge.style.background = '#f3f4f6';
-    badge.style.color = '#6b7280';
-    if (labelText) labelText.style.textDecoration = 'line-through';
-  }
-}
-
-async function handleItemStoreChange(selectEl, idx) {
-  if (selectEl.value === '__new__') {
-    const newName = prompt('Enter name for the new store:');
-    const defaultStoreId = getIntelligentDefaultStoreId();
-    if (!newName || !newName.trim()) {
-      selectEl.value = defaultStoreId;
-      return;
-    }
-    try {
-      const res = await fetch(API + '/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() })
-      }).then(r => r.json());
-      
-      if (res.id) {
-        const newStore = { id: res.id, name: newName.trim() };
-        stores.push(newStore);
-        refreshAllStoreDropdowns(res.id, idx);
-        toast(`Store "${newName.trim()}" created!`);
-      } else {
-        selectEl.value = defaultStoreId;
-      }
-    } catch (e) {
-      toast('Failed to create store');
-      selectEl.value = defaultStoreId;
-    }
-  }
-}
-
-async function handleBulkStoreChange(selectEl) {
-  if (selectEl.value === '__new__') {
-    const newName = prompt('Enter name for the new store:');
-    if (!newName || !newName.trim()) {
-      selectEl.value = '';
-      return;
-    }
-    try {
-      const res = await fetch(API + '/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() })
-      }).then(r => r.json());
-      
-      if (res.id) {
-        const newStore = { id: res.id, name: newName.trim() };
-        stores.push(newStore);
-        refreshAllStoreDropdowns(res.id, null);
-        selectEl.value = res.id;
-        toast(`Store "${newName.trim()}" created!`);
-      } else {
-        selectEl.value = '';
-      }
-    } catch (e) {
-      toast('Failed to create store');
-      selectEl.value = '';
-    }
-  }
-}
-
-function refreshAllStoreDropdowns(newStoreId = null, activeIdx = null) {
-  const bulkSel = $('#bulkStoreSelect');
-  const currentBulkVal = bulkSel.value;
-  let storeOpts = '<option value="">Choose default store...</option>';
-  stores.forEach(s => {
-    storeOpts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
-  });
-  storeOpts += `<option value="__new__">+ Create New Store...</option>`;
-  bulkSel.innerHTML = storeOpts;
-  bulkSel.value = currentBulkVal === '__new__' && newStoreId ? newStoreId : currentBulkVal;
-
-  $$('.ing-store-select').forEach((sel, i) => {
-    const currentVal = sel.value;
-    let opts = '';
-    stores.forEach(s => {
-      opts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
-    });
-    opts += `<option value="__new__">+ New store...</option>`;
-    sel.innerHTML = opts;
-    
-    if (i === activeIdx && newStoreId) {
-      sel.value = newStoreId;
-    } else if (currentVal === '__new__' && newStoreId) {
-      sel.value = newStoreId;
-    } else {
-      sel.value = currentVal;
-    }
-  });
-}
-
-function openRecipeStoreModal(recipe = null) {
-  const r = recipe || currentDraftRecipe;
-  if (!r) {
-    toast('No active recipe selected');
-    return;
-  }
-  
-  currentDraftRecipe = r;
-  
-  // Populate bulk store select
-  const bulkSel = $('#bulkStoreSelect');
-  const defaultStoreId = getIntelligentDefaultStoreId();
-  let storeOpts = '<option value="">Choose default store...</option>';
-  stores.forEach(s => {
-    storeOpts += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
-  });
-  storeOpts += `<option value="__new__">+ Create New Store...</option>`;
-  bulkSel.innerHTML = storeOpts;
-  
-  // Build per-item store mapping list
-  const listContainer = $('#recipeIngredientsMappingList');
-  let itemsHtml = '';
-  
-  (r.ingredients || []).forEach((ing, idx) => {
-    let options = '';
-    stores.forEach(s => {
-      options += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
-    });
-    options += `<option value="__new__">+ New store...</option>`;
-    
-    itemsHtml += `
-      <div class="recipe-ing-row" id="ingRow_${idx}" data-idx="${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;">
-            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_${idx}" onchange="toggleIngRowState(${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
-            <span style="font-weight:600; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
-          </label>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">${escapeHtml(ing.amount || '')}</span>
-            <span id="ingStatusBadge_${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
-          </div>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
-          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
-            ${options}
-          </select>
-        </div>
-      </div>
-    `;
-  });
-  listContainer.innerHTML = itemsHtml;
-  
-  const modal = $('#recipeStoreModal');
-  if (modal) modal.classList.add('active');
-}
-
-function closeRecipeStoreModal() {
-  const modal = $('#recipeStoreModal');
-  if (modal) modal.classList.remove('active');
-}
-
-async function applyBulkStore() {
-  const val = $('#bulkStoreSelect').value;
-  if (!val) return;
-  
-  let targetStoreId = val;
-  if (val === '__new__') {
-    const newName = prompt('Enter name for the new store:');
-    if (!newName || !newName.trim()) return;
-    try {
-      const res = await fetch(API + '/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() })
-      }).then(r => r.json());
-      if (res.id) {
-        stores.push(res);
-        targetStoreId = res.id;
-        toast(`Store '${res.name}' created!`);
-      }
-    } catch (e) {
-      toast('Failed to create store');
-      return;
-    }
-  }
-  $$('.ing-store-select').forEach(sel => {
-    sel.value = targetStoreId;
-  });
-}
-
-async function confirmAddRecipeToList() {
-  const r = currentDraftRecipe;
-  if (!r) return;
-  
-  const rows = $$('.recipe-ing-row');
-  const itemsToAdd = [];
-  let skippedCount = 0;
-  
-  for (const row of rows) {
-    const chk = row.querySelector('.ing-include-checkbox');
-    if (chk && !chk.checked) {
-      skippedCount++;
-      continue;
-    }
-    
-    const sel = row.querySelector('.ing-store-select');
-    if (!sel) continue;
-    
-    let storeId = sel.value;
-    const ingName = sel.getAttribute('data-ing-name');
-    const ingAmount = sel.getAttribute('data-ing-amount');
-    const ingCat = sel.getAttribute('data-ing-cat');
-    
-    if (storeId === '__new__') {
-      const newName = prompt(`Enter new store name for '${ingName}':`);
-      if (newName && newName.trim()) {
-        try {
-          const res = await fetch(API + '/stores', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName.trim() })
-          }).then(r => r.json());
-          if (res.id) {
-            stores.push(res);
-            storeId = res.id;
-          }
-        } catch (e) {}
-      }
-    }
-    
-    if (storeId && storeId !== '__new__') {
-      itemsToAdd.push({
-        name: ingName,
-        amount: ingAmount,
-        category: ingCat,
-        store_id: parseInt(storeId)
-      });
-    }
-  }
-  
-  if (itemsToAdd.length === 0) {
-    if (skippedCount > 0) {
-      toast('All ingredients were marked as already at home.');
-      closeRecipeStoreModal();
-    } else {
-      toast('No items selected to add');
-    }
-    return;
-  }
-  
-  try {
-    const res = await fetch(API + '/recipes/add-to-list', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipe_title: r.title,
-        items: itemsToAdd
-      })
-    }).then(r => r.json());
-    
-    if (res.ok) {
-      closeRecipeStoreModal();
-      let msg = `🛒 Added ${res.added_count} ingredients from '${r.title}' to your list!`;
-      if (skippedCount > 0) {
-        msg += ` (${skippedCount} skipped as already at home)`;
-      }
-      toast(msg);
-
-      // Auto-save recipe if not already saved (has no id)
-      if (!r.id) {
-        try {
-          const saveRes = await fetch(API + '/recipes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(r)
-          }).then(res => res.json());
-          if (saveRes.ok) {
-            r.id = saveRes.recipe_id;
-            toast(`💾 Recipe '${r.title}' automatically saved to library!`);
-            loadSavedRecipes();
-          }
-        } catch (saveErr) {
-          console.error('Error auto-saving recipe:', saveErr);
-        }
-      }
-
-      showScreen('home');
-      loadData();
-    } else {
-      toast(res.error || 'Failed to add items to list');
-    }
-  } catch (err) {
-    console.error('Error adding recipe to list:', err);
-    toast('Error adding ingredients to shopping list');
-  }
-}
-
-async function saveCurrentRecipe() {
-  const r = currentDraftRecipe;
-  if (!r) {
-    toast('No recipe to save');
-    return;
-  }
-  
-  try {
-    const res = await fetch(API + '/recipes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(r)
-    }).then(r => r.json());
-    if (res.ok) {
-      r.id = res.recipe_id;
-      toast('💾 Recipe saved to your saved library!');
-      loadSavedRecipes();
-    } else {
-      toast('Failed to save recipe');
-    }
-  } catch (err) {
-    toast('Error saving recipe');
-  }
-}
-
-async function loadSavedRecipes() {
-  try {
-    const res = await fetch(API + '/recipes').then(r => r.json());
-    savedRecipesList = res.recipes || [];
-    
-    const countEl = $('#savedRecipeCount');
-    if (countEl) countEl.textContent = savedRecipesList.length;
-    
-    renderSavedRecipes(savedRecipesList);
-  } catch (err) {}
-}
-
-function renderSavedRecipes(recipes) {
-  const listEl = $('#savedRecipesList');
-  if (!listEl) return;
-
-  if (recipes.length === 0) {
-    listEl.innerHTML = `
-      <div class="empty-state">
-        <div class="emoji">📖</div>
-        <div>No saved recipes yet.</div>
-        <div style="font-size:13px; margin-top:4px;">Generate a recipe using Chef AI and click 'Save Recipe'!</div>
-      </div>
-    `;
-    return;
-  }
-
-  listEl.innerHTML = recipes.map(r => `
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text);">${escapeHtml(r.title)}</h3>
-        <button onclick="deleteSavedRecipe(${r.id})" style="background:none; border:none; color:#bbb; font-size:16px; cursor:pointer;" title="Delete Recipe">🗑</button>
-      </div>
-      <p style="margin:0 0 10px 0; font-size:13px; color:var(--muted); line-height:1.4;">${escapeHtml(r.description || '')}</p>
-      <div style="display:flex; gap:12px; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:12px;">
-        <span>⏱ ${escapeHtml(r.prep_time || '')}</span>
-        <span>🔥 ${escapeHtml(r.cook_time || '')}</span>
-        <span>🍽 ${escapeHtml(r.servings || '')}</span>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button onclick="viewSavedRecipe(${r.id})" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#fff; font-size:13px; font-weight:600; cursor:pointer;">📖 View Recipe</button>
-        <button onclick="addSavedRecipeToList(${r.id})" style="flex:1; padding:10px; border-radius:10px; border:none; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-size:13px; font-weight:600; cursor:pointer;">🛒 Add to List</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function viewSavedRecipe(id) {
-  const r = savedRecipesList.find(rec => rec.id === id);
-  if (!r) return;
-  currentDraftRecipe = r;
-  switchRecipeTab('create');
-  renderFormattedRecipe(r);
-}
-
-function addSavedRecipeToList(id) {
-  const r = savedRecipesList.find(rec => rec.id === id);
-  if (!r) return;
-  openRecipeStoreModal(r);
-}
-
-async function deleteSavedRecipe(id) {
-  if (!confirm('Are you sure you want to delete this saved recipe?')) return;
-  try {
-    const res = await fetch(API + '/recipes/' + id, { method: 'DELETE' }).then(r => r.json());
-    if (res.ok) {
-      toast('Recipe deleted');
-      loadSavedRecipes();
-    }
-  } catch (e) {
-    toast('Error deleting recipe');
-  }
-}
-
-
 </script>
 <div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
 <ins class="adsbygoogle ad-banner-bottom" style="display:block" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665" data-ad-format="auto" data-full-width-responsive="true"></ins>
