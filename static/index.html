@@ -101,6 +101,8 @@
 
   .share-btn { background: none; border: 1px solid var(--green); color: var(--green); font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; font-weight: 500; margin-left: 8px; white-space: nowrap; }
   .share-btn:hover, .share-btn:active { background: var(--green); color: #fff; }
+  .suggestion-chip { display: inline-block; padding: 6px 12px; background: #f0f4ed; border: 1px solid var(--border); border-radius: 16px; font-size: 13px; color: var(--text); cursor: pointer; margin-right: 6px; margin-bottom: 6px; transition: all .15s; }
+  .suggestion-chip:hover { background: #e8f5e9; border-color: var(--green); }
 </style>
 
 <style>
@@ -144,10 +146,18 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
         🍳 Recipe Planner
       </button>
     </div>
+    
     <div class="store-grid" id="storeGrid"></div>
     <div class="new-store-wrap">
       <input type="text" id="newStoreInput" placeholder="+ New store..." autocomplete="off">
       <button id="btnNewStore">+</button>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <select id="recipeFilter" onchange="renderHome()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+        <option value="">All Recipes</option>
+      </select>
+      <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share All</button>
     </div>
     <div id="listView"></div>
     <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
@@ -283,18 +293,18 @@ function toggleBurger() {
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
-let stores=[], list=[], currentStore=null, allStoreItems={};
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
   try {
-    const cfg = await (await fetch(API+'/auth/config')).json(); window.currentCfg = cfg;
+    const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); window.currentCfg = cfg;
     if (!cfg.user) { window.location.href='/login'; return false; }
     $('#headerUser').textContent = cfg.display_name||cfg.user;
     // Show Health nav link only if health_dashboard feature is enabled
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
-      $('#healthNavLink').style.display = '';
+      const healthLink = $('#healthNavLink');
+      if (healthLink) healthLink.style.display = '';
     }
     
     if (cfg.is_premium) {
@@ -312,12 +322,22 @@ return true;
   } catch(e) { window.location.href='/login'; return false; }
 }
 
+let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
 async function loadData() {
-  const [s, l] = await Promise.all([
-    fetch(API+'/stores').then(r=>r.json()),
-    fetch(API+'/list').then(r=>r.json())
+  const [s, l, r] = await Promise.all([
+    fetch(API+'/stores').then(r=>r.json()).catch(e=>[]),
+    fetch(API+'/list').then(r=>r.json()).catch(e=>[]),
+    fetch(API+'/recipes').then(r=>r.json()).catch(e=>[])
   ]);
-  stores=s; list=l; renderHome(); loadSuggestions();
+  stores=s; list=l; recipes=r.recipes || []; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
+  
+  const filter = $('#recipeFilter');
+  if (filter) {
+    const selected = filter.value;
+    filter.innerHTML = '<option value="">All Recipes</option>' + (Array.isArray(recipes) ? recipes.map(r => '<option value="'+r.id+'">'+(r.title || 'Unnamed Recipe')+'</option>').join('') : '');
+    filter.value = selected;
+  }
+
   allStoreItems = {};
   if(currentStore) {
     try {
@@ -329,16 +349,23 @@ async function loadData() {
   }
 }
 
+
 function renderHome() {
-  const counts={}; list.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
+  const filterRecipeName = $('#recipeFilter') ? $('#recipeFilter').value : '';
+  let filteredList = list;
+  if (filterRecipeName) {
+    filteredList = list.filter(i => i.recipe_tag === filterRecipeName);
+  }
+  
+  const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
   $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
   $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
   
   // Separate active and purchased items
-  const activeItems = list.filter(i=>!i.purchased);
-  const purchasedItems = list.filter(i=>i.purchased);
+  const activeItems = filteredList.filter(i=>!i.purchased);
+  const purchasedItems = filteredList.filter(i=>i.purchased);
   
   // Group active items by store
   const activeGroups = {};
@@ -703,7 +730,7 @@ async function loadSuggestions(){
       if(!store) continue;
       const wrap = $('#sug-'+store.id);
       if(!wrap) continue;
-      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">💡 '+i.name+'</span>').join('');
+      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">'+i.name+'</span>').join('');
     }
     $$('.suggestion-chip').forEach(el=>el.addEventListener('click',async()=>{
       const sid=parseInt(el.dataset.store), name=el.dataset.name;
@@ -795,6 +822,55 @@ $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#m
 // ---- Share / Copy to Text ----
 function isMobile() {
   return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window);
+}
+
+async function shareAllLists() {
+  const activeItems = list.filter(i => !i.purchased);
+  if (!activeItems.length) { toast('No active items'); return; }
+  
+  // Group by store name
+  const itemsByStore = {};
+  activeItems.forEach(i => {
+    const store = stores.find(s => s.id === i.store_id);
+    const storeName = store ? store.name : 'Unknown';
+    if (!itemsByStore[storeName]) itemsByStore[storeName] = [];
+    itemsByStore[storeName].push(i);
+  });
+  
+  let text = '🛒 Grocery List:\n\n';
+  for (const [storeName, items] of Object.entries(itemsByStore)) {
+    text += storeName + ':\n' + items.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n') + '\n\n';
+  }
+
+  // Sharing logic
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+    try {
+      await window.Capacitor.Plugins.Share.share({
+        title: 'Grocery List',
+        text: text,
+        dialogTitle: 'Share Grocery List'
+      });
+      return;
+    } catch (e) {}
+  }
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Grocery List',
+        text: text
+      });
+      return;
+    } catch (e) {}
+  }
+  
+  // Fallback to clipboard
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('✅ List copied to clipboard');
+  } catch (e) {
+    toast('❌ Failed to copy to clipboard');
+  }
 }
 
 async function shareStoreList(storeId, storeName) {
