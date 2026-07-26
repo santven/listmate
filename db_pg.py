@@ -135,10 +135,16 @@ def init_db():
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS auto_populated BOOLEAN DEFAULT FALSE")
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT \x27\x27")
+        except Exception: pass
         except Exception: pass
 
         default_aisle_patterns = [

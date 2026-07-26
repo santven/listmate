@@ -243,6 +243,7 @@ def _generate_fallback_recipe(prompt, dietary_restrictions=""):
         "prep_time": "15 mins",
         "cook_time": "20 mins",
         "servings": "4 servings",
+        "cuisine": "General",
         "dietary_tags": diet_tags,
         "ingredients": [
             {"name": f"Main ingredient for {title}", "amount": "1 lb", "category": "Produce"},
@@ -300,7 +301,8 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             '  "description": "Short description of the dish",\n'
             '  "prep_time": "15 mins",\n'
             '  "cook_time": "25 mins",\n'
-            '  "servings": "4 servings",\n'
+            '  "servings": "4 servings",
+        "cuisine": "General",\n'            '  "cuisine": "Primary culinary style or origin",\n'
             '  "dietary_tags": ["Gluten-Free", "Vegetarian"],\n'
             '  "ingredients": [\n'
             '    {"name": "Ingredient Name", "amount": "1.5 lbs", "category": "Produce"}\n'
@@ -517,22 +519,23 @@ def recipes_endpoint():
         prep = (data.get("prep_time") or "").strip()
         cook = (data.get("cook_time") or "").strip()
         servings = (data.get("servings") or "").strip()
+        cuisine = (data.get("cuisine") or "").strip()
         tags_json = json.dumps(data.get("dietary_tags") or [])
         instr_json = json.dumps(data.get("instructions") or [])
         ingr_json = json.dumps(data.get("ingredients") or [])
 
         if _use_pg:
             cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
             )
             recipe_id = cur.fetchall()[0]["id"]
         else:
             cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
             )
             db.commit()
             recipe_id = cur.lastrowid

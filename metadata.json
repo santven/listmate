@@ -1,0 +1,6 @@
+{
+  "name": "ListMate Grocery List",
+  "description": "A household-scoped, store-smart grocery list application featuring automatic item categorization, visit-based predictions, and store-specific shopping lists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
