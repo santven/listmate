@@ -220,12 +220,12 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       <h3 style="margin:0; font-size:17px; font-weight:700;">Select Stores for Ingredients</h3>
       <button onclick="closeRecipeStoreModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
     </div>
-    <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">Assign each ingredient to your preferred store or create a new store.</div>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.4;">Assign each ingredient to your preferred store. <strong>Uncheck any items you already have at home</strong> to exclude them from your shopping list.</div>
 
     <!-- Bulk Assign Bar -->
     <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:12px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span style="font-size:13px; font-weight:600; color:#166534;">Set store for all:</span>
-      <select id="bulkStoreSelect" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:13px; outline:none; background:#fff; min-width:140px;"></select>
+      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:13px; outline:none; background:#fff; min-width:140px;"></select>
       <button onclick="applyBulkStore()" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Apply All</button>
     </div>
 
@@ -1040,6 +1040,10 @@ function renderFormattedRecipe(r) {
         <ul style="list-style:none; padding:0; margin:0;">
           ${ingredientsList}
         </ul>
+        <div style="font-size:12px; color:var(--muted); margin-top:10px; display:flex; align-items:center; gap:6px; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px 12px; border-radius:8px; font-weight:500;">
+          <span>💡</span>
+          <span>You can mark items as <strong>Already at home</strong> in the next step!</span>
+        </div>
       </div>
 
       <!-- INSTRUCTIONS SECTION -->
@@ -1059,22 +1063,141 @@ function renderFormattedRecipe(r) {
 }
 
 
+function getIntelligentDefaultStoreId() {
+  if (currentStore && currentStore.id) {
+    return currentStore.id;
+  }
+  if (stores && stores.length > 0) {
+    const counts = {};
+    if (Array.isArray(list)) {
+      list.filter(i => !i.purchased).forEach(i => {
+        counts[i.store_id] = (counts[i.store_id] || 0) + 1;
+      });
+    }
+    let maxStoreId = stores[0].id;
+    let maxCount = -1;
+    stores.forEach(s => {
+      const count = counts[s.id] || 0;
+      if (count > maxCount) {
+        maxCount = count;
+        maxStoreId = s.id;
+      }
+    });
+    return maxStoreId;
+  }
+  return '';
+}
+
 function toggleIngRowState(idx) {
   const chk = $('#ingCheck_' + idx);
   const row = $('#ingRow_' + idx);
   const badge = $('#ingStatusBadge_' + idx);
   if (!chk || !row || !badge) return;
+  
+  const labelText = row.querySelector('label span');
   if (chk.checked) {
     row.style.opacity = '1';
     badge.textContent = 'Add to list';
     badge.style.background = '#dcfce7';
     badge.style.color = '#15803d';
+    if (labelText) labelText.style.textDecoration = 'none';
   } else {
     row.style.opacity = '0.55';
     badge.textContent = 'Already at home';
     badge.style.background = '#f3f4f6';
     badge.style.color = '#6b7280';
+    if (labelText) labelText.style.textDecoration = 'line-through';
   }
+}
+
+async function handleItemStoreChange(selectEl, idx) {
+  if (selectEl.value === '__new__') {
+    const newName = prompt('Enter name for the new store:');
+    const defaultStoreId = getIntelligentDefaultStoreId();
+    if (!newName || !newName.trim()) {
+      selectEl.value = defaultStoreId;
+      return;
+    }
+    try {
+      const res = await fetch(API + '/stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() })
+      }).then(r => r.json());
+      
+      if (res.id) {
+        const newStore = { id: res.id, name: newName.trim() };
+        stores.push(newStore);
+        refreshAllStoreDropdowns(res.id, idx);
+        toast(`Store "${newName.trim()}" created!`);
+      } else {
+        selectEl.value = defaultStoreId;
+      }
+    } catch (e) {
+      toast('Failed to create store');
+      selectEl.value = defaultStoreId;
+    }
+  }
+}
+
+async function handleBulkStoreChange(selectEl) {
+  if (selectEl.value === '__new__') {
+    const newName = prompt('Enter name for the new store:');
+    if (!newName || !newName.trim()) {
+      selectEl.value = '';
+      return;
+    }
+    try {
+      const res = await fetch(API + '/stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() })
+      }).then(r => r.json());
+      
+      if (res.id) {
+        const newStore = { id: res.id, name: newName.trim() };
+        stores.push(newStore);
+        refreshAllStoreDropdowns(res.id, null);
+        selectEl.value = res.id;
+        toast(`Store "${newName.trim()}" created!`);
+      } else {
+        selectEl.value = '';
+      }
+    } catch (e) {
+      toast('Failed to create store');
+      selectEl.value = '';
+    }
+  }
+}
+
+function refreshAllStoreDropdowns(newStoreId = null, activeIdx = null) {
+  const bulkSel = $('#bulkStoreSelect');
+  const currentBulkVal = bulkSel.value;
+  let storeOpts = '<option value="">Choose default store...</option>';
+  stores.forEach(s => {
+    storeOpts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
+  });
+  storeOpts += `<option value="__new__">+ Create New Store...</option>`;
+  bulkSel.innerHTML = storeOpts;
+  bulkSel.value = currentBulkVal === '__new__' && newStoreId ? newStoreId : currentBulkVal;
+
+  $$('.ing-store-select').forEach((sel, i) => {
+    const currentVal = sel.value;
+    let opts = '';
+    stores.forEach(s => {
+      opts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
+    });
+    opts += `<option value="__new__">+ New store...</option>`;
+    sel.innerHTML = opts;
+    
+    if (i === activeIdx && newStoreId) {
+      sel.value = newStoreId;
+    } else if (currentVal === '__new__' && newStoreId) {
+      sel.value = newStoreId;
+    } else {
+      sel.value = currentVal;
+    }
+  });
 }
 
 function openRecipeStoreModal(recipe = null) {
@@ -1088,9 +1211,10 @@ function openRecipeStoreModal(recipe = null) {
   
   // Populate bulk store select
   const bulkSel = $('#bulkStoreSelect');
+  const defaultStoreId = getIntelligentDefaultStoreId();
   let storeOpts = '<option value="">Choose default store...</option>';
   stores.forEach(s => {
-    storeOpts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
+    storeOpts += `<option value="${s.id}" \${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
   });
   storeOpts += `<option value="__new__">+ Create New Store...</option>`;
   bulkSel.innerHTML = storeOpts;
@@ -1100,30 +1224,28 @@ function openRecipeStoreModal(recipe = null) {
   let itemsHtml = '';
   
   (r.ingredients || []).forEach((ing, idx) => {
-    let defaultStoreId = stores.length > 0 ? stores[0].id : '';
-    
     let options = '';
     stores.forEach(s => {
-      options += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+      options += `<option value="${s.id}" \${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
     });
     options += `<option value="__new__">+ New store...</option>`;
     
     itemsHtml += `
-      <div class="recipe-ing-row" id="ingRow_${idx}" data-idx="${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
+      <div class="recipe-ing-row" id="ingRow_\${idx}" data-idx="\${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;">
-            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_${idx}" onchange="toggleIngRowState(${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
-            <span style="font-weight:600; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
+            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_\${idx}" onchange="toggleIngRowState(\${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
+            <span style="font-weight:600; font-size:14px; color:var(--text);">\${escapeHtml(ing.name)}</span>
           </label>
           <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">${escapeHtml(ing.amount || '')}</span>
-            <span id="ingStatusBadge_${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
+            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">\${escapeHtml(ing.amount || '')}</span>
+            <span id="ingStatusBadge_\${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
-          <select class="ing-store-select" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
-            ${options}
+          <select class="ing-store-select" onchange="handleItemStoreChange(this, \${idx})" data-ing-name="\${escapeHtml(ing.name)}" data-ing-amount="\${escapeHtml(ing.amount || '')}" data-ing-cat="\${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
+            \${options}
           </select>
         </div>
       </div>
@@ -1157,14 +1279,14 @@ async function applyBulkStore() {
       if (res.id) {
         stores.push(res);
         targetStoreId = res.id;
-        toast(`Store '${res.name}' created!`);
+        toast(`Store '\${res.name}' created!`);
       }
     } catch (e) {
       toast('Failed to create store');
       return;
     }
   }
-  5101('.ing-store-select').forEach(sel => {
+  $$('.ing-store-select').forEach(sel => {
     sel.value = targetStoreId;
   });
 }
