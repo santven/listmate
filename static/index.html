@@ -1214,7 +1214,7 @@ function openRecipeStoreModal(recipe = null) {
   const defaultStoreId = getIntelligentDefaultStoreId();
   let storeOpts = '<option value="">Choose default store...</option>';
   stores.forEach(s => {
-    storeOpts += `<option value="${s.id}" \${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+    storeOpts += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
   });
   storeOpts += `<option value="__new__">+ Create New Store...</option>`;
   bulkSel.innerHTML = storeOpts;
@@ -1226,26 +1226,26 @@ function openRecipeStoreModal(recipe = null) {
   (r.ingredients || []).forEach((ing, idx) => {
     let options = '';
     stores.forEach(s => {
-      options += `<option value="${s.id}" \${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+      options += `<option value="${s.id}" ${s.id == defaultStoreId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
     });
     options += `<option value="__new__">+ New store...</option>`;
     
     itemsHtml += `
-      <div class="recipe-ing-row" id="ingRow_\${idx}" data-idx="\${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
+      <div class="recipe-ing-row" id="ingRow_${idx}" data-idx="${idx}" style="background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; transition:opacity 0.2s;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;">
-            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_\${idx}" onchange="toggleIngRowState(\${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
-            <span style="font-weight:600; font-size:14px; color:var(--text);">\${escapeHtml(ing.name)}</span>
+            <input type="checkbox" class="ing-include-checkbox" checked id="ingCheck_${idx}" onchange="toggleIngRowState(${idx})" style="width:18px; height:18px; accent-color:#16a34a; cursor:pointer;">
+            <span style="font-weight:600; font-size:14px; color:var(--text);">${escapeHtml(ing.name)}</span>
           </label>
           <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">\${escapeHtml(ing.amount || '')}</span>
-            <span id="ingStatusBadge_\${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
+            <span style="font-size:12px; font-weight:600; color:var(--green-dark); background:#f0fdf4; padding:2px 8px; border-radius:8px;">${escapeHtml(ing.amount || '')}</span>
+            <span id="ingStatusBadge_${idx}" style="font-size:11px; font-weight:600; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:8px;">Add to list</span>
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
-          <select class="ing-store-select" onchange="handleItemStoreChange(this, \${idx})" data-ing-name="\${escapeHtml(ing.name)}" data-ing-amount="\${escapeHtml(ing.amount || '')}" data-ing-cat="\${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
-            \${options}
+          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
+            ${options}
           </select>
         </div>
       </div>
@@ -1279,7 +1279,7 @@ async function applyBulkStore() {
       if (res.id) {
         stores.push(res);
         targetStoreId = res.id;
-        toast(`Store '\${res.name}' created!`);
+        toast(`Store '${res.name}' created!`);
       }
     } catch (e) {
       toast('Failed to create store');
