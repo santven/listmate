@@ -301,6 +301,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             '  "prep_time": "15 mins",\n'
             '  "cook_time": "25 mins",\n'
             '  "servings": "4 servings",\n'
+            '  "cuisine": "Italian",\n'
             '  "dietary_tags": ["Gluten-Free", "Vegetarian"],\n'
             '  "ingredients": [\n'
             '    {"name": "Ingredient Name", "amount": "1.5 lbs", "category": "Produce"}\n'
@@ -523,16 +524,16 @@ def recipes_endpoint():
 
         if _use_pg:
             cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
             )
             recipe_id = cur.fetchall()[0]["id"]
         else:
             cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (hhid, title, desc, prep, cook, servings, tags_json, instr_json, ingr_json)
+                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
             )
             db.commit()
             recipe_id = cur.lastrowid

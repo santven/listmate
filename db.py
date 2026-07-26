@@ -51,6 +51,7 @@ def init_db():
             prep_time TEXT DEFAULT '',
             cook_time TEXT DEFAULT '',
             servings TEXT DEFAULT '',
+            cuisine TEXT DEFAULT '',
             dietary_tags TEXT DEFAULT '',
             instructions TEXT DEFAULT '',
             ingredients TEXT DEFAULT '',
