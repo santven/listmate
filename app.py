@@ -1229,7 +1229,7 @@ def get_suggestions():
 if __name__ == "__main__":
     from db import init_db
     init_db()
-    app.run(host="127.0.0.1", port=5003, debug=True)
+    app.run(host="0.0.0.0", port=3000, debug=True)
 # ---- Google OAuth (server-side redirect flow) ----
 import secrets as _secrets
 import urllib.parse as _urlparse
