@@ -334,7 +334,10 @@ async function loadData() {
   const filter = $('#recipeFilter');
   if (filter) {
     const selected = filter.value;
-    filter.innerHTML = '<option value="">All Recipes</option>' + (Array.isArray(recipes) ? recipes.map(r => '<option value="'+escapeHtml(r.title)+'">'+escapeHtml(r.title || 'Unnamed Recipe')+'</option>').join('') : '');
+    const recipeTagsInList = Array.from(new Set(list.filter(i => i.recipe_tag).map(i => i.recipe_tag)));
+    const savedRecipeTitles = Array.isArray(recipes) ? recipes.map(r => r.title) : [];
+    const allRecipes = Array.from(new Set([...recipeTagsInList, ...savedRecipeTitles]));
+    filter.innerHTML = '<option value="">All Recipes</option>' + allRecipes.map(title => '<option value="'+escapeHtml(title)+'">'+escapeHtml(title || 'Unnamed Recipe')+'</option>').join('');
     filter.value = selected;
   }
 
