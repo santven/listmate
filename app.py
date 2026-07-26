@@ -287,7 +287,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             if key: break
 
     # Prioritize Gemini 3.6 Flash and Gemini 3.1 Flash Lite (higher allowance/free tier friendly)
-    models_to_try = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]
+    models_to_try = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
 
     if key:
         system_instruction = (
