@@ -1072,12 +1072,12 @@ function openRecipeStoreModal(recipe = null) {
 }
 
 function closeRecipeStoreModal() {
-  const modal = ;
+  const modal = $('#recipeStoreModal');
   if (modal) modal.classList.remove('active');
 }
 
 async function applyBulkStore() {
-  const val = .value;
+  const val = $('#bulkStoreSelect').value;
   if (!val) return;
   
   let targetStoreId = val;
@@ -1093,14 +1093,14 @@ async function applyBulkStore() {
       if (res.id) {
         stores.push(res);
         targetStoreId = res.id;
-        toast();
+        toast(`Store '${res.name}' created!`);
       }
     } catch (e) {
       toast('Failed to create store');
       return;
     }
   }
-  4924('.ing-store-select').forEach(sel => {
+  5101('.ing-store-select').forEach(sel => {
     sel.value = targetStoreId;
   });
 }
@@ -1193,7 +1193,7 @@ async function confirmAddRecipeToList() {
   }
 }
 
-function saveCurrentRecipe() {
+async function saveCurrentRecipe() {
   const r = currentDraftRecipe;
   if (!r) {
     toast('No recipe to save');
