@@ -197,47 +197,7 @@ function switchRecipeTab(tab) {
   }
 }
 
-async function generateRecipe() {
-  const prompt = $('#recipePromptInput').value.trim();
-  if (!prompt) {
-    toast('Please enter what recipe or meal you want!');
-    return;
-  }
-  
-  const btn = $('#btnGenerateRecipe');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';
-  
-  try {
-    const res = await fetch(API + '/recipes/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-    
-    if (res.status === 403) {
-      closePremiumModal();
-      const pModal = $('#premiumModal');
-      if (pModal) pModal.classList.add('active');
-      return;
-    }
-    
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      toast(data.error || 'Failed to generate recipe');
-      return;
-    }
-    
-    currentDraftRecipe = data.recipe;
-    renderFormattedRecipe(data.recipe);
-    toast('✨ Recipe generated successfully!');
-  } catch (err) {
-    toast('Error connecting to recipe generator');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✨ Generate Recipe (1 Credit)';
-  }
-}
+async function generateRecipe() {  const prompt = $('#recipePromptInput').value.trim();  if (!prompt) {    toast('Please enter what recipe or meal you want!');    return;  }    const btn = $('#btnGenerateRecipe');  btn.disabled = true;  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';    try {    const res = await fetch(API + '/recipes/generate', {      method: 'POST',      headers: { 'Content-Type': 'application/json' },      body: JSON.stringify({ prompt })    });        if (res.status === 403) {      closePremiumModal();      const pModal = $('#premiumModal');      if (pModal) pModal.classList.add('active');      return;    }        let data = {};    try {      data = await res.json();    } catch (parseErr) {      console.error('Non-JSON response received:', parseErr);    }        if (!res.ok || !data.ok) {      toast(data.error || 'Failed to generate recipe');      return;    }        currentDraftRecipe = data.recipe;    renderFormattedRecipe(data.recipe);    toast('✨ Recipe generated successfully!');  } catch (err) {    console.error('Recipe generation error:', err);    toast('Error connecting to recipe generator');  } finally {    btn.disabled = false;    btn.innerHTML = '✨ Generate Recipe (1 Credit)';  }}
 
 function renderFormattedRecipe(r) {
   const container = $('#recipeOutput');
@@ -1305,47 +1265,7 @@ function switchRecipeTab(tab) {
   }
 }
 
-async function generateRecipe() {
-  const prompt = $('#recipePromptInput').value.trim();
-  if (!prompt) {
-    toast('Please enter what recipe or meal you want!');
-    return;
-  }
-  
-  const btn = $('#btnGenerateRecipe');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';
-  
-  try {
-    const res = await fetch(API + '/recipes/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-    
-    if (res.status === 403) {
-      closePremiumModal();
-      const pModal = $('#premiumModal');
-      if (pModal) pModal.classList.add('active');
-      return;
-    }
-    
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      toast(data.error || 'Failed to generate recipe');
-      return;
-    }
-    
-    currentDraftRecipe = data.recipe;
-    renderFormattedRecipe(data.recipe);
-    toast('✨ Recipe generated successfully!');
-  } catch (err) {
-    toast('Error connecting to recipe generator');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✨ Generate Recipe (1 Credit)';
-  }
-}
+async function generateRecipe() {  const prompt = $('#recipePromptInput').value.trim();  if (!prompt) {    toast('Please enter what recipe or meal you want!');    return;  }    const btn = $('#btnGenerateRecipe');  btn.disabled = true;  btn.innerHTML = '⏳ AI Chef is crafting your recipe...';    try {    const res = await fetch(API + '/recipes/generate', {      method: 'POST',      headers: { 'Content-Type': 'application/json' },      body: JSON.stringify({ prompt })    });        if (res.status === 403) {      closePremiumModal();      const pModal = $('#premiumModal');      if (pModal) pModal.classList.add('active');      return;    }        let data = {};    try {      data = await res.json();    } catch (parseErr) {      console.error('Non-JSON response received:', parseErr);    }        if (!res.ok || !data.ok) {      toast(data.error || 'Failed to generate recipe');      return;    }        currentDraftRecipe = data.recipe;    renderFormattedRecipe(data.recipe);    toast('✨ Recipe generated successfully!');  } catch (err) {    console.error('Recipe generation error:', err);    toast('Error connecting to recipe generator');  } finally {    btn.disabled = false;    btn.innerHTML = '✨ Generate Recipe (1 Credit)';  }}
 
 function renderFormattedRecipe(r) {
   const container = $('#recipeOutput');
