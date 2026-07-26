@@ -686,6 +686,7 @@ def add_store():
         return jsonify({"error": "name required"}), 400
     hh = _hh()
     db = get_db()
+    store_id = None
     try:
         cat_order = "Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household"
         if any(k in name.lower() for k in ["patel", "indiaco", "indian", "desi", "bazar", "apna"]):
@@ -704,6 +705,8 @@ def add_store():
         except Exception: pass
     finally:
         db.close()
+    if store_id:
+        return jsonify({"id": store_id, "name": name, "ok": True})
     return jsonify({"ok": True})
 
 
