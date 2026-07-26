@@ -162,18 +162,6 @@ if USE_PG:
             _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE")
         except Exception:
             pass
-
-        # Seed dev household and user if they don't exist
-        try:
-            h = _one("SELECT id FROM auth_households WHERE id = 1")
-            if not h:
-                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
-            u = _one("SELECT id FROM auth_users WHERE id = 1")
-            if not u:
-                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
-        except Exception as e:
-            print(f'[seed dev error] {e}', flush=True)
-
         _schema_done = True
 
 else:
@@ -257,18 +245,6 @@ else:
                 _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
             except Exception:
                 pass
-
-        # Seed dev household and user if they don't exist
-        try:
-            h = _one("SELECT id FROM auth_households WHERE id = 1")
-            if not h:
-                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
-            u = _one("SELECT id FROM auth_users WHERE id = 1")
-            if not u:
-                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
-        except Exception as e:
-            print(f'[seed dev error] {e}', flush=True)
-
         _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -298,36 +274,13 @@ def _set(uid, email, name, hhid, hhname):
     session.modified = True
 
 def _clear(): session.pop(COOKIE_NAME, None)
-def _get():
-    s = session.get(COOKIE_NAME)
-    if not s:
-        is_dev = not bool(os.environ.get("DATABASE_URL")) and "RENDER" not in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
-        if is_dev:
-            s = {"user_id": 1, "email": "dev@listmate.local", "name": "Dev User", "household_id": 1, "household_name": "Dev Household"}
-            session[COOKIE_NAME] = s
-            session.permanent = True
-            session.modified = True
-        else:
-            return None
-    return s
-def is_logged_in(): 
-    s = _get()
-    return bool(s)
-def get_user_id(): 
-    s = _get()
-    return s.get("user_id") if s else None
-def get_display_name(): 
-    s = _get()
-    return s.get("name", "") if s else ""
-def get_email(): 
-    s = _get()
-    return s.get("email", "") if s else ""
-def get_household_id(): 
-    s = _get()
-    return s.get("household_id", 0) if s else 0
-def get_household_name(): 
-    s = _get()
-    return s.get("household_name", "") if s else ""
+def _get(): return session.get(COOKIE_NAME, {})
+def is_logged_in(): return bool(_get())
+def get_user_id(): return _get().get("user_id")
+def get_display_name(): return _get().get("name", "")
+def get_email(): return _get().get("email", "")
+def get_household_id(): return _get().get("household_id", 0)
+def get_household_name(): return _get().get("household_name", "")
 
 def require_user(fn):
     @wraps(fn)

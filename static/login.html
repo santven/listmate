@@ -80,7 +80,7 @@ function doSignIn() {
 // Check for session or redirect callback
 (function() {
   try {
-    fetch('/api/auth/config?_='+Date.now()).then(function(r) {
+    fetch('/api/auth/config').then(function(r) {
       if (r.ok) r.json().then(function(c) { if (c.user) location.replace('/'); });
     });
   } catch(e) {}
