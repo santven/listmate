@@ -340,3 +340,9 @@
 - [ ] Create Google Play Developer account ($25) → **Wait until Sprint 5**
 - [x] Decide: React Native or Expo for mobile → **React Native**
 - [x] Review and approve backlog priorities → **Approved, 7-week plan**
+
+
+---
+
+## Completed Features
+- [x] **US-112: Recipe Planner & AI Generator (Premium Feature)** — Formatted recipes, Gemini AI credit generator, dietary restrictions integration, store mapping modal, recipe tagging on list items, and saved recipe library.
