@@ -262,7 +262,7 @@ def _generate_fallback_recipe(prompt, dietary_restrictions=""):
 
 
 def _call_gemini_recipe(prompt, dietary_restrictions=""):
-    """Call Gemini API with multi-key discovery, multi-model fallback, and smart recipe generation fallback."""
+    """Call Gemini API with multi-key discovery, Lite model fallback, and smart recipe generation fallback."""
     key = ""
     for var in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"]:
         k = os.environ.get(var, "").strip()
@@ -286,7 +286,8 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
                     pass
             if key: break
 
-    models_to_try = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro"]
+    # Prioritize Gemini 3.6 Flash and Gemini 3.1 Flash Lite (higher allowance/free tier friendly)
+    models_to_try = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]
 
     if key:
         system_instruction = (
@@ -360,6 +361,38 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
                 continue
 
     return _generate_fallback_recipe(prompt, dietary_restrictions)
+
+
+@app.route("/api/recipes/generate", methods=["POST"])
+@require_user
+def generate_recipe_endpoint():
+    hhid = _hh()
+    if not hhid:
+        return jsonify({"error": "No household"}), 400
+    authmod._init_schema()
+    hh = authmod._one(f"SELECT is_premium, dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+    is_prem = bool(hh.get("is_premium")) if hh else False
+    is_early = bool(hhid and int(hhid) <= 100)
+    if not (is_prem or is_early):
+        return jsonify({
+            "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",
+            "code": "PREMIUM_REQUIRED"
+        }), 403
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "Please enter what recipe you want to make."}), 400
+    dietary = (hh.get("dietary_restrictions") or "").strip() if hh else ""
+    try:
+        recipe_data = _call_gemini_recipe(prompt, dietary)
+        return jsonify({"ok": True, "recipe": recipe_data})
+    except Exception as e:
+        print(f"Error calling _call_gemini_recipe: {e}")
+        try:
+            recipe_data = _generate_fallback_recipe(prompt, dietary)
+            return jsonify({"ok": True, "recipe": recipe_data})
+        except Exception as fallback_e:
+            return jsonify({"error": f"Failed to generate recipe: {str(fallback_e)}"}), 500
 
 
 @app.route("/api/recipes", methods=["GET", "POST"])
