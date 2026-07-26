@@ -251,8 +251,8 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
         <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
       </button>
     </div>
+  </div>
 </div>
-
 <!-- Premium Modal -->
 <div class="modal-overlay" id="premiumModal">
   <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
@@ -1264,16 +1264,17 @@ function refreshAllStoreDropdowns(newStoreId = null, activeIdx = null) {
   bulkSel.innerHTML = storeOpts;
   bulkSel.value = currentBulkVal === '__new__' && newStoreId ? newStoreId : currentBulkVal;
 
-  $$('.ing-store-select').forEach((sel, i) => {
+  $$('.ing-store-select').forEach((sel) => {
+    const rowIdx = parseInt(sel.closest('.recipe-ing-row').getAttribute('data-idx'));
     const currentVal = sel.value;
-    let opts = '';
+    let opts = '<option value="">Choose store...</option>';
     stores.forEach(s => {
       opts += `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
     });
     opts += `<option value="__new__">+ New store...</option>`;
     sel.innerHTML = opts;
     
-    if (i === activeIdx && newStoreId) {
+    if (rowIdx === activeIdx && newStoreId) {
       sel.value = newStoreId;
     } else if (currentVal === '__new__' && newStoreId) {
       sel.value = newStoreId;
