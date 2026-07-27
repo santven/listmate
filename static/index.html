@@ -1753,12 +1753,18 @@ async function deleteSavedRecipe(id) {
           }
         } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
             stream.getTracks().forEach(t => t.stop());
           } catch (err) {
-            console.error("Camera permission error:", err);
-            toast("Camera access denied. Please allow camera access in your browser.");
-            return;
+            console.warn("Environment camera not found or denied:", err);
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+              stream.getTracks().forEach(t => t.stop());
+            } catch (fallbackErr) {
+              console.error("Camera permission error:", fallbackErr);
+              toast(`Camera access issue: ${fallbackErr.name} - ${fallbackErr.message}. Please allow access.`);
+              return;
+            }
           }
         }
         
