@@ -148,7 +148,10 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <div class="container">
   <div id="screenHome">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
+        <button onclick="document.getElementById('storeGrid').scrollIntoView({behavior:'smooth'})" style="background:#f0fdf4; border:1px solid #bbf7d0; color:var(--green-dark); padding:3px 9px; border-radius:12px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">🏪 Add Items ↓</button>
+      </div>
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
         🍳 Recipe Planner
       </button>
@@ -586,12 +589,13 @@ function renderCatalog(filter) {
   for (const cat of catOrder) {
     if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
     html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i => {
-      const isAdded = onList.has(i.name.toLowerCase().trim());
+      const activeListItem = list.find(l => l.store_id === currentStore.id && !l.purchased && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
+      const isAdded = !!activeListItem;
       const itemNameEsc = escapeHtml(i.name);
       return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
         '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; display:flex; flex-direction:column; gap:4px; overflow:hidden;" title="' + itemNameEsc + '">'+
           '<span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; line-height:1.3; font-weight:500; font-size:14px; color:var(--text);">' + itemNameEsc + '</span>' +
-          (isAdded ? '<span style="font-size:10px; color:#2e6b45; background:#e8f4ed; padding:2px 6px; border-radius:6px; font-weight:600; width:fit-content; white-space:nowrap;">✓ On List</span>' : '') +
+          (isAdded ? '<span class="btn-remove-from-list" data-list-id="'+activeListItem.id+'" data-name="'+itemNameEsc+'" style="font-size:11px; color:#1e5132; background:#e8f4ed; border:1px solid #bbf7d0; padding:2px 8px; border-radius:6px; font-weight:600; width:fit-content; white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Click to remove from shopping list">✓ On List <span style="font-weight:700; color:#dc2626; font-size:11px; margin-left:2px;">✕</span></span>' : '') +
         '</div>'+
         '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
           (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; white-space:nowrap;">+ Add</button>') +
@@ -668,6 +672,13 @@ $('#btnDeleteStore').addEventListener('click',async()=>{
     if(!r.ok){toast('Error deleting store');return;}
     toast('🗑 Store deleted: '+currentStore.name);
     showScreen('home');
+if($('#fabStores')) {
+  $('#fabStores').addEventListener('click', () => {
+    const target = $('#fabStores').getAttribute('data-target');
+    if (target === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else { const sg = $('#storeGrid'); if (sg) sg.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+}
   }catch(err){toast('Network error');}
 });
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
@@ -736,6 +747,31 @@ function updateRecipeUsageUI(used, limit, remaining) {
 }
 
 
+function updateFabVisibility() {
+  const fab = $('#fabStores');
+  if (!fab) return;
+  const home = $('#screenHome');
+  if (!home || home.style.display === 'none') {
+    fab.style.display = 'none';
+    return;
+  }
+  fab.style.display = 'flex';
+  const sg = $('#storeGrid');
+  if (!sg) return;
+  const rect = sg.getBoundingClientRect();
+  if (rect.top <= window.innerHeight * 0.65) {
+    fab.innerHTML = '<span>⬆ Top</span>';
+    fab.title = 'Scroll to top of list';
+    fab.setAttribute('data-target', 'top');
+  } else {
+    fab.innerHTML = '<span>🏪 Stores ↓</span>';
+    fab.title = 'Jump down to store catalog';
+    fab.setAttribute('data-target', 'stores');
+  }
+}
+
+window.addEventListener('scroll', updateFabVisibility);
+
 function showScreen(name){
   if(name==='home'){
     currentStore=null;
@@ -747,6 +783,7 @@ function showScreen(name){
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData();
+    updateFabVisibility();
   } else if(name==='recipes'){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
@@ -1533,6 +1570,13 @@ async function confirmAddRecipeToList() {
       await autoSaveRecipe();
 
       showScreen('home');
+if($('#fabStores')) {
+  $('#fabStores').addEventListener('click', () => {
+    const target = $('#fabStores').getAttribute('data-target');
+    if (target === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else { const sg = $('#storeGrid'); if (sg) sg.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+}
       loadData();
     } else {
       toast(res.error || 'Failed to add items to list');
@@ -1797,6 +1841,11 @@ async function deleteSavedRecipe(id) {
       // Ignore
     }
   </script>
+
+
+<button id="fabStores" title="Jump to Stores" style="position:fixed; right:12px; top:50%; transform:translateY(-50%); z-index:90; background:var(--green); color:#fff; border:none; border-radius:24px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.2); display:none; align-items:center; gap:6px; transition:all 0.2s ease;">
+  <span>🏪 Stores ↓</span>
+</button>
 
 </body>
 </html>
