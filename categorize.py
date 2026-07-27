@@ -8,6 +8,31 @@ import os
 import json
 
 CATEGORY_KEYWORDS = {
+    # ── Meat & Seafood ──
+    "Meat & Seafood": [
+        "chicken", "poultry", "turkey", "duck", "beef", "steak", "ground beef",
+        "pork", "pork chop", "bacon", "sausage", "ham", "lamb", "mutton", "goat",
+        "salmon", "tuna", "fish", "tilapia", "cod", "halibut", "trout", "mahi mahi",
+        "shrimp", "prawn", "crab", "lobster", "clam", "mussel", "oyster", "scallop",
+        "squid", "calamari", "anchovy", "sardine", "meatball", "hot dog", "frankfurter",
+    ],
+    # ── Deli ──
+    "Deli": [
+        "deli", "deli turkey", "deli ham", "roast beef", "salami", "prosciutto",
+        "pepperoni", "bologna", "pastrami", "rotisserie chicken", "cold cut",
+        "prepared meal", "potato salad", "cole slaw", "macaroni salad",
+    ],
+    # ── Health & Personal Care ──
+    "Health & Personal Care": [
+        "vitamin", "multivitamin", "supplement", "creatine", "protein powder", "whey",
+        "bcaa", "pre workout", "collagen", "biotin", "calcium", "magnesium", "probiotic",
+        "omega 3", "fish oil", "zinc", "iron supplement", "one a day", "centrum",
+        "nature made", "airborne", "emergen-c", "advil", "tylenol", "aspirin", "ibuprofen",
+        "band aid", "bandage", "first aid", "medicine", "pill", "cough drop",
+        "toothpaste", "toothbrush", "dental floss", "mouthwash", "shampoo", "conditioner",
+        "body wash", "soap", "deodorant", "lotion", "sunscreen", "razor", "shaving",
+        "tampon", "pad", "diaper", "baby wipes", "hand sanitizer",
+    ],
     # ── Produce: Top-level for produce section ──
     "Produce": [
         # Vegetables
@@ -69,7 +94,7 @@ CATEGORY_KEYWORDS = {
         "danish", "donut", "doughnut", "pastry", "cake", "cupcake",
         "pie crust", "pie shell", "pizza dough", "pizza base",
         "breadcrumb", "bread crumb", "crouton", "stuffing",
-        "sandwich bread", "sandwich loaf", "rusk", "biscotti",
+        "sandwich bread", "sandwich loaf", "rusk", "biscotti", "oatnut", "brownberry", "dave's killer", "nature's own", "arnold", "wonder bread",
     ],
 
     # ── Legumes & Grains ──
@@ -140,7 +165,6 @@ CATEGORY_KEYWORDS = {
         "jam", "jelly", "marmalade", "preserve", "honey",
         "maple syrup", "agave", "chocolate syrup", "caramel",
         "peanut butter", "almond butter", "cashew butter", "nutella",
-        "protein powder", "whey", "creatine", "bcaa", "pre workout",
     ],
 
     # ── Beverages ──
