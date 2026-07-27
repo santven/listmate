@@ -55,8 +55,7 @@
 </style>
 </head>
 <body>
-<div id="appLoader" style="position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center;"><div style="width:36px; height:36px; border:4px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin 1s linear infinite;"></div></div>
-<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
 <div class="header">
   <a href="/" style="color:#fff;text-decoration:none;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.18);flex-shrink:0;" aria-label="Back">←</a>
   <div style="width:38px;height:38px;min-width:38px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);margin-left:4px;">⚙️</div>
@@ -172,7 +171,6 @@ let householdData = null;
   // Load dietary preferences
   await loadDietary();
     await loadLocation();
-  document.getElementById("appLoader").style.display = "none";
 })();
 
 async function loadHousehold() {
