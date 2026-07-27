@@ -120,13 +120,6 @@ body.has-ads .visit-toast, body.has-ads .toast { bottom: 115px; }
 body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toast, body.has-no-ads .toast { bottom: 30px; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
-<style>
-</style>
-<script src="https://unpkg.com/html5-qrcode"></script>
-</head>
-<style>
-</style>
-<script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
 <div class="header">
@@ -1716,7 +1709,6 @@ async function deleteSavedRecipe(id) {
   </div>
 
 
-  <input type="file" id="barcodeFallbackInput" accept="image/*" capture="environment" style="display:none;">
   <script>
     // Barcode Scanner Logic
     let html5QrcodeScanner = null;
@@ -1731,6 +1723,22 @@ async function deleteSavedRecipe(id) {
           toast("Please select a store first.");
           return;
         }
+        
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera) {
+          try {
+            const status = await window.Capacitor.Plugins.Camera.checkPermissions();
+            if (status.camera !== 'granted') {
+              const req = await window.Capacitor.Plugins.Camera.requestPermissions();
+              if (req.camera !== 'granted') {
+                toast("Camera permission is required to scan barcodes.");
+                return;
+              }
+            }
+          } catch (e) {
+            console.error("Camera permission error:", e);
+          }
+        }
+        
         barcodeModal.style.display = 'flex';
         if (!html5QrcodeScanner) {
           html5QrcodeScanner = new Html5Qrcode("reader");
@@ -1856,23 +1864,6 @@ async function deleteSavedRecipe(id) {
       // Ignore
     }
 
-    const barcodeFallbackInput = document.getElementById('barcodeFallbackInput');
-    if (barcodeFallbackInput) {
-      barcodeFallbackInput.addEventListener('change', async (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-          const file = e.target.files[0];
-          try {
-            toast("Scanning image for barcode...");
-            if (!html5QrcodeScanner) html5QrcodeScanner = new Html5Qrcode("reader");
-            const decodedText = await html5QrcodeScanner.scanFile(file, true);
-            onScanSuccess(decodedText);
-          } catch (err) {
-            toast("No barcode found in image.");
-          }
-          e.target.value = ''; // Reset
-        }
-      });
-    }
 
 
     // FAB listener
@@ -1898,5 +1889,6 @@ async function deleteSavedRecipe(id) {
   <span>🏪 Stores ↓</span>
 </button>
 
+<script defer src="https://unpkg.com/html5-qrcode"></script>
 </body>
 </html>
