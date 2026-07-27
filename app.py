@@ -517,6 +517,7 @@ def recipes_endpoint():
         desc = (data.get("description") or "").strip()
         prep = (data.get("prep_time") or "").strip()
         cook = (data.get("cook_time") or "").strip()
+        cuisine = (data.get("cuisine") or "").strip()
         servings = (data.get("servings") or "").strip()
         tags_json = json.dumps(data.get("dietary_tags") or [])
         instr_json = json.dumps(data.get("instructions") or [])
@@ -607,20 +608,50 @@ def add_recipe_to_list_endpoint():
                 except Exception:
                     pass
 
-            if _use_pg:
+            existing = db.execute(
+                "SELECT id, quantity, recipe_tag FROM list_items WHERE household_id = ? AND store_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                (hhid, store_id, name)
+            ).fetchall()
+
+            if existing and len(existing) > 0:
+                # Update existing
+                ext = existing[0]
+                new_qty = quantity
+                old_qty = ext["quantity"] or ""
+                if new_qty and old_qty and new_qty not in old_qty:
+                    new_qty = f"{old_qty} + {new_qty}"
+                elif old_qty:
+                    new_qty = old_qty
+                
+                old_tag = ext["recipe_tag"] or ""
+                new_tag = recipe_title
+                if old_tag and new_tag and new_tag not in old_tag:
+                    new_tag = f"{old_tag}, {new_tag}"
+                elif old_tag:
+                    new_tag = old_tag
+
                 db.execute(
-                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                    "UPDATE list_items SET quantity = ?, recipe_tag = ? WHERE id = ?",
+                    (new_qty, new_tag, ext["id"])
                 )
+                if not _use_pg:
+                    db.commit()
+                added_count += 1
             else:
-                db.execute(
-                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
-                )
-                db.commit()
-            added_count += 1
+                if _use_pg:
+                    db.execute(
+                        "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                    )
+                else:
+                    db.execute(
+                        "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                    )
+                    db.commit()
+                added_count += 1
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
     finally:
         db.close()

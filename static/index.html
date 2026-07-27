@@ -1043,6 +1043,16 @@ async function generateRecipe() {
     return;
   }
   
+  // Check if it already exists in saved recipes
+  const searchLower = prompt.toLowerCase();
+  const existing = recipes.find(r => r.title.toLowerCase().includes(searchLower));
+  if (existing) {
+    currentDraftRecipe = existing;
+    renderFormattedRecipe(existing);
+    toast('Found in your saved recipes!');
+    return;
+  }
+  
   const btn = $('#btnGenerateRecipe');
   btn.disabled = true;
   btn.innerHTML = '⏳ AI Chef is crafting your recipe...';
@@ -1462,9 +1472,30 @@ async function confirmAddRecipeToList() {
     }
   }
   
+  // Auto-save recipe if not already saved (has no id)
+  const autoSaveRecipe = async () => {
+    if (!r.id) {
+      try {
+        const saveRes = await fetch(API + '/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(r)
+        }).then(res => res.json());
+        if (saveRes.ok) {
+          r.id = saveRes.recipe_id;
+          toast(`💾 Recipe '${r.title}' automatically saved to library!`);
+          loadSavedRecipes();
+        }
+      } catch (saveErr) {
+        console.error('Error auto-saving recipe:', saveErr);
+      }
+    }
+  };
+
   if (itemsToAdd.length === 0) {
     if (skippedCount > 0) {
       toast('All ingredients were marked as already at home.');
+      await autoSaveRecipe();
       closeRecipeStoreModal();
     } else {
       toast('No items selected to add');
@@ -1490,23 +1521,7 @@ async function confirmAddRecipeToList() {
       }
       toast(msg);
 
-      // Auto-save recipe if not already saved (has no id)
-      if (!r.id) {
-        try {
-          const saveRes = await fetch(API + '/recipes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(r)
-          }).then(res => res.json());
-          if (saveRes.ok) {
-            r.id = saveRes.recipe_id;
-            toast(`💾 Recipe '${r.title}' automatically saved to library!`);
-            loadSavedRecipes();
-          }
-        } catch (saveErr) {
-          console.error('Error auto-saving recipe:', saveErr);
-        }
-      }
+      await autoSaveRecipe();
 
       showScreen('home');
       loadData();
