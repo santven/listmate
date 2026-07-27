@@ -145,19 +145,13 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <div class="container">
   <div id="screenHome">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Stores & Grocery List</div>
+      <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
         🍳 Recipe Planner
       </button>
     </div>
-    
-    <div class="store-grid" id="storeGrid"></div>
-    <div class="new-store-wrap">
-      <input type="text" id="newStoreInput" placeholder="+ New store..." autocomplete="off">
-      <button id="btnNewStore">+</button>
-    </div>
 
-    <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+    <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
       <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
         <option value="">All Stores</option>
       </select>
@@ -166,8 +160,16 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       </select>
       <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share</button>
     </div>
+
     <div id="listView"></div>
-    <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
+    <button class="btn-danger" id="btnClear" style="margin-bottom:24px;">🗑 Clear all open items</button>
+
+    <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px;">Manage Stores</div>
+    <div class="store-grid" id="storeGrid"></div>
+    <div class="new-store-wrap">
+      <input type="text" id="newStoreInput" placeholder="+ New store..." autocomplete="off">
+      <button id="btnNewStore">+</button>
+    </div>
   </div>
   <div class="catalog" id="screenCatalog">
     <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
@@ -472,7 +474,7 @@ function renderHome() {
     html += '</div></div>';
   }
   
-  if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store to add items</div>';
+  if(!html) html='<div class="empty-state"><div class="emoji">🛒</div>Tap a store below to add items</div>';
   $('#listView').innerHTML=html;
   
   // Attach copy/share buttons to store group titles (only active sections)
