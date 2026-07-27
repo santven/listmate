@@ -15,6 +15,9 @@
   .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
   
   .container { max-width: 500px; margin: 0 auto; padding: 16px; }
+  body.has-ads .container { padding-bottom: 70px !important; }
+  .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: #f3f4f6; display: flex; align-items: center; justify-content: center; z-index: 1000; color: #9ca3af; font-size: 11px; }
+  body.is-premium .ad-banner-bottom { display: none !important; }
   .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
   .card h2 { font-size: 15px; margin-bottom: 14px; color: #2c5a2c; }
   .card p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
@@ -302,6 +305,13 @@ async function loadPremium() {
     const r = await fetch('/api/settings/premium');
     const d = await r.json();
     document.getElementById('premiumToggle').checked = !!d.is_premium;
+    if (d.is_premium) {
+      document.body.classList.add('is-premium');
+      document.body.classList.remove('has-ads');
+    } else {
+      document.body.classList.add('has-ads');
+      document.body.classList.remove('is-premium');
+    }
     const badge = document.getElementById('earlyAdopterBadge');
     if (badge) {
       if (d.is_early_adopter) {
@@ -325,6 +335,13 @@ async function savePremium() {
       body: JSON.stringify({is_premium})
     });
     if (r.ok) {
+      if (is_premium) {
+        document.body.classList.add('is-premium');
+        document.body.classList.remove('has-ads');
+      } else {
+        document.body.classList.add('has-ads');
+        document.body.classList.remove('is-premium');
+      }
       document.getElementById('premiumSuccess').textContent = '✓ Plan updated';
       setTimeout(() => document.getElementById('premiumSuccess').textContent = '', 2000);
     }
@@ -387,5 +404,6 @@ async function deleteAccount() {
   }
 }
 </script>
+<ins class="adsbygoogle ad-banner-bottom" style="display:block" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665" data-ad-format="auto" data-full-width-responsive="true"></ins>
 </body>
 </html>

@@ -118,6 +118,29 @@ body.has-ads .container { padding-bottom: 95px !important; }
 body.is-premium .container, body.has-no-ads .container { padding-bottom: 24px; }
 body.has-ads .visit-toast, body.has-ads .toast { bottom: 115px; }
 body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toast, body.has-no-ads .toast { bottom: 30px; }
+
+.offline-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+.offline-badge.pro {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.offline-badge.free {
+  background: #fffbebfb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 </head>
@@ -141,6 +164,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </div>
 <div class="container">
   <div id="screenHome">
+    <div id="offlineBadge" class="offline-badge pro" style="display:none;"></div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <div style="display:flex; align-items:center; gap:8px;">
         <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
@@ -310,10 +334,11 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
   try {
-    const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); window.currentCfg = cfg;
+    const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); 
+    window.currentCfg = cfg;
+    try { localStorage.setItem('listmate_cfg', JSON.stringify(cfg)); } catch(e){}
     if (!cfg.user) { window.location.href='/login'; return false; }
-    $('#headerUser').textContent = cfg.display_name||cfg.user;
-    // Show Health nav link only if health_dashboard feature is enabled
+    if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
       const healthLink = $('#healthNavLink');
       if (healthLink) healthLink.style.display = '';
@@ -330,8 +355,120 @@ async function checkAuth() {
       const ad = document.querySelector('.ad-banner-bottom');
       if (ad) ad.style.display = 'flex';
     }
-return true;
-  } catch(e) { window.location.href='/login'; return false; }
+    updateOfflineStatusUI();
+    return true;
+  } catch(e) { 
+    if (!navigator.onLine) {
+      try {
+        const cachedCfg = localStorage.getItem('listmate_cfg');
+        if (cachedCfg) {
+          const cfg = JSON.parse(cachedCfg);
+          window.currentCfg = cfg;
+          if (cfg.user) {
+            if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
+            if (cfg.is_premium) {
+              document.body.classList.add('is-premium');
+              document.body.classList.remove('has-ads');
+            } else {
+              document.body.classList.add('has-ads');
+              document.body.classList.remove('is-premium');
+            }
+            updateOfflineStatusUI();
+            return true;
+          }
+        }
+      } catch(ex){}
+    }
+    window.location.href='/login'; 
+    return false; 
+  }
+}
+
+// ── Offline Sync & Queue System (#153) ─────────────────────────────
+let isOffline = !navigator.onLine;
+
+function updateOfflineStatusUI() {
+  isOffline = !navigator.onLine;
+  const badge = $('#offlineBadge');
+  if (badge) {
+    if (isOffline) {
+      badge.style.display = 'flex';
+      const isPremium = !!(window.currentCfg && window.currentCfg.is_premium);
+      if (isPremium) {
+        badge.innerHTML = '⚡ <span><strong>Offline Mode (ListMate Pro)</strong> — Changes saved locally & will sync when reconnected</span>';
+        badge.className = 'offline-badge pro';
+      } else {
+        badge.innerHTML = '📶 <span><strong>Offline Mode</strong> — Read-Only mode. Pro required to edit offline.</span>';
+        badge.className = 'offline-badge free';
+      }
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+window.addEventListener('online', () => {
+  updateOfflineStatusUI();
+  toast('🟢 Reconnected to internet. Syncing changes...');
+  syncOfflineQueue();
+});
+
+window.addEventListener('offline', () => {
+  updateOfflineStatusUI();
+  toast('📶 You are offline.');
+});
+
+function canEditOffline() {
+  if (navigator.onLine) return true;
+  const isPremium = !!(window.currentCfg && window.currentCfg.is_premium);
+  if (isPremium) return true;
+  toast('⚠️ Offline editing requires ListMate Pro. Reconnect or upgrade in Settings!');
+  return false;
+}
+
+function enqueueOfflineAction(action) {
+  try {
+    const queue = JSON.parse(localStorage.getItem('listmate_offline_queue') || '[]');
+    action.timestamp = Date.now();
+    queue.push(action);
+    localStorage.setItem('listmate_offline_queue', JSON.stringify(queue));
+  } catch(e) { console.error('Failed to enqueue offline action:', e); }
+}
+
+function saveCache() {
+  try {
+    localStorage.setItem('listmate_cache', JSON.stringify({ stores, list, recipes }));
+  } catch(e){}
+}
+
+async function syncOfflineQueue() {
+  if (!navigator.onLine) return;
+  let queue = [];
+  try {
+    queue = JSON.parse(localStorage.getItem('listmate_offline_queue') || '[]');
+  } catch(e) {}
+  if (!queue || queue.length === 0) return;
+
+  try {
+    const res = await fetch(API + '/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actions: queue })
+    }).then(r => r.json());
+
+    if (res.ok) {
+      localStorage.removeItem('listmate_offline_queue');
+      if (res.list) {
+        list = res.list;
+        saveCache();
+        renderHome();
+        if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
+      }
+      toast('✅ Synced ' + queue.length + ' offline changes!');
+    }
+  } catch(e) {
+    console.error('Failed to sync offline queue:', e);
+  }
 }
 
 let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
@@ -541,10 +678,7 @@ function renderHome() {
     const currentQty=el.dataset.qty||'';
     const newQty=prompt('Enter quantity (e.g. 2, 500g, 1 lb):', currentQty);
     if(newQty===null) return;
-    try {
-      const r=await fetch(API+'/list/'+id+'/quantity',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({quantity:newQty.trim()})});
-      if(r.ok){ list=await fetch(API+'/list').then(res=>res.json()); renderHome(); }
-    }catch(err){ toast('Network error'); }
+    await updateItemQuantity(id, newQty);
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
@@ -629,43 +763,35 @@ function renderCatalog(filter) {
   $$('#catalogItems .catalog-item').forEach(el=>el.addEventListener('click',async()=>{
     const name=el.dataset.new;
     if(!name) return;
-    try{
-      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name,quantity:($('#catalogQty')?$('#catalogQty').value.trim():'')})});
-      const d=await r.json();
-      if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
-    }catch(e){toast('Network error');return;}
-    if(!allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())){
-      try{await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});}catch(e){}
-      allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
+    const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
+    const added = await addToList(currentStore.id, name, qty);
+    if (added) {
+      if (navigator.onLine && allStoreItems[currentStore.id] && !allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())) {
+        try{await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});}catch(e){}
+        try { allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json()); }catch(e){}
+      }
+      $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
     }
-    toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
-    $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
   }));
   $$('#catalogItems .catalog-item-btn').forEach(el=>el.addEventListener('click',async()=>{
     const name=el.dataset.name;
     if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
       return;
     }
-    try{
-      const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name,quantity:($('#catalogQty')?$('#catalogQty').value.trim():'')})});
-      const d=await r.json();
-      if(!r.ok){toast('Error: '+(d.error||'Failed'));return;}
-    }catch(e){toast('Network error');return;}
-    toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
-    $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
+    const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
+    const added = await addToList(currentStore.id, name, qty);
+    if (added) {
+      $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
+    }
   }));
   $$('#catalogItems .btn-remove-from-list').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
     const listId=el.dataset.listId;
     const name=el.dataset.name;
-    try{
-      const r=await fetch(API+'/list/'+listId,{method:'DELETE'});
-      if(!r.ok){toast('Error removing item');return;}
-      toast('Removed from list: '+name);
-      list=await fetch(API+'/list').then(res=>res.json());
-      renderCatalog($('#catalogSearch').value.trim());
-      renderHome();
-    }catch(err){toast('Network error');}
+    await deleteItem(listId);
+    toast('Removed from list: '+name);
+    renderCatalog($('#catalogSearch').value.trim());
+    renderHome();
   }));
 
   $$('#catalogItems .btn-delete-catalog-item').forEach(el=>el.addEventListener('click',async(e)=>{
@@ -836,47 +962,158 @@ async function loadSuggestions(){
     }
     $$('.suggestion-chip').forEach(el=>el.addEventListener('click',async()=>{
       const sid=parseInt(el.dataset.store), name=el.dataset.name;
-      await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:sid,name})});
-      el.classList.add('was-suggested'); el.style.animation='none';
-      list=await fetch(API+'/list').then(r=>r.json()); renderHome(); loadSuggestions();
+      const added = await addToList(sid, name);
+      if (added) {
+        el.classList.add('was-suggested'); el.style.animation='none';
+        loadSuggestions();
+      }
     }));
   }catch(e){}
 }
 
-async function toggleItem(id, showVisitPrompt = true){
-  const item = list.find(i=>i.id===id);
+async function addToList(sid, name, qty = '') {
+  if (!canEditOffline()) return false;
+
+  if (!navigator.onLine) {
+    const storeName = (stores.find(s=>s.id===sid)||{}).name || 'Store';
+    const tempId = 'temp_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+    const newItem = {
+      id: tempId,
+      store_id: sid,
+      name: name,
+      quantity: qty || '',
+      purchased: false,
+      category: null,
+      store_name: storeName
+    };
+    list.unshift(newItem);
+    saveCache();
+    renderHome();
+    enqueueOfflineAction({ type: 'add', data: { store_id: sid, name: name, quantity: qty } });
+    toast('⚡ Saved offline (will sync online)');
+    return true;
+  }
+
+  try {
+    const res = await fetch(API+'/list', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ store_id: sid, name: name, quantity: qty })
+    });
+    const data = await res.json();
+    if (!res.ok) { toast('Error: ' + (data.error || 'Failed')); return false; }
+    if (data.duplicate) { toast('⚠️ Already on list: ' + name); return false; }
+    list = await fetch(API+'/list').then(r=>r.json());
+    saveCache();
+    renderHome();
+    return true;
+  } catch(e) {
+    if (window.currentCfg && window.currentCfg.is_premium) {
+      return addToList(sid, name, qty);
+    }
+    toast('Network error');
+    return false;
+  }
+}
+
+async function updateItemQuantity(id, newQty) {
+  if (!canEditOffline()) return;
+
+  if (!navigator.onLine) {
+    const item = list.find(i => String(i.id) === String(id));
+    if (item) {
+      item.quantity = newQty.trim();
+      saveCache();
+      renderHome();
+      enqueueOfflineAction({ type: 'quantity', data: { id: id, quantity: newQty.trim() } });
+      toast('⚡ Quantity updated offline');
+    }
+    return;
+  }
+
+  try {
+    const r = await fetch(API+'/list/'+id+'/quantity', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({quantity:newQty.trim()})
+    });
+    if (r.ok) {
+      list = await fetch(API+'/list').then(res=>res.json());
+      saveCache();
+      renderHome();
+    }
+  } catch(e) { toast('Network error'); }
+}
+
+async function toggleItem(id, showVisitPrompt = true) {
+  if (!canEditOffline()) return;
+
+  if (!navigator.onLine) {
+    const item = list.find(i=>String(i.id)===String(id));
+    if (item) {
+      item.purchased = !item.purchased;
+      saveCache();
+      renderHome();
+      if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
+      enqueueOfflineAction({ type: 'toggle', data: { id: id } });
+      toast('⚡ Toggled offline');
+    }
+    return;
+  }
+
+  const item = list.find(i=>String(i.id)===String(id));
   const wasPurchased = item?.purchased;
-  
-  // Visit prompt: check BEFORE toggling (API auto-creates a visit on toggle)
   let needsVisitPrompt = false;
   let visitStoreName = '';
-  if(!wasPurchased && showVisitPrompt && item){
-    const res=await fetch(API+'/stores/'+item.store_id+'/visit/today');
-    const data=await res.json();
-    if(!data.active){
-      needsVisitPrompt = true;
-      visitStoreName = stores.find(s=>s.id===item.store_id)?.name||'this store';
-    }
+  if (!wasPurchased && showVisitPrompt && item) {
+    try {
+      const res = await fetch(API+'/stores/'+item.store_id+'/visit/today');
+      const data = await res.json();
+      if (!data.active) {
+        needsVisitPrompt = true;
+        visitStoreName = stores.find(s=>s.id===item.store_id)?.name||'this store';
+      }
+    } catch(e){}
   }
-  
-  await fetch(API+'/list/'+id+'/toggle',{method:'POST'});
-  list=await fetch(API+'/list').then(r=>r.json());
+
+  await fetch(API+'/list/'+id+'/toggle', {method:'POST'});
+  list = await fetch(API+'/list').then(r=>r.json());
+  saveCache();
   renderHome();
-  if(currentStore)renderCatalog($('#catalogSearch').value.trim());
+  if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
   loadSuggestions();
-  
-  if(needsVisitPrompt){
-    $('#visitMsg').textContent='Shopping at '+visitStoreName+'?';
+
+  if (needsVisitPrompt) {
+    $('#visitMsg').textContent = 'Shopping at ' + visitStoreName + '?';
     $('#visitToast').classList.add('show');
-    $('#btnVisitYes').onclick = async ()=>{
-      await fetch(API+'/stores/'+item.store_id+'/visit',{method:'POST'});
+    $('#btnVisitYes').onclick = async () => {
+      await fetch(API+'/stores/'+item.store_id+'/visit', {method:'POST'});
       $('#visitToast').classList.remove('show');
       loadSuggestions();
     };
-    $('#btnVisitNo').onclick = ()=>{$('#visitToast').classList.remove('show');};
+    $('#btnVisitNo').onclick = () => { $('#visitToast').classList.remove('show'); };
   }
 }
-async function deleteItem(id){await fetch(API+'/list/'+id,{method:'DELETE'});list=await fetch(API+'/list').then(r=>r.json());renderHome();}
+
+async function deleteItem(id) {
+  if (!canEditOffline()) return;
+
+  if (!navigator.onLine) {
+    list = list.filter(i => String(i.id) !== String(id));
+    saveCache();
+    renderHome();
+    if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
+    enqueueOfflineAction({ type: 'delete', data: { id: id } });
+    toast('⚡ Deleted offline');
+    return;
+  }
+
+  await fetch(API+'/list/'+id, {method:'DELETE'});
+  list = await fetch(API+'/list').then(r=>r.json());
+  saveCache();
+  renderHome();
+  if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
+}
 
 $('#btnNewStore').addEventListener('click',async()=>{
   const name=$('#newStoreInput').value.trim(); if(!name)return;
@@ -892,9 +1129,26 @@ $('#btnNewStore').addEventListener('click',async()=>{
 $('#newStoreInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewStore').click();});
 
 $('#btnClear').addEventListener('click',async()=>{
-  if(!confirm('Remove all open items from the list?'))return;
-  await fetch(API+'/list/clear',{method:'POST'}); toast('Cleared!'); loadData();
+  await clearList();
 });
+
+async function clearList() {
+  if (!confirm('Remove all open items from the list?')) return;
+  if (!canEditOffline()) return;
+
+  if (!navigator.onLine) {
+    list = list.filter(i => i.purchased);
+    saveCache();
+    renderHome();
+    enqueueOfflineAction({ type: 'clear', data: {} });
+    toast('⚡ List cleared offline');
+    return;
+  }
+
+  await fetch(API+'/list/clear', {method:'POST'});
+  toast('Cleared!');
+  loadData();
+}
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
@@ -909,17 +1163,38 @@ function openMoveModal(itemId,itemName){
   $$('#moveStoreList .modal-store-option').forEach(el=>el.addEventListener('click',()=>moveItem(parseInt(el.dataset.sid))));
   $('#moveModal').classList.add('active');
 }
-async function moveItem(targetStoreId){
-  await fetch(API+'/list/'+moveItemId+'/move',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:targetStoreId})});
-  list=await fetch(API+'/list').then(r=>r.json());
+
+async function moveItem(targetStoreId) {
+  if (!canEditOffline()) return;
+
+  if (!navigator.onLine) {
+    const item = list.find(i => String(i.id) === String(moveItemId));
+    if (item) {
+      item.store_id = targetStoreId;
+      saveCache();
+      $('#moveModal').classList.remove('active');
+      toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');
+      renderHome();
+      enqueueOfflineAction({ type: 'move', data: { id: moveItemId, store_id: targetStoreId } });
+    }
+    return;
+  }
+
+  await fetch(API+'/list/'+moveItemId+'/move', {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({store_id:targetStoreId})
+  });
+  list = await fetch(API+'/list').then(r=>r.json());
+  saveCache();
   $('#moveModal').classList.remove('active');
-  toast('✅ Moved to '+stores.find(s=>s.id===targetStoreId)?.name);
+  toast('✅ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name);
   renderHome();
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#moveModal').classList.remove('active');});
 
-loadData(); checkAuth();
+loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
 
 // ---- Share / Copy to Text ----
 function isMobile() {
