@@ -13,11 +13,11 @@ def _get_pool():
         if not url:
             raise RuntimeError("DATABASE_URL not set")
         # Neon free tier: keep min=1, max=4 connections
-        _pool_ctx = _pool.ThreadedConnectionPool(1, 4, url)
+        _pool_ctx = _pool.ThreadedConnectionPool(1, 20, url)
     return _pool_ctx
 
 def get_db():
-    return PgConnection(_get_pool().getconn())
+    conn = _get_pool().getconn(); conn.autocommit = True; return PgConnection(conn)
 
 def close_db(conn):
     if conn:

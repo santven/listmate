@@ -26,7 +26,7 @@ if USE_PG:
     def _connect():
         global _pool
         if _pool is None:
-            _pool = _pgpool.ThreadedConnectionPool(1, 4, os.environ["DATABASE_URL"])
+            _pool = _pgpool.ThreadedConnectionPool(1, 20, os.environ["DATABASE_URL"])
         conn = _pool.getconn()
         conn.autocommit = True
         return conn
