@@ -85,6 +85,15 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
             """CREATE INDEX IF NOT EXISTS idx_si_store_name ON store_items(household_id, store_id, name)""",
+            """CREATE TABLE IF NOT EXISTS household_barcodes (
+                id SERIAL PRIMARY KEY,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                barcode TEXT NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT '',
+                quantity TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE INDEX IF NOT EXISTS idx_hb_hh_barcode ON household_barcodes(household_id, barcode)""",
         ]
         for stmt in store_tables:
             try: authmod._exec(stmt)
@@ -937,7 +946,351 @@ def update_store_item(store_id, item_id):
         db.close()
 
 
-# ── grocery list (household-scoped) ──
+
+# ── Barcode Lookup ──
+def _lookup_barcode_info(raw_barcode, hhid=None):
+    bc = raw_barcode.strip()
+    if not bc:
+        return None
+
+    # 1. Check household barcode memory first if hhid provided
+    if hhid:
+        try:
+            db = get_db()
+            unpadded = bc.lstrip("0") or "0"
+            row = db.execute(
+                "SELECT name, category, quantity FROM household_barcodes WHERE household_id = ? AND (barcode = ? OR barcode = ?) ORDER BY id DESC LIMIT 1",
+                (hhid, bc, unpadded),
+            ).fetchone()
+            db.close()
+            if row:
+                return {
+                    "barcode": bc,
+                    "name": row["name"],
+                    "category": row["category"] or "General",
+                    "quantity": row["quantity"] or "1",
+                    "source": "household"
+                }
+        except Exception:
+            pass
+
+    # 2. Get barcode variations (GTIN-14, GTIN-13, UPCA-12, GTIN-8, unpadded)
+    unpadded = bc.lstrip("0") or "0"
+    variations = [bc, unpadded]
+    if len(unpadded) <= 12:
+        variations.append(unpadded.zfill(12))
+    if len(unpadded) <= 13:
+        variations.append(unpadded.zfill(13))
+    if len(unpadded) <= 14:
+        variations.append(unpadded.zfill(14))
+
+    seen = set()
+    unique_variations = []
+    for v in variations:
+        if v and v not in seen:
+            seen.add(v)
+            unique_variations.append(v)
+
+    # 3. Determine country preference from household setting
+    user_country = ""
+    if hhid:
+        try:
+            hh = authmod._one(f"SELECT country FROM {authmod._HH} WHERE id = ?", (hhid,))
+            if hh and hh.get("country"):
+                user_country = str(hh["country"]).strip().lower()
+        except Exception:
+            pass
+
+    if any(c in user_country for c in ["us", "united states", "usa"]):
+        domains = [
+            "us.openfoodfacts.org",
+            "world.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
+    elif any(c in user_country for c in ["in", "india"]):
+        domains = [
+            "in.openfoodfacts.org",
+            "world.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
+    else:
+        domains = [
+            "world.openfoodfacts.org",
+            "us.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
+
+    headers = {"User-Agent": "ListMate/1.0 (contact@listmate.app)"}
+    product_data = None
+
+    for v in unique_variations:
+        for domain in domains:
+            url = f"https://{domain}/api/v2/product/{v}.json"
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if data.get("status") == 1 and data.get("product"):
+                        product_data = data["product"]
+                        break
+            except Exception:
+                try:
+                    url_v0 = f"https://{domain}/api/v0/product/{v}.json"
+                    req = urllib.request.Request(url_v0, headers=headers)
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        if data.get("status") == 1 and data.get("product"):
+                            product_data = data["product"]
+                            break
+                except Exception:
+                    pass
+        if product_data:
+            break
+
+    if not product_data:
+        return None
+
+    raw_name = (product_data.get("product_name") or product_data.get("product_name_en") or product_data.get("generic_name") or "").strip()
+    brand = (product_data.get("brands") or product_data.get("brand_owner") or "").strip()
+    if "," in brand:
+        brand = brand.split(",")[0].strip()
+
+    quantity = (product_data.get("quantity") or "").strip()
+    if not quantity and product_data.get("net_weight_value") and product_data.get("net_weight_unit"):
+        quantity = f"{product_data['net_weight_value']} {product_data['net_weight_unit']}"
+
+    if not quantity:
+        quantity = "1"
+
+    cat_tags = product_data.get("categories_tags", []) or []
+
+    title = raw_name
+    if brand and brand.lower() not in raw_name.lower():
+        title = f"{brand} {raw_name}".strip()
+
+    title = re.sub(r'\s+', ' ', title).strip().strip('",\'.-')
+
+    cat = categorize(title)
+
+    if not cat and cat_tags:
+        tag_str = " ".join(cat_tags).lower()
+        if any(k in tag_str for k in ["dietary-supplements", "vitamins", "bodybuilding", "beauty", "body-care", "health"]):
+            cat = "Health & Personal Care"
+        elif any(k in tag_str for k in ["breads", "baked-goods", "bakery", "viennoiseries"]):
+            cat = "Bakery"
+        elif any(k in tag_str for k in ["dairies", "cheeses", "milks", "yogurts"]):
+            cat = "Dairy"
+        elif any(k in tag_str for k in ["beverages", "sodas", "juices", "coffees", "teas", "waters"]):
+            cat = "Beverages"
+        elif any(k in tag_str for k in ["snacks", "biscuits", "chocolates", "confectionery", "sweets"]):
+            cat = "Snacks & Sweets"
+        elif any(k in tag_str for k in ["frozen"]):
+            cat = "Frozen"
+        elif any(k in tag_str for k in ["fresh-foods", "fruits", "vegetables", "produce"]):
+            cat = "Produce"
+        elif any(k in tag_str for k in ["meats", "seafood", "fishes"]):
+            cat = "Meat & Seafood"
+
+    if not cat:
+        cat = "General"
+
+    # Save to household barcodes cache if hhid present
+    if hhid and title:
+        try:
+            db = get_db()
+            db.execute(
+                "INSERT INTO household_barcodes (household_id, barcode, name, category, quantity) VALUES (?, ?, ?, ?, ?)",
+                (hhid, bc, title, cat, quantity),
+            )
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
+    return {
+        "barcode": bc,
+        "name": title,
+        "category": cat,
+        "quantity": quantity
+    }
+
+
+@app.route("/api/barcode/lookup", methods=["POST"])
+@require_user
+def barcode_lookup():
+    data = request.get_json(silent=True) or {}
+    barcode = (data.get("barcode") or "").strip()
+    store_id = data.get("store_id")
+
+    if not barcode:
+        return jsonify({"error": "barcode required"}), 400
+
+    hhid = _hh()
+    info = _lookup_barcode_info(barcode, hhid=hhid)
+
+    if info:
+        name = info["name"]
+        category = info["category"]
+        quantity = info["quantity"]
+
+        if store_id:
+            db = get_db()
+            try:
+                store = db.execute(
+                    "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+                    (store_id, hhid),
+                ).fetchone()
+                if not store:
+                    return jsonify({"error": "store not found"}), 404
+
+                existing = db.execute(
+                    "SELECT id, quantity FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                    (store_id, hhid, name),
+                ).fetchone()
+
+                already_on_list = False
+                item_id = 0
+
+                if existing:
+                    already_on_list = True
+                    item_id = existing["id"]
+                else:
+                    db.execute(
+                        "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                        (hhid, store_id, name, category, quantity, get_display_name()),
+                    )
+                    row = db.execute(
+                        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                        (store_id, hhid, name)
+                    ).fetchone()
+                    if row:
+                        item_id = row["id"]
+
+                cat_row = db.execute(
+                    "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                    (store_id, hhid, name),
+                ).fetchone()
+                if not cat_row:
+                    try:
+                        db.execute(
+                            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                            (hhid, store_id, name, category),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        db.execute(
+                            "UPDATE store_items SET category = ? WHERE id = ? AND (category IS NULL OR category = '' OR category = 'General')",
+                            (category, cat_row["id"]),
+                        )
+                    except Exception:
+                        pass
+
+                db.commit()
+
+                return jsonify({
+                    "ok": True,
+                    "found": True,
+                    "already_on_list": already_on_list,
+                    "item_id": item_id,
+                    "name": name,
+                    "category": category,
+                    "quantity": quantity
+                })
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return jsonify({"error": str(e)}), 500
+            finally:
+                db.close()
+
+        return jsonify({"ok": True, "found": True, "info": info})
+
+    return jsonify({"ok": True, "found": False, "barcode": barcode})
+
+
+@app.route("/api/barcode/save", methods=["POST"])
+@require_user
+def barcode_save():
+    data = request.get_json(silent=True) or {}
+    barcode = (data.get("barcode") or "").strip()
+    name = (data.get("name") or "").strip()
+    quantity = (data.get("quantity") or "1").strip()
+    store_id = data.get("store_id")
+
+    if not barcode or not name:
+        return jsonify({"error": "barcode and name required"}), 400
+
+    category = categorize(name) or "General"
+    hhid = _hh()
+
+    db = get_db()
+    try:
+        try:
+            db.execute(
+                "INSERT INTO household_barcodes (household_id, barcode, name, category, quantity) VALUES (?, ?, ?, ?, ?)",
+                (hhid, barcode, name, category, quantity),
+            )
+        except Exception:
+            pass
+
+        already_on_list = False
+        item_id = 0
+
+        if store_id:
+            existing = db.execute(
+                "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                (store_id, hhid, name),
+            ).fetchone()
+
+            if existing:
+                already_on_list = True
+                item_id = existing["id"]
+            else:
+                db.execute(
+                    "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    (hhid, store_id, name, category, quantity, get_display_name()),
+                )
+                row = db.execute(
+                    "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                    (store_id, hhid, name)
+                ).fetchone()
+                if row:
+                    item_id = row["id"]
+
+            cat_row = db.execute(
+                "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                (store_id, hhid, name),
+            ).fetchone()
+            if not cat_row:
+                try:
+                    db.execute(
+                        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                        (hhid, store_id, name, category),
+                    )
+                except Exception:
+                    pass
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "already_on_list": already_on_list,
+            "item_id": item_id,
+            "name": name,
+            "category": category,
+            "quantity": quantity
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
 
 @app.route("/api/list")
 @require_user

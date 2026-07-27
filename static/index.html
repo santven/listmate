@@ -73,7 +73,8 @@
   .catalog-search { margin-bottom: 14px; }
   .catalog-search input { width: 100%; padding: 14px 16px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); outline: none; }
   .catalog-search input:focus { border-color: var(--green); }
-  .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .catalog-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 480px) { .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
   .catalog-item { padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; display: flex; align-items: center; justify-content: center; min-height: 44px; word-break: break-word; }
   .catalog-item:hover, .catalog-item:active { border-color: var(--green); background: #f5faf3; }
   .catalog-item.on-list { border-color: var(--green); background: #e8f5e9; color: var(--green-dark); font-weight: 500; }
@@ -87,7 +88,7 @@
   .toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .toast.show { opacity: 1; }
 
-  @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; } .header-meta .user { display: inline; } }
+  @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; } .header-meta .user { display: inline; } }
 
   .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
   .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 100; min-width: 160px; overflow: hidden; }
@@ -121,9 +122,11 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <style>
 </style>
+<script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <style>
 </style>
+<script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
 <div class="header">
@@ -145,7 +148,10 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <div class="container">
   <div id="screenHome">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
+        
+      </div>
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
         🍳 Recipe Planner
       </button>
@@ -181,7 +187,10 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     </div>
     <div class="catalog-search" style="display:flex; gap:8px;">
       <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off" style="flex:2;">
-      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:100px; padding:14px 12px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
+      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
+      <button id="btnScanBarcode" style="padding:14px; background:var(--green); color:#fff; border:none; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center;" title="Scan Barcode">
+         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 7v10"/><path d="M12 7v10"/><path d="M16 7v10"/></svg>
+      </button>
     </div>
     <div class="catalog-grid" id="catalogItems"></div>
     <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
@@ -406,9 +415,9 @@ function renderHome() {
     let aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
     if (!aisleOrderStr) {
       if (/patel|indiaco|indian|desi|bazar|apna/i.test(storeName)) {
-        aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+        aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
       } else {
-        aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+        aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
       }
     }
     const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
@@ -478,6 +487,7 @@ function renderHome() {
   $('#listView').innerHTML=html;
   
   // Attach copy/share buttons to store group titles (only active sections)
+  updateFabVisibility();
   $$('#listView .store-group-title').forEach(title => {
     const shopBtn = title.querySelector('.shop-btn');
     if (!shopBtn) return; // only active (non-purchased) sections have shop-btn
@@ -553,9 +563,9 @@ function renderCatalog(filter) {
   let aisleOrderStr = (currentStore && currentStore.category_order) || '';
   if (!aisleOrderStr) {
     if (/patel|indiaco|indian|desi|bazar|apna/i.test((currentStore && currentStore.name) || '')) {
-      aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+      aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
     } else {
-      aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household';
+      aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
     }
   }
   const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
@@ -580,14 +590,18 @@ function renderCatalog(filter) {
   for (const cat of catOrder) {
     if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
     html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i => {
-      const isAdded = onList.has(i.name.toLowerCase());
-      return '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:10px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.6' : '1') + ';">'+
-        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:8px;">'+
-          escapeHtml(i.name) + 
-          (isAdded ? '<span style="font-size:10px; color:var(--muted); background:#f0f4ed; padding:2px 6px; border-radius:6px; font-weight:600;">✓ On List</span>' : '') +
+      const activeListItem = list.find(l => l.store_id === currentStore.id && !l.purchased && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
+      const isAdded = !!activeListItem;
+      const itemNameEsc = escapeHtml(i.name);
+      return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
+        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; display:flex; flex-direction:column; gap:4px; overflow:hidden;" title="' + itemNameEsc + '">'+
+          '<span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; line-height:1.3; font-weight:500; font-size:14px; color:var(--text);">' + itemNameEsc + '</span>' +
+          (isAdded ? '<span class="btn-remove-from-list" data-list-id="'+activeListItem.id+'" data-name="'+itemNameEsc+'" style="font-size:11px; color:#1e5132; background:#e8f4ed; border:1px solid #bbf7d0; padding:2px 8px; border-radius:6px; font-weight:600; width:fit-content; white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Click to remove from shopping list">✓ On List <span style="font-weight:700; color:#dc2626; font-size:11px; margin-left:2px;">✕</span></span>' : '') +
         '</div>'+
-        (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; flex-shrink:0;">+ Add</button>') +
-        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+        '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+          (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; white-space:nowrap;">+ Add</button>') +
+          '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+itemNameEsc+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
@@ -611,7 +625,7 @@ function renderCatalog(filter) {
   $$('#catalogItems .catalog-item-btn').forEach(el=>el.addEventListener('click',async()=>{
     const name=el.dataset.name;
     if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
-      toast('⚠️ Already on list: '+name); return;
+      return;
     }
     try{
       const r=await fetch(API+'/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id:currentStore.id,name,quantity:($('#catalogQty')?$('#catalogQty').value.trim():'')})});
@@ -621,6 +635,20 @@ function renderCatalog(filter) {
     toast('✅ Added: '+name); list=await fetch(API+'/list').then(r=>r.json());
     $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
   }));
+  $$('#catalogItems .btn-remove-from-list').forEach(el=>el.addEventListener('click',async(e)=>{
+    e.stopPropagation();
+    const listId=el.dataset.listId;
+    const name=el.dataset.name;
+    try{
+      const r=await fetch(API+'/list/'+listId,{method:'DELETE'});
+      if(!r.ok){toast('Error removing item');return;}
+      toast('Removed from list: '+name);
+      list=await fetch(API+'/list').then(res=>res.json());
+      renderCatalog($('#catalogSearch').value.trim());
+      renderHome();
+    }catch(err){toast('Network error');}
+  }));
+
   $$('#catalogItems .btn-delete-catalog-item').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
     const id=el.dataset.id;
@@ -659,6 +687,7 @@ $('#btnDeleteStore').addEventListener('click',async()=>{
     if(!r.ok){toast('Error deleting store');return;}
     toast('🗑 Store deleted: '+currentStore.name);
     showScreen('home');
+
   }catch(err){toast('Network error');}
 });
 $('#btnBackHome').addEventListener('click',()=>showScreen('home'));
@@ -727,6 +756,31 @@ function updateRecipeUsageUI(used, limit, remaining) {
 }
 
 
+function updateFabVisibility() {
+  const fab = $('#fabStores');
+  if (!fab) return;
+  const home = $('#screenHome');
+  if (!home || home.style.display === 'none') {
+    fab.style.display = 'none';
+    return;
+  }
+  fab.style.display = 'flex';
+  const sg = $('#storeGrid');
+  if (!sg) return;
+  const rect = sg.getBoundingClientRect();
+  if (rect.top <= window.innerHeight * 0.75) {
+    fab.innerHTML = '<span>⬆ Top</span>';
+    fab.title = 'Scroll to top of list';
+    fab.setAttribute('data-target', 'top');
+  } else {
+    fab.innerHTML = '<span>🏪 Stores ↓</span>';
+    fab.title = 'Jump down to store catalog';
+    fab.setAttribute('data-target', 'stores');
+  }
+}
+
+window.addEventListener('scroll', updateFabVisibility);
+
 function showScreen(name){
   if(name==='home'){
     currentStore=null;
@@ -738,6 +792,7 @@ function showScreen(name){
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData();
+    updateFabVisibility();
   } else if(name==='recipes'){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
@@ -1524,6 +1579,7 @@ async function confirmAddRecipeToList() {
       await autoSaveRecipe();
 
       showScreen('home');
+
       loadData();
     } else {
       toast(res.error || 'Failed to add items to list');
@@ -1637,5 +1693,179 @@ async function deleteSavedRecipe(id) {
 </script>
 <div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
 <ins class="adsbygoogle ad-banner-bottom" style="display:block" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665" data-ad-format="auto" data-full-width-responsive="true"></ins>
+
+  <!-- Barcode Scanner Modal -->
+  <div id="barcodeModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="width:100%; max-width:500px; padding:20px; text-align:center; display:flex; flex-direction:column; gap:16px;">
+      <h3 style="color:#fff; font-size:18px; margin:0;">Scan Barcode</h3>
+      <p style="color:#bbb; font-size:14px; margin:0;">Position barcode inside the frame</p>
+      <div id="reader" style="width:100%; min-height:250px; background:#000; border-radius:16px; overflow:hidden; border:2px solid #5ebe7e; box-shadow: 0 8px 32px rgba(0,0,0,0.3);"></div>
+      <button id="btnCancelScan" style="margin-top:8px; padding:14px 24px; background:#333; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+
+
+  <script>
+    // Barcode Scanner Logic
+    let html5QrcodeScanner = null;
+
+    const btnScanBarcode = document.getElementById('btnScanBarcode');
+    const btnCancelScan = document.getElementById('btnCancelScan');
+    const barcodeModal = document.getElementById('barcodeModal');
+    
+    if (btnScanBarcode) {
+      btnScanBarcode.addEventListener('click', async () => {
+        if (!currentStore) {
+          toast("Please select a store first.");
+          return;
+        }
+        barcodeModal.style.display = 'flex';
+        if (!html5QrcodeScanner) {
+          html5QrcodeScanner = new Html5Qrcode("reader");
+        }
+        try {
+          await html5QrcodeScanner.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 150 }
+            },
+            onScanSuccess,
+            onScanFailure
+          );
+        } catch (err) {
+          console.error("Error starting scanner:", err);
+          toast("Camera access denied or unavailable.");
+          closeScanner();
+        }
+      });
+    }
+
+    if (btnCancelScan) {
+      btnCancelScan.addEventListener('click', closeScanner);
+    }
+
+    async function closeScanner() {
+      barcodeModal.style.display = 'none';
+      if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+        try {
+          await html5QrcodeScanner.stop();
+        } catch(err) {
+          console.error("Error stopping scanner:", err);
+        }
+      }
+    }
+
+        async function onScanSuccess(decodedText, decodedResult) {
+      closeScanner();
+      toast("🔍 Searching product database...");
+
+      try {
+        const storeId = currentStore ? currentStore.id : null;
+        const res = await fetch(API + '/barcode/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode: decodedText, store_id: storeId })
+        });
+
+        const data = await res.json();
+
+        if (data.ok && data.found) {
+          const productName = data.name;
+          const qty = data.quantity || "1";
+
+          if (data.already_on_list) {
+            toast('⚠️ Already on shopping list: ' + productName);
+          } else {
+            toast('✅ Added to list: ' + productName + (qty && qty !== '1' ? ' (' + qty + ')' : ''));
+          }
+
+          // Reload list and store catalog items
+          list = await fetch(API + '/list').then(r => r.json());
+          if (currentStore) {
+            try {
+              const items = await fetch(API + '/stores/' + currentStore.id + '/items').then(r => r.json());
+              allStoreItems[currentStore.id] = items;
+            } catch(e){}
+            document.getElementById('catalogSearch').value = '';
+            if (document.getElementById('catalogQty')) document.getElementById('catalogQty').value = '';
+            renderCatalog('');
+          }
+          renderHome();
+        } else {
+          toast("❌ Barcode not found in database");
+          setTimeout(async () => {
+            const userEnteredName = prompt("Barcode (" + decodedText + ") not found in database.\nEnter product name to add to shopping list & save barcode:");
+            if (userEnteredName && userEnteredName.trim()) {
+              const cleanName = userEnteredName.trim();
+              toast("💾 Saving item...");
+              try {
+                const saveRes = await fetch(API + '/barcode/save', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ barcode: decodedText, name: cleanName, store_id: storeId })
+                });
+                const saveData = await saveRes.json();
+                if (saveData.ok) {
+                  if (saveData.already_on_list) {
+                    toast('⚠️ Already on list: ' + cleanName);
+                  } else {
+                    toast('✅ Saved & Added: ' + cleanName);
+                  }
+                  list = await fetch(API + '/list').then(r => r.json());
+                  if (currentStore) {
+                    try {
+                      const items = await fetch(API + '/stores/' + currentStore.id + '/items').then(r => r.json());
+                      allStoreItems[currentStore.id] = items;
+                    } catch(e){}
+                    document.getElementById('catalogSearch').value = '';
+                    if (document.getElementById('catalogQty')) document.getElementById('catalogQty').value = '';
+                    renderCatalog('');
+                  }
+                  renderHome();
+                } else {
+                  toast("Error saving item: " + (saveData.error || "failed"));
+                }
+              } catch(e) {
+                toast("Network error saving item");
+              }
+            } else {
+              toast("Scan cancelled");
+            }
+          }, 300);
+        }
+      } catch (err) {
+        console.error("Barcode Lookup Error:", err);
+        toast("❌ Error searching product database.");
+      }
+    }
+
+    function onScanFailure(error) {
+      // Ignore
+    }
+
+    // FAB listener
+    document.addEventListener('DOMContentLoaded', () => {
+      const fabEl = document.getElementById('fabStores');
+      if (fabEl) {
+        fabEl.addEventListener('click', () => {
+          const target = fabEl.getAttribute('data-target');
+          if (target === 'top') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            const sg = document.getElementById('storeGrid');
+            if (sg) sg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    });
+
+  </script>
+
+
+<button id="fabStores" title="Jump to Stores" style="position:fixed; right:12px; top:50%; transform:translateY(-50%); z-index:90; background:var(--green); color:#fff; border:none; border-radius:24px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.2); display:none; align-items:center; gap:6px; transition:all 0.2s ease;">
+  <span>🏪 Stores ↓</span>
+</button>
+
 </body>
 </html>
