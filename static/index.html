@@ -120,23 +120,9 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <style>
-.active-store-filter {
-  background-color: var(--green) !important;
-  color: white !important;
-}
-.active-store-filter .count {
-  color: #e0f2fe !important;
-}
 </style>
 </head>
 <style>
-.active-store-filter {
-  background-color: var(--green) !important;
-  color: white !important;
-}
-.active-store-filter .count {
-  color: #e0f2fe !important;
-}
 </style>
 </head>
 <body>
@@ -171,11 +157,14 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       <button id="btnNewStore">+</button>
     </div>
 
-    <div style="display:flex; gap:8px; margin-top:16px;">
-      <select id="recipeFilter" onchange="renderHome()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+    <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+      <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+        <option value="">All Stores</option>
+      </select>
+      <select id="recipeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
         <option value="">All Recipes</option>
       </select>
-      <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share All</button>
+      <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share</button>
     </div>
     <div id="listView"></div>
     <button class="btn-danger" id="btnClear">🗑 Clear all open items</button>
@@ -304,7 +293,6 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </div>
 
 <script>
-let currentStoreFilterId = null;
 function toggleBurger() {
   document.getElementById("burgerMenu").classList.toggle("show");
   document.getElementById("burgerOverlay").classList.toggle("show");
@@ -350,6 +338,13 @@ async function loadData() {
   ]);
   stores=s; list=l; recipes=r.recipes || []; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
   
+  const sFilter = $('#storeFilter');
+  if (sFilter) {
+    const sSelected = sFilter.value;
+    sFilter.innerHTML = '<option value="">All Stores</option>' + stores.map(s => '<option value="'+s.id+'">'+escapeHtml(s.name)+'</option>').join('');
+    if (sSelected) sFilter.value = sSelected;
+  }
+  
   const filter = $('#recipeFilter');
   if (filter) {
     const selected = filter.value;
@@ -380,15 +375,12 @@ function renderHome() {
   }
   
   const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
-  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn '+(currentStoreFilterId === s.id ? 'active-store-filter' : '')+'" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
-  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{
-    const sid = parseInt(b.dataset.id);
-    currentStoreFilterId = (currentStoreFilterId === sid) ? null : sid;
-    renderHome();
-  }));
+  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
+  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
   
-  if (currentStoreFilterId) {
-    filteredList = filteredList.filter(i => i.store_id === currentStoreFilterId);
+  const storeFilterVal = $('#storeFilter') ? $('#storeFilter').value : '';
+  if (storeFilterVal) {
+    filteredList = filteredList.filter(i => i.store_id === parseInt(storeFilterVal));
   }
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
