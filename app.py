@@ -937,6 +937,211 @@ def update_store_item(store_id, item_id):
         db.close()
 
 
+
+# ── Barcode Lookup ──
+def _lookup_barcode_info(raw_barcode):
+    bc = raw_barcode.strip()
+    if not bc:
+        return None
+
+    variations = [bc]
+    if bc.startswith("00"):
+        variations.extend([bc[2:], bc[1:]])
+    elif bc.startswith("0"):
+        variations.extend([bc[1:], "00" + bc[1:]])
+    elif len(bc) == 12:
+        variations.append("0" + bc)
+
+    seen = set()
+    unique_variations = []
+    for v in variations:
+        if v not in seen:
+            seen.add(v)
+            unique_variations.append(v)
+
+    product_data = None
+
+    headers = {"User-Agent": "ListMate/1.0 (contact@listmate.app)"}
+
+    domains = [
+        "world.openfoodfacts.org",
+        "world.openbeautyfacts.org",
+        "world.openproductsfacts.org"
+    ]
+
+    for v in unique_variations:
+        for domain in domains:
+            url = f"https://{domain}/api/v2/product/{v}.json"
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if data.get("status") == 1 and data.get("product"):
+                        product_data = data["product"]
+                        break
+            except Exception:
+                try:
+                    url_v0 = f"https://{domain}/api/v0/product/{v}.json"
+                    req = urllib.request.Request(url_v0, headers=headers)
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        if data.get("status") == 1 and data.get("product"):
+                            product_data = data["product"]
+                            break
+                except Exception:
+                    pass
+        if product_data:
+            break
+
+    if not product_data:
+        return None
+
+    raw_name = (product_data.get("product_name") or product_data.get("product_name_en") or product_data.get("generic_name") or "").strip()
+    brand = (product_data.get("brands") or product_data.get("brand_owner") or "").strip()
+    if "," in brand:
+        brand = brand.split(",")[0].strip()
+
+    quantity = (product_data.get("quantity") or "").strip()
+    if not quantity and product_data.get("net_weight_value") and product_data.get("net_weight_unit"):
+        quantity = f"{product_data['net_weight_value']} {product_data['net_weight_unit']}"
+
+    if not quantity:
+        quantity = "1"
+
+    cat_tags = product_data.get("categories_tags", []) or []
+
+    title = raw_name
+    if brand and brand.lower() not in raw_name.lower():
+        title = f"{brand} {raw_name}".strip()
+
+    title = re.sub(r'\s+', ' ', title).strip().strip('",\'.-')
+
+    cat = categorize(title)
+
+    if not cat and cat_tags:
+        tag_str = " ".join(cat_tags).lower()
+        if any(k in tag_str for k in ["dietary-supplements", "vitamins", "bodybuilding", "beauty", "body-care", "health"]):
+            cat = "Health & Personal Care"
+        elif any(k in tag_str for k in ["breads", "baked-goods", "bakery", "viennoiseries"]):
+            cat = "Bakery"
+        elif any(k in tag_str for k in ["dairies", "cheeses", "milks", "yogurts"]):
+            cat = "Dairy"
+        elif any(k in tag_str for k in ["beverages", "sodas", "juices", "coffees", "teas", "waters"]):
+            cat = "Beverages"
+        elif any(k in tag_str for k in ["snacks", "biscuits", "chocolates", "confectionery", "sweets"]):
+            cat = "Snacks & Sweets"
+        elif any(k in tag_str for k in ["frozen"]):
+            cat = "Frozen"
+        elif any(k in tag_str for k in ["fresh-foods", "fruits", "vegetables", "produce"]):
+            cat = "Produce"
+        elif any(k in tag_str for k in ["meats", "seafood", "fishes"]):
+            cat = "Meat & Seafood"
+
+    if not cat:
+        cat = "General"
+
+    return {
+        "barcode": bc,
+        "name": title,
+        "category": cat,
+        "quantity": quantity
+    }
+
+
+@app.route("/api/barcode/lookup", methods=["POST"])
+@require_user
+def barcode_lookup():
+    data = request.get_json(silent=True) or {}
+    barcode = (data.get("barcode") or "").strip()
+    store_id = data.get("store_id")
+
+    if not barcode:
+        return jsonify({"error": "barcode required"}), 400
+
+    info = _lookup_barcode_info(barcode)
+
+    if info:
+        name = info["name"]
+        category = info["category"]
+        quantity = info["quantity"]
+
+        if store_id:
+            db = get_db()
+            try:
+                store = db.execute(
+                    "SELECT id FROM stores WHERE id = ? AND household_id = ?",
+                    (store_id, _hh()),
+                ).fetchone()
+                if not store:
+                    return jsonify({"error": "store not found"}), 404
+
+                existing = db.execute(
+                    "SELECT id, quantity FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                    (store_id, _hh(), name),
+                ).fetchone()
+
+                already_on_list = False
+                item_id = 0
+
+                if existing:
+                    already_on_list = True
+                    item_id = existing["id"]
+                else:
+                    db.execute(
+                        "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                        (_hh(), store_id, name, category, quantity, get_display_name()),
+                    )
+                    row = db.execute(
+                        "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                        (store_id, _hh(), name)
+                    ).fetchone()
+                    if row:
+                        item_id = row["id"]
+
+                cat_row = db.execute(
+                    "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                    (store_id, _hh(), name),
+                ).fetchone()
+                if not cat_row:
+                    try:
+                        db.execute(
+                            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                            (_hh(), store_id, name, category),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        db.execute(
+                            "UPDATE store_items SET category = ? WHERE id = ? AND (category IS NULL OR category = '' OR category = 'General')",
+                            (category, cat_row["id"]),
+                        )
+                    except Exception:
+                        pass
+
+                db.commit()
+
+                return jsonify({
+                    "ok": True,
+                    "found": True,
+                    "already_on_list": already_on_list,
+                    "item_id": item_id,
+                    "name": name,
+                    "category": category,
+                    "quantity": quantity
+                })
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return jsonify({"error": str(e)}), 500
+            finally:
+                db.close()
+
+        return jsonify({"ok": True, "found": True, "info": info})
+
+    return jsonify({"ok": True, "found": False, "barcode": barcode})
+
+
 # ── grocery list (household-scoped) ──
 
 @app.route("/api/list")
