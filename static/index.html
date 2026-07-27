@@ -119,7 +119,25 @@ body.has-ads .visit-toast, body.has-ads .toast { bottom: 115px; }
 body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toast, body.has-no-ads .toast { bottom: 30px; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
+<style>
+.active-store-filter {
+  background-color: var(--green) !important;
+  color: white !important;
+}
+.active-store-filter .count {
+  color: #e0f2fe !important;
+}
+</style>
 </head>
+<style>
+.active-store-filter {
+  background-color: var(--green) !important;
+  color: white !important;
+}
+.active-store-filter .count {
+  color: #e0f2fe !important;
+}
+</style>
 </head>
 <body>
 <div class="header">
@@ -286,6 +304,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 </div>
 
 <script>
+let currentStoreFilterId = null;
 function toggleBurger() {
   document.getElementById("burgerMenu").classList.toggle("show");
   document.getElementById("burgerOverlay").classList.toggle("show");
@@ -361,8 +380,16 @@ function renderHome() {
   }
   
   const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
-  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+s.name+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
-  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
+  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn '+(currentStoreFilterId === s.id ? 'active-store-filter' : '')+'" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
+  $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{
+    const sid = parseInt(b.dataset.id);
+    currentStoreFilterId = (currentStoreFilterId === sid) ? null : sid;
+    renderHome();
+  }));
+  
+  if (currentStoreFilterId) {
+    filteredList = filteredList.filter(i => i.store_id === currentStoreFilterId);
+  }
 
   const storeMap={}; stores.forEach(s=>{storeMap[s.id]=s.name;});
   
@@ -503,8 +530,8 @@ function renderHome() {
 
 async function openStore(sid) {
   currentStore=stores.find(s=>s.id===sid);
-  $('#headerTitle').textContent=currentStore.name;
-  if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
+  $('#headerTitle').textContent='Add to ' + currentStore.name;
+  if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   try {
@@ -558,14 +585,17 @@ function renderCatalog(filter) {
 
   for (const cat of catOrder) {
     if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
-    html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i =>
-      '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); font-size:14px;'+(onList.has(i.name.toLowerCase())?' border-color:var(--green); background:#e8f5e9; color:var(--green-dark); font-weight:600;':'')+'">'+
-        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+i.name+'" style="flex:1; cursor:pointer; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+
-          (onList.has(i.name.toLowerCase())?'✓ ':'')+i.name+
+    html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i => {
+      const isAdded = onList.has(i.name.toLowerCase());
+      return '<div class="catalog-item-card" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:10px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.6' : '1') + ';">'+
+        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:8px;">'+
+          escapeHtml(i.name) + 
+          (isAdded ? '<span style="font-size:10px; color:var(--muted); background:#f0f4ed; padding:2px 6px; border-radius:6px; font-weight:600;">✓ On List</span>' : '') +
         '</div>'+
-        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+i.name+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
-      '</div>'
-    ).join('');
+        (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; flex-shrink:0;">+ Add</button>') +
+        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+escapeHtml(i.name)+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+      '</div>';
+    }).join('');
   }
   if(!html&&!filter) html='<div class="empty-state" style="grid-column:1/-1"><div class="emoji">📝</div>Search to add your first item</div>';
   $('#catalogItems').innerHTML=html;
@@ -622,8 +652,8 @@ $('#btnRenameStore').addEventListener('click',async()=>{
     if(!r.ok){toast('Error renaming store');return;}
     toast('✅ Renamed to '+newName.trim());
     currentStore.name=newName.trim();
-    $('#headerTitle').textContent=currentStore.name;
-    if($('#catalogStoreName')) $('#catalogStoreName').textContent=currentStore.name;
+    $('#headerTitle').textContent='Add to ' + currentStore.name;
+    if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
     loadData();
   }catch(err){toast('Network error');}
 });
