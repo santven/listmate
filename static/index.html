@@ -1751,21 +1751,6 @@ async function deleteSavedRecipe(id) {
           } catch (e) {
             console.error("Camera permission error:", e);
           }
-        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            stream.getTracks().forEach(t => t.stop());
-          } catch (err) {
-            console.warn("Environment camera not found or denied:", err);
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-              stream.getTracks().forEach(t => t.stop());
-            } catch (fallbackErr) {
-              console.error("Camera permission error:", fallbackErr);
-              toast(`Camera access issue: ${fallbackErr.name} - ${fallbackErr.message}. Please allow access.`);
-              return;
-            }
-          }
         }
         
         barcodeModal.style.display = 'flex';
@@ -1798,7 +1783,7 @@ async function deleteSavedRecipe(id) {
             }
           } catch (fallbackErr) {
             console.error("Error starting scanner:", fallbackErr);
-            toast("Camera access denied or unavailable.");
+            toast(`Camera access denied. Please allow it in settings. (${fallbackErr.name})`);
             closeScanner();
           }
         }
