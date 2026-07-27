@@ -706,6 +706,48 @@ register_auth_routes(app)
 
 # ── stores (household-scoped) ──
 
+
+
+
+@app.route("/api/init")
+@require_user
+def init_data():
+    db = get_db()
+    hh = _hh()
+    try:
+        stores = db.execute("SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)).fetchall()
+        list_items = db.execute('''
+            SELECT l.*, s.name as store_name, s.category_order as store_category_order
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id AND s.household_id = ?
+            WHERE l.household_id = ?
+            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+        ''', (hh, hh)).fetchall()
+        recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hh,)).fetchall()
+        
+        recipes = []
+        import json
+        for r in recipes_rows:
+            rec = dict(r)
+            try: rec["dietary_tags"] = json.loads(rec.get("dietary_tags") or "[]")
+            except Exception: rec["dietary_tags"] = []
+            try: rec["instructions"] = json.loads(rec.get("instructions") or "[]")
+            except Exception: rec["instructions"] = []
+            try: rec["ingredients"] = json.loads(rec.get("ingredients") or "[]")
+            except Exception: rec["ingredients"] = []
+            recipes.append(rec)
+
+        return jsonify({
+            "stores": [dict(s) for s in stores],
+            "list": [dict(r) for r in list_items],
+            "recipes": recipes
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
 @app.route("/api/stores")
 @require_user
 def list_stores():

@@ -342,12 +342,23 @@ return true;
 
 let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
 async function loadData() {
-  const [s, l, r] = await Promise.all([
-    fetch(API+'/stores').then(r=>r.json()).catch(e=>[]),
-    fetch(API+'/list').then(r=>r.json()).catch(e=>[]),
-    fetch(API+'/recipes').then(r=>r.json()).catch(e=>[])
-  ]);
-  stores=s; list=l; recipes=r.recipes || []; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
+  let s, l, r_recipes;
+  try {
+    const initData = await fetch(API+'/init').then(r=>r.json());
+    if (initData.stores) {
+      s = initData.stores;
+      l = initData.list;
+      r_recipes = initData.recipes;
+    } else { throw new Error('fallback'); }
+  } catch (err) {
+    const [s_res, l_res, r_res] = await Promise.all([
+      fetch(API+'/stores').then(r=>r.json()).catch(e=>[]),
+      fetch(API+'/list').then(r=>r.json()).catch(e=>[]),
+      fetch(API+'/recipes').then(r=>r.json()).catch(e=>[])
+    ]);
+    s = s_res; l = l_res; r_recipes = r_res.recipes || [];
+  }
+  stores=s||[]; list=l||[]; recipes=r_recipes||[]; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
   
   const sFilter = $('#storeFilter');
   if (sFilter) {
@@ -1705,6 +1716,7 @@ async function deleteSavedRecipe(id) {
   </div>
 
 
+  <input type="file" id="barcodeFallbackInput" accept="image/*" capture="environment" style="display:none;">
   <script>
     // Barcode Scanner Logic
     let html5QrcodeScanner = null;
@@ -1843,6 +1855,25 @@ async function deleteSavedRecipe(id) {
     function onScanFailure(error) {
       // Ignore
     }
+
+    const barcodeFallbackInput = document.getElementById('barcodeFallbackInput');
+    if (barcodeFallbackInput) {
+      barcodeFallbackInput.addEventListener('change', async (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          const file = e.target.files[0];
+          try {
+            toast("Scanning image for barcode...");
+            if (!html5QrcodeScanner) html5QrcodeScanner = new Html5Qrcode("reader");
+            const decodedText = await html5QrcodeScanner.scanFile(file, true);
+            onScanSuccess(decodedText);
+          } catch (err) {
+            toast("No barcode found in image.");
+          }
+          e.target.value = ''; // Reset
+        }
+      });
+    }
+
 
     // FAB listener
     document.addEventListener('DOMContentLoaded', () => {
