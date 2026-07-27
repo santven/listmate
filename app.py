@@ -299,8 +299,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             "1. Ingredient `name` must be a clean, base grocery item WITHOUT preparation states or adjectives (e.g., use 'Garlic', not 'Minced garlic'; use 'Cheese', not 'Grated cheese'). "
             "2. Move preparation details (like grated, minced, chopped) to the `amount` field (e.g. amount: '2 cloves, minced') or instructions. "
             "3. DO NOT combine ingredients. Instead of 'Salt and pepper', list 'Salt' and 'Black pepper' as two separate items. "
-            "Produce ONLY a valid JSON object matching this structure with no markdown formatting:
-"
+            "Produce ONLY a valid JSON object matching this structure with no markdown formatting:\n"
             "{\n"
             '  "title": "Recipe Name",\n'
             '  "description": "Short description of the dish",\n'
