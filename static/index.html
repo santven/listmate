@@ -73,7 +73,8 @@
   .catalog-search { margin-bottom: 14px; }
   .catalog-search input { width: 100%; padding: 14px 16px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); outline: none; }
   .catalog-search input:focus { border-color: var(--green); }
-  .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .catalog-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 480px) { .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
   .catalog-item { padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; display: flex; align-items: center; justify-content: center; min-height: 44px; word-break: break-word; }
   .catalog-item:hover, .catalog-item:active { border-color: var(--green); background: #f5faf3; }
   .catalog-item.on-list { border-color: var(--green); background: #e8f5e9; color: var(--green-dark); font-weight: 500; }
@@ -87,7 +88,7 @@
   .toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 16px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .toast.show { opacity: 1; }
 
-  @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; } .header-meta .user { display: inline; } }
+  @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; } .header-meta .user { display: inline; } }
 
   .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
   .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 100; min-width: 160px; overflow: hidden; }
@@ -587,13 +588,15 @@ function renderCatalog(filter) {
     html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i => {
       const isAdded = onList.has(i.name.toLowerCase().trim());
       const itemNameEsc = escapeHtml(i.name);
-      return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:10px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.75' : '1') + '; min-width:0;">'+
-        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; display:flex; align-items:center; gap:6px; overflow:hidden;" title="' + itemNameEsc + '">'+
-          '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; font-weight:500;">' + itemNameEsc + '</span>' +
-          (isAdded ? '<span style="font-size:10px; color:#2e6b45; background:#e8f4ed; padding:2px 6px; border-radius:6px; font-weight:600; flex-shrink:0; white-space:nowrap;">✓ On List</span>' : '') +
+      return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
+        '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; display:flex; flex-direction:column; gap:4px; overflow:hidden;" title="' + itemNameEsc + '">'+
+          '<span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; line-height:1.3; font-weight:500; font-size:14px; color:var(--text);">' + itemNameEsc + '</span>' +
+          (isAdded ? '<span style="font-size:10px; color:#2e6b45; background:#e8f4ed; padding:2px 6px; border-radius:6px; font-weight:600; width:fit-content; white-space:nowrap;">✓ On List</span>' : '') +
         '</div>'+
-        (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; flex-shrink:0; white-space:nowrap;">+ Add</button>') +
-        '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+itemNameEsc+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+        '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+          (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; white-space:nowrap;">+ Add</button>') +
+          '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+itemNameEsc+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
