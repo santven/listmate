@@ -1718,6 +1718,11 @@ async function deleteSavedRecipe(id) {
       <h3 style="color:#fff; font-size:18px; margin:0;">Scan Barcode</h3>
       <p style="color:#bbb; font-size:14px; margin:0;">Position barcode inside the frame</p>
       <div id="reader" style="width:100%; min-height:250px; background:#000; border-radius:16px; overflow:hidden; border:2px solid #5ebe7e; box-shadow: 0 8px 32px rgba(0,0,0,0.3);"></div>
+      <div id="cameraFallbackContainer" style="display:none; flex-direction:column; gap:12px; align-items:center; background:#222; padding:20px; border-radius:12px;">
+        <p style="color:#ffb74d; font-size:14px; margin:0;">Camera access denied by browser or PWA. You can take a photo instead.</p>
+        <label for="cameraFileInput" style="padding:14px 24px; background:#5ebe7e; color:#fff; border-radius:12px; font-weight:600; cursor:pointer; width:100%; box-sizing:border-box;">Take Photo</label>
+        <input type="file" id="cameraFileInput" accept="image/*" capture="environment" style="display:none;">
+      </div>
       <button id="btnCancelScan" style="margin-top:8px; padding:14px 24px; background:#333; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
@@ -1730,7 +1735,30 @@ async function deleteSavedRecipe(id) {
     const btnScanBarcode = document.getElementById('btnScanBarcode');
     const btnCancelScan = document.getElementById('btnCancelScan');
     const barcodeModal = document.getElementById('barcodeModal');
+    const cameraFileInput = document.getElementById('cameraFileInput');
+    const cameraFallbackContainer = document.getElementById('cameraFallbackContainer');
+    const readerDiv = document.getElementById('reader');
     
+    if (cameraFileInput) {
+      cameraFileInput.addEventListener('change', async (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          const file = e.target.files[0];
+          try {
+            if (!html5QrcodeScanner) {
+              html5QrcodeScanner = new Html5Qrcode("reader");
+            }
+            const result = await html5QrcodeScanner.scanFile(file, true);
+            onScanSuccess(result);
+          } catch (err) {
+            console.error("Error scanning file:", err);
+            toast("Could not read barcode from image. Please try again.");
+          }
+          // Reset file input so it can trigger again
+          e.target.value = '';
+        }
+      });
+    }
+
     if (btnScanBarcode) {
       btnScanBarcode.addEventListener('click', async () => {
         if (!currentStore) {
@@ -1783,8 +1811,9 @@ async function deleteSavedRecipe(id) {
             }
           } catch (fallbackErr) {
             console.error("Error starting scanner:", fallbackErr);
-            toast(`Camera access denied. Please allow it in settings. (${fallbackErr.name})`);
-            closeScanner();
+            toast(`Camera access denied. Please use fallback. (${fallbackErr.name})`);
+            if (readerDiv) readerDiv.style.display = 'none';
+            if (cameraFallbackContainer) cameraFallbackContainer.style.display = 'flex';
           }
         }
       });
@@ -1796,6 +1825,8 @@ async function deleteSavedRecipe(id) {
 
     async function closeScanner() {
       barcodeModal.style.display = 'none';
+      if (readerDiv) readerDiv.style.display = 'block';
+      if (cameraFallbackContainer) cameraFallbackContainer.style.display = 'none';
       if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
         try {
           await html5QrcodeScanner.stop();
