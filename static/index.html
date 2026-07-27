@@ -338,6 +338,17 @@ let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
 async function loadData() {
   let s, l, r_recipes;
   try {
+    const cached = localStorage.getItem('listmate_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      stores = parsed.stores || [];
+      list = parsed.list || [];
+      recipes = parsed.recipes || [];
+      renderHome();
+      loadSuggestions();
+    }
+  } catch(e) {}
+  try {
     const initData = await fetch(API+'/init').then(r=>r.json());
     if (initData.stores) {
       s = initData.stores;
@@ -352,7 +363,9 @@ async function loadData() {
     ]);
     s = s_res; l = l_res; r_recipes = r_res.recipes || [];
   }
-  stores=s||[]; list=l||[]; recipes=r_recipes||[]; console.log("DEBUG: recipes:", recipes); renderHome(); loadSuggestions();
+  stores=s||[]; list=l||[]; recipes=r_recipes||[]; 
+  localStorage.setItem('listmate_cache', JSON.stringify({stores, list, recipes}));
+  renderHome(); loadSuggestions();
   
   const sFilter = $('#storeFilter');
   if (sFilter) {
@@ -904,7 +917,7 @@ async function moveItem(targetStoreId){
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 $('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#moveModal').classList.remove('active');});
 
-(async()=>{if(await checkAuth())loadData();})();
+loadData(); checkAuth();
 
 // ---- Share / Copy to Text ----
 function isMobile() {

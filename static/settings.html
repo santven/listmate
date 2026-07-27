@@ -165,12 +165,12 @@ let householdData = null;
   if (!cfg.user) { window.location.href = '/login'; return; }
 
   // Load household data
-  await loadHousehold();
+  Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
   // Load premium plan
-  await loadPremium();
+  
   // Load dietary preferences
-  await loadDietary();
-    await loadLocation();
+  
+    
 })();
 
 async function loadHousehold() {
@@ -248,7 +248,7 @@ async function addMember() {
          <input type="text" value="${link}" readonly style="width:100%;font-size:11px;padding:4px;margin:4px 0;border:1px solid #ddd;border-radius:4px;" onclick="this.select()">
          <br><small>Copy this link and send it to ${email}</small>`;
       document.getElementById('newMemberEmail').value = '';
-      await loadHousehold();
+      Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
     } else {
       document.getElementById('addError').style.display = 'block';
       document.getElementById('addError').textContent = data.error || 'Could not add member.';
