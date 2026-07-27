@@ -85,6 +85,15 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
             """CREATE INDEX IF NOT EXISTS idx_si_store_name ON store_items(household_id, store_id, name)""",
+            """CREATE TABLE IF NOT EXISTS household_barcodes (
+                id SERIAL PRIMARY KEY,
+                household_id INTEGER NOT NULL DEFAULT 1,
+                barcode TEXT NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT '',
+                quantity TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE INDEX IF NOT EXISTS idx_hb_hh_barcode ON household_barcodes(household_id, barcode)""",
         ]
         for stmt in store_tables:
             try: authmod._exec(stmt)
@@ -939,35 +948,83 @@ def update_store_item(store_id, item_id):
 
 
 # ── Barcode Lookup ──
-def _lookup_barcode_info(raw_barcode):
+def _lookup_barcode_info(raw_barcode, hhid=None):
     bc = raw_barcode.strip()
     if not bc:
         return None
 
-    variations = [bc]
-    if bc.startswith("00"):
-        variations.extend([bc[2:], bc[1:]])
-    elif bc.startswith("0"):
-        variations.extend([bc[1:], "00" + bc[1:]])
-    elif len(bc) == 12:
-        variations.append("0" + bc)
+    # 1. Check household barcode memory first if hhid provided
+    if hhid:
+        try:
+            db = get_db()
+            unpadded = bc.lstrip("0") or "0"
+            row = db.execute(
+                "SELECT name, category, quantity FROM household_barcodes WHERE household_id = ? AND (barcode = ? OR barcode = ?) ORDER BY id DESC LIMIT 1",
+                (hhid, bc, unpadded),
+            ).fetchone()
+            db.close()
+            if row:
+                return {
+                    "barcode": bc,
+                    "name": row["name"],
+                    "category": row["category"] or "General",
+                    "quantity": row["quantity"] or "1",
+                    "source": "household"
+                }
+        except Exception:
+            pass
+
+    # 2. Get barcode variations (GTIN-14, GTIN-13, UPCA-12, GTIN-8, unpadded)
+    unpadded = bc.lstrip("0") or "0"
+    variations = [bc, unpadded]
+    if len(unpadded) <= 12:
+        variations.append(unpadded.zfill(12))
+    if len(unpadded) <= 13:
+        variations.append(unpadded.zfill(13))
+    if len(unpadded) <= 14:
+        variations.append(unpadded.zfill(14))
 
     seen = set()
     unique_variations = []
     for v in variations:
-        if v not in seen:
+        if v and v not in seen:
             seen.add(v)
             unique_variations.append(v)
 
-    product_data = None
+    # 3. Determine country preference from household setting
+    user_country = ""
+    if hhid:
+        try:
+            hh = authmod._one(f"SELECT country FROM {authmod._HH} WHERE id = ?", (hhid,))
+            if hh and hh.get("country"):
+                user_country = str(hh["country"]).strip().lower()
+        except Exception:
+            pass
+
+    if any(c in user_country for c in ["us", "united states", "usa"]):
+        domains = [
+            "us.openfoodfacts.org",
+            "world.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
+    elif any(c in user_country for c in ["in", "india"]):
+        domains = [
+            "in.openfoodfacts.org",
+            "world.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
+    else:
+        domains = [
+            "world.openfoodfacts.org",
+            "us.openfoodfacts.org",
+            "world.openbeautyfacts.org",
+            "world.openproductsfacts.org"
+        ]
 
     headers = {"User-Agent": "ListMate/1.0 (contact@listmate.app)"}
-
-    domains = [
-        "world.openfoodfacts.org",
-        "world.openbeautyfacts.org",
-        "world.openproductsfacts.org"
-    ]
+    product_data = None
 
     for v in unique_variations:
         for domain in domains:
@@ -1040,6 +1097,19 @@ def _lookup_barcode_info(raw_barcode):
     if not cat:
         cat = "General"
 
+    # Save to household barcodes cache if hhid present
+    if hhid and title:
+        try:
+            db = get_db()
+            db.execute(
+                "INSERT INTO household_barcodes (household_id, barcode, name, category, quantity) VALUES (?, ?, ?, ?, ?)",
+                (hhid, bc, title, cat, quantity),
+            )
+            db.commit()
+            db.close()
+        except Exception:
+            pass
+
     return {
         "barcode": bc,
         "name": title,
@@ -1058,7 +1128,8 @@ def barcode_lookup():
     if not barcode:
         return jsonify({"error": "barcode required"}), 400
 
-    info = _lookup_barcode_info(barcode)
+    hhid = _hh()
+    info = _lookup_barcode_info(barcode, hhid=hhid)
 
     if info:
         name = info["name"]
@@ -1070,14 +1141,14 @@ def barcode_lookup():
             try:
                 store = db.execute(
                     "SELECT id FROM stores WHERE id = ? AND household_id = ?",
-                    (store_id, _hh()),
+                    (store_id, hhid),
                 ).fetchone()
                 if not store:
                     return jsonify({"error": "store not found"}), 404
 
                 existing = db.execute(
                     "SELECT id, quantity FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
-                    (store_id, _hh(), name),
+                    (store_id, hhid, name),
                 ).fetchone()
 
                 already_on_list = False
@@ -1089,24 +1160,24 @@ def barcode_lookup():
                 else:
                     db.execute(
                         "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
-                        (_hh(), store_id, name, category, quantity, get_display_name()),
+                        (hhid, store_id, name, category, quantity, get_display_name()),
                     )
                     row = db.execute(
                         "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
-                        (store_id, _hh(), name)
+                        (store_id, hhid, name)
                     ).fetchone()
                     if row:
                         item_id = row["id"]
 
                 cat_row = db.execute(
                     "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
-                    (store_id, _hh(), name),
+                    (store_id, hhid, name),
                 ).fetchone()
                 if not cat_row:
                     try:
                         db.execute(
                             "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-                            (_hh(), store_id, name, category),
+                            (hhid, store_id, name, category),
                         )
                     except Exception:
                         pass
@@ -1142,7 +1213,84 @@ def barcode_lookup():
     return jsonify({"ok": True, "found": False, "barcode": barcode})
 
 
-# ── grocery list (household-scoped) ──
+@app.route("/api/barcode/save", methods=["POST"])
+@require_user
+def barcode_save():
+    data = request.get_json(silent=True) or {}
+    barcode = (data.get("barcode") or "").strip()
+    name = (data.get("name") or "").strip()
+    quantity = (data.get("quantity") or "1").strip()
+    store_id = data.get("store_id")
+
+    if not barcode or not name:
+        return jsonify({"error": "barcode and name required"}), 400
+
+    category = categorize(name) or "General"
+    hhid = _hh()
+
+    db = get_db()
+    try:
+        try:
+            db.execute(
+                "INSERT INTO household_barcodes (household_id, barcode, name, category, quantity) VALUES (?, ?, ?, ?, ?)",
+                (hhid, barcode, name, category, quantity),
+            )
+        except Exception:
+            pass
+
+        already_on_list = False
+        item_id = 0
+
+        if store_id:
+            existing = db.execute(
+                "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                (store_id, hhid, name),
+            ).fetchone()
+
+            if existing:
+                already_on_list = True
+                item_id = existing["id"]
+            else:
+                db.execute(
+                    "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    (hhid, store_id, name, category, quantity, get_display_name()),
+                )
+                row = db.execute(
+                    "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+                    (store_id, hhid, name)
+                ).fetchone()
+                if row:
+                    item_id = row["id"]
+
+            cat_row = db.execute(
+                "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                (store_id, hhid, name),
+            ).fetchone()
+            if not cat_row:
+                try:
+                    db.execute(
+                        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                        (hhid, store_id, name, category),
+                    )
+                except Exception:
+                    pass
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "already_on_list": already_on_list,
+            "item_id": item_id,
+            "name": name,
+            "category": category,
+            "quantity": quantity
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
 
 @app.route("/api/list")
 @require_user
