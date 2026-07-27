@@ -246,10 +246,11 @@ def _generate_fallback_recipe(prompt, dietary_restrictions=""):
         "dietary_tags": diet_tags,
         "ingredients": [
             {"name": f"Main ingredient for {title}", "amount": "1 lb", "category": "Produce"},
-            {"name": "Cooking Oil / Butter", "amount": "2 tbsp", "category": "Pantry"},
-            {"name": "Garlic & Ginger paste", "amount": "1 tbsp", "category": "Produce"},
-            {"name": "Onion & Tomato base", "amount": "2 medium", "category": "Produce"},
-            {"name": "Salt & Spices to taste", "amount": "1 tsp", "category": "Spices"}
+            {"name": "Cooking Oil", "amount": "2 tbsp", "category": "Pantry"},
+            {"name": "Garlic", "amount": "1 tbsp, minced", "category": "Produce"},
+            {"name": "Onion", "amount": "1 medium, chopped", "category": "Produce"},
+            {"name": "Salt", "amount": "to taste", "category": "Spices"},
+            {"name": "Black pepper", "amount": "to taste", "category": "Spices"}
         ],
         "instructions": [
             f"Prepare all fresh ingredients for {title}.",
@@ -294,7 +295,12 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             "You are a professional chef and meal planner assistant. "
             "Your job is to generate a detailed, delicious, properly formatted recipe in JSON based on the user request. "
             "Always respect any specified dietary restrictions. "
-            "Produce ONLY a valid JSON object matching this structure with no markdown formatting:\n"
+            "CRITICAL INGREDIENT FORMATTING RULES: "
+            "1. Ingredient `name` must be a clean, base grocery item WITHOUT preparation states or adjectives (e.g., use 'Garlic', not 'Minced garlic'; use 'Cheese', not 'Grated cheese'). "
+            "2. Move preparation details (like grated, minced, chopped) to the `amount` field (e.g. amount: '2 cloves, minced') or instructions. "
+            "3. DO NOT combine ingredients. Instead of 'Salt and pepper', list 'Salt' and 'Black pepper' as two separate items. "
+            "Produce ONLY a valid JSON object matching this structure with no markdown formatting:
+"
             "{\n"
             '  "title": "Recipe Name",\n'
             '  "description": "Short description of the dish",\n'
