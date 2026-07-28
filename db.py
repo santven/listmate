@@ -25,9 +25,20 @@ def _add_column_if_missing(db, table, column, coldef):
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA journal_mode=WAL")
+    try:
+        db = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.DatabaseError:
+        print(f"[init_db] {DB_PATH} is corrupt, recreating clean database...")
+        for ext in ['', '-wal', '-shm']:
+            p = DB_PATH + ext
+            if os.path.exists(p):
+                try: os.remove(p)
+                except Exception: pass
+        db = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
 
     # Create legacy tables if they don't exist
