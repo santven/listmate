@@ -36,6 +36,7 @@
   .store-group-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; padding: 6px 4px; border-bottom: 1.5px solid var(--border); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
   .cat-header { font-size: 12px; font-weight: 500; color: var(--muted); padding: 12px 4px 4px; border-bottom: 1px dotted var(--border); margin-bottom: 4px; }
   .cat-header:first-child { margin-top: -4px; }
+  .date-subheader { font-size: 11px; font-weight: 600; color: var(--muted); padding: 8px 4px 4px 4px; border-bottom: 1px dashed var(--border); margin-bottom: 6px; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
   .store-group-title .shop-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--green); border-radius: 8px; color: var(--green); cursor: pointer; background: none; font-weight: 500; }
   .item-row { display: flex; align-items: center; padding: 12px 10px; background: var(--card); border-radius: 10px; margin-bottom: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); gap: 10px; }
   .item-row.purchased { opacity: 0.45; }
@@ -327,6 +328,44 @@ function toggleBurger() {
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
+function getItemDateInfo(item) {
+  const rawDate = item.purchased_at || item.added_at;
+  if (!rawDate) {
+    return { key: '0000-00-00', label: 'Earlier' };
+  }
+  let dateStr = String(rawDate).trim();
+  if (dateStr.includes(' ') && !dateStr.includes('T')) {
+    dateStr = dateStr.replace(' ', 'T');
+  }
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) {
+    return { key: '0000-00-00', label: 'Earlier' };
+  }
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const key = `${year}-${month}-${day}`;
+
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+  let label = '';
+  if (key === todayKey) {
+    label = 'Today';
+  } else if (key === yesterdayKey) {
+    label = 'Yesterday';
+  } else {
+    label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  return { key, label };
+}
+
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
@@ -614,53 +653,87 @@ function renderHome() {
     const store = stores.find(s => s.id === storeId);
     const storeName = (store && store.name) || (items[0] && items[0].store_name) || '';
     
-    let aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
-    if (!aisleOrderStr) {
-      if (/patel|indiaco|indian|desi|bazar|apna/i.test(storeName)) {
-        aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
-      } else {
-        aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
+    let itemsHtml = '';
+    if (isPurchased) {
+      const dateMap = {};
+      items.forEach(i => {
+        const info = getItemDateInfo(i);
+        if (!dateMap[info.key]) {
+          dateMap[info.key] = { label: info.label, items: [] };
+        }
+        dateMap[info.key].items.push(i);
+      });
+
+      const sortedDateKeys = Object.keys(dateMap).sort((a, b) => b.localeCompare(a));
+
+      itemsHtml = sortedDateKeys.map(dateKey => {
+        const group = dateMap[dateKey];
+        const alphabetizedItems = [...group.items].sort((a, b) =>
+          (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+        );
+
+        const subheaderHtml = '<div class="date-subheader">📅 ' + escapeHtml(group.label) + '</div>';
+
+        const groupRowsHtml = alphabetizedItems.map(i => {
+          return '<div class="item-row purchased">' +
+            '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
+            '<div class="item-name">' + escapeHtml(i.name) + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + escapeHtml(i.quantity) + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + escapeHtml(i.recipe_tag) + '</span>' : '') + '</div>' +
+            '<div class="item-meta">✓ ' + escapeHtml(i.purchased_by || '') + '</div>' +
+            '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
+            '</div>';
+        }).join('');
+
+        return subheaderHtml + groupRowsHtml;
+      }).join('');
+    } else {
+      let aisleOrderStr = (store && store.category_order) || (items[0] && items[0].store_category_order) || '';
+      if (!aisleOrderStr) {
+        if (/patel|indiaco|indian|desi|bazar|apna/i.test(storeName)) {
+          aisleOrderStr = 'Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
+        } else {
+          aisleOrderStr = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household,Health & Personal Care';
+        }
       }
+      const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
+
+      const sortedItems = [...items].sort((a, b) => {
+        if (a.purchased !== b.purchased) return a.purchased ? 1 : -1;
+
+        const catA = (a.category || 'General').trim();
+        const catB = (b.category || 'General').trim();
+
+        let idxA = aisleOrder.findIndex(c => c.toLowerCase() === catA.toLowerCase());
+        let idxB = aisleOrder.findIndex(c => c.toLowerCase() === catB.toLowerCase());
+
+        if (idxA === -1) {
+          if (/household|cleaning|paper/i.test(catA)) idxA = 998;
+          else if (/general/i.test(catA)) idxA = 999;
+          else idxA = 500;
+        }
+        if (idxB === -1) {
+          if (/household|cleaning|paper/i.test(catB)) idxB = 998;
+          else if (/general/i.test(catB)) idxB = 999;
+          else idxB = 500;
+        }
+
+        if (idxA !== idxB) return idxA - idxB;
+
+        const catComp = catA.localeCompare(catB);
+        if (catComp !== 0) return catComp;
+
+        return a.name.localeCompare(b.name);
+      });
+
+      itemsHtml = sortedItems.map(i => {
+        return '<div class="item-row' + (i.purchased ? ' purchased' : '') + '">' +
+          '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
+          '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
+          '<div class="item-meta">' + (i.purchased ? '✓ ' + i.purchased_by : 'by ' + i.added_by) + '</div>' +
+          (i.purchased ? '' : '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store">⇄</button>') +
+          '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
+          '</div>';
+      }).join('');
     }
-    const aisleOrder = aisleOrderStr.split(',').map(c => c.trim()).filter(Boolean);
-
-    const sortedItems = [...items].sort((a, b) => {
-      if (a.purchased !== b.purchased) return a.purchased ? 1 : -1;
-
-      const catA = (a.category || 'General').trim();
-      const catB = (b.category || 'General').trim();
-
-      let idxA = aisleOrder.findIndex(c => c.toLowerCase() === catA.toLowerCase());
-      let idxB = aisleOrder.findIndex(c => c.toLowerCase() === catB.toLowerCase());
-
-      if (idxA === -1) {
-        if (/household|cleaning|paper/i.test(catA)) idxA = 998;
-        else if (/general/i.test(catA)) idxA = 999;
-        else idxA = 500;
-      }
-      if (idxB === -1) {
-        if (/household|cleaning|paper/i.test(catB)) idxB = 998;
-        else if (/general/i.test(catB)) idxB = 999;
-        else idxB = 500;
-      }
-
-      if (idxA !== idxB) return idxA - idxB;
-
-      const catComp = catA.localeCompare(catB);
-      if (catComp !== 0) return catComp;
-
-      return a.name.localeCompare(b.name);
-    });
-
-    const itemsHtml = sortedItems.map(i => {
-      return '<div class="item-row' + (i.purchased ? ' purchased' : '') + '">' +
-        '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
-        '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
-        '<div class="item-meta">' + (i.purchased ? '✓ ' + i.purchased_by : 'by ' + i.added_by) + '</div>' +
-        (i.purchased ? '' : '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store">⇄</button>') +
-        '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
-        '</div>';
-    }).join('');
 
     return '<div class="store-group">' +
       '<div class="store-group-title">' + storeMap[storeId] + ' <span>' + items.length + '</span>' +
@@ -677,7 +750,7 @@ function renderHome() {
   }
   // Purchased items at bottom, collapsed
   if(Object.keys(purchasedGroups).length > 0) {
-    html += '<div class="store-group purchased-section"><div class="store-group-title" id="purchasedToggle" style="cursor:pointer;opacity:0.7;">✅ Completed <span>'+purchasedItems.length+'</span></div>';
+    html += '<div class="store-group purchased-section"><div class="store-group-title" id="purchasedToggle" style="cursor:pointer;opacity:0.7;">✅ Recent Purchases <span>'+purchasedItems.length+'</span></div>';
     html += '<div id="purchasedItems" style="display:none;">';
     for(const [sid,items] of Object.entries(purchasedGroups)) {
       html += renderGroup(parseInt(sid), items, true);
