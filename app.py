@@ -1774,10 +1774,6 @@ def get_suggestions():
     finally:
         db.close()
 
-if __name__ == "__main__":
-    from db import init_db
-    init_db()
-    app.run(host="0.0.0.0", port=3000, debug=True)
 # ---- Google OAuth (server-side redirect flow) ----
 import secrets as _secrets
 import urllib.parse as _urlparse
@@ -1896,5 +1892,10 @@ def auth_google_callback():
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         return '<h3>Login failed</h3><p>Server error: ' + str(exc) + '</p><a href="/login">Try again</a>', 500
+
+if __name__ == "__main__":
+    from db import init_db
+    init_db()
+    app.run(host="0.0.0.0", port=3000, debug=True)
 
 

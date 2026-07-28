@@ -191,8 +191,18 @@ else:
     AUTH_DB_PATH = os.environ.get("AUTH_DB", "listmate_auth.db")
 
     def _connect():
-        db = sqlite3.connect(AUTH_DB_PATH)
-        db.execute("PRAGMA journal_mode=WAL")
+        try:
+            db = sqlite3.connect(AUTH_DB_PATH)
+            db.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.DatabaseError:
+            print(f"[auth] {AUTH_DB_PATH} is corrupt, recreating clean database...")
+            for ext in ['', '-wal', '-shm']:
+                p = AUTH_DB_PATH + ext
+                if os.path.exists(p):
+                    try: os.remove(p)
+                    except Exception: pass
+            db = sqlite3.connect(AUTH_DB_PATH)
+            db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA foreign_keys=ON")
         return db
 
