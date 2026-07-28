@@ -449,9 +449,15 @@ async function checkAuth() {
     // RevenueCat Init
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
         try {
-            await window.Capacitor.Plugins.Purchases.configure({ apiKey: "test_IiwuzQXuzucZlwihcMHIsqAMwby" });
-            if (cfg && cfg.user_info && cfg.user_info.id) {
-                await window.Capacitor.Plugins.Purchases.logIn({ appUserID: cfg.user_info.id.toString() });
+            const rcKey = (cfg && cfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
+            if (isNative && rcKey.startsWith('test_')) {
+                console.warn("RevenueCat SDK skipped: Test API key cannot be used in native release builds. Please set REVENUECAT_PUBLIC_KEY with your Google Play public key (goog_...).");
+            } else {
+                await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+                if (cfg && cfg.user_info && cfg.user_info.id) {
+                    await window.Capacitor.Plugins.Purchases.logIn({ appUserID: cfg.user_info.id.toString() });
+                }
             }
         } catch(e) { console.error("RC Init error:", e); }
     }
@@ -1500,6 +1506,14 @@ function closePremiumModal() {
 async function showPaywall() {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
         try {
+            const cfg = window.currentCfg || {};
+            const rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
+            if (isNative && rcKey.startsWith('test_')) {
+                toast('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
+                return;
+            }
+            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             if (offerings.current && offerings.current.availablePackages.length > 0) {
                 const packageToBuy = offerings.current.availablePackages[0];
