@@ -142,6 +142,10 @@ def signup_page():
 def privacy_page():
     return send_from_directory("static", "privacy.html")
 
+@app.route("/terms")
+def terms_page():
+    return send_from_directory("static", "terms.html")
+
 
 @app.route("/settings")
 @require_user
