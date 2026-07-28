@@ -28,6 +28,12 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Inject Staging build flag (if building from staging branch)
+        if: github.ref_name == 'staging'
+        run: |
+          sed -i 's/window.IS_STAGING_BUILD = false;/window.IS_STAGING_BUILD = true;/' static/index.html
+          echo "Injected staging build flag into static/index.html"
+
       - name: Install Capacitor & sync platform
         run: |
           npm ci
