@@ -151,6 +151,8 @@
 </div>
 
 <script>
+function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
 function toggleBurger() {
   document.getElementById("burgerMenu").classList.toggle("show");
   document.getElementById("burgerOverlay").classList.toggle("show");
@@ -187,12 +189,12 @@ async function loadHousehold() {
     const list = document.getElementById('memberList');
     list.innerHTML = members.map(m => `
       <div class="member-row">
-        <div class="member-avatar">${(m.display_name || m.user_id)[0].toUpperCase()}</div>
+        <div class="member-avatar">${escapeHtml((m.display_name || m.user_id)[0].toUpperCase())}</div>
         <div class="member-info">
-          <div class="member-name">${m.display_name}${m.user_id === householdData.current_user_id ? '<span class="you-badge">you</span>' : ''}</div>
-          <div class="member-email">${m.email}</div>
+          <div class="member-name">${escapeHtml(m.display_name)}${m.user_id === householdData.current_user_id ? '<span class="you-badge">you</span>' : ''}</div>
+          <div class="member-email">${escapeHtml(m.email)}</div>
         </div>
-        <div class="member-role">${m.role}</div>
+        <div class="member-role">${escapeHtml(m.role)}</div>
       </div>
     `).join('');
 
@@ -244,9 +246,9 @@ async function addMember() {
       const link = data.invite_link;
       document.getElementById('addSuccess').style.display = 'block';
       document.getElementById('addSuccess').innerHTML = 
-        `<b>Invite link for ${email}:</b><br>
-         <input type="text" value="${link}" readonly style="width:100%;font-size:11px;padding:4px;margin:4px 0;border:1px solid #ddd;border-radius:4px;" onclick="this.select()">
-         <br><small>Copy this link and send it to ${email}</small>`;
+        `<b>Invite link for ${escapeHtml(email)}:</b><br>
+         <input type="text" value="${escapeHtml(link)}" readonly style="width:100%;font-size:11px;padding:4px;margin:4px 0;border:1px solid #ddd;border-radius:4px;" onclick="this.select()">
+         <br><small>Copy this link and send it to ${escapeHtml(email)}</small>`;
       document.getElementById('newMemberEmail').value = '';
       Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
     } else {
