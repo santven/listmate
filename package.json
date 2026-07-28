@@ -4,6 +4,7 @@
   "description": "Store-specific grocery list for households. Know what to buy at every store.",
   "main": "index.js",
   "scripts": {
+    "build": "echo 'No build step required'",
     "dev": "curl -sSL https://bootstrap.pypa.io/get-pip.py | python3 - && python3 -m pip install -r requirements.txt && python3 app.py"
   },
   "repository": {
@@ -19,12 +20,11 @@
   "homepage": "https://github.com/santven/listmate#readme",
   "dependencies": {
     "@capacitor/android": "^8.4.2",
-    "@capacitor/camera": "^8.2.1",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/ios": "^8.4.2",
-    "@capacitor/preferences": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
-    "@capacitor/status-bar": "^8.0.3"
+    "@capacitor/status-bar": "^8.0.3",
+    "jimp": "^1.6.1"
   }
 }

@@ -6,3 +6,5 @@ shared/__pycache__/
 node_modules/
 listmate-upload.keystore
 version.properties
+listmate.db*
+*.log

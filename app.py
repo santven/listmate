@@ -687,6 +687,12 @@ def health():
     })
 
 
+@app.route("/<path:filename>")
+def root_files(filename):
+    if filename in ["sw.js", "manifest.json", "robots.txt"] or filename.startswith("icon-") or filename.endswith(".png"):
+        return send_from_directory("static", filename)
+    return "", 404
+
 @app.route("/")
 @app.route("/index.html")
 def index():
@@ -1542,6 +1548,105 @@ def clear_list():
         )
         db.commit()
         return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route("/api/sync", methods=["POST"])
+@require_user
+def sync_offline_actions():
+    """Sync offline queued actions from client for Pro / Premium users."""
+    data = request.get_json(silent=True) or {}
+    actions = data.get("actions", [])
+    if not isinstance(actions, list):
+        return jsonify({"error": "actions array required"}), 400
+
+    db = get_db()
+    applied_count = 0
+    try:
+        hh_id = _hh()
+        display_name = get_display_name()
+
+        for act in actions:
+            if not isinstance(act, dict):
+                continue
+            act_type = act.get("type")
+            act_data = act.get("data", {})
+
+            if act_type == "add":
+                store_id = act_data.get("store_id")
+                name = (act_data.get("name") or "").strip()
+                quantity = (act_data.get("quantity") or "").strip()
+                if name and store_id:
+                    store = db.execute("SELECT id FROM stores WHERE id = ? AND household_id = ?", (store_id, hh_id)).fetchone()
+                    if store:
+                        existing = db.execute(
+                            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                            (store_id, hh_id, name)
+                        ).fetchone()
+                        if not existing:
+                            cat_row = db.execute(
+                                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                                (store_id, hh_id, name)
+                            ).fetchone()
+                            existing_category = cat_row["category"] if cat_row else categorize(name)
+                            db.execute(
+                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                                (hh_id, store_id, name, existing_category, quantity, display_name)
+                            )
+                            applied_count += 1
+
+            elif act_type == "toggle":
+                item_id = act_data.get("id")
+                if item_id and not str(item_id).startswith("temp_"):
+                    item = db.execute("SELECT * FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id)).fetchone()
+                    if item:
+                        if item["purchased"]:
+                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+                        else:
+                            db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?", (display_name, item_id))
+                        applied_count += 1
+
+            elif act_type == "delete":
+                item_id = act_data.get("id")
+                if item_id and not str(item_id).startswith("temp_"):
+                    db.execute("DELETE FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id))
+                    applied_count += 1
+
+            elif act_type == "quantity":
+                item_id = act_data.get("id")
+                quantity = (act_data.get("quantity") or "").strip()
+                if item_id and not str(item_id).startswith("temp_"):
+                    db.execute("UPDATE list_items SET quantity = ? WHERE id = ? AND household_id = ?", (quantity, item_id, hh_id))
+                    applied_count += 1
+
+            elif act_type == "move":
+                item_id = act_data.get("id")
+                target_store_id = act_data.get("store_id")
+                if item_id and target_store_id and not str(item_id).startswith("temp_"):
+                    db.execute("UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?", (target_store_id, item_id, hh_id))
+                    applied_count += 1
+
+            elif act_type == "clear":
+                db.execute("DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?", (hh_id,))
+                applied_count += 1
+
+        db.commit()
+
+        items = db.execute("""
+            SELECT l.*, s.name as store_name, s.category_order as store_category_order
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id AND s.household_id = ?
+            WHERE l.household_id = ?
+            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+        """, (hh_id, hh_id)).fetchall()
+
+        return jsonify({"ok": True, "synced_count": applied_count, "list": [dict(r) for r in items]})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
