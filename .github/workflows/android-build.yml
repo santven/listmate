@@ -2,7 +2,7 @@ name: Build Android APK/AAB
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - 'android/**'
       - 'capacitor.config.json'
