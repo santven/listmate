@@ -1924,6 +1924,11 @@ async function saveCurrentRecipe() {
     return;
   }
   
+  if (r.id) {
+    toast('Recipe is already saved!');
+    return;
+  }
+  
   try {
     const res = await fetch(API + '/recipes', {
       method: 'POST',
