@@ -8,6 +8,8 @@ on:
       - 'capacitor.config.json'
       - 'package.json'
       - '.github/workflows/android-build.yml'
+      - 'icon-override/**'
+      - 'assets/**'
   workflow_dispatch:
 
 jobs:
