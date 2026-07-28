@@ -1921,6 +1921,11 @@ async function saveCurrentRecipe() {
     toast('No recipe to save');
     return;
   }
+  if (r.id) {
+    toast('Recipe is already saved!');
+    return;
+  }
+
   
   try {
     const res = await fetch(API + '/recipes', {
