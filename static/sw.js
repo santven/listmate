@@ -1,7 +1,18 @@
-// v19 — offline-first static shell caching
-const CACHE_NAME = 'listmate-static-v19';
+// v20 — offline-first static shell caching
+const CACHE_NAME = 'listmate-static-v20';
+const PRECACHE_ASSETS = [
+  '/',
+  '/index.html',
+  '/settings.html',
+  '/manifest.json'
+];
 
 self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(PRECACHE_ASSETS).catch(err => console.log('Precache warning:', err));
+    })
+  );
   self.skipWaiting();
 });
 

@@ -333,6 +333,28 @@ function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g,
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
 async function checkAuth() {
+  if (!navigator.onLine) {
+    let cfg = null;
+    try {
+      const cachedCfg = localStorage.getItem('listmate_cfg');
+      if (cachedCfg) cfg = JSON.parse(cachedCfg);
+    } catch(ex){}
+    if (!cfg) {
+      cfg = { user: 'offline_user', display_name: 'Offline User', is_premium: true };
+    }
+    window.currentCfg = cfg;
+    if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
+    if (cfg.is_premium) {
+      document.body.classList.add('is-premium');
+      document.body.classList.remove('has-ads');
+    } else {
+      document.body.classList.add('has-ads');
+      document.body.classList.remove('is-premium');
+    }
+    updateOfflineStatusUI();
+    return true;
+  }
+
   try {
     const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); 
     window.currentCfg = cfg;
@@ -358,29 +380,15 @@ async function checkAuth() {
     updateOfflineStatusUI();
     return true;
   } catch(e) { 
-    if (!navigator.onLine) {
-      try {
-        const cachedCfg = localStorage.getItem('listmate_cfg');
-        if (cachedCfg) {
-          const cfg = JSON.parse(cachedCfg);
-          window.currentCfg = cfg;
-          if (cfg.user) {
-            if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
-            if (cfg.is_premium) {
-              document.body.classList.add('is-premium');
-              document.body.classList.remove('has-ads');
-            } else {
-              document.body.classList.add('has-ads');
-              document.body.classList.remove('is-premium');
-            }
-            updateOfflineStatusUI();
-            return true;
-          }
-        }
-      } catch(ex){}
-    }
-    window.location.href='/login'; 
-    return false; 
+    let cfg = null;
+    try {
+      const cachedCfg = localStorage.getItem('listmate_cfg');
+      if (cachedCfg) cfg = JSON.parse(cachedCfg);
+    } catch(ex){}
+    if (!cfg) cfg = { user: 'offline_user', display_name: 'Offline User', is_premium: true };
+    window.currentCfg = cfg;
+    updateOfflineStatusUI();
+    return true; 
   }
 }
 
@@ -437,7 +445,7 @@ function enqueueOfflineAction(action) {
 
 function saveCache() {
   try {
-    localStorage.setItem('listmate_cache', JSON.stringify({ stores, list, recipes }));
+    localStorage.setItem('listmate_cache', JSON.stringify({ stores, list, recipes, allStoreItems }));
   } catch(e){}
 }
 
@@ -473,37 +481,65 @@ async function syncOfflineQueue() {
 
 let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
 async function loadData() {
-  let s, l, r_recipes;
   try {
     const cached = localStorage.getItem('listmate_cache');
     if (cached) {
       const parsed = JSON.parse(cached);
-      stores = parsed.stores || [];
-      list = parsed.list || [];
-      recipes = parsed.recipes || [];
+      if (Array.isArray(parsed.stores) && parsed.stores.length > 0) stores = parsed.stores;
+      if (Array.isArray(parsed.list)) list = parsed.list;
+      if (Array.isArray(parsed.recipes)) recipes = parsed.recipes;
+      if (parsed.allStoreItems && typeof parsed.allStoreItems === 'object') allStoreItems = parsed.allStoreItems;
       renderHome();
       loadSuggestions();
     }
   } catch(e) {}
+
+  if (!navigator.onLine) {
+    updateFiltersUI();
+    return;
+  }
+
   try {
     const initData = await fetch(API+'/init').then(r=>r.json());
     if (initData.stores) {
-      s = initData.stores;
-      l = initData.list;
-      r_recipes = initData.recipes;
-    } else { throw new Error('fallback'); }
+      stores = initData.stores;
+      list = initData.list;
+      recipes = initData.recipes;
+      saveCache();
+    }
   } catch (err) {
-    const [s_res, l_res, r_res] = await Promise.all([
-      fetch(API+'/stores').then(r=>r.json()).catch(e=>[]),
-      fetch(API+'/list').then(r=>r.json()).catch(e=>[]),
-      fetch(API+'/recipes').then(r=>r.json()).catch(e=>[])
-    ]);
-    s = s_res; l = l_res; r_recipes = r_res.recipes || [];
+    if (!navigator.onLine) return;
+    try {
+      const [s_res, l_res, r_res] = await Promise.all([
+        fetch(API+'/stores').then(r=>r.json()),
+        fetch(API+'/list').then(r=>r.json()),
+        fetch(API+'/recipes').then(r=>r.json())
+      ]);
+      if (Array.isArray(s_res) && s_res.length > 0) stores = s_res;
+      if (Array.isArray(l_res)) list = l_res;
+      if (r_res && Array.isArray(r_res.recipes)) recipes = r_res.recipes;
+      saveCache();
+    } catch(ex) {
+      return;
+    }
   }
-  stores=s||[]; list=l||[]; recipes=r_recipes||[]; 
-  localStorage.setItem('listmate_cache', JSON.stringify({stores, list, recipes}));
-  renderHome(); loadSuggestions();
-  
+
+  renderHome();
+  loadSuggestions();
+  updateFiltersUI();
+
+  if (currentStore && navigator.onLine) {
+    try {
+      const items = await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
+      allStoreItems[currentStore.id] = items;
+      saveCache();
+      const searchEl = document.querySelector("#catalogSearch");
+      renderCatalog(searchEl ? searchEl.value.trim() : '');
+    } catch(e){}
+  }
+}
+
+function updateFiltersUI() {
   const sFilter = $('#storeFilter');
   if (sFilter) {
     const sSelected = sFilter.value;
@@ -519,16 +555,6 @@ async function loadData() {
     const allRecipes = Array.from(new Set([...recipeTagsInList, ...savedRecipeTitles]));
     filter.innerHTML = '<option value="">All Recipes</option>' + allRecipes.map(title => '<option value="'+escapeHtml(title)+'">'+escapeHtml(title || 'Unnamed Recipe')+'</option>').join('');
     filter.value = selected;
-  }
-
-  allStoreItems = {};
-  if(currentStore) {
-    try {
-      const items = await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json());
-      allStoreItems[currentStore.id] = items;
-      const searchEl = document.querySelector("#catalogSearch");
-      renderCatalog(searchEl ? searchEl.value.trim() : '');
-    } catch(e){}
   }
 }
 
@@ -687,14 +713,20 @@ function renderHome() {
 async function openStore(sid) {
   window.scrollTo(0, 0);
   currentStore=stores.find(s=>s.id===sid);
+  if (!currentStore) return;
   $('#headerTitle').textContent='Add to ' + currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
   $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
-  try {
-    const res = await fetch(API+'/stores/'+sid+'/items');
-    if(res.ok) allStoreItems[sid] = await res.json();
-  } catch(e) { if(!allStoreItems[sid]) allStoreItems[sid] = []; }
+  if (navigator.onLine) {
+    try {
+      const res = await fetch(API+'/stores/'+sid+'/items');
+      if(res.ok) {
+        allStoreItems[sid] = await res.json();
+        saveCache();
+      }
+    } catch(e) { if(!allStoreItems[sid]) allStoreItems[sid] = []; }
+  }
   renderCatalog();
 }
 
