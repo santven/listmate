@@ -27,10 +27,9 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Capacitor & add platforms
+      - name: Install Capacitor & sync platform
         run: |
           npm ci
-          npx cap add android
           npx cap sync android
 
       - name: Copy app icons (replace Capacitor defaults & remove adaptive XMLs)
