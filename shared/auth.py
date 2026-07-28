@@ -142,6 +142,10 @@ if USE_PG:
                 zip_code TEXT DEFAULT '',
                 country TEXT DEFAULT '',
                 is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+                stripe_customer_id TEXT,
+                rc_app_user_id TEXT,
+                subscription_status TEXT NOT NULL DEFAULT 'free',
+                trial_ends_at TIMESTAMP,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL REFERENCES auth_users(id),
@@ -158,10 +162,17 @@ if USE_PG:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
-        try:
-            _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE")
-        except Exception:
-            pass
+        for stmt in [
+            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
+            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
+            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
+            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
+        ]:
+            try:
+                _run(stmt)
+            except Exception:
+                pass
 
         # Seed dev household and user if they don't exist
         try:
@@ -231,6 +242,10 @@ else:
                 zip_code TEXT DEFAULT '',
                 country TEXT DEFAULT '',
                 is_premium INTEGER NOT NULL DEFAULT 0,
+                stripe_customer_id TEXT,
+                rc_app_user_id TEXT,
+                subscription_status TEXT NOT NULL DEFAULT 'free',
+                trial_ends_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS auth_feature_flags (
                 user_id INTEGER NOT NULL, feature TEXT NOT NULL,
@@ -251,7 +266,11 @@ else:
             ("dietary_restrictions", "TEXT DEFAULT ''"),
             ("zip_code", "TEXT DEFAULT ''"),
             ("country", "TEXT DEFAULT ''"),
-            ("is_premium", "INTEGER NOT NULL DEFAULT 0")
+            ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
+            ("stripe_customer_id", "TEXT"),
+            ("rc_app_user_id", "TEXT"),
+            ("subscription_status", "TEXT NOT NULL DEFAULT 'free'"),
+            ("trial_ends_at", "TIMESTAMP")
         ]:
             try:
                 _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
@@ -379,7 +398,7 @@ def register_auth_routes(app):
                     import secrets
                     code = secrets.token_hex(4).upper()
                     prem_val = True if USE_PG else 1
-                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?)", ("Root Household", code, prem_val))
+                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -418,16 +437,23 @@ def register_auth_routes(app):
             is_prem = False
             if hh_id:
                 _init_schema()
-                hh = _one(f"SELECT is_premium FROM {_HH} WHERE id = ?", (hh_id,))
+                hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
+                sub_status = hh.get("subscription_status", "free") if hh else "free"
+                trial_ends_at = hh.get("trial_ends_at") if hh else None
+                if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
+                    trial_ends_at = trial_ends_at.isoformat()
                 if int(hh_id) <= 100 and not is_prem:
                     is_prem = True
+                    sub_status = "premium"
                     val = True if USE_PG else 1
-                    _run(f"UPDATE {_HH} SET is_premium = ? WHERE id = ?", (val, hh_id))
+                    _run(f"UPDATE {_HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, 'premium', hh_id))
             resp["is_premium"] = is_prem
+            resp["subscription_status"] = sub_status if hh_id else "free"
+            resp["trial_ends_at"] = trial_ends_at if hh_id else None
             resp["user_info"] = {"id": uid, "name": get_display_name(),
                 "email": get_email(), "household_id": hh_id,
-                "household_name": get_household_name(), "is_premium": is_prem}
+                "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))
@@ -510,10 +536,14 @@ def register_auth_routes(app):
         existing_cnt = count_row.get("cnt", 0) if count_row else 0
         is_early = existing_cnt < 100
         prem_val = is_early if USE_PG else (1 if is_early else 0)
+        status = 'premium' if is_early else 'trial'
+        
         if USE_PG:
-            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?) RETURNING id", (hname, code, prem_val))
+            trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"
+            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr}) RETURNING id", (hname, code, prem_val, status))
         else:
-            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium) VALUES (?,?,?)", (hname, code, prem_val))
+            trial_expr = "datetime('now', '+30 days')" if not is_early else "NULL"
+            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr})", (hname, code, prem_val, status))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})

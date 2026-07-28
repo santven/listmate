@@ -299,7 +299,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <button onclick="activateEarlyAdopterPremium()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
-        🎁 Enable Early Adopter Premium Access
+        🎁 Upgrade to Premium
       </button>
       <a href="/settings" style="display:block; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); text-decoration:none; font-weight:600; font-size:14px;">
         ⚙️ Manage Premium in Settings
@@ -377,6 +377,30 @@ async function checkAuth() {
       const ad = document.querySelector('.ad-banner-bottom');
       if (ad) ad.style.display = 'flex';
     }
+    if (cfg.subscription_status === 'trial' && cfg.trial_ends_at) {
+        const daysLeft = Math.ceil((new Date(cfg.trial_ends_at) - new Date()) / (1000*60*60*24));
+        if (daysLeft >= 0) {
+            let banner = document.getElementById('trialBanner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'trialBanner';
+                banner.style.cssText = 'background:#fef3c7; color:#92400e; padding:10px; text-align:center; font-size:13px; font-weight:600; border-bottom:1px solid #fcd34d;';
+                document.querySelector('.header').insertAdjacentElement('afterend', banner);
+            }
+            banner.innerHTML = `⏳ Your Free Trial ends in ${daysLeft} days. <a href="#" onclick="showPaywall(); return false;" style="color:#b45309; text-decoration:underline;">Upgrade to Premium</a>`;
+        }
+    }
+    
+    // RevenueCat Init
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
+        try {
+            await window.Capacitor.Plugins.Purchases.configure({ apiKey: "test_IiwuzQXuzucZlwihcMHIsqAMwby" });
+            if (cfg && cfg.user_info && cfg.user_info.id) {
+                await window.Capacitor.Plugins.Purchases.logIn({ appUserID: cfg.user_info.id.toString() });
+            }
+        } catch(e) { console.error("RC Init error:", e); }
+    }
+    
     updateOfflineStatusUI();
     return true;
   } catch(e) { 
@@ -1370,7 +1394,37 @@ function closePremiumModal() {
   if (pModal) pModal.classList.remove('active');
 }
 
+async function showPaywall() {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
+        try {
+            const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
+            if (offerings.current && offerings.current.availablePackages.length > 0) {
+                const packageToBuy = offerings.current.availablePackages[0];
+                if (confirm(`Subscribe to Premium for ${packageToBuy.product.priceString}?`)) {
+                    const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ package: packageToBuy });
+                    if (customerInfo.entitlements.active['premium']) {
+                        toast('⭐ Welcome to Premium!');
+                        window.location.reload();
+                    }
+                }
+            } else {
+                toast('No subscription packages available right now.');
+            }
+        } catch (e) {
+            if (!e.userCancelled) toast('Purchase error: ' + e.message);
+        }
+    } else {
+        toast('In-app purchases are only available in the mobile app.');
+    }
+}
+
 async function activateEarlyAdopterPremium() {
+  const isEarly = window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.household_id <= 100;
+  if (!isEarly) {
+      closePremiumModal();
+      showPaywall();
+      return;
+  }
   try {
     const res = await fetch(API + '/settings/premium', {
       method: 'POST',
