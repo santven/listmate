@@ -38,6 +38,7 @@ jobs:
           # Remove mipmap-anydpi-v26 adaptive XMLs created by Capacitor
           # This forces Android (API 26+) to load custom ic_launcher PNGs from density folders
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          find android/app/src/main/res -name "ic_launcher*.xml" -type f -delete
 
           for dir in icon-override/mipmap-*; do
             folder=$(basename $dir)
