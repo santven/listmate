@@ -567,6 +567,7 @@ def register_auth_routes(app):
         
         _init_schema()
         hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
+        if not hh: return jsonify({"error": "Household not found"}), 404
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
