@@ -454,6 +454,7 @@ async function checkAuth() {
             if (isNative && rcKey.startsWith('test_')) {
                 console.warn("RevenueCat SDK skipped: Test API key cannot be used in native release builds. Please set REVENUECAT_PUBLIC_KEY with your Google Play public key (goog_...).");
             } else {
+                try { await window.Capacitor.Plugins.Purchases.setLogLevel({ level: "DEBUG" }); } catch(le) {}
                 await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
                 if (cfg && cfg.user_info && cfg.user_info.id) {
                     await window.Capacitor.Plugins.Purchases.logIn({ appUserID: cfg.user_info.id.toString() });
@@ -1513,22 +1514,34 @@ async function showPaywall() {
                 toast('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
                 return;
             }
+            console.log("[RevenueCat] Configuring SDK with key:", rcKey);
+            try { await window.Capacitor.Plugins.Purchases.setLogLevel({ level: "DEBUG" }); } catch(le) {}
             await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+            console.log("[RevenueCat] Fetching offerings...");
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
+            console.log("[RevenueCat] Offerings fetched:", offerings);
             if (offerings.current && offerings.current.availablePackages.length > 0) {
                 const packageToBuy = offerings.current.availablePackages[0];
                 if (confirm(`Subscribe to Premium for ${packageToBuy.product.priceString}?`)) {
+                    console.log("[RevenueCat] Initiating purchase for package:", packageToBuy.identifier);
                     const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ package: packageToBuy });
+                    console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
                     if (customerInfo.entitlements.active['premium']) {
                         toast('⭐ Welcome to Premium!');
                         window.location.reload();
                     }
                 }
             } else {
-                toast('No subscription packages available right now.');
+                console.warn("[RevenueCat] No offerings available. Offerings object:", JSON.stringify(offerings));
+                toast('No subscription packages available right now. Check RevenueCat offering setup.');
             }
         } catch (e) {
-            if (!e.userCancelled) toast('Purchase error: ' + e.message);
+            console.error("[RevenueCat] Error object:", e);
+            console.error("[RevenueCat] Error stringified:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
+            if (!e.userCancelled) {
+                const errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+                toast('Purchase error: ' + errDetail);
+            }
         }
     } else {
         toast('In-app purchases are only available in the mobile app.');
