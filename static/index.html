@@ -1124,7 +1124,7 @@ async function loadSuggestions(){
       if(!store) continue;
       const wrap = $('#sug-'+store.id);
       if(!wrap) continue;
-      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+i.name+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">'+i.name+'</span>').join('');
+      wrap.innerHTML = items.map((i,idx)=>'<span class="suggestion-chip" data-store="'+store.id+'" data-name="'+escapeHtml(i.name)+'" title="Bought '+i.times+'x, last '+i.days_since+'d ago">'+escapeHtml(i.name)+'</span>').join('');
     }
     $$('.suggestion-chip').forEach(el=>el.addEventListener('click',async()=>{
       const sid=parseInt(el.dataset.store), name=el.dataset.name;
@@ -1324,7 +1324,7 @@ function openMoveModal(itemId,itemName){
   const item=list.find(i=>i.id===itemId);
   $('#moveItemLabel').textContent='"'+itemName+'" — currently in '+stores.find(s=>s.id===item.store_id)?.name;
   $('#moveStoreList').innerHTML=stores
-    .map(s=>'<button class="modal-store-option'+(s.id===item.store_id?' current':'')+'" data-sid="'+s.id+'">'+s.name+'</button>')
+    .map(s=>'<button class="modal-store-option'+(s.id===item.store_id?' current':'')+'" data-sid="'+s.id+'">'+escapeHtml(s.name)+'</button>')
     .join('');
   $$('#moveStoreList .modal-store-option').forEach(el=>el.addEventListener('click',()=>moveItem(parseInt(el.dataset.sid))));
   $('#moveModal').classList.add('active');

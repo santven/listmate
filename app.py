@@ -129,6 +129,15 @@ def _hh():
 
 # ── Pages ───────────────────────────────────────────────────
 
+@app.after_request
+def add_security_headers(response):
+    response.headers['Content-Security-Policy'] = "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval';"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
 @app.route("/login")
 def login_page():
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
