@@ -1358,7 +1358,11 @@ async function moveItem(targetStoreId) {
   renderHome();
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
-$('#moveModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('#moveModal').classList.remove('active');});
+$$('.modal-overlay').forEach(modal => {
+  modal.addEventListener('click', e => {
+    if (e.target === e.currentTarget) modal.classList.remove('active');
+  });
+});
 
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
 
