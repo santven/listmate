@@ -1,10 +1,11 @@
-// v20 — offline-first static shell caching
-const CACHE_NAME = 'listmate-static-v20';
+// v22 — offline-first static shell caching
+const CACHE_NAME = 'listmate-static-v22';
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/settings.html',
-  '/manifest.json'
+  '/static/index.html',
+  '/static/settings.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', e => {
@@ -47,7 +48,7 @@ self.addEventListener('fetch', e => {
       return caches.match(e.request).then(cached => {
         if (cached) return cached;
         if (e.request.mode === 'navigate') {
-          return caches.match('/') || caches.match('/index.html');
+          return caches.match('/static/index.html') || caches.match('/') || caches.match('/index.html');
         }
       });
     })

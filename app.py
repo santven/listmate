@@ -687,6 +687,12 @@ def health():
     })
 
 
+@app.route("/<path:filename>")
+def root_files(filename):
+    if filename in ["sw.js", "manifest.json", "robots.txt"] or filename.startswith("icon-") or filename.endswith(".png"):
+        return send_from_directory("static", filename)
+    return "", 404
+
 @app.route("/")
 @app.route("/index.html")
 def index():

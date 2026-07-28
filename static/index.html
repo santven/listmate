@@ -406,7 +406,7 @@ function updateOfflineStatusUI() {
         badge.innerHTML = '⚡ <span><strong>Offline Mode (ListMate Pro)</strong> — Changes saved locally & will sync when reconnected</span>';
         badge.className = 'offline-badge pro';
       } else {
-        badge.innerHTML = '📶 <span><strong>Offline Mode</strong> — Read-Only mode. Pro required to edit offline.</span>';
+        badge.innerHTML = '📶 <span><strong>Offline Mode</strong> — You can check off items. Add/Edit offline requires Pro.</span>';
         badge.className = 'offline-badge free';
       }
     } else {
@@ -1078,8 +1078,6 @@ async function updateItemQuantity(id, newQty) {
 }
 
 async function toggleItem(id, showVisitPrompt = true) {
-  if (!canEditOffline()) return;
-
   if (!navigator.onLine) {
     const item = list.find(i=>String(i.id)===String(id));
     if (item) {
