@@ -201,23 +201,32 @@ def premium_settings():
     authmod._init_schema()
 
     if request.method == "GET":
-        hh = authmod._one(f"SELECT is_premium FROM {authmod._HH} WHERE id = ?", (hhid,))
+        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
         is_early = bool(hhid and int(hhid) <= 100)
+        sub_status = hh.get("subscription_status", "free") if hh else "free"
+        trial_ends_at = hh.get("trial_ends_at") if hh else None
+        if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
+            trial_ends_at = trial_ends_at.isoformat()
+            
         if is_early and not is_prem:
             is_prem = True
+            sub_status = "premium"
             val = True if _use_pg else 1
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
         return jsonify({
             "is_premium": is_prem,
             "household_id": hhid,
-            "is_early_adopter": is_early
+            "is_early_adopter": is_early,
+            "subscription_status": sub_status,
+            "trial_ends_at": trial_ends_at
         })
 
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium if _use_pg else (1 if is_premium else 0)
-    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ? WHERE id = ?", (val, hhid))
+    status = "premium" if is_premium else "free"
+    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
     is_early = bool(hhid and int(hhid) <= 100)
     return jsonify({
         "ok": True,
@@ -1411,10 +1420,6 @@ def get_suggestions():
     finally:
         db.close()
 
-if __name__ == "__main__":
-    from db import init_db
-    init_db()
-    app.run(host="0.0.0.0", port=3000, debug=True)
 # ---- Google OAuth (server-side redirect flow) ----
 import secrets as _secrets
 import urllib.parse as _urlparse
@@ -1533,5 +1538,10 @@ def auth_google_callback():
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         return '<h3>Login failed</h3><p>Server error: ' + str(exc) + '</p><a href="/login">Try again</a>', 500
+
+if __name__ == "__main__":
+    from db import init_db
+    init_db()
+    app.run(host="0.0.0.0", port=3000, debug=True)
 
 
