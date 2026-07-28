@@ -979,6 +979,7 @@ function showScreen(name){
     loadRecipeUsage();
     $('#btnBack').style.display='block';
   }
+  updateFabVisibility();
 }
 
 async function loadSuggestions(){
@@ -2026,5 +2027,22 @@ async function deleteSavedRecipe(id) {
   <span>🏪 Stores ↓</span>
 </button>
 
+
+<script>
+  (function() {
+    const fabEl = document.getElementById('fabStores');
+    if (fabEl) {
+      fabEl.addEventListener('click', () => {
+        const target = fabEl.getAttribute('data-target');
+        if (target === 'top') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const sg = document.getElementById('storeGrid');
+          if (sg) sg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  })();
+</script>
 </body>
 </html>
