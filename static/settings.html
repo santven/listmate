@@ -162,6 +162,7 @@ let householdData = null;
   // Check auth
   const cfg = await (await fetch('/api/auth/config')).json();
   if (!cfg.user) { window.location.href = '/login'; return; }
+  window.currentCfg = cfg;
 
   // Load household data
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
@@ -340,7 +341,14 @@ async function loadPremium() {
 async function showPaywall() {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
         try {
-            await window.Capacitor.Plugins.Purchases.configure({ apiKey: "test_IiwuzQXuzucZlwihcMHIsqAMwby" });
+            const cfg = window.currentCfg || {};
+            const rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
+            if (isNative && rcKey.startsWith('test_')) {
+                alert('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
+                return;
+            }
+            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             if (offerings.current && offerings.current.availablePackages.length > 0) {
                 const packageToBuy = offerings.current.availablePackages[0];
