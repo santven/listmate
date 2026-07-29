@@ -149,7 +149,7 @@ def login_page():
         
         if id_token_str:
             if state_str and state_str.startswith("intent_"):
-                intent_id = state_str.split("intent_")[1]
+                intent_id = state_str.split("intent_")[1].replace("_web", "")
                 import jwt
                 import json
                 try:

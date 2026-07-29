@@ -402,6 +402,9 @@ def register_auth_routes(app):
             hh_name = hh.get('name', '') if hh else ''
         _set(user["id"], user["email"], user["name"], hh_id, hh_name)
         _run("DELETE FROM login_intents WHERE id = ?", (intent_id,))
+        
+        if hh_id == 0:
+            return jsonify({"ok": False, "status": "completed", "needs_signup": True, "message": "No household"})
         return jsonify({"ok": True, "status": "completed"})
 
     @app.route("/api/auth/google", methods=["POST"])
@@ -450,9 +453,10 @@ def register_auth_routes(app):
                     hh_name = hh["name"] if hh else "Root Household"
                     _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
                 else:
-                    # Households exist but this user isn't in one — they must sign up
-                    # Register the user first so they have an account, then redirect to signup
                     _set(user["id"], email, name, 0, "")
+                    intent_id = data.get("intent")
+                    if intent_id:
+                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
                     return jsonify({"ok": False, "needs_signup": True,
                                     "message": "No household — please complete signup"}), 200
             if hh_id and not hh_name:
@@ -553,6 +557,9 @@ def register_auth_routes(app):
                     _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
                 else:
                     _set(user["id"], email, user["name"] or name, 0, "")
+                    intent_id = data.get("intent")
+                    if intent_id:
+                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
                     return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
 
             if hh_id and not hh_name:

@@ -96,12 +96,20 @@ var activePoll = null;
 function startPollingIntent(intentId) {
   if (activePoll) clearInterval(activePoll);
   activePoll = setInterval(function() {
-    fetch('/api/auth/poll?intent=' + encodeURIComponent(intentId))
+    fetch('/api/auth/poll?intent=' + encodeURIComponent(intentId) + '&_t=' + Date.now(), { cache: 'no-store' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.ok) {
           clearInterval(activePoll);
           location.replace('/');
+        } else if (d.needs_signup) {
+          clearInterval(activePoll);
+          document.getElementById('step1').classList.remove('active');
+          document.getElementById('step2').classList.add('active');
+          if (inviteToken) { showInviteBanner(); } else {
+            document.getElementById('createSection').style.display='block';
+            document.getElementById('btnAccept').style.display='none';
+          }
         }
       }).catch(function(){});
   }, 2000);
@@ -314,6 +322,11 @@ function handleCredential(credential, isIntentCallback) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
+      if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
+      }
       if (inviteToken) {
         fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
       } else {
