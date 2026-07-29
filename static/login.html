@@ -118,7 +118,7 @@ function _doSignIn() {
     '&response_type=id_token' +
     '&scope=openid%20email%20profile' +
     '&nonce=' + nonce + '&state=intent_' + intentId;
-  window.location.assign(url);
+  window.open(url, '_blank');
 }
 
 // Check for session or redirect callback
@@ -136,7 +136,11 @@ function _doSignIn() {
     sessionStorage.removeItem('apple_user');
     var stateStr = sessionStorage.getItem('apple_state');
     sessionStorage.removeItem('apple_state');
-    if (stateStr && stateStr.startsWith('intent_')) { currentIntentId = stateStr.substring(7); }
+    var isAppleIntentFallback = false;
+    if (stateStr && stateStr.startsWith('intent_')) { 
+      currentIntentId = stateStr.substring(7);
+      isAppleIntentFallback = true;
+    }
     var userObj = null;
     if (userStr) {
       try { userObj = JSON.parse(userStr); } catch(e) {}
@@ -148,10 +152,16 @@ function _doSignIn() {
   var hp = new URLSearchParams(window.location.hash.substring(1));
   var idToken = hp.get('id_token');
   var st = hp.get('state');
-  if (st && st.startsWith('intent_')) { currentIntentId = st.substring(7); }
+  
+  var isIntentCallback = false;
+  if (st && st.startsWith('intent_')) { 
+    currentIntentId = st.substring(7); 
+    isIntentCallback = true;
+  }
+
   if (idToken) {
     history.replaceState(null, '', location.pathname + location.search);
-    handleCredential(idToken);
+    handleCredential(idToken, isIntentCallback);
   }
 })();
 
@@ -190,7 +200,7 @@ function redirectToAppleOAuth() {
     '&scope=name%20email' +
     '&response_mode=form_post' +
     '&state=' + state;
-  window.location.assign(url);
+  window.open(url, '_blank');
 }
 
 function doAppleSignIn() {
@@ -221,7 +231,7 @@ function _doAppleSignIn() {
           email: res.response.email || ''
         };
       }
-      handleAppleCredential(idToken, userObj);
+      handleAppleCredential(idToken, userObj, isAppleIntentFallback);
     }).catch(function(err) {
       console.warn('[Native AppleID Sign-In error]', err);
     });
@@ -261,7 +271,7 @@ function _doAppleSignIn() {
   redirectToAppleOAuth();
 }
 
-function handleAppleCredential(idToken, userObj) {
+function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   showError('');
   fetch('/api/auth/apple', {
     method: 'POST',
@@ -270,6 +280,11 @@ function handleAppleCredential(idToken, userObj) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
+      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
+      }
       if (inviteToken) {
         fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
       } else {
@@ -290,7 +305,7 @@ function handleAppleCredential(idToken, userObj) {
   }).catch(function() { showError('Network error. Try again.'); });
 }
 
-function handleCredential(credential) {
+function handleCredential(credential, isIntentCallback) {
   googleCredential = credential;
   showError('');
   fetch('/api/auth/login', {

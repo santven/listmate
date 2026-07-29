@@ -188,12 +188,7 @@ def login_page():
                             user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                         
                         if user:
-                            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                            is_web = state_str.endswith("_web")
-                            if is_web:
-                                authmod._set(user["id"], email, user["name"], user.get("household_id", 0), "")
-                                return '''<script>window.location.replace('/');</script>'''
-                            
+                            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))                            
                             return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
                             <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;">
                             <h2>✅ Login Successful</h2>

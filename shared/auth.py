@@ -154,8 +154,9 @@ if USE_PG:
                 PRIMARY KEY (user_id, feature))""",
             """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
             """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+            
             """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
-            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+            
             """CREATE TABLE IF NOT EXISTS invites (
                 id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL,
                 household_id INTEGER NOT NULL REFERENCES auth_households(id),
@@ -266,6 +267,7 @@ else:
                 PRIMARY KEY (user_id, feature))""",
             """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
             """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS invites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL,
                 household_id INTEGER NOT NULL, email TEXT, created_by INTEGER NOT NULL,
