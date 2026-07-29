@@ -148,74 +148,74 @@ def login_page():
         state_str = request.form.get("state")
         
         if id_token_str:
-            if state_str and state_str.startswith("intent_"):
-                intent_id = state_str.split("intent_")[1].replace("_web", "")
-                import jwt
-                import json
-                try:
-                    claims = jwt.decode(id_token_str, options={"verify_signature": False})
-                    apple_sub = claims.get("sub")
-                    token_email = claims.get("email", "")
-                    if apple_sub:
-                        import shared.auth as authmod
-                        authmod._init_schema()
+            import jwt
+            import json
+            import secrets
+            try:
+                claims = jwt.decode(id_token_str, options={"verify_signature": False})
+                apple_sub = claims.get("sub")
+                token_email = claims.get("email", "")
+                if apple_sub:
+                    import shared.auth as authmod
+                    authmod._init_schema()
+                    
+                    client_user = {}
+                    if user_json:
+                        try: client_user = json.loads(user_json)
+                        except: pass
+                    
+                    client_email = client_user.get("email") or ""
+                    email = (client_email or token_email or "").strip().lower()
+                    name_obj = client_user.get("name") or {}
+                    first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
+                    last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
+                    name_from_client = f"{first} {last}".strip()
+                    if not name_from_client:
+                        name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
+                    else:
+                        name = name_from_client
+                    
+                    gid_alias = f"apple_{apple_sub}"
+                    user = None
+                    if email:
+                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+                    if not user:
+                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                         
-                        client_user = {}
-                        if user_json:
-                            try: client_user = json.loads(user_json)
-                            except: pass
+                    if not user:
+                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid_alias, email, name))
+                        user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                    
+                    if user:
+                        hh_id = user.get("household_id", 0)
+                        hh_name = ""
+                        if not hh_id:
+                            hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+                            if hh_count and hh_count.get("cnt", 0) == 0:
+                                code = secrets.token_hex(4).upper()
+                                prem_val = True if _use_pg else 1
+                                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
+                                hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+                                hh_id = hh["id"] if hh else 1
+                                hh_name = hh["name"] if hh else "Root Household"
+                                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                        if hh_id and not hh_name:
+                            hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+                            hh_name = hh.get("name", "") if hh else ""
+                        authmod._set(user["id"], email, name, hh_id, hh_name)
                         
-                        client_email = client_user.get("email") or ""
-                        email = (client_email or token_email or "").strip().lower()
-                        name_obj = client_user.get("name") or {}
-                        first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
-                        last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
-                        name_from_client = f"{first} {last}".strip()
-                        if not name_from_client:
-                            name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
-                        else:
-                            name = name_from_client
-                        
-                        gid_alias = f"apple_{apple_sub}"
-                        user = None
-                        if email:
-                            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
-                        if not user:
-                            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
-                            
-                        if not user:
-                            authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid_alias, email, name))
-                            user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
-                        
-                        if user:
-                            hh_id = user.get("household_id", 0)
-                            hh_name = ""
-                            if not hh_id:
-                                hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
-                                if hh_count and hh_count.get("cnt", 0) == 0:
-                                    import secrets
-                                    code = secrets.token_hex(4).upper()
-                                    prem_val = True if _use_pg else 1
-                                    authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
-                                    hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
-                                    hh_id = hh["id"] if hh else 1
-                                    hh_name = hh["name"] if hh else "Root Household"
-                                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-                            if hh_id and not hh_name:
-                                hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
-                                hh_name = hh.get("name", "") if hh else ""
-                            authmod._set(user["id"], email, name, hh_id, hh_name)
-                            if "_web" not in state_str:
+                        if state_str and state_str.startswith("intent_"):
+                            intent_id = state_str.split("intent_")[1].replace("_web", "")
+                            if intent_id:
                                 authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                                target_url = "/login?needs_signup=1" if hh_id == 0 else "/"
-                                return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>function proceed(){{window.location.replace("{target_url}");}}if(window.opener && window.opener !== window){{try{{window.close();}}catch(e){{}}setTimeout(proceed, 500);}}else{{proceed();}}</script></body></html>"""
-                            else:
-                                if hh_id == 0:
-                                    return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/login?needs_signup=1");</script></body></html>"""
-                                return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/");</script></body></html>"""
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                        
+                        code_token = secrets.token_urlsafe(32)
+                        authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", ("code_" + code_token, user["id"]))
+                        
+                        return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authenticating...</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authenticating...</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>window.location.replace("/auth/callback?code={code_token}");</script></body></html>"""
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
             # Fallback
             return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body><script>
@@ -228,6 +228,29 @@ def login_page():
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
     html = html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)
     return html.replace("APPLE_CLIENT_ID_PLACEHOLDER", APPLE_CLIENT_ID)
+
+@app.route("/auth/callback")
+def auth_callback():
+    code = request.args.get("code")
+    if not code:
+        return redirect("/login")
+    import shared.auth as authmod
+    authmod._init_schema()
+    intent = authmod._one("SELECT * FROM login_intents WHERE id = ?", ("code_" + code,))
+    if not intent:
+        return redirect("/login")
+    user = authmod._one(f"SELECT id, email, name, household_id FROM {authmod._USERS} WHERE id = ?", (intent["user_id"],))
+    if not user:
+        return redirect("/login")
+    authmod._run("DELETE FROM login_intents WHERE id = ?", ("code_" + code,))
+    hh_id = user.get("household_id", 0)
+    hh_name = ""
+    if hh_id:
+        hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+        hh_name = hh.get("name", "") if hh else ""
+    authmod._set(user["id"], user.get("email", ""), user.get("name", ""), hh_id, hh_name)
+    target_url = "/login?needs_signup=1" if hh_id == 0 else "/"
+    return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>function proceed(){{window.location.replace("{target_url}");}}if(window.opener && window.opener !== window){{try{{window.close();}}catch(e){{}}setTimeout(proceed, 500);}}else{{proceed();}}</script></body></html>"""
 
 
 @app.route("/login_google_native", methods=["POST"])
