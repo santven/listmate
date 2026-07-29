@@ -213,6 +213,63 @@ def login_page():
     return html.replace("APPLE_CLIENT_ID_PLACEHOLDER", APPLE_CLIENT_ID)
 
 
+@app.route("/login_google_native", methods=["POST"])
+def login_google_native():
+    c = request.form.get("credential")
+    intent_id = request.form.get("intent")
+    try:
+        from google.oauth2 import id_token
+        import google.auth.transport.requests as google_requests
+        info = id_token.verify_oauth2_token(c, google_requests.Request(), CLIENT_ID)
+        gid = info["sub"]
+        email = info.get("email", "")
+        name = info.get("name") or (email.split("@")[0] if email else "User")
+        
+        import shared.auth as authmod
+        authmod._init_schema()
+        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+        if not user:
+            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+        if not user:
+            authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid, email, name))
+            user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+            
+        if user:
+            if user.get("google_id") != gid:
+                authmod._run(f"UPDATE {authmod._USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
+            
+            hh_id = user.get("household_id", 0)
+            hh_name = ""
+            if not hh_id:
+                hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+                if hh_count and hh_count.get("cnt", 0) == 0:
+                    import secrets
+                    code = secrets.token_hex(4).upper()
+                    prem_val = True if _use_pg else 1
+                    authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+                    hh_id = hh["id"] if hh else 1
+                    hh_name = hh["name"] if hh else "Root Household"
+                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+            
+            if hh_id and not hh_name:
+                hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+                hh_name = hh.get("name", "") if hh else ""
+            
+            authmod._set(user["id"], email, name, hh_id, hh_name)
+            if intent_id:
+                authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+                
+            if hh_id == 0:
+                return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
+                
+            return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/');</script></body></html>'''
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f'''<!DOCTYPE html><html><head></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
+
 @app.route("/signup")
 def signup_page():
     return redirect("/login")

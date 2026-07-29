@@ -66,7 +66,15 @@
 
 <script>
 var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
-var inviteToken = (new URLSearchParams(window.location.search)).get('token') || sessionStorage.getItem('listmate_invite');
+var urlParams = new URLSearchParams(window.location.search);
+var inviteToken = urlParams.get('token') || sessionStorage.getItem('listmate_invite');
+if (urlParams.get('needs_signup')) {
+  setTimeout(function() {
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step2').classList.add('active');
+    if (inviteToken) { showInviteBanner(); } else { document.getElementById('createSection').style.display='block'; document.getElementById('btnAccept').style.display='none'; }
+  }, 100);
+}
 if (inviteToken) sessionStorage.removeItem('listmate_invite');
 var googleCredential = null;
 
@@ -78,7 +86,7 @@ function checkSessionAndProceed(proceedFn) {
   fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
     if (r.ok) {
       r.json().then(function(c) {
-        if (c.user) { location.replace('/?_=' + Date.now()); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
+        if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
       });
     } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
   }).catch(function() { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); });
@@ -101,7 +109,7 @@ function startPollingIntent(intentId) {
       .then(function(d) {
         if (d.ok) {
           clearInterval(activePoll);
-          location.replace('/?_=' + Date.now());
+          setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
         } else if (d.needs_signup) {
           clearInterval(activePoll);
           document.getElementById('step1').classList.remove('active');
@@ -124,9 +132,9 @@ function _doSignIn() {
     'client_id=' + CLIENT_ID +
     '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
     '&response_type=id_token' +
-    '&scope=openid%20email%20profile' +
+    '&scope=openid%20email%20profile' + '&prompt=select_account' +
     '&nonce=' + nonce + '&state=intent_' + intentId;
-  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') {
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     window.location.href = url;
   } else {
     window.open(url, '_blank');
@@ -137,7 +145,7 @@ function _doSignIn() {
 (function() {
   try {
     fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
-      if (r.ok) r.json().then(function(c) { if (c.user) { location.replace('/?_=' + Date.now()); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
+      if (r.ok) r.json().then(function(c) { if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
     });
   } catch(e) { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
 
@@ -157,7 +165,7 @@ function _doSignIn() {
     if (userStr) {
       try { userObj = JSON.parse(userStr); } catch(e) {}
     }
-    handleAppleCredential(appleToken, userObj);
+    handleAppleCredential(appleToken, userObj, isAppleIntentFallback);
     return;
   }
 
@@ -192,6 +200,7 @@ function initAppleID() {
         clientId: getAppleClientId(),
         scope: 'name email',
         redirectURI: location.origin + '/login',
+        state: 'intent_' + currentIntentId,
         usePopup: true
       });
     } catch(e) {}
@@ -203,7 +212,7 @@ document.addEventListener('DOMContentLoaded', initAppleID);
 var currentIntentId;
 function redirectToAppleOAuth() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  startPollingIntent(currentIntentId);
+  
   var state = 'intent_' + currentIntentId + '_web';
   var url = 'https://appleid.apple.com/auth/authorize?' +
     'client_id=' + encodeURIComponent(getAppleClientId()) +
@@ -212,7 +221,7 @@ function redirectToAppleOAuth() {
     '&scope=name%20email' +
     '&response_mode=form_post' +
     '&state=' + state;
-  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') {
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     window.location.href = url;
   } else {
     window.open(url, '_blank');
@@ -226,10 +235,10 @@ function doAppleSignIn() {
 }
 function _doAppleSignIn() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  startPollingIntent(currentIntentId);
+  
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
 
-  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.SignInWithApple) {
+  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios' && window.Capacitor.Plugins && window.Capacitor.Plugins.SignInWithApple) {
     window.Capacitor.Plugins.SignInWithApple.authorize({
       clientId: getAppleClientId(),
       redirectURI: location.origin + '/login',
@@ -247,19 +256,23 @@ function _doAppleSignIn() {
           email: res.response.email || ''
         };
       }
-      handleAppleCredential(idToken, userObj, isAppleIntentFallback);
+      handleAppleCredential(idToken, userObj, false);
     }).catch(function(err) {
       console.warn('[Native AppleID Sign-In error]', err);
+      showError('Apple Sign-In Error: ' + (err.message || JSON.stringify(err)));
     });
     return;
   }
 
+  
+  startPollingIntent(currentIntentId);
   if (window.AppleID && window.AppleID.auth) {
     try {
       AppleID.auth.init({
         clientId: getAppleClientId(),
         scope: 'name email',
         redirectURI: location.origin + '/login',
+        state: 'intent_' + currentIntentId,
         usePopup: true
       });
       AppleID.auth.signIn().then(function(res) {
@@ -288,7 +301,33 @@ function _doAppleSignIn() {
 }
 
 function handleAppleCredential(idToken, userObj, isFallbackPopup) {
+  if (activePoll) { clearInterval(activePoll); activePoll = null; }
   showError('');
+  
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+     var form = document.createElement('form');
+     form.method = 'POST';
+     form.action = '/login';
+     var tokenInput = document.createElement('input');
+     tokenInput.type = 'hidden';
+     tokenInput.name = 'id_token';
+     tokenInput.value = idToken;
+     var userInput = document.createElement('input');
+     userInput.type = 'hidden';
+     userInput.name = 'user';
+     userInput.value = userObj ? JSON.stringify(userObj) : '';
+     var stateInput = document.createElement('input');
+     stateInput.type = 'hidden';
+     stateInput.name = 'state';
+     stateInput.value = 'intent_' + (typeof currentIntentId !== 'undefined' ? currentIntentId : '') + '_web';
+     form.appendChild(tokenInput);
+     form.appendChild(userInput);
+     form.appendChild(stateInput);
+     document.body.appendChild(form);
+     form.submit();
+     return;
+  }
+  
   fetch('/api/auth/apple', { credentials: 'include',
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -304,9 +343,9 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
         }
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/?_=' + Date.now());});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});
       } else {
-        location.replace('/?_=' + Date.now());
+        setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
       }
       return;
     }
@@ -320,12 +359,33 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
-  }).catch(function() { showError('Network error. Try again.'); });
+  }).catch(function(e) { showError('Network error. Try again. ' + e.message); });
 }
 
 function handleCredential(credential, isIntentCallback) {
+  if (activePoll) { clearInterval(activePoll); activePoll = null; }
   googleCredential = credential;
   showError('');
+  
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+     var form = document.createElement('form');
+     form.method = 'POST';
+     form.action = '/login_google_native';
+     var tokenInput = document.createElement('input');
+     tokenInput.type = 'hidden';
+     tokenInput.name = 'credential';
+     tokenInput.value = credential;
+     var stateInput = document.createElement('input');
+     stateInput.type = 'hidden';
+     stateInput.name = 'intent';
+     stateInput.value = (typeof currentIntentId !== 'undefined' ? currentIntentId : '');
+     form.appendChild(tokenInput);
+     form.appendChild(stateInput);
+     document.body.appendChild(form);
+     form.submit();
+     return;
+  }
+  
   fetch('/api/auth/login', { credentials: 'include',
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({credential: credential, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
@@ -340,9 +400,9 @@ function handleCredential(credential, isIntentCallback) {
         }
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/?_=' + Date.now());});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});
       } else {
-        location.replace('/?_=' + Date.now());
+        setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
       }
       return;
     }
@@ -356,7 +416,7 @@ function handleCredential(credential, isIntentCallback) {
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
-  }).catch(function() { showError('Network error. Try again.'); });
+  }).catch(function(e) { showError('Network error. Try again. ' + e.message); });
 }
 
 function showInviteBanner() {
@@ -375,7 +435,7 @@ function showInviteBanner() {
 function acceptInvite() {
   var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
   fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
-    if(d.ok) location.replace('/?_=' + Date.now()); else showStep2Error(d.error||'Failed');
+    if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
@@ -386,7 +446,7 @@ function createHousehold() {
   var b=document.getElementById('btnCreate'); b.disabled=true; showStep2Error('');
   fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})})
     .then(function(r){return r.json()}).then(function(d){
-    if(d.ok) location.replace('/?_=' + Date.now()); else showStep2Error(d.error||'Failed');
+    if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }

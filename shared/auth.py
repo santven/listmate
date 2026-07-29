@@ -323,7 +323,7 @@ def install(app, cookie_name="listmate_session", cookie_secure=False):
     from datetime import timedelta
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "None"
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_SECURE"] = True
     
 def _set(uid, email, name, hhid, hhname):
