@@ -149,6 +149,29 @@ function redirectToAppleOAuth() {
 function doAppleSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
 
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.SignInWithApple) {
+    window.Capacitor.Plugins.SignInWithApple.authorize({
+      clientId: getAppleClientId(),
+      scopes: 'email name'
+    }).then(function(res) {
+      var idToken = res.response.identityToken;
+      var userObj = null;
+      if (res.response.givenName || res.response.familyName || res.response.email) {
+        userObj = {
+          name: {
+            firstName: res.response.givenName || '',
+            lastName: res.response.familyName || ''
+          },
+          email: res.response.email || ''
+        };
+      }
+      handleAppleCredential(idToken, userObj);
+    }).catch(function(err) {
+      console.warn('[Native AppleID Sign-In error]', err);
+    });
+    return;
+  }
+
   if (window.AppleID && window.AppleID.auth) {
     try {
       AppleID.auth.init({
