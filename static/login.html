@@ -95,9 +95,7 @@ function checkSessionAndProceed(proceedFn) {
 
 // Direct JavaScript navigation — Capacitor respects allowNavigation for user-initiated navigations
 function doSignIn() {
-  checkSessionAndProceed(function() {
-    _doSignIn();
-  });
+  _doSignIn();
 }
 
 var activePoll = null;
@@ -222,8 +220,8 @@ document.addEventListener('DOMContentLoaded', initAppleID);
 var currentIntentId;
 function redirectToAppleOAuth() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  
-  var state = 'intent_' + currentIntentId + '_web';
+  startPollingIntent(currentIntentId);
+  var state = 'intent_' + currentIntentId;
   var url = 'https://appleid.apple.com/auth/authorize?' +
     'client_id=' + encodeURIComponent(getAppleClientId()) +
     '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
@@ -232,16 +230,18 @@ function redirectToAppleOAuth() {
     '&response_mode=form_post' +
     '&state=' + state;
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-    window.location.href = url;
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+      window.Capacitor.Plugins.Browser.open({ url: url });
+    } else {
+      window.location.href = url;
+    }
   } else {
     window.open(url, '_blank');
   }
 }
 
 function doAppleSignIn() {
-  checkSessionAndProceed(function() {
-    _doAppleSignIn();
-  });
+  _doAppleSignIn();
 }
 function _doAppleSignIn() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
