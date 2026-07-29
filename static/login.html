@@ -78,10 +78,10 @@ function checkSessionAndProceed(proceedFn) {
   fetch('/api/auth/config?_='+Date.now()).then(function(r) {
     if (r.ok) {
       r.json().then(function(c) {
-        if (c.user) { location.replace('/'); } else { proceedFn(); }
+        if (c.user) { location.replace('/'); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
       });
-    } else { proceedFn(); }
-  }).catch(function() { proceedFn(); });
+    } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
+  }).catch(function() { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); });
 }
 
 
@@ -141,7 +141,7 @@ function getAppleClientId() {
 }
 
 function initAppleID() {
-  if (window.AppleID && window.AppleID.auth) {
+  if (false) { // Disabled popup auth to force redirect in WebView
     try {
       AppleID.auth.init({
         clientId: getAppleClientId(),
