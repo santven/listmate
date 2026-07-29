@@ -145,13 +145,74 @@ def login_page():
     if request.method == "POST":
         id_token_str = request.form.get("id_token")
         user_json = request.form.get("user")
+        state_str = request.form.get("state")
+        
         if id_token_str:
-            return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+            if state_str and state_str.startswith("intent_"):
+                intent_id = state_str.split("intent_")[1]
+                import jwt
+                import json
+                try:
+                    claims = jwt.decode(id_token_str, options={"verify_signature": False})
+                    apple_sub = claims.get("sub")
+                    token_email = claims.get("email", "")
+                    if apple_sub:
+                        import shared.auth as authmod
+                        authmod._init_schema()
+                        
+                        client_user = {}
+                        if user_json:
+                            try: client_user = json.loads(user_json)
+                            except: pass
+                        
+                        client_email = client_user.get("email") or ""
+                        email = (client_email or token_email or "").strip().lower()
+                        name_obj = client_user.get("name") or {}
+                        first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
+                        last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
+                        name_from_client = f"{first} {last}".strip()
+                        if not name_from_client:
+                            name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
+                        else:
+                            name = name_from_client
+                        
+                        gid_alias = f"apple_{apple_sub}"
+                        user = None
+                        if email:
+                            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+                        if not user:
+                            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                            
+                        if not user:
+                            authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid_alias, email, name))
+                            user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                        
+                        if user:
+                            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+                            is_web = state_str.endswith("_web")
+                            if is_web:
+                                authmod._set(user["id"], email, user["name"], user.get("household_id", 0), "")
+                                return '''<script>window.location.replace('/');</script>'''
+                            
+                            return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+                            <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;">
+                            <h2>✅ Login Successful</h2>
+                            <p style="color:#888;">You can now close this tab to return to the app.</p>
+                            <script>try{window.close();}catch(e){}</script>
+                            </body></html>'''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+
+            # Fallback
+            return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body><script>
             sessionStorage.setItem('apple_id_token', {json.dumps(id_token_str)});
             sessionStorage.setItem('apple_user', {json.dumps(user_json or '')});
+            sessionStorage.setItem('apple_state', {json.dumps(state_str or '')});
             window.location.replace('/login');
-            </script></body></html>"""
+            </script></body></html>'''
+            
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
     html = html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)
     return html.replace("APPLE_CLIENT_ID_PLACEHOLDER", APPLE_CLIENT_ID)
@@ -1455,7 +1516,8 @@ _OAUTH_STATES = {}
 def auth_google_redirect():
     """Return HTML page that redirects to Google OAuth via JS — avoids Capacitor interception."""
     redirect_uri = 'https://grocerlist.app/auth/google/callback'
-    state = _secrets.token_hex(16)
+    intent_id = request.args.get("intent")
+    state = ("intent_" + intent_id) if intent_id else _secrets.token_hex(16)
     _OAUTH_STATES[state] = time.time()
     now = time.time()
     for s in list(_OAUTH_STATES.keys()):
@@ -1555,7 +1617,13 @@ def auth_google_callback():
             hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
             hh_name = hh.get('name', '') if hh else ''
         
+
         authmod._set(user["id"], email, name, hh_id, hh_name)
+        
+        if state.startswith("intent_"):
+            intent_id = state.split("intent_")[1]
+            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+
         return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
                 '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
                 '<h2>&#x1F44D; Signed in</h2><p>Loading...</p>' +

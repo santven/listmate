@@ -8,8 +8,10 @@
     "androidScheme": "https",
     "allowNavigation": [
       "accounts.google.com",
-      "appleid.apple.com",
-      "oauth2.googleapis.com"
+      "*.google.com",
+      "*.googleapis.com",
+      "*.apple.com",
+      "*.appleid.com"
     ]
   },
   "plugins": {

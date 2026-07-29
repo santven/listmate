@@ -154,6 +154,8 @@ if USE_PG:
                 PRIMARY KEY (user_id, feature))""",
             """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
             """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS invites (
                 id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL,
                 household_id INTEGER NOT NULL REFERENCES auth_households(id),
@@ -370,6 +372,36 @@ def require_user(fn):
 # ── Routes ──────────────────────────────────────────────────
 
 def register_auth_routes(app):
+
+    @app.route("/api/auth/poll")
+    def auth_poll_intent():
+        intent_id = request.args.get("intent")
+        if not intent_id: return jsonify({"error": "Missing intent"}), 400
+        _init_schema()
+        intent = _one("SELECT * FROM login_intents WHERE id = ?", (intent_id,))
+        if not intent: return jsonify({"status": "pending"})
+        user = _one(f"SELECT id, email, name, household_id FROM {_USERS} WHERE id = ?", (intent["user_id"],))
+        if not user: return jsonify({"error": "User not found"}), 404
+        hh_id = user.get('household_id', 0)
+        hh_name = ''
+        if not hh_id:
+            hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
+            if hh_count and hh_count.get("cnt", 0) == 0:
+                import secrets
+                code = secrets.token_hex(4).upper()
+                prem_val = True if USE_PG else 1
+                _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
+                hh_id = hh["id"] if hh else 1
+                hh_name = hh.get("name", "Root Household") if hh else "Root Household"
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+        if hh_id and not hh_name:
+            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+            hh_name = hh.get('name', '') if hh else ''
+        _set(user["id"], user["email"], user["name"], hh_id, hh_name)
+        _run("DELETE FROM login_intents WHERE id = ?", (intent_id,))
+        return jsonify({"ok": True, "status": "completed"})
+
     @app.route("/api/auth/google", methods=["POST"])
     def auth_google():
         try:
@@ -426,6 +458,12 @@ def register_auth_routes(app):
                 hh_name = hh.get("name", "") if hh else ""
             
             _set(user["id"], email, name, hh_id, hh_name)
+
+            intent_id = data.get("intent")
+            if intent_id:
+                _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+
+
             return jsonify({"ok": True, "name": name, "email": email,
                             "household_id": hh_id, "household_name": hh_name})
         except Exception as e:
@@ -519,7 +557,13 @@ def register_auth_routes(app):
                 hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
                 hh_name = hh.get("name", "") if hh else ""
 
+            
             _set(user["id"], email, user["name"] or name, hh_id, hh_name)
+
+            intent_id = data.get("intent")
+            if intent_id:
+                _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+
             return jsonify({"ok": True, "name": user["name"] or name, "email": email, "household_id": hh_id, "household_name": hh_name})
         except Exception as e:
             traceback.print_exc()

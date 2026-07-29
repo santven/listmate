@@ -91,15 +91,33 @@ function doSignIn() {
     _doSignIn();
   });
 }
+
+var activePoll = null;
+function startPollingIntent(intentId) {
+  if (activePoll) clearInterval(activePoll);
+  activePoll = setInterval(function() {
+    fetch('/api/auth/poll?intent=' + encodeURIComponent(intentId))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.ok) {
+          clearInterval(activePoll);
+          location.replace('/');
+        }
+      }).catch(function(){});
+  }, 2000);
+}
+
 function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
   var nonce = Math.random().toString(36).slice(2);
+  var intentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  startPollingIntent(intentId);
   var url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
     'client_id=' + CLIENT_ID +
     '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
     '&response_type=id_token' +
     '&scope=openid%20email%20profile' +
-    '&nonce=' + nonce;
+    '&nonce=' + nonce + '&state=intent_' + intentId;
   window.location.assign(url);
 }
 
@@ -116,6 +134,9 @@ function _doSignIn() {
     sessionStorage.removeItem('apple_id_token');
     var userStr = sessionStorage.getItem('apple_user');
     sessionStorage.removeItem('apple_user');
+    var stateStr = sessionStorage.getItem('apple_state');
+    sessionStorage.removeItem('apple_state');
+    if (stateStr && stateStr.startsWith('intent_')) { currentIntentId = stateStr.substring(7); }
     var userObj = null;
     if (userStr) {
       try { userObj = JSON.parse(userStr); } catch(e) {}
@@ -126,6 +147,8 @@ function _doSignIn() {
 
   var hp = new URLSearchParams(window.location.hash.substring(1));
   var idToken = hp.get('id_token');
+  var st = hp.get('state');
+  if (st && st.startsWith('intent_')) { currentIntentId = st.substring(7); }
   if (idToken) {
     history.replaceState(null, '', location.pathname + location.search);
     handleCredential(idToken);
@@ -155,8 +178,11 @@ function initAppleID() {
 
 document.addEventListener('DOMContentLoaded', initAppleID);
 
+var currentIntentId;
 function redirectToAppleOAuth() {
-  var state = Math.random().toString(36).slice(2);
+  currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  startPollingIntent(currentIntentId);
+  var state = 'intent_' + currentIntentId + '_web';
   var url = 'https://appleid.apple.com/auth/authorize?' +
     'client_id=' + encodeURIComponent(getAppleClientId()) +
     '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
@@ -173,11 +199,15 @@ function doAppleSignIn() {
   });
 }
 function _doAppleSignIn() {
+  currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  startPollingIntent(currentIntentId);
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
 
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.SignInWithApple) {
     window.Capacitor.Plugins.SignInWithApple.authorize({
       clientId: getAppleClientId(),
+      redirectURI: location.origin + '/login',
+      state: 'intent_' + currentIntentId,
       scopes: 'email name'
     }).then(function(res) {
       var idToken = res.response.identityToken;
@@ -236,7 +266,7 @@ function handleAppleCredential(idToken, userObj) {
   fetch('/api/auth/apple', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({id_token: idToken, user: userObj})
+    body: JSON.stringify({id_token: idToken, user: userObj, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
@@ -265,7 +295,7 @@ function handleCredential(credential) {
   showError('');
   fetch('/api/auth/login', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({credential: credential})
+    body: JSON.stringify({credential: credential, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {

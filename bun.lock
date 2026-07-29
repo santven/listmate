@@ -1,0 +1,343 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "listmate",
+      "dependencies": {
+        "@capacitor-community/apple-sign-in": "^7.1.0",
+        "@capacitor/android": "^8.4.2",
+        "@capacitor/cli": "^8.4.2",
+        "@capacitor/core": "^8.4.2",
+        "@capacitor/ios": "^8.4.2",
+        "@capacitor/splash-screen": "^8.0.2",
+        "@capacitor/status-bar": "^8.0.3",
+        "@revenuecat/purchases-capacitor": "^13.2.4",
+        "jimp": "^1.6.1",
+      },
+    },
+  },
+  "packages": {
+    "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, ""],
+
+    "@capacitor-community/apple-sign-in": ["@capacitor-community/apple-sign-in@7.1.0", "", { "dependencies": { "@types/scriptjs": "0.0.2", "scriptjs": "^2.5.9" }, "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-df7cA7vfvvvilTtpJKeVvxO31W+py5t3HK9233GBD5MvgAgtGvCqeQ3pI0noNkVsKPF9B1g/po8Mph6s4bVSmw=="],
+
+    "@capacitor/android": ["@capacitor/android@8.4.2", "", { "peerDependencies": { "@capacitor/core": "^8.4.0" } }, ""],
+
+    "@capacitor/cli": ["@capacitor/cli@8.4.2", "", { "dependencies": { "@ionic/cli-framework-output": "^2.2.8", "@ionic/utils-subprocess": "^3.0.1", "@ionic/utils-terminal": "^2.3.5", "commander": "^12.1.0", "debug": "^4.4.0", "env-paths": "^2.2.0", "fs-extra": "^11.2.0", "kleur": "^4.1.5", "native-run": "^2.0.3", "open": "^8.4.0", "plist": "^3.1.0", "prompts": "^2.4.2", "rimraf": "^6.0.1", "semver": "^7.6.3", "tar": "^7.5.3", "tslib": "^2.8.1", "xml2js": "^0.6.2" }, "bin": { "cap": "bin/capacitor", "capacitor": "bin/capacitor" } }, ""],
+
+    "@capacitor/core": ["@capacitor/core@8.4.2", "", { "dependencies": { "tslib": "^2.1.0" } }, ""],
+
+    "@capacitor/ios": ["@capacitor/ios@8.4.2", "", { "peerDependencies": { "@capacitor/core": "^8.4.0" } }, ""],
+
+    "@capacitor/splash-screen": ["@capacitor/splash-screen@8.0.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
+
+    "@capacitor/status-bar": ["@capacitor/status-bar@8.0.3", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, ""],
+
+    "@ionic/cli-framework-output": ["@ionic/cli-framework-output@2.2.8", "", { "dependencies": { "@ionic/utils-terminal": "2.3.5", "debug": "^4.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-array": ["@ionic/utils-array@2.1.6", "", { "dependencies": { "debug": "^4.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-fs": ["@ionic/utils-fs@3.1.7", "", { "dependencies": { "@types/fs-extra": "^8.0.0", "debug": "^4.0.0", "fs-extra": "^9.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-object": ["@ionic/utils-object@2.1.6", "", { "dependencies": { "debug": "^4.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-process": ["@ionic/utils-process@2.1.12", "", { "dependencies": { "@ionic/utils-object": "2.1.6", "@ionic/utils-terminal": "2.3.5", "debug": "^4.0.0", "signal-exit": "^3.0.3", "tree-kill": "^1.2.2", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-stream": ["@ionic/utils-stream@3.1.7", "", { "dependencies": { "debug": "^4.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-subprocess": ["@ionic/utils-subprocess@3.0.1", "", { "dependencies": { "@ionic/utils-array": "2.1.6", "@ionic/utils-fs": "3.1.7", "@ionic/utils-process": "2.1.12", "@ionic/utils-stream": "3.1.7", "@ionic/utils-terminal": "2.3.5", "cross-spawn": "^7.0.3", "debug": "^4.0.0", "tslib": "^2.0.1" } }, ""],
+
+    "@ionic/utils-terminal": ["@ionic/utils-terminal@2.3.5", "", { "dependencies": { "@types/slice-ansi": "^4.0.0", "debug": "^4.0.0", "signal-exit": "^3.0.3", "slice-ansi": "^4.0.0", "string-width": "^4.1.0", "strip-ansi": "^6.0.0", "tslib": "^2.0.1", "untildify": "^4.0.0", "wrap-ansi": "^7.0.0" } }, ""],
+
+    "@isaacs/fs-minipass": ["@isaacs/fs-minipass@4.0.1", "", { "dependencies": { "minipass": "^7.0.4" } }, ""],
+
+    "@jimp/core": ["@jimp/core@1.6.1", "", { "dependencies": { "@jimp/file-ops": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "await-to-js": "^3.0.0", "exif-parser": "^0.1.12", "file-type": "^21.3.3", "mime": "3" } }, ""],
+
+    "@jimp/diff": ["@jimp/diff@1.6.1", "", { "dependencies": { "@jimp/plugin-resize": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "pixelmatch": "^5.3.0" } }, ""],
+
+    "@jimp/file-ops": ["@jimp/file-ops@1.6.1", "", {}, ""],
+
+    "@jimp/js-bmp": ["@jimp/js-bmp@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "bmp-ts": "^1.0.9" } }, ""],
+
+    "@jimp/js-gif": ["@jimp/js-gif@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "gifwrap": "^0.10.1", "omggif": "^1.0.10" } }, ""],
+
+    "@jimp/js-jpeg": ["@jimp/js-jpeg@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "jpeg-js": "^0.4.4" } }, ""],
+
+    "@jimp/js-png": ["@jimp/js-png@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "pngjs": "^7.0.0" } }, ""],
+
+    "@jimp/js-tiff": ["@jimp/js-tiff@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "utif2": "^4.1.0" } }, ""],
+
+    "@jimp/plugin-blit": ["@jimp/plugin-blit@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-blur": ["@jimp/plugin-blur@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/utils": "1.6.1" } }, ""],
+
+    "@jimp/plugin-circle": ["@jimp/plugin-circle@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-color": ["@jimp/plugin-color@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "tinycolor2": "^1.6.0", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-contain": ["@jimp/plugin-contain@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/plugin-blit": "1.6.1", "@jimp/plugin-resize": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-cover": ["@jimp/plugin-cover@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/plugin-crop": "1.6.1", "@jimp/plugin-resize": "1.6.1", "@jimp/types": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-crop": ["@jimp/plugin-crop@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-displace": ["@jimp/plugin-displace@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-dither": ["@jimp/plugin-dither@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1" } }, ""],
+
+    "@jimp/plugin-fisheye": ["@jimp/plugin-fisheye@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-flip": ["@jimp/plugin-flip@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-hash": ["@jimp/plugin-hash@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/js-bmp": "1.6.1", "@jimp/js-jpeg": "1.6.1", "@jimp/js-png": "1.6.1", "@jimp/js-tiff": "1.6.1", "@jimp/plugin-color": "1.6.1", "@jimp/plugin-resize": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "any-base": "^1.1.0" } }, ""],
+
+    "@jimp/plugin-mask": ["@jimp/plugin-mask@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-print": ["@jimp/plugin-print@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/js-jpeg": "1.6.1", "@jimp/js-png": "1.6.1", "@jimp/plugin-blit": "1.6.1", "@jimp/types": "1.6.1", "parse-bmfont-ascii": "^1.0.6", "parse-bmfont-binary": "^1.0.6", "parse-bmfont-xml": "^1.1.6", "simple-xml-to-json": "^1.2.2", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-quantize": ["@jimp/plugin-quantize@1.6.1", "", { "dependencies": { "image-q": "^4.0.0", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-resize": ["@jimp/plugin-resize@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/types": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-rotate": ["@jimp/plugin-rotate@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/plugin-crop": "1.6.1", "@jimp/plugin-resize": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/plugin-threshold": ["@jimp/plugin-threshold@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/plugin-color": "1.6.1", "@jimp/plugin-hash": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1", "zod": "^3.23.8" } }, ""],
+
+    "@jimp/types": ["@jimp/types@1.6.1", "", { "dependencies": { "zod": "^3.23.8" } }, ""],
+
+    "@jimp/utils": ["@jimp/utils@1.6.1", "", { "dependencies": { "@jimp/types": "1.6.1", "tinycolor2": "^1.6.0" } }, ""],
+
+    "@revenuecat/purchases-capacitor": ["@revenuecat/purchases-capacitor@13.2.4", "", { "dependencies": { "@revenuecat/purchases-typescript-internal-esm": "18.22.2" }, "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-0ql1SBLYq3ldh+I8zsUU2bx1ml59s8rlt2wXYydzXTVj0/OJ12ntHAh3n95d9a+Iuwt89kZ6uTWTwu4LvzE+UA=="],
+
+    "@revenuecat/purchases-typescript-internal-esm": ["@revenuecat/purchases-typescript-internal-esm@18.22.2", "", {}, "sha512-JdMGKUX4n/WWIxN1WjcwL8VsECQCtYW7X9iYO/YBqEqFnBPKqbOK3O/QX+Tu53JA881Jo/Y8wvPiK4EoNJmQmg=="],
+
+    "@tokenizer/inflate": ["@tokenizer/inflate@0.4.1", "", { "dependencies": { "debug": "^4.4.3", "token-types": "^6.1.1" } }, ""],
+
+    "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, ""],
+
+    "@types/fs-extra": ["@types/fs-extra@8.1.5", "", { "dependencies": { "@types/node": "*" } }, ""],
+
+    "@types/node": ["@types/node@16.9.1", "", {}, ""],
+
+    "@types/scriptjs": ["@types/scriptjs@0.0.2", "", {}, "sha512-GFrUgzGYfNX3VWZwMyzr0JrBwzLv5Kes4BQBvo6hXdRy14/GBbpCiVwwB7v1o2xIEvFf+9GyznmYhuesQQjSag=="],
+
+    "@types/slice-ansi": ["@types/slice-ansi@4.0.0", "", {}, ""],
+
+    "@xmldom/xmldom": ["@xmldom/xmldom@0.9.10", "", {}, ""],
+
+    "ansi-regex": ["ansi-regex@5.0.1", "", {}, ""],
+
+    "ansi-styles": ["ansi-styles@4.3.0", "", { "dependencies": { "color-convert": "^2.0.1" } }, ""],
+
+    "any-base": ["any-base@1.1.0", "", {}, ""],
+
+    "astral-regex": ["astral-regex@2.0.0", "", {}, ""],
+
+    "at-least-node": ["at-least-node@1.0.0", "", {}, ""],
+
+    "await-to-js": ["await-to-js@3.0.0", "", {}, ""],
+
+    "balanced-match": ["balanced-match@4.0.4", "", {}, ""],
+
+    "base64-js": ["base64-js@1.5.1", "", {}, ""],
+
+    "big-integer": ["big-integer@1.6.52", "", {}, ""],
+
+    "bmp-ts": ["bmp-ts@1.0.9", "", {}, ""],
+
+    "bplist-parser": ["bplist-parser@0.3.2", "", { "dependencies": { "big-integer": "1.6.x" } }, ""],
+
+    "brace-expansion": ["brace-expansion@5.0.7", "", { "dependencies": { "balanced-match": "^4.0.2" } }, ""],
+
+    "buffer-crc32": ["buffer-crc32@0.2.13", "", {}, ""],
+
+    "chownr": ["chownr@3.0.0", "", {}, ""],
+
+    "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, ""],
+
+    "color-name": ["color-name@1.1.4", "", {}, ""],
+
+    "commander": ["commander@12.1.0", "", {}, ""],
+
+    "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, ""],
+
+    "debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, ""],
+
+    "define-lazy-prop": ["define-lazy-prop@2.0.0", "", {}, ""],
+
+    "elementtree": ["elementtree@0.1.7", "", { "dependencies": { "sax": "1.1.4" } }, ""],
+
+    "emoji-regex": ["emoji-regex@8.0.0", "", {}, ""],
+
+    "env-paths": ["env-paths@2.2.1", "", {}, ""],
+
+    "exif-parser": ["exif-parser@0.1.12", "", {}, ""],
+
+    "fd-slicer": ["fd-slicer@1.1.0", "", { "dependencies": { "pend": "~1.2.0" } }, ""],
+
+    "file-type": ["file-type@21.3.4", "", { "dependencies": { "@tokenizer/inflate": "^0.4.1", "strtok3": "^10.3.4", "token-types": "^6.1.1", "uint8array-extras": "^1.4.0" } }, ""],
+
+    "fs-extra": ["fs-extra@11.3.6", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, ""],
+
+    "gifwrap": ["gifwrap@0.10.1", "", { "dependencies": { "image-q": "^4.0.0", "omggif": "^1.0.10" } }, ""],
+
+    "glob": ["glob@13.0.6", "", { "dependencies": { "minimatch": "^10.2.2", "minipass": "^7.1.3", "path-scurry": "^2.0.2" } }, ""],
+
+    "graceful-fs": ["graceful-fs@4.2.11", "", {}, ""],
+
+    "ieee754": ["ieee754@1.2.1", "", {}, ""],
+
+    "image-q": ["image-q@4.0.0", "", { "dependencies": { "@types/node": "16.9.1" } }, ""],
+
+    "inherits": ["inherits@2.0.4", "", {}, ""],
+
+    "ini": ["ini@4.1.3", "", {}, ""],
+
+    "is-docker": ["is-docker@2.2.1", "", { "bin": "cli.js" }, ""],
+
+    "is-fullwidth-code-point": ["is-fullwidth-code-point@3.0.0", "", {}, ""],
+
+    "is-wsl": ["is-wsl@2.2.0", "", { "dependencies": { "is-docker": "^2.0.0" } }, ""],
+
+    "isexe": ["isexe@2.0.0", "", {}, ""],
+
+    "jimp": ["jimp@1.6.1", "", { "dependencies": { "@jimp/core": "1.6.1", "@jimp/diff": "1.6.1", "@jimp/js-bmp": "1.6.1", "@jimp/js-gif": "1.6.1", "@jimp/js-jpeg": "1.6.1", "@jimp/js-png": "1.6.1", "@jimp/js-tiff": "1.6.1", "@jimp/plugin-blit": "1.6.1", "@jimp/plugin-blur": "1.6.1", "@jimp/plugin-circle": "1.6.1", "@jimp/plugin-color": "1.6.1", "@jimp/plugin-contain": "1.6.1", "@jimp/plugin-cover": "1.6.1", "@jimp/plugin-crop": "1.6.1", "@jimp/plugin-displace": "1.6.1", "@jimp/plugin-dither": "1.6.1", "@jimp/plugin-fisheye": "1.6.1", "@jimp/plugin-flip": "1.6.1", "@jimp/plugin-hash": "1.6.1", "@jimp/plugin-mask": "1.6.1", "@jimp/plugin-print": "1.6.1", "@jimp/plugin-quantize": "1.6.1", "@jimp/plugin-resize": "1.6.1", "@jimp/plugin-rotate": "1.6.1", "@jimp/plugin-threshold": "1.6.1", "@jimp/types": "1.6.1", "@jimp/utils": "1.6.1" } }, ""],
+
+    "jpeg-js": ["jpeg-js@0.4.4", "", {}, ""],
+
+    "jsonfile": ["jsonfile@6.2.1", "", { "dependencies": { "universalify": "^2.0.0" }, "optionalDependencies": { "graceful-fs": "^4.1.6" } }, ""],
+
+    "kleur": ["kleur@4.1.5", "", {}, ""],
+
+    "lru-cache": ["lru-cache@11.5.2", "", {}, ""],
+
+    "mime": ["mime@3.0.0", "", { "bin": "cli.js" }, ""],
+
+    "minimatch": ["minimatch@10.2.5", "", { "dependencies": { "brace-expansion": "^5.0.5" } }, ""],
+
+    "minipass": ["minipass@7.1.3", "", {}, ""],
+
+    "minizlib": ["minizlib@3.1.0", "", { "dependencies": { "minipass": "^7.1.2" } }, ""],
+
+    "ms": ["ms@2.1.3", "", {}, ""],
+
+    "native-run": ["native-run@2.0.3", "", { "dependencies": { "@ionic/utils-fs": "^3.1.7", "@ionic/utils-terminal": "^2.3.4", "bplist-parser": "^0.3.2", "debug": "^4.3.4", "elementtree": "^0.1.7", "ini": "^4.1.1", "plist": "^3.1.0", "split2": "^4.2.0", "through2": "^4.0.2", "tslib": "^2.6.2", "yauzl": "^2.10.0" }, "bin": "bin/native-run" }, ""],
+
+    "omggif": ["omggif@1.0.10", "", {}, ""],
+
+    "open": ["open@8.4.2", "", { "dependencies": { "define-lazy-prop": "^2.0.0", "is-docker": "^2.1.1", "is-wsl": "^2.2.0" } }, ""],
+
+    "package-json-from-dist": ["package-json-from-dist@1.0.1", "", {}, ""],
+
+    "pako": ["pako@1.0.11", "", {}, ""],
+
+    "parse-bmfont-ascii": ["parse-bmfont-ascii@1.0.6", "", {}, ""],
+
+    "parse-bmfont-binary": ["parse-bmfont-binary@1.0.6", "", {}, ""],
+
+    "parse-bmfont-xml": ["parse-bmfont-xml@1.1.6", "", { "dependencies": { "xml-parse-from-string": "^1.0.0", "xml2js": "^0.5.0" } }, ""],
+
+    "path-key": ["path-key@3.1.1", "", {}, ""],
+
+    "path-scurry": ["path-scurry@2.0.2", "", { "dependencies": { "lru-cache": "^11.0.0", "minipass": "^7.1.2" } }, ""],
+
+    "pend": ["pend@1.2.0", "", {}, ""],
+
+    "pixelmatch": ["pixelmatch@5.3.0", "", { "dependencies": { "pngjs": "^6.0.0" }, "bin": "bin/pixelmatch" }, ""],
+
+    "plist": ["plist@3.1.1", "", { "dependencies": { "@xmldom/xmldom": "^0.9.10", "base64-js": "^1.5.1", "xmlbuilder": "^15.1.1" } }, ""],
+
+    "pngjs": ["pngjs@7.0.0", "", {}, ""],
+
+    "prompts": ["prompts@2.4.2", "", { "dependencies": { "kleur": "^3.0.3", "sisteransi": "^1.0.5" } }, ""],
+
+    "readable-stream": ["readable-stream@3.6.2", "", { "dependencies": { "inherits": "^2.0.3", "string_decoder": "^1.1.1", "util-deprecate": "^1.0.1" } }, ""],
+
+    "rimraf": ["rimraf@6.1.3", "", { "dependencies": { "glob": "^13.0.3", "package-json-from-dist": "^1.0.1" }, "bin": "dist/esm/bin.mjs" }, ""],
+
+    "safe-buffer": ["safe-buffer@5.2.1", "", {}, ""],
+
+    "sax": ["sax@1.1.4", "", {}, ""],
+
+    "scriptjs": ["scriptjs@2.5.9", "", {}, "sha512-qGVDoreyYiP1pkQnbnFAUIS5AjenNwwQBdl7zeos9etl+hYKWahjRTfzAZZYBv5xNHx7vNKCmaLDQZ6Fr2AEXg=="],
+
+    "semver": ["semver@7.8.5", "", { "bin": "bin/semver.js" }, ""],
+
+    "shebang-command": ["shebang-command@2.0.0", "", { "dependencies": { "shebang-regex": "^3.0.0" } }, ""],
+
+    "shebang-regex": ["shebang-regex@3.0.0", "", {}, ""],
+
+    "signal-exit": ["signal-exit@3.0.7", "", {}, ""],
+
+    "simple-xml-to-json": ["simple-xml-to-json@1.2.7", "", {}, ""],
+
+    "sisteransi": ["sisteransi@1.0.5", "", {}, ""],
+
+    "slice-ansi": ["slice-ansi@4.0.0", "", { "dependencies": { "ansi-styles": "^4.0.0", "astral-regex": "^2.0.0", "is-fullwidth-code-point": "^3.0.0" } }, ""],
+
+    "split2": ["split2@4.2.0", "", {}, ""],
+
+    "string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, ""],
+
+    "string_decoder": ["string_decoder@1.3.0", "", { "dependencies": { "safe-buffer": "~5.2.0" } }, ""],
+
+    "strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, ""],
+
+    "strtok3": ["strtok3@10.3.5", "", { "dependencies": { "@tokenizer/token": "^0.3.0" } }, ""],
+
+    "tar": ["tar@7.5.20", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, ""],
+
+    "through2": ["through2@4.0.2", "", { "dependencies": { "readable-stream": "3" } }, ""],
+
+    "tinycolor2": ["tinycolor2@1.6.0", "", {}, ""],
+
+    "token-types": ["token-types@6.1.2", "", { "dependencies": { "@borewit/text-codec": "^0.2.1", "@tokenizer/token": "^0.3.0", "ieee754": "^1.2.1" } }, ""],
+
+    "tree-kill": ["tree-kill@1.2.2", "", { "bin": "cli.js" }, ""],
+
+    "tslib": ["tslib@2.8.1", "", {}, ""],
+
+    "uint8array-extras": ["uint8array-extras@1.5.0", "", {}, ""],
+
+    "undici-types": ["undici-types@8.3.0", "", {}, ""],
+
+    "universalify": ["universalify@2.0.1", "", {}, ""],
+
+    "untildify": ["untildify@4.0.0", "", {}, ""],
+
+    "utif2": ["utif2@4.1.0", "", { "dependencies": { "pako": "^1.0.11" } }, ""],
+
+    "util-deprecate": ["util-deprecate@1.0.2", "", {}, ""],
+
+    "which": ["which@2.0.2", "", { "dependencies": { "isexe": "^2.0.0" }, "bin": { "node-which": "bin/node-which" } }, ""],
+
+    "wrap-ansi": ["wrap-ansi@7.0.0", "", { "dependencies": { "ansi-styles": "^4.0.0", "string-width": "^4.1.0", "strip-ansi": "^6.0.0" } }, ""],
+
+    "xml-parse-from-string": ["xml-parse-from-string@1.0.1", "", {}, ""],
+
+    "xml2js": ["xml2js@0.6.2", "", { "dependencies": { "sax": ">=0.6.0", "xmlbuilder": "~11.0.0" } }, ""],
+
+    "xmlbuilder": ["xmlbuilder@15.1.1", "", {}, ""],
+
+    "yallist": ["yallist@5.0.0", "", {}, ""],
+
+    "yauzl": ["yauzl@2.10.0", "", { "dependencies": { "buffer-crc32": "~0.2.3", "fd-slicer": "~1.1.0" } }, ""],
+
+    "zod": ["zod@3.25.76", "", {}, ""],
+
+    "@ionic/utils-fs/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, ""],
+
+    "@types/fs-extra/@types/node": ["@types/node@26.1.1", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
+
+    "parse-bmfont-xml/xml2js": ["xml2js@0.5.0", "", { "dependencies": { "sax": ">=0.6.0", "xmlbuilder": "~11.0.0" } }, ""],
+
+    "pixelmatch/pngjs": ["pngjs@6.0.0", "", {}, ""],
+
+    "prompts/kleur": ["kleur@3.0.3", "", {}, ""],
+
+    "xml2js/xmlbuilder": ["xmlbuilder@11.0.1", "", {}, ""],
+
+    "parse-bmfont-xml/xml2js/xmlbuilder": ["xmlbuilder@11.0.1", "", {}, ""],
+  }
+}
