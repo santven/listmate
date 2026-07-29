@@ -8,3 +8,4 @@ listmate-upload.keystore
 version.properties
 listmate.db*
 *.log
+listmate_auth.db
