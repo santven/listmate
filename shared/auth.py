@@ -273,18 +273,19 @@ else:
             """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
         ]:
             _run(stmt)
-        for col, coltype in [
-            ("dietary_restrictions", "TEXT DEFAULT ''"),
-            ("zip_code", "TEXT DEFAULT ''"),
-            ("country", "TEXT DEFAULT ''"),
-            ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
-            ("stripe_customer_id", "TEXT"),
-            ("rc_app_user_id", "TEXT"),
-            ("subscription_status", "TEXT NOT NULL DEFAULT 'free'"),
-            ("trial_ends_at", "TIMESTAMP")
+        for table, col, coltype in [
+            ("auth_households", "dietary_restrictions", "TEXT DEFAULT ''"),
+            ("auth_households", "zip_code", "TEXT DEFAULT ''"),
+            ("auth_households", "country", "TEXT DEFAULT ''"),
+            ("auth_households", "is_premium", "INTEGER NOT NULL DEFAULT 0"),
+            ("auth_households", "stripe_customer_id", "TEXT"),
+            ("auth_households", "rc_app_user_id", "TEXT"),
+            ("auth_households", "subscription_status", "TEXT NOT NULL DEFAULT 'free'"),
+            ("auth_households", "trial_ends_at", "TIMESTAMP"),
+            ("auth_users", "apple_id", "TEXT DEFAULT ''")
         ]:
             try:
-                _run(f"ALTER TABLE auth_households ADD COLUMN {col} {coltype}")
+                _run(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
             except Exception:
                 pass
 
@@ -431,6 +432,96 @@ def register_auth_routes(app):
             # GoogleAuthError (MalformedError, etc) → 401; anything else → 500
             if isinstance(e, GoogleAuthError):
                 return jsonify({"error": f"Invalid token: {str(e)}"}), 401
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/auth/apple", methods=["POST"])
+    def auth_apple():
+        try:
+            data = request.get_json(silent=True) or {}
+            id_token_str = data.get("id_token") or (data.get("authorization") and data.get("authorization").get("id_token"))
+            if not id_token_str:
+                return jsonify({"error": "Missing id_token"}), 400
+
+            apple_sub = None
+            token_email = ""
+
+            try:
+                import jwt
+                claims = jwt.decode(id_token_str, options={"verify_signature": False})
+                apple_sub = claims.get("sub")
+                token_email = claims.get("email", "")
+            except Exception as jwte:
+                print(f"[Apple Auth JWT decode error] {jwte}", flush=True)
+
+            if not apple_sub:
+                return jsonify({"error": "Invalid or unparseable Apple id_token"}), 400
+
+            client_user = data.get("user") or {}
+            if isinstance(client_user, str):
+                try:
+                    client_user = json.loads(client_user)
+                except Exception:
+                    client_user = {}
+
+            client_email = client_user.get("email") or ""
+            email = (client_email or token_email or "").strip().lower()
+
+            name_obj = client_user.get("name") or {}
+            first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
+            last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
+            name_from_client = f"{first} {last}".strip()
+
+            if not name_from_client:
+                name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
+            else:
+                name = name_from_client
+
+            gid_alias = f"apple_{apple_sub}"
+
+            _init_schema()
+
+            user = None
+            if email:
+                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+            if not user:
+                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
+
+            if not user:
+                _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
+                     (gid_alias, email, name))
+                user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
+
+            if user and not user.get("apple_id"):
+                try:
+                    _run(f"UPDATE {_USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
+                except Exception: pass
+
+            hh_id = user.get("household_id", 0) if user else 0
+            hh_name = ""
+
+            if not hh_id:
+                hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
+                if hh_count and hh_count.get("cnt", 0) == 0:
+                    import secrets
+                    code = secrets.token_hex(4).upper()
+                    prem_val = True if USE_PG else 1
+                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
+                    hh_id = hh["id"] if hh else 1
+                    hh_name = hh["name"] if hh else "Root Household"
+                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                else:
+                    _set(user["id"], email, user["name"] or name, 0, "")
+                    return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
+
+            if hh_id and not hh_name:
+                hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+                hh_name = hh.get("name", "") if hh else ""
+
+            _set(user["id"], email, user["name"] or name, hh_id, hh_name)
+            return jsonify({"ok": True, "name": user["name"] or name, "email": email, "household_id": hh_id, "household_name": hh_name})
+        except Exception as e:
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
 
