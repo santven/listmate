@@ -236,7 +236,6 @@ document.addEventListener('AppleIDSignInOnSuccess', function(event) {
 var currentIntentId;
 function redirectToAppleOAuth() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  startPollingIntent(currentIntentId);
   var state = 'intent_' + currentIntentId;
   var params = new URLSearchParams({
     client_id: getAppleClientId(),
@@ -248,13 +247,15 @@ function redirectToAppleOAuth() {
   });
   var url = 'https://appleid.apple.com/auth/authorize?' + params.toString();
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    startPollingIntent(currentIntentId);
     if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
       window.Capacitor.Plugins.Browser.open({ url: url });
     } else {
       window.location.href = url;
     }
   } else {
-    window.open(url, '_blank');
+    // Top-level navigation on web ensures first-party cookie persistence in Safari ITP
+    window.location.href = url;
   }
 }
 
@@ -290,39 +291,6 @@ function _doAppleSignIn() {
       showError('Apple Sign-In Error: ' + (err.message || JSON.stringify(err)));
     });
     return;
-  }
-
-  
-  startPollingIntent(currentIntentId);
-  if (window.AppleID && window.AppleID.auth) {
-    try {
-      AppleID.auth.init({
-        clientId: getAppleClientId(),
-        scope: 'name email',
-        redirectURI: location.origin + '/login',
-        state: 'intent_' + currentIntentId,
-        usePopup: true
-      });
-      AppleID.auth.signIn().then(function(res) {
-        if (res && res.authorization && res.authorization.id_token) {
-          handleAppleCredential(res.authorization.id_token, res.user);
-        }
-      }).catch(function(err) {
-        console.warn('[AppleID Sign-In error]', err);
-        var errStr = typeof err === 'string' ? err : (err && (err.error || err.message)) || '';
-        if (errStr === 'popup_closed_by_user' || errStr === 'user_cancelled') {
-          return;
-        }
-        if (errStr === 'invalid_client' || errStr === 'invalid_request') {
-          showError('Apple Sign-In is being configured. Please ensure your Services ID (' + getAppleClientId() + ') is registered in Apple Developer Console for ' + location.host);
-          return;
-        }
-        redirectToAppleOAuth();
-      });
-      return;
-    } catch(e) {
-      console.warn('[AppleID Init exception]', e);
-    }
   }
 
   redirectToAppleOAuth();
