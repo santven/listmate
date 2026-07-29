@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#5ebe7e">
 <title>Listmate</title>
-<script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js"></script>
+<script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Roboto, sans-serif; background: #f0f4ed; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
@@ -111,9 +111,37 @@ function doSignIn() {
   }
 })();
 
+function initAppleID() {
+  if (window.AppleID && window.AppleID.auth) {
+    try {
+      AppleID.auth.init({
+        clientId: 'com.santven.listmate',
+        scope: 'name email',
+        redirectURI: location.origin + '/login',
+        usePopup: true
+      });
+    } catch(e) {}
+  }
+}
+
+document.addEventListener('DOMContentLoaded', initAppleID);
+
+function redirectToAppleOAuth() {
+  var state = Math.random().toString(36).slice(2);
+  var url = 'https://appleid.apple.com/auth/authorize?' +
+    'client_id=com.santven.listmate' +
+    '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
+    '&response_type=code%20id_token' +
+    '&scope=name%20email' +
+    '&response_mode=form_post' +
+    '&state=' + state;
+  window.location.assign(url);
+}
+
 function doAppleSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
-  if (window.AppleID) {
+
+  if (window.AppleID && window.AppleID.auth) {
     try {
       AppleID.auth.init({
         clientId: 'com.santven.listmate',
@@ -124,18 +152,23 @@ function doAppleSignIn() {
       AppleID.auth.signIn().then(function(res) {
         if (res && res.authorization && res.authorization.id_token) {
           handleAppleCredential(res.authorization.id_token, res.user);
+        } else {
+          redirectToAppleOAuth();
         }
       }).catch(function(err) {
-        if (err && err.error !== 'popup_closed_by_user') {
-          showError('Apple Sign-In failed or was cancelled.');
+        if (err && err.error === 'popup_closed_by_user') {
+          return;
         }
+        redirectToAppleOAuth();
       });
       return;
     } catch(e) {
-      console.error('[AppleID Init Error]', e);
+      console.warn('[AppleID Init warning, falling back to redirect]', e);
     }
   }
-  showError('Apple Sign-In is initializing. Please try again.');
+
+  // Fallback to direct redirect if SDK popup is not ready or blocked
+  redirectToAppleOAuth();
 }
 
 function handleAppleCredential(idToken, userObj) {
