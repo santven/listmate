@@ -455,7 +455,7 @@ def register_auth_routes(app):
                 print(f"[Apple Auth JWT decode error] {jwte}", flush=True)
 
             if not apple_sub:
-                return jsonify({"error": "Invalid or unparseable Apple id_token"}), 400
+                return jsonify({"error": f"Invalid or unparseable Apple id_token: {jwte}" if "jwte" in locals() else "Invalid or unparseable Apple id_token"}), 400
 
             client_user = data.get("user") or {}
             if isinstance(client_user, str):
