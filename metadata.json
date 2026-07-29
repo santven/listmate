@@ -1,6 +1,6 @@
 {
   "name": "ListMate",
   "description": "Store-specific grocery list for households.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

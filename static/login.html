@@ -111,11 +111,19 @@ function doSignIn() {
   }
 })();
 
+function getAppleClientId() {
+  var cid = 'APPLE_CLIENT_ID_PLACEHOLDER';
+  if (!cid || cid === 'APPLE_CLIENT_ID_PLACEHOLDER') {
+    return 'com.santven.listmate';
+  }
+  return cid;
+}
+
 function initAppleID() {
   if (window.AppleID && window.AppleID.auth) {
     try {
       AppleID.auth.init({
-        clientId: 'com.santven.listmate',
+        clientId: getAppleClientId(),
         scope: 'name email',
         redirectURI: location.origin + '/login',
         usePopup: true
@@ -129,7 +137,7 @@ document.addEventListener('DOMContentLoaded', initAppleID);
 function redirectToAppleOAuth() {
   var state = Math.random().toString(36).slice(2);
   var url = 'https://appleid.apple.com/auth/authorize?' +
-    'client_id=com.santven.listmate' +
+    'client_id=' + encodeURIComponent(getAppleClientId()) +
     '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
     '&response_type=code%20id_token' +
     '&scope=name%20email' +
@@ -144,7 +152,7 @@ function doAppleSignIn() {
   if (window.AppleID && window.AppleID.auth) {
     try {
       AppleID.auth.init({
-        clientId: 'com.santven.listmate',
+        clientId: getAppleClientId(),
         scope: 'name email',
         redirectURI: location.origin + '/login',
         usePopup: true
@@ -152,23 +160,26 @@ function doAppleSignIn() {
       AppleID.auth.signIn().then(function(res) {
         if (res && res.authorization && res.authorization.id_token) {
           handleAppleCredential(res.authorization.id_token, res.user);
-        } else {
-          redirectToAppleOAuth();
         }
       }).catch(function(err) {
-        if (err && err.error === 'popup_closed_by_user') {
+        console.warn('[AppleID Sign-In error]', err);
+        var errStr = typeof err === 'string' ? err : (err && (err.error || err.message)) || '';
+        if (errStr === 'popup_closed_by_user' || errStr === 'user_cancelled') {
           return;
         }
-        redirectToAppleOAuth();
+        if (errStr === 'invalid_client' || errStr === 'invalid_request') {
+          showError('Apple Sign-In is being configured. Please ensure your Services ID (' + getAppleClientId() + ') is registered in Apple Developer Console for ' + location.host);
+          return;
+        }
+        showError('Apple Sign-In failed (' + (errStr || 'popup issue') + ').');
       });
       return;
     } catch(e) {
-      console.warn('[AppleID Init warning, falling back to redirect]', e);
+      console.warn('[AppleID Init exception]', e);
     }
   }
 
-  // Fallback to direct redirect if SDK popup is not ready or blocked
-  redirectToAppleOAuth();
+  showError('Apple Sign-In JS SDK is initializing. Please try again.');
 }
 
 function handleAppleCredential(idToken, userObj) {

@@ -24,6 +24,8 @@ install_auth(app, cookie_name="listmate_session", cookie_secure=False)
 
 CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
                            "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com")
+APPLE_CLIENT_ID = os.environ.get("SSO_APPLE_CLIENT_ID",
+                           os.environ.get("APPLE_CLIENT_ID", "com.santven.listmate"))
 DB_PATH = os.environ.get("DB_PATH", "listmate.db")
 
 # ── Schema migration: dietary_restrictions (added Jul 2026, idempotent) ──
@@ -151,7 +153,8 @@ def login_page():
             window.location.replace('/login');
             </script></body></html>"""
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
-    return html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)
+    html = html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)
+    return html.replace("APPLE_CLIENT_ID_PLACEHOLDER", APPLE_CLIENT_ID)
 
 
 @app.route("/signup")
