@@ -96,7 +96,7 @@ var activePoll = null;
 function startPollingIntent(intentId) {
   if (activePoll) clearInterval(activePoll);
   activePoll = setInterval(function() {
-    fetch('/api/auth/poll?intent=' + encodeURIComponent(intentId) + '&_t=' + Date.now(), { cache: 'no-store' })
+    fetch('/api/auth/poll?intent=' + encodeURIComponent(intentId) + '&_t=' + Date.now(), { cache: 'no-store', credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.ok) {
