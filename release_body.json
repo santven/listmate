@@ -1,9 +1,0 @@
-{
-  "tag_name": "v1.6.1",
-  "target_commitish": "main",
-  "name": "v1.6.1",
-  "body": "## GitHub Release Notes\n* **Fix Apple SSO Popup Hang and Cookie Isolation (#192)**: Disables popup-based auth for Apple SSO on Android/PWA. This forces a top-level WebView redirect, resolving an issue where the session cookie was isolated in the popup, leaving the main app window unauthenticated and hanging with disabled buttons. Also ensures login buttons are properly re-enabled if the session check fails.\n\n## Google Play Store / App Store \"What's New\"\n* Squashed a bug where Apple Sign-In on Android would sometimes get stuck and not log you in properly.",
-  "draft": false,
-  "prerelease": false,
-  "generate_release_notes": false
-}

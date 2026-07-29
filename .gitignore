@@ -9,3 +9,4 @@ version.properties
 listmate.db*
 *.log
 listmate_auth.db
+release_body.json
