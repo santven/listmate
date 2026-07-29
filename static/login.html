@@ -219,7 +219,19 @@ function initAppleID() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', initAppleID);
+document.addEventListener('DOMContentLoaded', function() {
+  initAppleID();
+});
+
+document.addEventListener('AppleIDSignInOnSuccess', function(event) {
+  if (event && event.detail) {
+    var auth = event.detail.authorization;
+    var userObj = event.detail.user;
+    if (auth && auth.id_token) {
+      handleAppleCredential(auth.id_token, userObj);
+    }
+  }
+});
 
 var currentIntentId;
 function redirectToAppleOAuth() {
@@ -351,9 +363,10 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
-      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
+      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup && window.opener && window.opener !== window) {
         document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p></div>';
         try { window.close(); } catch(e) {}
+        setTimeout(function() { location.replace('/?_=' + Date.now()); }, 500);
         return;
       }
       if (inviteToken) {
@@ -364,9 +377,10 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       return;
     }
     if (r.data.needs_signup) {
-      if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
+      if (typeof isIntentCallback !== 'undefined' && isIntentCallback && window.opener && window.opener !== window) {
         document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
         try { window.close(); } catch(e) {}
+        setTimeout(function() { location.replace('/login?needs_signup=1'); }, 500);
         return;
       }
       document.getElementById('step1').classList.remove('active');
