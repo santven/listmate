@@ -207,7 +207,7 @@ def login_page():
                             authmod._set(user["id"], email, name, hh_id, hh_name)
                             if "_web" not in state_str:
                                 authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                                return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p><script>try{window.close();}catch(e){}</script></body></html>"""
+                                return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p><script>try{window.close();}catch(e){}</script></body></html>"""
                             else:
                                 if hh_id == 0:
                                     return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/login?needs_signup=1");</script></body></html>"""

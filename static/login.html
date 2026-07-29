@@ -346,7 +346,7 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p></div>';
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p></div>';
         try { window.close(); } catch(e) {}
         return;
       }
@@ -358,6 +358,11 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       return;
     }
     if (r.data.needs_signup) {
+      if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
+      }
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
       if (inviteToken) { showInviteBanner(); } else {
@@ -401,7 +406,7 @@ function handleCredential(credential, isIntentCallback) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p></div>';
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p></div>';
         try { window.close(); } catch(e) {}
         return;
       }
@@ -413,6 +418,11 @@ function handleCredential(credential, isIntentCallback) {
       return;
     }
     if (r.data.needs_signup) {
+      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
+      }
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
       if (inviteToken) { showInviteBanner(); } else {
