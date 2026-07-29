@@ -78,7 +78,7 @@ function checkSessionAndProceed(proceedFn) {
   fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
     if (r.ok) {
       r.json().then(function(c) {
-        if (c.user) { location.replace('/'); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
+        if (c.user) { location.replace('/?_=' + Date.now()); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
       });
     } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
   }).catch(function() { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); });
@@ -101,7 +101,7 @@ function startPollingIntent(intentId) {
       .then(function(d) {
         if (d.ok) {
           clearInterval(activePoll);
-          location.replace('/');
+          location.replace('/?_=' + Date.now());
         } else if (d.needs_signup) {
           clearInterval(activePoll);
           document.getElementById('step1').classList.remove('active');
@@ -126,14 +126,18 @@ function _doSignIn() {
     '&response_type=id_token' +
     '&scope=openid%20email%20profile' +
     '&nonce=' + nonce + '&state=intent_' + intentId;
-  window.open(url, '_blank');
+  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') {
+    window.location.href = url;
+  } else {
+    window.open(url, '_blank');
+  }
 }
 
 // Check for session or redirect callback
 (function() {
   try {
     fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
-      if (r.ok) r.json().then(function(c) { if (c.user) { location.replace('/'); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
+      if (r.ok) r.json().then(function(c) { if (c.user) { location.replace('/?_=' + Date.now()); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
     });
   } catch(e) { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
 
@@ -208,7 +212,11 @@ function redirectToAppleOAuth() {
     '&scope=name%20email' +
     '&response_mode=form_post' +
     '&state=' + state;
-  window.open(url, '_blank');
+  if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') {
+    window.location.href = url;
+  } else {
+    window.open(url, '_blank');
+  }
 }
 
 function doAppleSignIn() {
@@ -281,7 +289,7 @@ function _doAppleSignIn() {
 
 function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   showError('');
-  fetch('/api/auth/apple', {
+  fetch('/api/auth/apple', { credentials: 'include',
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({id_token: idToken, user: userObj, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
@@ -289,14 +297,16 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
-        try { window.close(); } catch(e) {}
-        return;
+        if (window.opener) {
+          document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
+          try { window.close(); } catch(e) {}
+          return;
+        }
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/');});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/?_=' + Date.now());});
       } else {
-        location.replace('/');
+        location.replace('/?_=' + Date.now());
       }
       return;
     }
@@ -316,21 +326,23 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
 function handleCredential(credential, isIntentCallback) {
   googleCredential = credential;
   showError('');
-  fetch('/api/auth/login', {
+  fetch('/api/auth/login', { credentials: 'include',
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({credential: credential, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
-        try { window.close(); } catch(e) {}
-        return;
+        if (window.opener) {
+          document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
+          try { window.close(); } catch(e) {}
+          return;
+        }
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/');});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/?_=' + Date.now());});
       } else {
-        location.replace('/');
+        location.replace('/?_=' + Date.now());
       }
       return;
     }
@@ -363,7 +375,7 @@ function showInviteBanner() {
 function acceptInvite() {
   var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
   fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
-    if(d.ok) location.replace('/'); else showStep2Error(d.error||'Failed');
+    if(d.ok) location.replace('/?_=' + Date.now()); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
@@ -374,7 +386,7 @@ function createHousehold() {
   var b=document.getElementById('btnCreate'); b.disabled=true; showStep2Error('');
   fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})})
     .then(function(r){return r.json()}).then(function(d){
-    if(d.ok) location.replace('/'); else showStep2Error(d.error||'Failed');
+    if(d.ok) location.replace('/?_=' + Date.now()); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
