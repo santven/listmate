@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#5ebe7e">
 <title>Listmate</title>
+<script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Roboto, sans-serif; background: #f0f4ed; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
@@ -33,10 +34,14 @@
   <p id="subtitle">Store-smart grocery lists for your household</p>
   <div id="error" class="error"></div>
   <div id="step1" class="step active">
-    <div style="margin-top:16px">
+    <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px; align-items:center;">
       <button onclick="doSignIn()" class="signin-btn">
         <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.95 16.46 0 20.12 0 24s.95 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Sign in with Google
+      </button>
+      <button onclick="doAppleSignIn()" class="signin-btn" style="background:#000; color:#fff; border:none;">
+        <svg width="18" height="18" viewBox="0 0 170 170" style="fill:#fff"><path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.94.13-9.86-1.95-14.75-6.23-3.17-2.63-7.06-7.27-11.68-13.91-6.13-8.82-11.05-18.66-14.76-29.53-3.71-10.87-5.57-21.36-5.57-31.47 0-14.28 3.69-25.92 11.07-34.93 7.38-9 16.59-13.56 27.63-13.68 4.82 0 10.13 1.22 15.93 3.66 5.8 2.45 9.87 3.67 12.22 3.67 2.12 0 6.27-1.28 12.46-3.84 6.19-2.56 11.45-3.78 15.78-3.66 12.02.5 21.84 5.06 29.47 13.68-10.65 6.4-15.85 15.34-15.6 26.83.25 9.02 3.63 16.59 10.13 22.7 6.5 6.11 14.3 9.61 23.4 10.5-.88 5.12-2.31 10.36-4.3 15.72zM119.22 31.02c0-7.02 2.53-13.62 7.59-19.8 5.06-6.18 11.38-9.8 18.96-10.86.37 1.12.56 2.18.56 3.18 0 7.02-2.59 13.62-7.78 19.8-5.18 6.18-11.41 9.8-18.69 10.86-.25-1.06-.64-2.12-.64-3.18z"/></svg>
+        Sign in with Apple
       </button>
     </div>
   </div>
@@ -85,6 +90,19 @@ function doSignIn() {
     });
   } catch(e) {}
 
+  var appleToken = sessionStorage.getItem('apple_id_token');
+  if (appleToken) {
+    sessionStorage.removeItem('apple_id_token');
+    var userStr = sessionStorage.getItem('apple_user');
+    sessionStorage.removeItem('apple_user');
+    var userObj = null;
+    if (userStr) {
+      try { userObj = JSON.parse(userStr); } catch(e) {}
+    }
+    handleAppleCredential(appleToken, userObj);
+    return;
+  }
+
   var hp = new URLSearchParams(window.location.hash.substring(1));
   var idToken = hp.get('id_token');
   if (idToken) {
@@ -92,6 +110,106 @@ function doSignIn() {
     handleCredential(idToken);
   }
 })();
+
+function getAppleClientId() {
+  var cid = 'APPLE_CLIENT_ID_PLACEHOLDER';
+  if (!cid || cid === 'APPLE_CLIENT_ID_PLACEHOLDER') {
+    return 'com.santven.listmate';
+  }
+  return cid;
+}
+
+function initAppleID() {
+  if (window.AppleID && window.AppleID.auth) {
+    try {
+      AppleID.auth.init({
+        clientId: getAppleClientId(),
+        scope: 'name email',
+        redirectURI: location.origin + '/login',
+        usePopup: true
+      });
+    } catch(e) {}
+  }
+}
+
+document.addEventListener('DOMContentLoaded', initAppleID);
+
+function redirectToAppleOAuth() {
+  var state = Math.random().toString(36).slice(2);
+  var url = 'https://appleid.apple.com/auth/authorize?' +
+    'client_id=' + encodeURIComponent(getAppleClientId()) +
+    '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
+    '&response_type=code%20id_token' +
+    '&scope=name%20email' +
+    '&response_mode=form_post' +
+    '&state=' + state;
+  window.location.assign(url);
+}
+
+function doAppleSignIn() {
+  if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
+
+  if (window.AppleID && window.AppleID.auth) {
+    try {
+      AppleID.auth.init({
+        clientId: getAppleClientId(),
+        scope: 'name email',
+        redirectURI: location.origin + '/login',
+        usePopup: true
+      });
+      AppleID.auth.signIn().then(function(res) {
+        if (res && res.authorization && res.authorization.id_token) {
+          handleAppleCredential(res.authorization.id_token, res.user);
+        }
+      }).catch(function(err) {
+        console.warn('[AppleID Sign-In error]', err);
+        var errStr = typeof err === 'string' ? err : (err && (err.error || err.message)) || '';
+        if (errStr === 'popup_closed_by_user' || errStr === 'user_cancelled') {
+          return;
+        }
+        if (errStr === 'invalid_client' || errStr === 'invalid_request') {
+          showError('Apple Sign-In is being configured. Please ensure your Services ID (' + getAppleClientId() + ') is registered in Apple Developer Console for ' + location.host);
+          return;
+        }
+        redirectToAppleOAuth();
+      });
+      return;
+    } catch(e) {
+      console.warn('[AppleID Init exception]', e);
+    }
+  }
+
+  redirectToAppleOAuth();
+}
+
+function handleAppleCredential(idToken, userObj) {
+  showError('');
+  fetch('/api/auth/apple', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id_token: idToken, user: userObj})
+  }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
+  .then(function(r) {
+    if (r.data.ok) {
+      if (inviteToken) {
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
+      } else {
+        location.replace('/');
+      }
+      return;
+    }
+    if (r.data.needs_signup) {
+      document.getElementById('step1').classList.remove('active');
+      document.getElementById('step2').classList.add('active');
+      if (inviteToken) { showInviteBanner(); } else {
+        document.getElementById('createSection').style.display='block';
+        document.getElementById('btnAccept').style.display='none';
+      }
+      return;
+    }
+    showError(r.data.error||('Server error ('+r.status+')'));
+  }).catch(function() { showError('Network error. Try again.'); });
+}
 
 function handleCredential(credential) {
   googleCredential = credential;
