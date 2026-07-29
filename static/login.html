@@ -171,7 +171,7 @@ function doAppleSignIn() {
           showError('Apple Sign-In is being configured. Please ensure your Services ID (' + getAppleClientId() + ') is registered in Apple Developer Console for ' + location.host);
           return;
         }
-        showError('Apple Sign-In failed (' + (errStr || 'popup issue') + ').');
+        redirectToAppleOAuth();
       });
       return;
     } catch(e) {
@@ -179,7 +179,7 @@ function doAppleSignIn() {
     }
   }
 
-  showError('Apple Sign-In JS SDK is initializing. Please try again.');
+  redirectToAppleOAuth();
 }
 
 function handleAppleCredential(idToken, userObj) {
