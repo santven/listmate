@@ -212,6 +212,9 @@ def login_page():
                                 if hh_id == 0:
                                     return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/login?needs_signup=1");</script></body></html>"""
                                 return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/");</script></body></html>"""
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
             # Fallback
             return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body><script>
