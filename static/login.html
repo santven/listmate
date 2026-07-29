@@ -75,7 +75,7 @@ function checkSessionAndProceed(proceedFn) {
   var b2 = document.getElementById('btnApple');
   if(b1) b1.disabled = true;
   if(b2) b2.disabled = true;
-  fetch('/api/auth/config?_='+Date.now()).then(function(r) {
+  fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
     if (r.ok) {
       r.json().then(function(c) {
         if (c.user) { location.replace('/'); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
@@ -132,7 +132,7 @@ function _doSignIn() {
 // Check for session or redirect callback
 (function() {
   try {
-    fetch('/api/auth/config?_='+Date.now()).then(function(r) {
+    fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
       if (r.ok) r.json().then(function(c) { if (c.user) { location.replace('/'); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
     });
   } catch(e) { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
@@ -294,7 +294,7 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
         return;
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/');});
       } else {
         location.replace('/');
       }
@@ -328,7 +328,7 @@ function handleCredential(credential, isIntentCallback) {
         return;
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(){location.replace('/');});
+        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){location.replace('/');});
       } else {
         location.replace('/');
       }
@@ -362,7 +362,7 @@ function showInviteBanner() {
 
 function acceptInvite() {
   var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
-  fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+  fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
     if(d.ok) location.replace('/'); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
