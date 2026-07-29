@@ -132,12 +132,16 @@ function _doSignIn() {
   var nonce = Math.random().toString(36).slice(2);
   var intentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
   startPollingIntent(intentId);
-  var url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-    'client_id=' + CLIENT_ID +
-    '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
-    '&response_type=id_token' +
-    '&scope=openid%20email%20profile' + '&prompt=select_account' +
-    '&nonce=' + nonce + '&state=intent_' + intentId;
+  var params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: location.origin + '/login',
+    response_type: 'id_token',
+    scope: 'openid email profile',
+    prompt: 'select_account',
+    nonce: nonce,
+    state: 'intent_' + intentId
+  });
+  var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
       window.Capacitor.Plugins.Browser.open({ url: url });
@@ -222,13 +226,15 @@ function redirectToAppleOAuth() {
   currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
   startPollingIntent(currentIntentId);
   var state = 'intent_' + currentIntentId;
-  var url = 'https://appleid.apple.com/auth/authorize?' +
-    'client_id=' + encodeURIComponent(getAppleClientId()) +
-    '&redirect_uri=' + encodeURIComponent(location.origin + '/login') +
-    '&response_type=code%20id_token' +
-    '&scope=name%20email' +
-    '&response_mode=form_post' +
-    '&state=' + state;
+  var params = new URLSearchParams({
+    client_id: getAppleClientId(),
+    redirect_uri: location.origin + '/login',
+    response_type: 'code id_token',
+    scope: 'name email',
+    response_mode: 'form_post',
+    state: state
+  });
+  var url = 'https://appleid.apple.com/auth/authorize?' + params.toString();
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
       window.Capacitor.Plugins.Browser.open({ url: url });
