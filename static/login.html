@@ -109,9 +109,15 @@ function startPollingIntent(intentId) {
       .then(function(d) {
         if (d.ok) {
           clearInterval(activePoll);
+          if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+            try { window.Capacitor.Plugins.Browser.close(); } catch(e) {}
+          }
           setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
         } else if (d.needs_signup) {
           clearInterval(activePoll);
+          if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+            try { window.Capacitor.Plugins.Browser.close(); } catch(e) {}
+          }
           document.getElementById('step1').classList.remove('active');
           document.getElementById('step2').classList.add('active');
           if (inviteToken) { showInviteBanner(); } else {
@@ -135,7 +141,11 @@ function _doSignIn() {
     '&scope=openid%20email%20profile' + '&prompt=select_account' +
     '&nonce=' + nonce + '&state=intent_' + intentId;
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-    window.location.href = url;
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+      window.Capacitor.Plugins.Browser.open({ url: url });
+    } else {
+      window.open(url, '_blank');
+    }
   } else {
     window.open(url, '_blank');
   }
@@ -336,11 +346,9 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
-        if (window.opener) {
-          document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
-          try { window.close(); } catch(e) {}
-          return;
-        }
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
       }
       if (inviteToken) {
         fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});
@@ -393,11 +401,9 @@ function handleCredential(credential, isIntentCallback) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
-        if (window.opener) {
-          document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">You can now close this tab to return to the app.</p></div>';
-          try { window.close(); } catch(e) {}
-          return;
-        }
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p></div>';
+        try { window.close(); } catch(e) {}
+        return;
       }
       if (inviteToken) {
         fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});

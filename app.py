@@ -188,17 +188,30 @@ def login_page():
                             user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                         
                         if user:
-                            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))                            
-                            return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-                            <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;">
-                            <h2>✅ Login Successful</h2>
-                            <p style="color:#888;">You can now close this tab to return to the app.</p>
-                            <script>try{window.close();}catch(e){}</script>
-                            </body></html>'''
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-
+                            hh_id = user.get("household_id", 0)
+                            hh_name = ""
+                            if not hh_id:
+                                hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+                                if hh_count and hh_count.get("cnt", 0) == 0:
+                                    import secrets
+                                    code = secrets.token_hex(4).upper()
+                                    prem_val = True if _use_pg else 1
+                                    authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
+                                    hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+                                    hh_id = hh["id"] if hh else 1
+                                    hh_name = hh["name"] if hh else "Root Household"
+                                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                            if hh_id and not hh_name:
+                                hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+                                hh_name = hh.get("name", "") if hh else ""
+                            authmod._set(user["id"], email, name, hh_id, hh_name)
+                            if "_web" not in state_str:
+                                authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+                                return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Login Successful</h2><p style="color:#888;">Returning to app...</p><script>try{window.close();}catch(e){}</script></body></html>"""
+                            else:
+                                if hh_id == 0:
+                                    return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/login?needs_signup=1");</script></body></html>"""
+                                return """<!DOCTYPE html><html><head></head><body><script>window.location.replace("/");</script></body></html>"""
             # Fallback
             return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body><script>
