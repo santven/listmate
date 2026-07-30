@@ -387,33 +387,53 @@ def revenuecat_webhook():
     event = data.get("event", {})
     evt_type = event.get("type")
 
-    # If the user cancels or their subscription expires, downgrade them
-    if evt_type in ["CANCELLATION", "EXPIRATION"]:
+    if evt_type == "CANCELLATION":
         uid = event.get("app_user_id")
-        if uid:
+        print(f"[Webhook] Processing CANCELLATION for uid: {uid}")
+        if uid and uid.isdigit():
             try:
                 uid_int = int(uid)
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = False if authmod._use_pg else 0
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "free", hhid))
-                    print(f"[Webhook] Downgraded household {hhid} due to {evt_type}")
+                    authmod._exec(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+                    print(f"[Webhook] Marked household {hhid} as canceled")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
             except Exception as e:
                 print(f"[Webhook] Error processing downgrade: {e}")
-                
-    # If the user purchases or renews, upgrade them
-    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
+
+    elif evt_type == "EXPIRATION":
         uid = event.get("app_user_id")
-        if uid and uid.isdigit():  # Ensure it's not an anonymous ID
+        print(f"[Webhook] Processing EXPIRATION for uid: {uid}")
+        if uid and uid.isdigit():
             try:
                 uid_int = int(uid)
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = True if authmod._use_pg else 1
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+                    val = False if getattr(authmod, '_use_pg', False) else 0
+                    authmod._exec(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
+                    print(f"[Webhook] Downgraded household {hhid} due to expiration")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
+            except Exception as e:
+                print(f"[Webhook] Error processing expiration: {e}")
+                
+    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
+        uid = event.get("app_user_id")
+        print(f"[Webhook] Processing {evt_type} for uid: {uid}")
+        if uid and uid.isdigit():
+            try:
+                uid_int = int(uid)
+                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
+                if user and user.get("household_id"):
+                    hhid = user["household_id"]
+                    val = True if getattr(authmod, '_use_pg', False) else 1
+                    authmod._exec(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
                     print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
             except Exception as e:
                 print(f"[Webhook] Error processing upgrade: {e}")
 

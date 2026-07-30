@@ -715,7 +715,7 @@ def register_auth_routes(app):
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": bool(hh.get("is_premium", False))},
+            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": bool(hh.get("is_premium", False)), "subscription_status": hh.get("subscription_status", "free"), "trial_ends_at": hh.get("trial_ends_at")},
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
                           "role": "owner" if m["id"] == uid else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],
