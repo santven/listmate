@@ -53,9 +53,9 @@ def _ensure_schema():
         ]:
             try:
                 if _use_pg:
-                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
+                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
                 else:
-                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
+                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
             except Exception:
                 pass
 
@@ -92,7 +92,7 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_si_store_name ON store_items(household_id, store_id, name)""",
         ]
         for stmt in store_tables:
-            try: authmod._exec(stmt)
+            try: authmod._run(stmt)
             except Exception: pass
 
         try:
@@ -197,7 +197,7 @@ def login_page():
                             if hh_count and hh_count.get("cnt", 0) == 0:
                                 code = secrets.token_hex(4).upper()
                                 prem_val = True if _use_pg else 1
-                                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
+                                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
                                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                                 hh_id = hh["id"] if hh else 1
                                 hh_name = hh["name"] if hh else "Root Household"
@@ -289,7 +289,7 @@ def login_google_native():
                     import secrets
                     code = secrets.token_hex(4).upper()
                     prem_val = True if _use_pg else 1
-                    authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -387,33 +387,53 @@ def revenuecat_webhook():
     event = data.get("event", {})
     evt_type = event.get("type")
 
-    # If the user cancels or their subscription expires, downgrade them
-    if evt_type in ["CANCELLATION", "EXPIRATION"]:
+    if evt_type == "CANCELLATION":
         uid = event.get("app_user_id")
-        if uid:
+        print(f"[Webhook] Processing CANCELLATION for uid: {uid}")
+        if uid and uid.isdigit():
             try:
                 uid_int = int(uid)
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = False if authmod._use_pg else 0
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "free", hhid))
-                    print(f"[Webhook] Downgraded household {hhid} due to {evt_type}")
+                    authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+                    print(f"[Webhook] Marked household {hhid} as canceled")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
             except Exception as e:
                 print(f"[Webhook] Error processing downgrade: {e}")
-                
-    # If the user purchases or renews, upgrade them
-    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
+
+    elif evt_type == "EXPIRATION":
         uid = event.get("app_user_id")
-        if uid and uid.isdigit():  # Ensure it's not an anonymous ID
+        print(f"[Webhook] Processing EXPIRATION for uid: {uid}")
+        if uid and uid.isdigit():
             try:
                 uid_int = int(uid)
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = True if authmod._use_pg else 1
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+                    val = False if _use_pg else 0
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
+                    print(f"[Webhook] Downgraded household {hhid} due to expiration")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
+            except Exception as e:
+                print(f"[Webhook] Error processing expiration: {e}")
+                
+    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
+        uid = event.get("app_user_id")
+        print(f"[Webhook] Processing {evt_type} for uid: {uid}")
+        if uid and uid.isdigit():
+            try:
+                uid_int = int(uid)
+                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
+                if user and user.get("household_id"):
+                    hhid = user["household_id"]
+                    val = True if _use_pg else 1
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
                     print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
+                else:
+                    print(f"[Webhook] User {uid_int} not found or no household")
             except Exception as e:
                 print(f"[Webhook] Error processing upgrade: {e}")
 
@@ -442,6 +462,24 @@ def premium_settings():
             sub_status = "premium"
             val = True if _use_pg else 1
             authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+
+        if sub_status == 'trial' and trial_ends_at:
+            import datetime
+            try:
+                t_end = trial_ends_at
+                if isinstance(t_end, str):
+                    if 'T' in t_end:
+                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                    else:
+                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                if t_end > now:
+                    is_prem = True
+                else:
+                    sub_status = "expired"
+            except:
+                pass
+
         return jsonify({
             "is_premium": is_prem,
             "household_id": hhid,
@@ -675,9 +713,27 @@ def generate_recipe_endpoint():
     if not hhid:
         return jsonify({"error": "No household"}), 400
     authmod._init_schema()
-    hh = authmod._one(f"SELECT is_premium, dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+    hh = authmod._one(f"SELECT is_premium, dietary_restrictions, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
     is_prem = bool(hh.get("is_premium")) if hh else False
     is_early = bool(hhid and int(hhid) <= 100)
+    sub_status = hh.get("subscription_status", "free") if hh else "free"
+    trial_ends_at = hh.get("trial_ends_at") if hh else None
+
+    if sub_status == 'trial' and trial_ends_at:
+        import datetime
+        try:
+            t_end = trial_ends_at
+            if isinstance(t_end, str):
+                if 'T' in t_end:
+                    t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                else:
+                    t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+            now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+            if t_end > now:
+                is_prem = True
+        except:
+            pass
+
     if not (is_prem or is_early):
         return jsonify({
             "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",
@@ -1743,7 +1799,7 @@ def auth_google_callback():
             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
             if hh_count and hh_count.get('cnt', 0) == 0:
                 code_hh = _secrets.token_hex(4).upper()
-                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
+                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh['id'] if hh else 1
                 hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'

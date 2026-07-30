@@ -603,6 +603,25 @@ def register_auth_routes(app):
                     sub_status = "premium"
                     val = True if USE_PG else 1
                     _run(f"UPDATE {_HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, 'premium', hh_id))
+                
+                # Check active trial
+                if sub_status == 'trial' and trial_ends_at:
+                    import datetime
+                    try:
+                        t_end = trial_ends_at
+                        if isinstance(t_end, str):
+                            if 'T' in t_end:
+                                t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                            else:
+                                t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                        now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                        if t_end > now:
+                            is_prem = True
+                        else:
+                            sub_status = "expired"
+                    except:
+                        pass
+
             resp["is_premium"] = is_prem
             resp["subscription_status"] = sub_status if hh_id else "free"
             resp["trial_ends_at"] = trial_ends_at if hh_id else None
@@ -712,10 +731,30 @@ def register_auth_routes(app):
         _init_schema()
         hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
         if not hh: return jsonify({"error": "Household not found"}), 404
+        
+        is_prem = bool(hh.get("is_premium", False))
+        sub_status = hh.get("subscription_status", "free")
+        trial_ends_at = hh.get("trial_ends_at")
+        
+        if sub_status == 'trial' and trial_ends_at:
+            import datetime
+            try:
+                t_end = trial_ends_at
+                if isinstance(t_end, str):
+                    if 'T' in t_end:
+                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                    else:
+                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                if t_end > now:
+                    is_prem = True
+            except:
+                pass
+                
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": bool(hh.get("is_premium", False))},
+            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": is_prem, "subscription_status": sub_status, "trial_ends_at": trial_ends_at},
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
                           "role": "owner" if m["id"] == uid else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],
