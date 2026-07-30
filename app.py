@@ -53,9 +53,9 @@ def _ensure_schema():
         ]:
             try:
                 if _use_pg:
-                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
+                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
                 else:
-                    authmod._exec(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
+                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
             except Exception:
                 pass
 
@@ -92,7 +92,7 @@ def _ensure_schema():
             """CREATE INDEX IF NOT EXISTS idx_si_store_name ON store_items(household_id, store_id, name)""",
         ]
         for stmt in store_tables:
-            try: authmod._exec(stmt)
+            try: authmod._run(stmt)
             except Exception: pass
 
         try:
@@ -197,7 +197,7 @@ def login_page():
                             if hh_count and hh_count.get("cnt", 0) == 0:
                                 code = secrets.token_hex(4).upper()
                                 prem_val = True if _use_pg else 1
-                                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
+                                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
                                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                                 hh_id = hh["id"] if hh else 1
                                 hh_name = hh["name"] if hh else "Root Household"
@@ -289,7 +289,7 @@ def login_google_native():
                     import secrets
                     code = secrets.token_hex(4).upper()
                     prem_val = True if _use_pg else 1
-                    authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -396,7 +396,7 @@ def revenuecat_webhook():
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    authmod._exec(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+                    authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
                     print(f"[Webhook] Marked household {hhid} as canceled")
                 else:
                     print(f"[Webhook] User {uid_int} not found or no household")
@@ -413,7 +413,7 @@ def revenuecat_webhook():
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
                     val = False if getattr(authmod, '_use_pg', False) else 0
-                    authmod._exec(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
                     print(f"[Webhook] Downgraded household {hhid} due to expiration")
                 else:
                     print(f"[Webhook] User {uid_int} not found or no household")
@@ -430,7 +430,7 @@ def revenuecat_webhook():
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
                     val = True if getattr(authmod, '_use_pg', False) else 1
-                    authmod._exec(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
                     print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
                 else:
                     print(f"[Webhook] User {uid_int} not found or no household")
@@ -1763,7 +1763,7 @@ def auth_google_callback():
             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
             if hh_count and hh_count.get('cnt', 0) == 0:
                 code_hh = _secrets.token_hex(4).upper()
-                authmod._exec(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
+                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh['id'] if hh else 1
                 hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
