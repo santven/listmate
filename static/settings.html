@@ -362,7 +362,7 @@ async function loadPremium() {
       } else if (d.is_premium) {
         badge.textContent = d.subscription_status === 'canceled' ? `✨ Premium (Cancels at end of period)` : `✨ Active Premium`;
         badge.style.display = 'inline-block';
-        if (upgradeBtn) upgradeBtn.style.display = d.subscription_status === 'canceled' ? 'inline-block' : 'none';
+        if (upgradeBtn) upgradeBtn.style.display = 'none';
       } else {
         badge.style.display = 'none';
         if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
