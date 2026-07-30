@@ -694,12 +694,22 @@ function updateFiltersUI() {
   
   const filter = $('#recipeFilter');
   if (filter) {
-    const selected = filter.value;
-    const recipeTagsInList = Array.from(new Set(list.filter(i => i.recipe_tag).map(i => i.recipe_tag)));
-    const savedRecipeTitles = Array.isArray(recipes) ? recipes.map(r => r.title) : [];
-    const allRecipes = Array.from(new Set([...recipeTagsInList, ...savedRecipeTitles]));
-    filter.innerHTML = '<option value="">All Recipes</option>' + allRecipes.map(title => '<option value="'+escapeHtml(title)+'">'+escapeHtml(title || 'Unnamed Recipe')+'</option>').join('');
-    filter.value = selected;
+    if (!window.currentCfg || !window.currentCfg.is_premium) {
+      filter.disabled = true;
+      filter.title = "Recipe filtering is a Premium feature";
+      filter.innerHTML = '<option value="">All Recipes (Premium)</option>';
+      filter.style.opacity = '0.7';
+    } else {
+      filter.disabled = false;
+      filter.title = "";
+      filter.style.opacity = '1';
+      const selected = filter.value;
+      const recipeTagsInList = Array.from(new Set(list.filter(i => i.recipe_tag).map(i => i.recipe_tag)));
+      const savedRecipeTitles = Array.isArray(recipes) ? recipes.map(r => r.title) : [];
+      const allRecipes = Array.from(new Set([...recipeTagsInList, ...savedRecipeTitles]));
+      filter.innerHTML = '<option value="">All Recipes</option>' + allRecipes.map(title => '<option value="'+escapeHtml(title)+'">'+escapeHtml(title || 'Unnamed Recipe')+'</option>').join('');
+      filter.value = selected;
+    }
   }
 }
 
@@ -1431,8 +1441,25 @@ function isMobile() {
 }
 
 async function shareAllLists() {
-  const activeItems = list.filter(i => !i.purchased);
-  if (!activeItems.length) { toast('No active items'); return; }
+  if (!window.currentCfg || !window.currentCfg.is_premium) {
+    const pModal = $('#premiumModal');
+    if (pModal) pModal.classList.add('active');
+    return;
+  }
+
+  const filterRecipeName = $('#recipeFilter') ? $('#recipeFilter').value : '';
+  const storeFilterVal = $('#storeFilter') ? $('#storeFilter').value : '';
+  
+  let filteredList = list.filter(i => !i.purchased);
+  if (filterRecipeName) {
+    filteredList = filteredList.filter(i => i.recipe_tag === filterRecipeName);
+  }
+  if (storeFilterVal) {
+    filteredList = filteredList.filter(i => i.store_id === parseInt(storeFilterVal));
+  }
+
+  const activeItems = filteredList;
+  if (!activeItems.length) { toast('No active items to share'); return; }
   
   // Group by store name
   const itemsByStore = {};
@@ -1443,7 +1470,10 @@ async function shareAllLists() {
     itemsByStore[storeName].push(i);
   });
   
-  let text = '🛒 Grocery List:\n\n';
+  let text = '🛒 Grocery List';
+  if (filterRecipeName) text += ` (Recipe: ${filterRecipeName})`;
+  text += ':\n\n';
+  
   for (const [storeName, items] of Object.entries(itemsByStore)) {
     text += storeName + ':\n' + items.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n') + '\n\n';
   }
@@ -1480,10 +1510,23 @@ async function shareAllLists() {
 }
 
 async function shareStoreList(storeId, storeName) {
-  const activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
+  if (!window.currentCfg || !window.currentCfg.is_premium) {
+    const pModal = $('#premiumModal');
+    if (pModal) pModal.classList.add('active');
+    return;
+  }
+
+  const filterRecipeName = $('#recipeFilter') ? $('#recipeFilter').value : '';
+  let activeItems = list.filter(i => i.store_id === storeId && !i.purchased);
+  if (filterRecipeName) {
+    activeItems = activeItems.filter(i => i.recipe_tag === filterRecipeName);
+  }
+
   if (!activeItems.length) { toast('No active items in ' + storeName); return; }
   
-  const text = '🛒 ' + storeName + ' Grocery List:\n' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n');
+  let text = '🛒 ' + storeName + ' Grocery List';
+  if (filterRecipeName) text += ` (Recipe: ${filterRecipeName})`;
+  text += ':\n' + activeItems.map(i => i.quantity ? '• ' + i.quantity + ' ' + i.name : '• ' + i.name).join('\n');
 
   // 1. Check Capacitor Share plugin (if running inside Android/iOS native app wrapper)
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
