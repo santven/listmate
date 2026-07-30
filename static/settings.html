@@ -307,7 +307,7 @@ async function saveDietary() {
 // ---- Premium Settings ----
 async function loadPremium() {
   try {
-    const r = await fetch('/api/settings/premium');
+    const r = await fetch(API + '/settings/premium');
     const d = await r.json();
     if (d.is_premium) {
       document.body.classList.add('is-premium');
@@ -360,7 +360,7 @@ async function purchasePackage(index) {
         console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
         if (customerInfo.entitlements.active['premium']) {
             try {
-                await fetch('/api/settings/premium', {
+                await fetch(API + '/settings/premium', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ is_premium: true })
