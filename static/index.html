@@ -499,7 +499,7 @@ async function checkAuth() {
                 console.warn("RevenueCat SDK skipped: Test API key cannot be used in native release builds. Please set REVENUECAT_PUBLIC_KEY with your Google Play public key (goog_...).");
             } else {
                 try { await window.Capacitor.Plugins.Purchases.setLogLevel({ level: "DEBUG" }); } catch(le) {}
-                await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+                await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey, appUserID: (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) ? String(window.currentCfg.user_info.id) : undefined });
                 if (cfg && cfg.user_info && cfg.user_info.id) {
                     await window.Capacitor.Plugins.Purchases.logIn({ appUserID: cfg.user_info.id.toString() });
                 }
@@ -1559,7 +1559,7 @@ async function restorePurchases() {
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
     try {
         const rcKey = (window.currentCfg && window.currentCfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
-        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey, appUserID: (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) ? String(window.currentCfg.user_info.id) : undefined });
         
         if (typeof toast !== "undefined") toast('Restoring purchases...');
         const { customerInfo } = await window.Capacitor.Plugins.Purchases.restorePurchases();
@@ -1629,7 +1629,7 @@ async function showPaywall() {
             }
             console.log("[RevenueCat] Configuring SDK with key:", rcKey);
             try { await window.Capacitor.Plugins.Purchases.setLogLevel({ level: "DEBUG" }); } catch(le) {}
-            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey, appUserID: (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) ? String(window.currentCfg.user_info.id) : undefined });
             console.log("[RevenueCat] Fetching offerings...");
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             console.log("[RevenueCat] Offerings fetched:", offerings);
