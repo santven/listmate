@@ -462,6 +462,24 @@ def premium_settings():
             sub_status = "premium"
             val = True if _use_pg else 1
             authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+
+        if sub_status == 'trial' and trial_ends_at:
+            import datetime
+            try:
+                t_end = trial_ends_at
+                if isinstance(t_end, str):
+                    if 'T' in t_end:
+                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                    else:
+                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                if t_end > now:
+                    is_prem = True
+                else:
+                    sub_status = "expired"
+            except:
+                pass
+
         return jsonify({
             "is_premium": is_prem,
             "household_id": hhid,
@@ -695,9 +713,27 @@ def generate_recipe_endpoint():
     if not hhid:
         return jsonify({"error": "No household"}), 400
     authmod._init_schema()
-    hh = authmod._one(f"SELECT is_premium, dietary_restrictions FROM {authmod._HH} WHERE id = ?", (hhid,))
+    hh = authmod._one(f"SELECT is_premium, dietary_restrictions, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
     is_prem = bool(hh.get("is_premium")) if hh else False
     is_early = bool(hhid and int(hhid) <= 100)
+    sub_status = hh.get("subscription_status", "free") if hh else "free"
+    trial_ends_at = hh.get("trial_ends_at") if hh else None
+
+    if sub_status == 'trial' and trial_ends_at:
+        import datetime
+        try:
+            t_end = trial_ends_at
+            if isinstance(t_end, str):
+                if 'T' in t_end:
+                    t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                else:
+                    t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+            now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+            if t_end > now:
+                is_prem = True
+        except:
+            pass
+
     if not (is_prem or is_early):
         return jsonify({
             "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",

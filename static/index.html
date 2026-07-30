@@ -422,19 +422,25 @@ async function checkAuth() {
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
-      if (tierBadge) {
+    } else {
+      document.body.classList.add('has-ads');
+      document.body.classList.remove('is-premium');
+    }
+    if (tierBadge) {
+      if (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled') {
         tierBadge.textContent = 'Premium';
         tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
         tierBadge.style.border = 'none';
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'default';
         tierBadge.onclick = null;
-      }
-    } else {
-      document.body.classList.add('has-ads');
-      document.body.classList.remove('is-premium');
-      if (tierBadge) {
+      } else {
         tierBadge.textContent = '🎁 Upgrade';
+        tierBadge.style.background = 'rgba(255,255,255,0.2)';
+        tierBadge.style.border = '1px solid rgba(255,255,255,0.4)';
+        tierBadge.style.color = '#fff';
+        tierBadge.style.cursor = 'pointer';
+        tierBadge.onclick = window.showPaywall;
       }
     }
 
@@ -459,20 +465,26 @@ async function checkAuth() {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
       
-      if (tierBadge) {
+    } else {
+      document.body.classList.add('has-ads');
+      document.body.classList.remove('is-premium');
+    }
+    
+    if (tierBadge) {
+      if (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled') {
         tierBadge.textContent = 'Premium';
         tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
         tierBadge.style.border = 'none';
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'default';
         tierBadge.onclick = null;
-      }
-    } else {
-      document.body.classList.add('has-ads');
-      document.body.classList.remove('is-premium');
-      
-      if (tierBadge) {
+      } else {
         tierBadge.textContent = '🎁 Upgrade';
+        tierBadge.style.background = 'rgba(255,255,255,0.2)';
+        tierBadge.style.border = '1px solid rgba(255,255,255,0.4)';
+        tierBadge.style.color = '#fff';
+        tierBadge.style.cursor = 'pointer';
+        tierBadge.onclick = window.showPaywall;
       }
     }
 

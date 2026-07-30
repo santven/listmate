@@ -324,11 +324,17 @@ async function loadPremium() {
     const tierBadge = document.getElementById("tierBadge");
     
     if (planName) {
-      planName.textContent = d.is_premium ? "🌟 ListMate Premium" : "🌟 Free Plan";
+      if (d.subscription_status === 'premium' || d.subscription_status === 'active' || d.subscription_status === 'canceled') {
+        planName.textContent = "🌟 ListMate Premium";
+      } else if (d.subscription_status === 'trial') {
+        planName.textContent = "🌟 ListMate Trial";
+      } else {
+        planName.textContent = "🌟 Free Plan";
+      }
     }
     
     if (tierBadge) {
-      if (d.is_premium) {
+      if (d.subscription_status === 'premium' || d.subscription_status === 'active' || d.subscription_status === 'canceled') {
         tierBadge.textContent = "Premium";
         tierBadge.style.background = "linear-gradient(135deg, #fbbf24, #f59e0b)";
         tierBadge.style.border = "none";
