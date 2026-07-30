@@ -1563,9 +1563,9 @@ async function purchasePackage(index) {
         console.log("[RevenueCat] Initiating purchase for package:", packageToBuy.identifier);
         const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ aPackage: packageToBuy });
         console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
-        if (customerInfo.entitlements.active['premium']) {
+        
             try {
-                await fetch(API + '/settings/premium', {
+                await fetch('/api/settings/premium', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ is_premium: true })
@@ -1575,7 +1575,6 @@ async function purchasePackage(index) {
             }
             toast('⭐ Welcome to Premium!');
             setTimeout(() => window.location.reload(), 1500);
-        }
     } catch (e) {
         console.error("[RevenueCat] Purchase Error:", e);
         if (!e.userCancelled) {
@@ -1653,7 +1652,7 @@ async function activateEarlyAdopterPremium() {
       return;
   }
   try {
-    const res = await fetch(API + '/settings/premium', {
+    const res = await fetch('/api/settings/premium', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_premium: true })
