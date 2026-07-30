@@ -1543,7 +1543,10 @@ async function purchasePackage(index) {
     } catch (e) {
         console.error("[RevenueCat] Purchase Error:", e);
         if (!e.userCancelled) {
-            const errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+            let errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+            if (errDetail.includes("One or more of the arguments provided are invalid")) {
+                errDetail = "Play Store configuration error (billing unavailable). Ensure your test account is opted-in and the app version matches Play Console.";
+            }
             toast('Purchase error: ' + errDetail);
         }
     }
@@ -1594,7 +1597,10 @@ async function showPaywall() {
         } catch (e) {
             console.error("[RevenueCat] Error object:", e);
             if (!e.userCancelled) {
-                const errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+                let errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+            if (errDetail.includes("One or more of the arguments provided are invalid")) {
+                errDetail = "Play Store configuration error (billing unavailable). Ensure your test account is opted-in and the app version matches Play Console.";
+            }
                 toast('Purchase error: ' + errDetail);
             }
         }
