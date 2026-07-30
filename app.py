@@ -412,7 +412,7 @@ def revenuecat_webhook():
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = False if getattr(authmod, '_use_pg', False) else 0
+                    val = False if _use_pg else 0
                     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
                     print(f"[Webhook] Downgraded household {hhid} due to expiration")
                 else:
@@ -429,7 +429,7 @@ def revenuecat_webhook():
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = True if getattr(authmod, '_use_pg', False) else 1
+                    val = True if _use_pg else 1
                     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
                     print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
                 else:
