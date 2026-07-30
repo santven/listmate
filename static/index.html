@@ -1567,7 +1567,7 @@ async function purchasePackage(index) {
         console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
         if (customerInfo.entitlements.active['premium']) {
             try {
-                await fetch('/api/settings/premium', {
+                await fetch(API + '/settings/premium', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ is_premium: true })
