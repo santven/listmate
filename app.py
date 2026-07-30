@@ -453,7 +453,7 @@ def premium_settings():
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium if _use_pg else (1 if is_premium else 0)
-    status = "premium" if is_premium else "free"
+    status = "active" if is_premium else "free"
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
     is_early = bool(hhid and int(hhid) <= 100)
     return jsonify({
