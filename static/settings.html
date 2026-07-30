@@ -253,6 +253,22 @@ async function loadHousehold() {
     // Show add member form if owner
     if (householdData.is_owner) {
       document.getElementById('addMemberSection').style.display = 'block';
+      const btnAdd = document.getElementById('btnAdd');
+      const emailInput = document.getElementById('newMemberEmail');
+      
+      if (!householdData.household.is_premium && members.length >= 1) {
+        btnAdd.textContent = 'Add (Premium)';
+        btnAdd.style.opacity = '0.5';
+        btnAdd.onclick = (e) => { e.preventDefault(); showPaywall(); };
+        emailInput.disabled = true;
+        emailInput.placeholder = 'Upgrade to add members';
+      } else {
+        btnAdd.textContent = 'Add';
+        btnAdd.style.opacity = '1';
+        btnAdd.onclick = addMember;
+        emailInput.disabled = false;
+        emailInput.placeholder = 'Email address';
+      }
     }
   } catch(e) {
     document.getElementById('memberList').textContent = 'Error loading household.';
