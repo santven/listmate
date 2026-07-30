@@ -455,8 +455,7 @@ async function checkAuth() {
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
-      const ad = document.querySelector('.ad-banner-bottom');
-      if (ad) ad.style.display = 'none';
+      
       if (tierBadge) {
         tierBadge.textContent = 'Premium';
         tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
@@ -468,8 +467,7 @@ async function checkAuth() {
     } else {
       document.body.classList.add('has-ads');
       document.body.classList.remove('is-premium');
-      const ad = document.querySelector('.ad-banner-bottom');
-      if (ad) ad.style.display = 'block';
+      
       if (tierBadge) {
         tierBadge.textContent = '🎁 Upgrade';
       }
