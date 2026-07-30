@@ -16,8 +16,8 @@
   
   .container { max-width: 500px; margin: 0 auto; padding: 16px; }
   body.has-ads .container { padding-bottom: 70px !important; }
-  .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; height: 50px !important; max-height: 50px !important; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; z-index: 1000; }
-  body.is-premium .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; height: 50px !important; max-height: 50px !important; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; height: 50px !important; background: #f3f4f6; z-index: 1000; overflow: hidden; }
+  body.is-premium .ad-banner-bottom, body.has-no-ads .ad-banner-bottom { display: none !important; }
   .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
   .card h2 { font-size: 15px; margin-bottom: 14px; color: #2c5a2c; }
   .card p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
@@ -69,6 +69,7 @@
   <a href="/" style="color:#fff;text-decoration:none;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.18);flex-shrink:0;" aria-label="Back">←</a>
   <div style="width:38px;height:38px;min-width:38px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);margin-left:4px;">⚙️</div>
   <h1 style="margin-left:6px;font-size:18px;font-weight:700;flex:1;">Settings</h1>
+  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <div class="header-meta">
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
@@ -316,11 +317,26 @@ async function loadPremium() {
       document.body.classList.add('has-ads');
       document.body.classList.remove('is-premium');
     }
-    const badge = document.getElementById('planBadge');
-    const upgradeBtn = document.getElementById('upgradeBtn');
-    const planName = document.getElementById('planName');
+    const badge = document.getElementById("planBadge");
+    const upgradeBtn = document.getElementById("upgradeBtn");
+    const planName = document.getElementById("planName");
+    const tierBadge = document.getElementById("tierBadge");
+    
     if (planName) {
-      planName.textContent = d.is_premium ? '🌟 ListMate Premium' : '🌟 Free Plan';
+      planName.textContent = d.is_premium ? "🌟 ListMate Premium" : "🌟 Free Plan";
+    }
+    
+    if (tierBadge) {
+      if (d.is_premium) {
+        tierBadge.textContent = "Premium";
+        tierBadge.style.background = "linear-gradient(135deg, #fbbf24, #f59e0b)";
+        tierBadge.style.border = "none";
+        tierBadge.style.color = "#fff";
+        tierBadge.style.cursor = "default";
+        tierBadge.onclick = null;
+      } else {
+        tierBadge.textContent = "🎁 Upgrade";
+      }
     }
     if (badge) {
       if (d.is_early_adopter) {
@@ -500,8 +516,10 @@ async function deleteAccount() {
   }
 }
 </script>
-<ins class="adsbygoogle ad-banner-bottom" style="display:inline-block;width:100%;height:50px" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+<div class="ad-banner-bottom">
+  <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
+  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</div>
 
 <!-- Paywall Modal -->
 <div class="modal-overlay" id="paywallModal">
