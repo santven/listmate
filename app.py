@@ -373,6 +373,37 @@ def location_settings():
     authmod._run(f"UPDATE {authmod._HH} SET zip_code = ?, country = ? WHERE id = ?", (zip_code, country, hhid))
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
+
+@app.route("/api/webhooks/revenuecat", methods=["POST"])
+def revenuecat_webhook():
+    """Handle RevenueCat webhooks for downgrades on cancellation."""
+    expected_token = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
+    if expected_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header != f"Bearer {expected_token}":
+            return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    event = data.get("event", {})
+    evt_type = event.get("type")
+
+    # If the user cancels or their subscription expires, downgrade them
+    if evt_type in ["CANCELLATION", "EXPIRATION"]:
+        uid = event.get("app_user_id")
+        if uid:
+            try:
+                uid_int = int(uid)
+                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
+                if user and user.get("household_id"):
+                    hhid = user["household_id"]
+                    val = False if authmod._use_pg else 0
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "free", hhid))
+                    print(f"[Webhook] Downgraded household {hhid} due to {evt_type}")
+            except Exception as e:
+                print(f"[Webhook] Error processing downgrade: {e}")
+
+    return jsonify({"ok": True})
+
 @app.route("/api/settings/premium", methods=["GET", "POST"])
 @require_user
 def premium_settings():
