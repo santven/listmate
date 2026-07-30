@@ -328,8 +328,8 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <div class="modal-overlay" id="premiumModal">
   <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
     <div style="font-size:48px; margin-bottom:12px;">⭐</div>
-    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Recipe Planner is Premium</h3>
-    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+    <h3 id="premiumModalTitle" style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Recipe Planner is Premium</h3>
+    <p id="premiumModalDesc" style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
       Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
@@ -1442,8 +1442,7 @@ function isMobile() {
 
 async function shareAllLists() {
   if (!window.currentCfg || !window.currentCfg.is_premium) {
-    const pModal = $('#premiumModal');
-    if (pModal) pModal.classList.add('active');
+    showPremiumModal('Share');
     return;
   }
 
@@ -1511,8 +1510,7 @@ async function shareAllLists() {
 
 async function shareStoreList(storeId, storeName) {
   if (!window.currentCfg || !window.currentCfg.is_premium) {
-    const pModal = $('#premiumModal');
-    if (pModal) pModal.classList.add('active');
+    showPremiumModal('Share');
     return;
   }
 
@@ -1585,8 +1583,7 @@ let savedRecipesList = [];
 
 async function showRecipesScreen() {
   if (!window.currentCfg || !window.currentCfg.is_premium) {
-    const pModal = $('#premiumModal');
-    if (pModal) pModal.classList.add('active');
+    showPremiumModal('Recipe');
     return;
   }
   showScreen('recipes');
@@ -1603,6 +1600,24 @@ async function showRecipesScreen() {
   } catch (e) {}
 
   loadSavedRecipes();
+}
+
+function showPremiumModal(featureName) {
+  const pModal = $('#premiumModal');
+  const title = $('#premiumModalTitle');
+  const desc = $('#premiumModalDesc');
+  
+  if (title && desc) {
+    if (featureName === 'Share') {
+      title.textContent = 'Sharing is a Premium Feature';
+      desc.textContent = 'Upgrade to share your grocery lists and recipes with others, plus unlock AI auto-enrichment and more.';
+    } else {
+      title.textContent = 'Recipe Planner is Premium';
+      desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
+    }
+  }
+  
+  if (pModal) pModal.classList.add('active');
 }
 
 function closePremiumModal() {
@@ -1822,8 +1837,7 @@ async function generateRecipe() {
     
     if (res.status === 403) {
       closePremiumModal();
-      const pModal = $('#premiumModal');
-      if (pModal) pModal.classList.add('active');
+      showPremiumModal('Recipe');
       return;
     }
     
