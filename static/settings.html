@@ -368,6 +368,35 @@ async function loadPremium() {
 
 let revenueCatOfferings = null;
 
+
+async function restorePurchases() {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
+    try {
+        const rcKey = (window.currentCfg && window.currentCfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+        
+        if (typeof toast !== "undefined") toast('Restoring purchases...');
+        const { customerInfo } = await window.Capacitor.Plugins.Purchases.restorePurchases();
+        
+        if (customerInfo && customerInfo.entitlements && customerInfo.entitlements.active['premium']) {
+            await fetch('/api/settings/premium', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_premium: true })
+            });
+            if (typeof toast !== "undefined") toast('⭐ Purchases restored! Welcome to Premium!');
+            else alert('⭐ Purchases restored! Welcome to Premium!');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            if (typeof toast !== "undefined") toast('No active premium subscription found.');
+            else alert('No active premium subscription found.');
+        }
+    } catch (e) {
+        if (typeof toast !== "undefined") toast('Error restoring purchases.');
+        else alert('Error restoring purchases.');
+        console.error(e);
+    }
+}
 async function purchasePackage(index) {
     if (!revenueCatOfferings || !revenueCatOfferings[index]) return;
     const packageToBuy = revenueCatOfferings[index];
@@ -531,7 +560,10 @@ async function deleteAccount() {
     <div id="paywallPackages" style="display:flex; flex-direction:column; gap:10px;">
       <!-- Dynamic Buttons -->
     </div>
-    <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:10px;">Cancel</button>
+    <div style="margin-top:14px;">
+        <button onclick="restorePurchases()" style="background:none; border:none; color:var(--green); padding:10px; font-size:14px; font-weight:600; cursor:pointer;">Restore Purchases</button>
+    </div>
+    <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
   </div>
 </div>
 
