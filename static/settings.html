@@ -355,10 +355,14 @@ async function loadPremium() {
             badge.style.display = 'inline-block';
             if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
         }
-      } else if (d.is_premium) {
-        badge.textContent = `✨ Active Premium`;
+      } else if (d.subscription_status === 'expired') {
+        badge.textContent = `❌ Subscription Expired`;
         badge.style.display = 'inline-block';
-        if (upgradeBtn) upgradeBtn.style.display = 'none';
+        if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
+      } else if (d.is_premium) {
+        badge.textContent = d.subscription_status === 'canceled' ? `✨ Premium (Cancels at end of period)` : `✨ Active Premium`;
+        badge.style.display = 'inline-block';
+        if (upgradeBtn) upgradeBtn.style.display = d.subscription_status === 'canceled' ? 'inline-block' : 'none';
       } else {
         badge.style.display = 'none';
         if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
