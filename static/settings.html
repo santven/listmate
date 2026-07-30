@@ -604,6 +604,12 @@ async function deleteAccount() {
     btn.textContent = 'Delete Account';
   }
 }
+
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+  modal.addEventListener('click', e => {
+    if (e.target === e.currentTarget) modal.classList.remove('active');
+  });
+});
 </script>
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
