@@ -401,6 +401,21 @@ def revenuecat_webhook():
                     print(f"[Webhook] Downgraded household {hhid} due to {evt_type}")
             except Exception as e:
                 print(f"[Webhook] Error processing downgrade: {e}")
+                
+    # If the user purchases or renews, upgrade them
+    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
+        uid = event.get("app_user_id")
+        if uid and uid.isdigit():  # Ensure it's not an anonymous ID
+            try:
+                uid_int = int(uid)
+                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
+                if user and user.get("household_id"):
+                    hhid = user["household_id"]
+                    val = True if authmod._use_pg else 1
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+                    print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
+            except Exception as e:
+                print(f"[Webhook] Error processing upgrade: {e}")
 
     return jsonify({"ok": True})
 
