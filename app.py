@@ -1718,11 +1718,17 @@ def auth_google_callback():
         if state.startswith("intent_"):
             intent_id = state.split("intent_")[1]
             authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-
-        return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
-                '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
-                '<h2>&#x1F44D; Signed in</h2><p>Loading...</p>' +
-                "<script>window.location.replace(\'/\');</script></body></html>")
+            return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head>
+            <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;">
+                <h2>✅ Authentication Successful</h2>
+                <p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p>
+                <p style="margin-top:15px;"><a href="listmate://sso_callback" style="color:#2563eb;font-weight:bold;text-decoration:underline;">Tap here if you are not automatically redirected</a></p>
+                <script>
+                    setTimeout(function() {{
+                        try {{ window.location.href = "listmate://sso_callback"; }} catch(e) {{}}
+                    }}, 100);
+                </script>
+            </body></html>"""
     
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)

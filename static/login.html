@@ -394,7 +394,8 @@ function handleCredential(credential, isIntentCallback) {
   .then(function(r) {
     if (r.data.ok) {
       if (typeof isIntentCallback !== 'undefined' && isIntentCallback) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p></div>';
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><p style="margin-top:15px;"><a href="listmate://sso_callback" style="color:#2563eb;font-weight:bold;text-decoration:underline;">Tap here if you are not automatically redirected</a></p></div>';
+        try { window.location.href = "listmate://sso_callback"; } catch(e) {}
         try { window.close(); } catch(e) {}
         return;
       }
