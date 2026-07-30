@@ -380,7 +380,7 @@ def revenuecat_webhook():
     expected_token = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
     if expected_token:
         auth_header = request.headers.get("Authorization")
-        if auth_header != f"Bearer {expected_token}":
+        if auth_header not in [expected_token, f"Bearer {expected_token}"]:
             return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
