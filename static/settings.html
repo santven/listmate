@@ -340,6 +340,31 @@ async function loadPremium() {
   } catch(e) {}
 }
 
+let revenueCatOfferings = null;
+
+async function purchasePackage(index) {
+    if (!revenueCatOfferings || !revenueCatOfferings[index]) return;
+    const packageToBuy = revenueCatOfferings[index];
+    const pModal = document.getElementById('paywallModal');
+    if (pModal) pModal.classList.remove('active');
+    
+    try {
+        console.log("[RevenueCat] Initiating purchase for package:", packageToBuy.identifier);
+        const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ aPackage: packageToBuy });
+        console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
+        if (customerInfo.entitlements.active['premium']) {
+            alert('⭐ Welcome to Premium!');
+            setTimeout(() => window.location.reload(), 1500);
+        }
+    } catch (e) {
+        console.error("[RevenueCat] Purchase Error:", e);
+        if (!e.userCancelled) {
+            const errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
+            alert('Purchase error: ' + errDetail);
+        }
+    }
+}
+
 async function showPaywall() {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
         try {
@@ -356,16 +381,27 @@ async function showPaywall() {
             console.log("[RevenueCat] Fetching offerings...");
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             console.log("[RevenueCat] Offerings fetched:", offerings);
+            
             if (offerings.current && offerings.current.availablePackages.length > 0) {
-                const packageToBuy = offerings.current.availablePackages[0];
-                if (confirm(`Subscribe to Premium for ${packageToBuy.product.priceString}?`)) {
-                    console.log("[RevenueCat] Initiating purchase for package:", packageToBuy.identifier);
-                    const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ package: packageToBuy });
-                    console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
-                    if (customerInfo.entitlements.active['premium']) {
-                        alert('⭐ Welcome to Premium!');
-                        window.location.reload();
-                    }
+                revenueCatOfferings = offerings.current.availablePackages;
+                const container = document.getElementById('paywallPackages');
+                if (container) {
+                    container.innerHTML = '';
+                    revenueCatOfferings.forEach((pkg, index) => {
+                        const btn = document.createElement('button');
+                        btn.style.cssText = "background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;";
+                        
+                        let label = pkg.packageType;
+                        if (label === 'ANNUAL') label = 'Yearly';
+                        else if (label === 'MONTHLY') label = 'Monthly';
+                        
+                        btn.innerText = `Subscribe to ${label} for ${pkg.product.priceString}`;
+                        btn.onclick = () => purchasePackage(index);
+                        container.appendChild(btn);
+                    });
+                    
+                    const pModal = document.getElementById('paywallModal');
+                    if (pModal) pModal.classList.add('active');
                 }
             } else {
                 console.warn("[RevenueCat] No offerings available. Offerings object:", JSON.stringify(offerings));
@@ -373,7 +409,6 @@ async function showPaywall() {
             }
         } catch (e) {
             console.error("[RevenueCat] Error object:", e);
-            console.error("[RevenueCat] Error stringified:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
             if (!e.userCancelled) {
                 const errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
                 alert('Purchase error: ' + errDetail);
@@ -441,5 +476,21 @@ async function deleteAccount() {
 }
 </script>
 <ins class="adsbygoogle ad-banner-bottom" style="display:block" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665" data-ad-format="auto" data-full-width-responsive="true"></ins>
+
+<!-- Paywall Modal -->
+<div class="modal-overlay" id="paywallModal">
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+    <div style="font-size:48px; margin-bottom:12px;">⭐</div>
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Choose Your Premium Plan</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+      Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.
+    </p>
+    <div id="paywallPackages" style="display:flex; flex-direction:column; gap:10px;">
+      <!-- Dynamic Buttons -->
+    </div>
+    <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:10px;">Cancel</button>
+  </div>
+</div>
+
 </body>
 </html>
