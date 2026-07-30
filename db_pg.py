@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """PostgreSQL — connection pool (ThreadedConnectionPool) for Render/Neon."""
 
-import os, re, psycopg2
+import os, re, psycopg2, subprocess
 from psycopg2 import pool as _pool
 
 _pool_ctx = None
 
+def _ensure_local_pg():
+    if os.environ.get("DATABASE_URL"):
+        return
+    try:
+        subprocess.run("mkdir -p /var/run/postgresql /tmp/pgdata && chown -R postgres:postgres /var/run/postgresql /tmp/pgdata 2>/dev/null || true", shell=True, check=False)
+        check_res = subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/pgdata status'", shell=True, capture_output=True)
+        if check_res.returncode != 0:
+            subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/initdb -D /tmp/pgdata'", shell=True, capture_output=True)
+            subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/pgdata -l /tmp/postgres.log start'", shell=True, capture_output=True)
+            subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/createdb listmate'", shell=True, capture_output=True)
+    except Exception as e:
+        print(f"[db_pg] local pg check notice: {e}", flush=True)
+
 def _get_pool():
     global _pool_ctx
     if _pool_ctx is None:
-        url = os.environ.get("DATABASE_URL")
-        if not url:
-            raise RuntimeError("DATABASE_URL not set")
-        # Neon free tier: keep min=1, max=4 connections
+        _ensure_local_pg()
+        url = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost:5432/listmate")
         _pool_ctx = _pool.ThreadedConnectionPool(1, 20, url)
     return _pool_ctx
 

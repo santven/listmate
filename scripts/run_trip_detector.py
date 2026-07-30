@@ -4,7 +4,6 @@ Trip detector wrapper — runs at 23:00 GMT (6pm CT) for 1 hour.
 Processes max 5 premium households per iteration, 60 iterations.
 Only processes households WHERE is_premium = TRUE.
 """
-import sqlite3
 import json
 import os
 import sys
@@ -16,10 +15,9 @@ sys.path.insert(0, "/opt/shared")
 sys.path.insert(0, "/tmp/listmate")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import shared.auth as authmod
 from trip_detector import detect_and_record_trips
 
-DB_PATH = os.environ.get("DB_PATH", "listmate.db")
-AUTH_DB = os.environ.get("AUTH_DB", "listmate_auth.db")
 LOG_FILE = "/var/log/trip_detector.log"
 
 os.makedirs(os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else ".", exist_ok=True)
@@ -38,13 +36,8 @@ def log(msg: str):
 
 def get_premium_households():
     """Get all premium household IDs."""
-    db = sqlite3.connect(AUTH_DB)
-    db.row_factory = sqlite3.Row
-    rows = db.execute(
-        "SELECT id, name, member_limit FROM auth_households WHERE is_premium = 1 ORDER BY id"
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]
+    authmod._init_schema()
+    return authmod._run("SELECT id, name FROM auth_households WHERE is_premium = TRUE ORDER BY id")
 
 
 def main():

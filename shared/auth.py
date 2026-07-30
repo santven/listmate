@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Listmate auth — Google SSO + household management.
-PostgreSQL on Render, SQLite locally. Lazy schema init, crash-safe."""
-import os, sqlite3, json, re, traceback
+PostgreSQL connection pool and authentication logic."""
+import os, json, re, traceback
 from functools import wraps
 from flask import request, jsonify, session, send_from_directory
 from google.oauth2 import id_token
@@ -13,298 +13,185 @@ GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID", "").strip() or \
 REVENUECAT_PUBLIC_KEY = os.environ.get("REVENUECAT_PUBLIC_KEY", "test_IiwuzQXuzucZlwihcMHIsqAMwby").strip()
 COOKIE_NAME = "listmate_session"
 COOKIE_SECURE = False
-USE_PG = bool(os.environ.get("DATABASE_URL"))
 _schema_done = False
 
-# ── DB: unified interface ───────────────────────────────────
-if USE_PG:
-    import psycopg2
-    from psycopg2 import extras as _extras
-    from psycopg2 import pool as _pgpool
+# ── DB: unified PostgreSQL interface ───────────────────────
+import psycopg2
+from psycopg2 import extras as _extras
+from psycopg2 import pool as _pgpool
 
-    _pool = None
+_pool = None
 
-    def _connect():
-        global _pool
-        if _pool is None:
-            _pool = _pgpool.ThreadedConnectionPool(1, 20, os.environ["DATABASE_URL"])
-        conn = _pool.getconn()
-        conn.autocommit = True
-        return conn
+def _connect():
+    global _pool
+    if _pool is None:
+        import db_pg
+        db_pg._ensure_local_pg()
+        db_url = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost:5432/listmate")
+        _pool = _pgpool.ThreadedConnectionPool(1, 20, db_url)
+    conn = _pool.getconn()
+    conn.autocommit = True
+    return conn
 
-    def _put_conn(conn):
-        global _pool
-        if _pool and conn:
-            try:
-                if not getattr(conn, 'closed', False):
-                    _pool.putconn(conn)
-            except Exception:
-                try: conn.close()
-                except Exception: pass
-
-    def _pool_close():
-        global _pool
-        if _pool:
-            _pool.closeall()
-            _pool = None
-
-    def _one(sql, params=None):
-        sql_fixed = re.sub(r'\?', '%s', sql)
-        conn = _connect()
-        cur = None
+def _put_conn(conn):
+    global _pool
+    if _pool and conn:
         try:
-            cur = conn.cursor()
-            if params: cur.execute(sql_fixed, params)
-            else: cur.execute(sql_fixed)
-            row = cur.fetchone()
-            cols = [d[0] for d in cur.description] if cur.description else []
-            return dict(zip(cols, row)) if row else None
+            if not getattr(conn, 'closed', False):
+                _pool.putconn(conn)
         except Exception:
-            return None
-        finally:
-            if cur:
-                try: cur.close()
-                except Exception: pass
-            _put_conn(conn)
+            try: conn.close()
+            except Exception: pass
 
-    def _run(sql, params=None):
-        sql_fixed = re.sub(r'\?', '%s', sql)
-        conn = _connect()
-        cur = None
+def _pool_close():
+    global _pool
+    if _pool:
+        _pool.closeall()
+        _pool = None
+
+def _one(sql, params=None):
+    sql_fixed = re.sub(r'\?', '%s', sql)
+    conn = _connect()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        row = cur.fetchone()
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return dict(zip(cols, row)) if row else None
+    except Exception:
+        return None
+    finally:
+        if cur:
+            try: cur.close()
+            except Exception: pass
+        _put_conn(conn)
+
+def _run(sql, params=None):
+    sql_fixed = re.sub(r'\?', '%s', sql)
+    conn = _connect()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        rows = cur.fetchall() if cur.description else []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return [dict(zip(cols, r)) for r in rows]
+    except Exception:
+        return []
+    finally:
+        if cur:
+            try: cur.close()
+            except Exception: pass
+        _put_conn(conn)
+
+def _exec(sql, params=None):
+    '''Execute INSERT/UPDATE/DELETE — raises on error.'''
+    sql_fixed = re.sub(r'\?', '%s', sql)
+    conn = _connect()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+    finally:
+        if cur:
+            try: cur.close()
+            except Exception: pass
+        _put_conn(conn)
+
+def _insert(sql, params=None):
+    """Insert a row and return the new ID (Postgres RETURNING)."""
+    sql_fixed = re.sub(r'\?', '%s', sql)
+    conn = _connect()
+    cur = None
+    try:
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        row = cur.fetchone() if cur.description else None
+        if row:
+            new_id = row[0]
+        else:
+            cur.execute("SELECT lastval()")
+            new_id = cur.fetchone()[0]
+        return new_id
+    finally:
+        if cur:
+            try: cur.close()
+            except Exception: pass
+        _put_conn(conn)
+
+_USERS = "auth_users"
+_HH = "auth_households"
+_FLAGS = "auth_feature_flags"
+
+def _init_schema():
+    global _schema_done
+    if _schema_done: return
+    for stmt in [
+        """CREATE TABLE IF NOT EXISTS auth_users (
+            id SERIAL PRIMARY KEY, google_id TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL, name TEXT NOT NULL,
+            household_id INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+        """CREATE TABLE IF NOT EXISTS auth_households (
+            id SERIAL PRIMARY KEY, name TEXT NOT NULL,
+            invite_code TEXT UNIQUE,
+            dietary_restrictions TEXT DEFAULT '',
+            zip_code TEXT DEFAULT '',
+            country TEXT DEFAULT '',
+            is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+            stripe_customer_id TEXT,
+            rc_app_user_id TEXT,
+            subscription_status TEXT NOT NULL DEFAULT 'free',
+            trial_ends_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+        """CREATE TABLE IF NOT EXISTS auth_feature_flags (
+            user_id INTEGER NOT NULL REFERENCES auth_users(id),
+            feature TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            PRIMARY KEY (user_id, feature))""",
+        """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
+        """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
+        
+        """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
+        
+        """CREATE TABLE IF NOT EXISTS invites (
+            id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL,
+            household_id INTEGER NOT NULL REFERENCES auth_households(id),
+            email TEXT, created_by INTEGER NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP)""",
+        """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
+    ]:
+        _run(stmt)
+    for stmt in [
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''"
+    ]:
         try:
-            cur = conn.cursor()
-            if params: cur.execute(sql_fixed, params)
-            else: cur.execute(sql_fixed)
-            rows = cur.fetchall() if cur.description else []
-            cols = [d[0] for d in cur.description] if cur.description else []
-            return [dict(zip(cols, r)) for r in rows]
+            _run(stmt)
         except Exception:
-            return []
-        finally:
-            if cur:
-                try: cur.close()
-                except Exception: pass
-            _put_conn(conn)
+            pass
 
-    def _exec(sql, params=None):
-        '''Execute INSERT/UPDATE/DELETE — raises on error.'''
-        sql_fixed = re.sub(r'\?', '%s', sql)
-        conn = _connect()
-        cur = None
-        try:
-            cur = conn.cursor()
-            if params: cur.execute(sql_fixed, params)
-            else: cur.execute(sql_fixed)
-        finally:
-            if cur:
-                try: cur.close()
-                except Exception: pass
-            _put_conn(conn)
+    # Seed dev household and user if they don't exist
+    try:
+        h = _one("SELECT id FROM auth_households WHERE id = 1")
+        if not h:
+            _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
+        u = _one("SELECT id FROM auth_users WHERE id = 1")
+        if not u:
+            _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
+    except Exception as e:
+        print(f'[seed dev error] {e}', flush=True)
 
-    def _insert(sql, params=None):
-        """Insert a row and return the new ID (Postgres RETURNING)."""
-        sql_fixed = re.sub(r'\?', '%s', sql)
-        conn = _connect()
-        cur = None
-        try:
-            cur = conn.cursor()
-            if params: cur.execute(sql_fixed, params)
-            else: cur.execute(sql_fixed)
-            row = cur.fetchone() if cur.description else None
-            if row:
-                new_id = row[0]
-            else:
-                cur.execute("SELECT lastval()")
-                new_id = cur.fetchone()[0]
-            return new_id
-        finally:
-            if cur:
-                try: cur.close()
-                except Exception: pass
-            _put_conn(conn)
-
-    _USERS = "auth_users"
-    _HH = "auth_households"
-    _FLAGS = "auth_feature_flags"
-
-    def _init_schema():
-        global _schema_done
-        if _schema_done: return
-        for stmt in [
-            """CREATE TABLE IF NOT EXISTS auth_users (
-                id SERIAL PRIMARY KEY, google_id TEXT UNIQUE NOT NULL,
-                email TEXT NOT NULL, name TEXT NOT NULL,
-                household_id INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
-            """CREATE TABLE IF NOT EXISTS auth_households (
-                id SERIAL PRIMARY KEY, name TEXT NOT NULL,
-                invite_code TEXT UNIQUE,
-                dietary_restrictions TEXT DEFAULT '',
-                zip_code TEXT DEFAULT '',
-                country TEXT DEFAULT '',
-                is_premium BOOLEAN NOT NULL DEFAULT FALSE,
-                stripe_customer_id TEXT,
-                rc_app_user_id TEXT,
-                subscription_status TEXT NOT NULL DEFAULT 'free',
-                trial_ends_at TIMESTAMP,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
-            """CREATE TABLE IF NOT EXISTS auth_feature_flags (
-                user_id INTEGER NOT NULL REFERENCES auth_users(id),
-                feature TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                PRIMARY KEY (user_id, feature))""",
-            """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
-            """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
-            
-            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
-            
-            """CREATE TABLE IF NOT EXISTS invites (
-                id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL,
-                household_id INTEGER NOT NULL REFERENCES auth_households(id),
-                email TEXT, created_by INTEGER NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP)""",
-            """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
-        ]:
-            _run(stmt)
-        for stmt in [
-            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE",
-            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
-            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
-            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
-            "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP"
-        ]:
-            try:
-                _run(stmt)
-            except Exception:
-                pass
-
-        # Seed dev household and user if they don't exist
-        try:
-            h = _one("SELECT id FROM auth_households WHERE id = 1")
-            if not h:
-                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
-            u = _one("SELECT id FROM auth_users WHERE id = 1")
-            if not u:
-                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
-        except Exception as e:
-            print(f'[seed dev error] {e}', flush=True)
-
-        _schema_done = True
-
-else:
-    AUTH_DB_PATH = os.environ.get("AUTH_DB", "listmate_auth.db")
-
-    def _connect():
-        try:
-            db = sqlite3.connect(AUTH_DB_PATH)
-            db.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.DatabaseError:
-            print(f"[auth] {AUTH_DB_PATH} is corrupt, recreating clean database...")
-            for ext in ['', '-wal', '-shm']:
-                p = AUTH_DB_PATH + ext
-                if os.path.exists(p):
-                    try: os.remove(p)
-                    except Exception: pass
-            db = sqlite3.connect(AUTH_DB_PATH)
-            db.execute("PRAGMA journal_mode=WAL")
-        db.execute("PRAGMA foreign_keys=ON")
-        return db
-
-    def _run(sql, params=None):
-        db = _connect()
-        db.row_factory = sqlite3.Row
-        if params: res = db.execute(sql, params)
-        else: res = db.execute(sql)
-        rows = [dict(r) for r in res.fetchall()]
-        db.commit(); db.close()
-        return rows
-
-    def _one(sql, params=None):
-        db = _connect()
-        db.row_factory = sqlite3.Row
-        if params: res = db.execute(sql, params)
-        else: res = db.execute(sql)
-        row = res.fetchone(); db.commit(); db.close()
-        return dict(row) if row else None
-
-    def _insert(sql, params=None):
-        db = _connect()
-        db.row_factory = sqlite3.Row
-        if params: db.execute(sql, params)
-        else: db.execute(sql)
-        lid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.commit(); db.close()
-        return lid
-
-    _USERS = "auth_users"
-    _HH = "auth_households"
-    _FLAGS = "auth_feature_flags"
-
-    def _init_schema():
-        global _schema_done
-        if _schema_done: return
-        for stmt in [
-            """CREATE TABLE IF NOT EXISTS auth_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, google_id TEXT UNIQUE NOT NULL,
-                email TEXT NOT NULL, name TEXT NOT NULL,
-                household_id INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
-            """CREATE TABLE IF NOT EXISTS auth_households (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
-                invite_code TEXT UNIQUE,
-                dietary_restrictions TEXT DEFAULT '',
-                zip_code TEXT DEFAULT '',
-                country TEXT DEFAULT '',
-                is_premium INTEGER NOT NULL DEFAULT 0,
-                stripe_customer_id TEXT,
-                rc_app_user_id TEXT,
-                subscription_status TEXT NOT NULL DEFAULT 'free',
-                trial_ends_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
-            """CREATE TABLE IF NOT EXISTS auth_feature_flags (
-                user_id INTEGER NOT NULL, feature TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (user_id, feature))""",
-            """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
-            """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
-            """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
-            """CREATE TABLE IF NOT EXISTS invites (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL,
-                household_id INTEGER NOT NULL, email TEXT, created_by INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP,
-                FOREIGN KEY (household_id) REFERENCES auth_households(id))""",
-            """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
-        ]:
-            _run(stmt)
-        for table, col, coltype in [
-            ("auth_households", "dietary_restrictions", "TEXT DEFAULT ''"),
-            ("auth_households", "zip_code", "TEXT DEFAULT ''"),
-            ("auth_households", "country", "TEXT DEFAULT ''"),
-            ("auth_households", "is_premium", "INTEGER NOT NULL DEFAULT 0"),
-            ("auth_households", "stripe_customer_id", "TEXT"),
-            ("auth_households", "rc_app_user_id", "TEXT"),
-            ("auth_households", "subscription_status", "TEXT NOT NULL DEFAULT 'free'"),
-            ("auth_households", "trial_ends_at", "TIMESTAMP"),
-            ("auth_users", "apple_id", "TEXT DEFAULT ''")
-        ]:
-            try:
-                _run(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
-            except Exception:
-                pass
-
-        # Seed dev household and user if they don't exist
-        try:
-            h = _one("SELECT id FROM auth_households WHERE id = 1")
-            if not h:
-                _run("INSERT INTO auth_households (id, name, invite_code) VALUES (1, 'Dev Household', 'DEV12345')")
-            u = _one("SELECT id FROM auth_users WHERE id = 1")
-            if not u:
-                _run("INSERT INTO auth_users (id, google_id, email, name, household_id) VALUES (1, 'dev_google_id', 'dev@listmate.local', 'Dev User', 1)")
-        except Exception as e:
-            print(f'[seed dev error] {e}', flush=True)
-
-        _schema_done = True
+    _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
 
@@ -391,7 +278,7 @@ def register_auth_routes(app):
             if hh_count and hh_count.get("cnt", 0) == 0:
                 import secrets
                 code = secrets.token_hex(4).upper()
-                prem_val = True if USE_PG else 1
+                prem_val = True
                 _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                 hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh["id"] if hh else 1
@@ -446,7 +333,7 @@ def register_auth_routes(app):
                     # First user on a fresh system — create household
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    prem_val = True if USE_PG else 1
+                    prem_val = True
                     _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
@@ -549,7 +436,7 @@ def register_auth_routes(app):
                 if hh_count and hh_count.get("cnt", 0) == 0:
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    prem_val = True if USE_PG else 1
+                    prem_val = True
                     _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
@@ -601,7 +488,7 @@ def register_auth_routes(app):
                 if int(hh_id) <= 100 and not is_prem:
                     is_prem = True
                     sub_status = "premium"
-                    val = True if USE_PG else 1
+                    val = True
                     _run(f"UPDATE {_HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, 'premium', hh_id))
                 
                 # Check active trial
@@ -709,15 +596,10 @@ def register_auth_routes(app):
         count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
         existing_cnt = count_row.get("cnt", 0) if count_row else 0
         is_early = existing_cnt < 100
-        prem_val = is_early if USE_PG else (1 if is_early else 0)
+        prem_val = is_early
         status = 'premium' if is_early else 'trial'
-        
-        if USE_PG:
-            trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"
-            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr}) RETURNING id", (hname, code, prem_val, status))
-        else:
-            trial_expr = "datetime('now', '+30 days')" if not is_early else "NULL"
-            hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr})", (hname, code, prem_val, status))
+        trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"
+        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr}) RETURNING id", (hname, code, prem_val, status))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})

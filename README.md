@@ -18,7 +18,7 @@ Store-specific grocery list for households. Know what to buy at every store.
 | Layer | Tech |
 |---|---|
 | Backend | Python 3 + Flask |
-| Database | SQLite (local) / PostgreSQL (production) |
+| Database | PostgreSQL |
 | Auth | Google OAuth 2.0 |
 | Frontend | Vanilla JS, service worker PWA |
 
@@ -31,18 +31,8 @@ python3 -m flask run -p 5003
 
 ## Deployment
 
-The app auto-detects `DATABASE_URL` environment variable:
-- **Not set** → uses local SQLite (`listmate.db`)
-- **Set** → uses PostgreSQL with connection pooling
-
 ```bash
 DATABASE_URL=postgres://... gunicorn wsgi:app
-```
-
-## Migration from SQLite
-
-```bash
-DATABASE_URL=postgres://... python3 migrate_to_pg.py
 ```
 
 ## Project Structure
@@ -50,9 +40,7 @@ DATABASE_URL=postgres://... python3 migrate_to_pg.py
 ```
 listmate/
 ├── app.py              # Flask application
-├── db.py               # SQLite database module
-├── db_pg.py            # PostgreSQL database module (cloud)
-├── migrate_to_pg.py    # SQLite → PG migration script
+├── db_pg.py            # PostgreSQL database module
 ├── categorize.py       # Auto-categorizer (500+ keywords)
 ├── wsgi.py             # Gunicorn entrypoint
 ├── shared/

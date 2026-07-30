@@ -43,7 +43,7 @@ def _ensure_schema():
     try:
         authmod._init_schema()
         col_type = "TEXT DEFAULT ''"
-        prem_type = "BOOLEAN DEFAULT FALSE" if _use_pg else "INTEGER DEFAULT 0"
+        prem_type = "BOOLEAN DEFAULT FALSE"
         
         for col, ctype in [
             ("dietary_restrictions", col_type),
@@ -52,10 +52,7 @@ def _ensure_schema():
             ("is_premium", prem_type)
         ]:
             try:
-                if _use_pg:
-                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
-                else:
-                    authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN {col} {ctype}")
+                authmod._run(f"ALTER TABLE {authmod._HH} ADD COLUMN IF NOT EXISTS {col} {ctype}")
             except Exception:
                 pass
 
@@ -107,13 +104,8 @@ def _ensure_schema():
 def _check_migration():
     _ensure_schema()
 
-# Database: PostgreSQL on Render (DATABASE_URL), SQLite locally
-_DATABASE_URL = os.environ.get("DATABASE_URL") or ""
-_use_pg = "postgres" in _DATABASE_URL.lower() or "RENDER" in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
-if _use_pg:
-    import db_pg as dbmod
-else:
-    import db as dbmod
+# Database: PostgreSQL
+import db_pg as dbmod
 
 
 def get_db():
@@ -121,10 +113,7 @@ def get_db():
 
 
 def close_db(conn):
-    if _DATABASE_URL:
-        dbmod.close_db(conn)
-    else:
-        conn.close()
+    dbmod.close_db(conn)
 
 
 def _hh():
@@ -196,7 +185,7 @@ def login_page():
                             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
                             if hh_count and hh_count.get("cnt", 0) == 0:
                                 code = secrets.token_hex(4).upper()
-                                prem_val = True if _use_pg else 1
+                                prem_val = True
                                 authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
                                 hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                                 hh_id = hh["id"] if hh else 1
@@ -288,7 +277,7 @@ def login_google_native():
                 if hh_count and hh_count.get("cnt", 0) == 0:
                     import secrets
                     code = secrets.token_hex(4).upper()
-                    prem_val = True if _use_pg else 1
+                    prem_val = True
                     authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
@@ -412,7 +401,7 @@ def revenuecat_webhook():
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = False if _use_pg else 0
+                    val = False
                     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
                     print(f"[Webhook] Downgraded household {hhid} due to expiration")
                 else:
@@ -429,7 +418,7 @@ def revenuecat_webhook():
                 user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
                 if user and user.get("household_id"):
                     hhid = user["household_id"]
-                    val = True if _use_pg else 1
+                    val = True
                     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
                     print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
                 else:
@@ -460,7 +449,7 @@ def premium_settings():
         if is_early and not is_prem:
             is_prem = True
             sub_status = "premium"
-            val = True if _use_pg else 1
+            val = True
             authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
 
         if sub_status == 'trial' and trial_ends_at:
@@ -490,7 +479,7 @@ def premium_settings():
 
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
-    val = is_premium if _use_pg else (1 if is_premium else 0)
+    val = is_premium
     status = "active" if is_premium else "free"
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
     is_early = bool(hhid and int(hhid) <= 100)
@@ -662,14 +651,8 @@ def _get_weekly_recipe_count(db, hhid):
     start_of_week = (now - datetime.timedelta(days=days_since_sunday)).replace(hour=0, minute=0, second=0, microsecond=0)
     start_str = start_of_week.strftime("%Y-%m-%d %H:%M:%S")
     try:
-        if _use_pg:
-            db.execute("CREATE TABLE IF NOT EXISTS recipe_generations (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())")
-            row = db.execute("SELECT COUNT(*) as cnt FROM recipe_generations WHERE household_id = ? AND created_at >= ?", (hhid, start_of_week)).fetchone()
-        else:
-            db.execute("CREATE TABLE IF NOT EXISTS recipe_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            if not _use_pg:
-                db.commit()
-            row = db.execute("SELECT COUNT(*) as cnt FROM recipe_generations WHERE household_id = ? AND created_at >= ?", (hhid, start_str)).fetchone()
+        db.execute("CREATE TABLE IF NOT EXISTS recipe_generations (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())")
+        row = db.execute("SELECT COUNT(*) as cnt FROM recipe_generations WHERE household_id = ? AND created_at >= ?", (hhid, start_of_week)).fetchone()
         return row["cnt"] if row else 0
     except Exception as e:
         print(f"Error checking weekly recipe count: {e}")
@@ -678,11 +661,7 @@ def _get_weekly_recipe_count(db, hhid):
 
 def _record_recipe_generation(db, hhid):
     try:
-        if _use_pg:
-            db.execute("INSERT INTO recipe_generations (household_id) VALUES (?)", (hhid,))
-        else:
-            db.execute("INSERT INTO recipe_generations (household_id) VALUES (?)", (hhid,))
-            db.commit()
+        db.execute("INSERT INTO recipe_generations (household_id) VALUES (?)", (hhid,))
     except Exception as e:
         print(f"Error recording recipe generation: {e}")
 
@@ -821,21 +800,12 @@ def recipes_endpoint():
         instr_json = json.dumps(data.get("instructions") or [])
         ingr_json = json.dumps(data.get("ingredients") or [])
 
-        if _use_pg:
-            cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
-            )
-            recipe_id = cur.fetchall()[0]["id"]
-        else:
-            cur = db.execute(
-                "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
-            )
-            db.commit()
-            recipe_id = cur.lastrowid
+        cur = db.execute(
+            "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
+        )
+        recipe_id = cur.fetchall()[0]["id"]
 
         return jsonify({"ok": True, "recipe_id": recipe_id, "title": title})
     finally:
@@ -851,8 +821,6 @@ def delete_recipe_endpoint(recipe_id):
     db = get_db()
     try:
         db.execute("DELETE FROM recipes WHERE id = ? AND household_id = ?", (recipe_id, hhid))
-        if not _use_pg:
-            db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -932,23 +900,13 @@ def add_recipe_to_list_endpoint():
                     "UPDATE list_items SET quantity = ?, recipe_tag = ? WHERE id = ?",
                     (new_qty, new_tag, ext["id"])
                 )
-                if not _use_pg:
-                    db.commit()
                 added_count += 1
             else:
-                if _use_pg:
-                    db.execute(
-                        "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (store_id, name, category, user_name, quantity, hhid, recipe_title)
-                    )
-                else:
-                    db.execute(
-                        "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (store_id, name, category, user_name, quantity, hhid, recipe_title)
-                    )
-                    db.commit()
+                db.execute(
+                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                )
                 added_count += 1
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
     finally:
@@ -964,9 +922,9 @@ def logout_page():
 def health():
     return jsonify({
         "status": "ok",
-        "db": "pg" if _use_pg else "sqlite",
-        "db_url_set": bool(_DATABASE_URL),
-        "db_url_prefix": _DATABASE_URL[:25] + "..." if _DATABASE_URL else "EMPTY",
+        "db": "pg",
+        "db_url_set": bool(os.environ.get("DATABASE_URL")),
+        "db_url_prefix": os.environ.get("DATABASE_URL", "")[:25] + "..." if os.environ.get("DATABASE_URL") else "EMPTY",
         "render_hostname": os.environ.get("RENDER_EXTERNAL_HOSTNAME", "not set"),
     })
 
@@ -1643,40 +1601,22 @@ def get_suggestions():
         suggestions = {}
         for s in stores:
             sid = s["id"]
-            if _use_pg:
-                items = db.execute("""
-                    SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
-                           MAX(sv.visit_date) as last_visit,
-                           (CURRENT_DATE - MAX(sv.visit_date)) as days_since
-                    FROM store_visits sv
-                    JOIN list_items li ON li.store_id = sv.store_id
-                        AND li.household_id = sv.household_id
-                        AND li.purchased = TRUE
-                        AND li.purchased_at >= sv.visit_date::timestamp
-                        AND li.purchased_at < (sv.visit_date::timestamp + INTERVAL '1 day')
-                    WHERE sv.store_id = ? AND sv.household_id = ?
-                    GROUP BY li.name, li.category
-                    HAVING COUNT(DISTINCT sv.visit_date) >= 5
-                    ORDER BY days_since DESC
-                    LIMIT 6
-                """, (sid, _hh())).fetchall()
-            else:
-                items = db.execute("""
-                    SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
-                           MAX(sv.visit_date) as last_visit,
-                           julianday('now') - julianday(MAX(sv.visit_date)) as days_since
-                    FROM store_visits sv
-                    JOIN list_items li ON li.store_id = sv.store_id
-                        AND li.household_id = sv.household_id
-                        AND li.purchased = TRUE
-                        AND li.purchased_at >= datetime(sv.visit_date)
-                        AND li.purchased_at < datetime(sv.visit_date, '+1 day')
-                    WHERE sv.store_id = ? AND sv.household_id = ?
-                    GROUP BY LOWER(li.name)
-                    HAVING visit_count >= 5
-                    ORDER BY days_since DESC
-                    LIMIT 6
-                """, (sid, _hh())).fetchall()
+            items = db.execute("""
+                SELECT li.name, li.category, COUNT(DISTINCT sv.visit_date) as visit_count,
+                       MAX(sv.visit_date) as last_visit,
+                       (CURRENT_DATE - MAX(sv.visit_date)) as days_since
+                FROM store_visits sv
+                JOIN list_items li ON li.store_id = sv.store_id
+                    AND li.household_id = sv.household_id
+                    AND li.purchased = TRUE
+                    AND li.purchased_at >= sv.visit_date::timestamp
+                    AND li.purchased_at < (sv.visit_date::timestamp + INTERVAL '1 day')
+                WHERE sv.store_id = ? AND sv.household_id = ?
+                GROUP BY li.name, li.category
+                HAVING COUNT(DISTINCT sv.visit_date) >= 5
+                ORDER BY days_since DESC
+                LIMIT 6
+            """, (sid, _hh())).fetchall()
 
             # Filter out items already on the current list
             on_list = set(
@@ -1837,7 +1777,7 @@ def auth_google_callback():
         return '<h3>Login failed</h3><p>Server error: ' + str(exc) + '</p><a href="/login">Try again</a>', 500
 
 if __name__ == "__main__":
-    from db import init_db
+    from db_pg import init_db
     init_db()
     app.run(host="0.0.0.0", port=3000, debug=True)
 

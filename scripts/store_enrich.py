@@ -107,14 +107,9 @@ def determine_category(item_name, gemini_cat=""):
     return "General"
 
 def get_db_conn():
-    """Connect to DB using standard app modules (db_pg for PostgreSQL on Render, db for SQLite)."""
-    dburi = os.environ.get("DATABASE_URL")
-    if dburi:
-        import db_pg
-        return db_pg.get_db(), True
-    else:
-        import db
-        return db.get_db(), False
+    """Connect to DB using db_pg for PostgreSQL."""
+    import db_pg
+    return db_pg.get_db(), True
 
 def query_all(db, sql, params=None):
     res = db.execute(sql, params or ())
