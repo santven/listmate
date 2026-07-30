@@ -374,7 +374,10 @@ async function restorePurchases() {
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
     try {
         const rcKey = (window.currentCfg && window.currentCfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
-        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey, appUserID: (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) ? String(window.currentCfg.user_info.id) : undefined });
+        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+            if (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) {
+                await window.Capacitor.Plugins.Purchases.logIn({ appUserID: String(window.currentCfg.user_info.id) });
+            }
         
         if (typeof toast !== "undefined") toast('Restoring purchases...');
         const { customerInfo } = await window.Capacitor.Plugins.Purchases.restorePurchases();
@@ -444,7 +447,10 @@ async function showPaywall() {
             }
             console.log("[RevenueCat] Configuring SDK with key:", rcKey);
             try { await window.Capacitor.Plugins.Purchases.setLogLevel({ level: "DEBUG" }); } catch(le) {}
-            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey, appUserID: (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) ? String(window.currentCfg.user_info.id) : undefined });
+            await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
+            if (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) {
+                await window.Capacitor.Plugins.Purchases.logIn({ appUserID: String(window.currentCfg.user_info.id) });
+            }
             console.log("[RevenueCat] Fetching offerings...");
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             console.log("[RevenueCat] Offerings fetched:", offerings);
