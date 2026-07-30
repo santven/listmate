@@ -169,6 +169,7 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
   <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
     <div id="cartIcon" style="width:40px;height:40px;min-width:40px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);">🛒</div>
   <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
+  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
@@ -415,13 +416,27 @@ async function checkAuth() {
     }
     window.currentCfg = cfg;
     if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
+    
+    const tierBadge = document.getElementById('tierBadge');
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
+      if (tierBadge) {
+        tierBadge.textContent = 'Premium';
+        tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
+        tierBadge.style.border = 'none';
+        tierBadge.style.color = '#fff';
+        tierBadge.style.cursor = 'default';
+        tierBadge.onclick = null;
+      }
     } else {
       document.body.classList.add('has-ads');
       document.body.classList.remove('is-premium');
+      if (tierBadge) {
+        tierBadge.textContent = '🎁 Upgrade';
+      }
     }
+
     updateOfflineStatusUI();
     return true;
   }
@@ -437,17 +452,31 @@ async function checkAuth() {
       if (healthLink) healthLink.style.display = '';
     }
     
+    
+    const tierBadge = document.getElementById('tierBadge');
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
       const ad = document.querySelector('.ad-banner-bottom');
       if (ad) ad.style.display = 'none';
+      if (tierBadge) {
+        tierBadge.textContent = 'Premium';
+        tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
+        tierBadge.style.border = 'none';
+        tierBadge.style.color = '#fff';
+        tierBadge.style.cursor = 'default';
+        tierBadge.onclick = null;
+      }
     } else {
       document.body.classList.add('has-ads');
       document.body.classList.remove('is-premium');
       const ad = document.querySelector('.ad-banner-bottom');
       if (ad) ad.style.display = 'flex';
+      if (tierBadge) {
+        tierBadge.textContent = '🎁 Upgrade';
+      }
     }
+
     if (cfg.subscription_status === 'trial' && cfg.trial_ends_at) {
         const daysLeft = Math.ceil((new Date(cfg.trial_ends_at) - new Date()) / (1000*60*60*24));
         if (daysLeft >= 0) {
@@ -1537,6 +1566,15 @@ async function purchasePackage(index) {
         const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ aPackage: packageToBuy });
         console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
         if (customerInfo.entitlements.active['premium']) {
+            try {
+                await fetch('/api/settings/premium', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_premium: true })
+                });
+            } catch (e) {
+                console.error("Failed to update backend with premium status:", e);
+            }
             toast('⭐ Welcome to Premium!');
             setTimeout(() => window.location.reload(), 1500);
         }

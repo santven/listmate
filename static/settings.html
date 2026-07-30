@@ -359,6 +359,15 @@ async function purchasePackage(index) {
         const { customerInfo } = await window.Capacitor.Plugins.Purchases.purchasePackage({ aPackage: packageToBuy });
         console.log("[RevenueCat] Purchase result customerInfo:", customerInfo);
         if (customerInfo.entitlements.active['premium']) {
+            try {
+                await fetch('/api/settings/premium', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_premium: true })
+                });
+            } catch (e) {
+                console.error("Failed to update backend with premium status:", e);
+            }
             alert('⭐ Welcome to Premium!');
             setTimeout(() => window.location.reload(), 1500);
         }
