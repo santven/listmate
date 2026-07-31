@@ -158,3 +158,59 @@ def send_reengagement_notice(to_email: str, user_name: str) -> bool:
         },
     }
     return _send_via_api(api_key, payload)
+
+def send_combined_notice(to_email: str, user_name: str, events: dict) -> bool:
+    """Send a combined notice when multiple daily events occur for the same user."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+        
+    app_link = "https://listmate.app/?source=email_combined"
+    upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
+    
+    # Build dynamic subject and content based on events
+    html_sections = []
+    text_sections = []
+    
+    # Expiration is highest priority
+    if 'expiration' in events:
+        days = events['expiration']['days_left']
+        is_trial = events['expiration']['is_trial']
+        term = "trial" if is_trial else "subscription"
+        subject = f"Action Required: Your ListMate {term} ends in {days} days" if days > 0 else f"Action Required: Your ListMate {term} ends today"
+        urgency = "expires today" if days == 0 else f"expires in {days} days"
+        
+        text_sections.append(f"Your ListMate {term} {urgency}. Upgrade to keep syncing your shared grocery lists:\n{upgrade_link}")
+        html_sections.append(f'<h3 style="color:#d32f2f">⏳ {term.capitalize()} {urgency}</h3><p>Upgrade to keep syncing your shared grocery lists seamlessly.</p><p><a href="{upgrade_link}" style="background:#5ebe7e;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Upgrade Now</a></p>')
+    else:
+        subject = "Updates from ListMate"
+
+    if 'activation' in events:
+        text_sections.append(f"You haven't added any items to ListMate yet! Tap here to get started:\n{app_link}")
+        html_sections.append(f'<h3 style="color:#2c5a2c">👋 Getting Started</h3><p>We noticed you haven\'t added any items yet. Share your grocery list with your household so whoever goes to the store has the latest updates.</p>')
+        
+    if 'reengagement' in events:
+        text_sections.append(f"It's been a while! We wanted to remind you that your shared lists are waiting for you.\n{app_link}")
+        html_sections.append(f'<h3 style="color:#2c5a2c">🛒 It\'s been a while!</h3><p>We wanted to remind you that your shared lists are waiting for you. Check out the latest features like fast store-based category organization.</p>')
+
+    if not ('expiration' in events):
+        html_sections.append(f'<p style="margin:24px 0"><a href="{app_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Open ListMate</a></p>')
+
+    text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + "\n\n— The Listmate Team"
+    html_body = f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><p style="font-size:16px">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
+    
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": text_body},
+            {"type": "text/html", "value": html_body},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)

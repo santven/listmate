@@ -54,3 +54,11 @@ listmate/
 │   └── manifest.json   # PWA manifest
 └── BACKLOG.md          # Go-to-market sprint plan
 ```
+
+## Background Jobs
+Listmate uses a single consolidated cron script `scripts/cron_daily.py` designed to run daily (e.g., at 8 AM). 
+
+It handles multiple automated workflows while ensuring a user receives **at most one combined email** per day:
+- **Trial Expirations**: Reminds users 3 days before and on the day their 30-day trial ends.
+- **Activation**: Engages users who signed up 3 days ago but haven't added any items to their list.
+- **Re-engagement**: Re-engages users who haven't added an item in 14 days.
