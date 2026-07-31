@@ -487,7 +487,7 @@ def register_auth_routes(app):
                 trial_ends_at = hh.get("trial_ends_at") if hh else None
                 if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
                     trial_ends_at = trial_ends_at.isoformat()
-                if int(hh_id) <= 100 and not is_prem:
+                if int(hh_id) <= 25 and not is_prem:
                     is_prem = True
                     sub_status = "premium"
                     val = True
@@ -597,7 +597,7 @@ def register_auth_routes(app):
         code = secrets.token_hex(4).upper()
         count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
         existing_cnt = count_row.get("cnt", 0) if count_row else 0
-        is_early = existing_cnt < 100
+        is_early = existing_cnt < 25
         prem_val = is_early
         status = 'premium' if is_early else 'trial'
         trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"

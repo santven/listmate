@@ -1754,7 +1754,7 @@ async function showPaywall() {
 }
 
 async function activateEarlyAdopterPremium() {
-  const isEarly = window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.household_id <= 100;
+  const isEarly = window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.household_id <= 25;
   if (!isEarly) {
       closePremiumModal();
       showPaywall();
