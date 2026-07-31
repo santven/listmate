@@ -59,3 +59,42 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
     }
 
     return _send_via_api(api_key, payload)
+
+def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int) -> bool:
+    """Send subscription ending notice. Returns True on success."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+        
+    term = "trial" if is_trial else "subscription"
+    
+    if days_left == 0:
+        subject = f"Your ListMate {term} ends today"
+        urgency_text = "expires today"
+    else:
+        subject = f"Your ListMate {term} ends in {days_left} days"
+        urgency_text = f"expires in {days_left} days"
+        
+    upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
+    
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "subject": subject,
+        "content": [
+            {
+                "type": "text/plain",
+                "value": f"Hi {user_name},\n\nYour ListMate {term} {urgency_text}.\n\nDon't lose access to your shared grocery lists! Tap the link below to upgrade your household and keep everything syncing seamlessly.\n\n{upgrade_link}\n\n— The Listmate Team",
+            },
+            {
+                "type": "text/html",
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">⏳ Action Required</h2><p style="font-size:16px">Hi {user_name},</p><p>Your ListMate <strong>{term}</strong> {urgency_text}.</p><p>Don\'t lose access to your shared grocery lists! Tap the button below to upgrade your household and keep everything syncing seamlessly.</p><p style="margin:24px 0"><a href="{upgrade_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Upgrade Now</a></p></div>',
+            },
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)

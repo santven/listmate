@@ -148,6 +148,7 @@ def _init_schema():
             rc_app_user_id TEXT,
             subscription_status TEXT NOT NULL DEFAULT 'free',
             trial_ends_at TIMESTAMP,
+            subscription_ends_at TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         """CREATE TABLE IF NOT EXISTS auth_feature_flags (
             user_id INTEGER NOT NULL REFERENCES auth_users(id),
@@ -173,6 +174,7 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''"
     ]:
         try:
