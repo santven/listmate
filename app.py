@@ -440,7 +440,7 @@ def premium_settings():
     if request.method == "GET":
         hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
-        is_early = bool(hhid and int(hhid) <= 100)
+        is_early = bool(hhid and int(hhid) <= 25)
         sub_status = hh.get("subscription_status", "free") if hh else "free"
         trial_ends_at = hh.get("trial_ends_at") if hh else None
         if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
@@ -482,7 +482,7 @@ def premium_settings():
     val = is_premium
     status = "active" if is_premium else "free"
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
-    is_early = bool(hhid and int(hhid) <= 100)
+    is_early = bool(hhid and int(hhid) <= 25)
     return jsonify({
         "ok": True,
         "is_premium": is_premium or is_early,
@@ -694,7 +694,7 @@ def generate_recipe_endpoint():
     authmod._init_schema()
     hh = authmod._one(f"SELECT is_premium, dietary_restrictions, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
     is_prem = bool(hh.get("is_premium")) if hh else False
-    is_early = bool(hhid and int(hhid) <= 100)
+    is_early = bool(hhid and int(hhid) <= 25)
     sub_status = hh.get("subscription_status", "free") if hh else "free"
     trial_ends_at = hh.get("trial_ends_at") if hh else None
 

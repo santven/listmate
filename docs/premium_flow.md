@@ -3,12 +3,12 @@
 ## Registration & Onboarding
 The application handles premium entitlements using a combination of early-adopter logic, trial periods, and RevenueCat integration.
 
-1. **Early Adopters (Households 1 - 100):**
+1. **Early Adopters (Households 1 - 25):**
    - **`is_premium`**: `true`
    - **`subscription_status`**: `'premium'`
    - **Experience**: These users will *never* see the "Upgrade" button or trial banners. They have lifetime access to all premium features without expiration.
 
-2. **Standard Users (Households 101+):**
+2. **Standard Users (Households 26+):**
    - **`is_premium`**: `true` (dynamically evaluated during the trial period)
    - **`subscription_status`**: `'trial'`
    - **`trial_ends_at`**: Set to 30 days from the date of registration.
