@@ -13,7 +13,6 @@ from email_helper import send_subscription_notice
 def process_household(hh, today_date, plus_3_date):
     status = hh.get("subscription_status")
     trial_ends_at = hh.get("trial_ends_at")
-    sub_ends_at = hh.get("subscription_ends_at")
     
     target_date = None
     is_trial = False
@@ -26,13 +25,6 @@ def process_household(hh, today_date, plus_3_date):
             except ValueError:
                 target_date = datetime.datetime.strptime(target_date, '%Y-%m-%d %H:%M:%S').date()
         is_trial = True
-    elif status == 'premium' and sub_ends_at:
-        target_date = sub_ends_at.date() if hasattr(sub_ends_at, 'date') else sub_ends_at
-        if isinstance(target_date, str):
-            try:
-                target_date = datetime.datetime.fromisoformat(target_date.replace('Z', '+00:00')).date()
-            except ValueError:
-                target_date = datetime.datetime.strptime(target_date, '%Y-%m-%d %H:%M:%S').date()
     
     if not target_date:
         return False
@@ -67,7 +59,7 @@ def run_cron():
     _init_schema()
     
     # Optimize: Let PostgreSQL filter out only the rows that match exactly today or +3 days.
-    # This prevents transferring thousands of non-expiring households to the Python process.
+    # Note: We only target 'trial' users now, as 'premium' subscriptions are auto-renewed by Google Play/App Store.
     query = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
@@ -75,14 +67,11 @@ def run_cron():
         u.email, 
         u.name as user_name, 
         h.subscription_status,
-        h.trial_ends_at, 
-        h.subscription_ends_at
+        h.trial_ends_at
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
     WHERE 
         (h.subscription_status = 'trial' AND DATE(h.trial_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
-        OR 
-        (h.subscription_status = 'premium' AND DATE(h.subscription_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
     ORDER BY h.id, u.created_at ASC
     """
     households = _run(query)
@@ -92,7 +81,6 @@ def run_cron():
     plus_3_date = today_date + datetime.timedelta(days=3)
     
     # Optimize: Use a ThreadPoolExecutor to send emails concurrently.
-    # Because network requests (API calls to SendGrid) are I/O bound, concurrency drastically reduces overall runtime.
     max_workers = min(32, len(households) if households else 1)
     
     if households:
