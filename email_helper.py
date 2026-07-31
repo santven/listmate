@@ -98,3 +98,63 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         },
     }
     return _send_via_api(api_key, payload)
+
+def send_activation_notice(to_email: str, user_name: str) -> bool:
+    """Send Day 3 onboarding/activation notice to inactive users."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+        
+    app_link = "https://listmate.app/?source=email_activation"
+    
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "subject": "Getting started with ListMate",
+        "content": [
+            {
+                "type": "text/plain",
+                "value": f"Hi {user_name},\n\nWe noticed you haven't added any items to ListMate yet!\n\nDid you know you can share your grocery list with your partner or roommates? It syncs instantly so whoever goes to the store always has the latest updates.\n\nTap the link below to add your first items and invite your household:\n\n{app_link}\n\n— The Listmate Team",
+            },
+            {
+                "type": "text/html",
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">👋 Getting started with ListMate</h2><p style="font-size:16px">Hi {user_name},</p><p>We noticed you haven\'t added any items to ListMate yet!</p><p>Did you know you can share your grocery list with your partner or roommates? It syncs instantly so whoever goes to the store always has the latest updates.</p><p style="margin:24px 0"><a href="{app_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Open ListMate</a></p></div>',
+            },
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+def send_reengagement_notice(to_email: str, user_name: str) -> bool:
+    """Send Day 14 re-engagement notice to dormant users."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+        
+    app_link = "https://listmate.app/?source=email_reengagement"
+    
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "subject": "It's been a while! What's new in ListMate",
+        "content": [
+            {
+                "type": "text/plain",
+                "value": f"Hi {user_name},\n\nIt's been a couple weeks since you last used ListMate. We wanted to remind you that your shared lists are waiting for you!\n\nCheck out the latest features, including fast store-based category organization, which makes your grocery trips much smoother.\n\nTap the link below to plan your next grocery trip:\n\n{app_link}\n\n— The Listmate Team",
+            },
+            {
+                "type": "text/html",
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 It\'s been a while!</h2><p style="font-size:16px">Hi {user_name},</p><p>It\'s been a couple weeks since you last used ListMate. We wanted to remind you that your shared lists are waiting for you!</p><p>Check out the latest features, including fast store-based category organization, which makes your grocery trips much smoother.</p><p style="margin:24px 0"><a href="{app_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Plan Your Next Trip</a></p></div>',
+            },
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)
