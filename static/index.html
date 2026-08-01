@@ -814,7 +814,14 @@ function renderHome() {
   }
   
   let html = '';
-  // Active items first
+  // Active items first, following the store order from API
+  stores.forEach(s => {
+    if (activeGroups[s.id]) {
+      html += renderGroup(s.id, activeGroups[s.id]);
+      delete activeGroups[s.id]; // mark as rendered
+    }
+  });
+  // Any leftover stores (should be none, but just in case)
   for(const [sid,items] of Object.entries(activeGroups)) {
     html += renderGroup(parseInt(sid), items);
   }

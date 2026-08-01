@@ -1425,7 +1425,7 @@ def list_stores():
     try:
         hh = _hh()
         stores = db.execute(
-            "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+            "SELECT * FROM stores WHERE household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)
         ).fetchall()
         return jsonify([dict(s) for s in stores])
     except Exception as e:
@@ -1669,7 +1669,7 @@ def list_grocery():
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
         """, (_hh(), _hh())).fetchall()
         return jsonify([dict(r) for r in items])
     finally:
@@ -2019,7 +2019,7 @@ def sync_offline_actions():
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
         """, (hh_id, hh_id)).fetchall()
 
         return jsonify({"ok": True, "synced_count": applied_count, "list": [dict(r) for r in items]})
