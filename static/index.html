@@ -366,6 +366,19 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
   </div>
 </div>
 
+<!-- Recipe Tag Modal -->
+<div class="modal-overlay" id="recipeTagModal">
+  <div class="modal-sheet" style="text-align:center;">
+    <div style="font-size:32px; margin-bottom:6px;">🍳</div>
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); margin-bottom:4px;">Recipe</div>
+    <h3 id="recipeTagModalTitle" style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:16px;"></h3>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button id="btnFilterByRecipe" style="width:100%; padding:12px; background:var(--green); color:#fff; border:none; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">Filter list by this recipe</button>
+      <button id="btnRecipeTagClose" class="modal-cancel">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function toggleBurger() {
   document.getElementById("burgerMenu").classList.toggle("show");
@@ -796,7 +809,7 @@ function renderHome() {
     const itemsHtml = sortedItems.map(i => {
       return '<div class="item-row">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
-        '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
+        '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
         '<div class="item-meta">by ' + i.added_by + '</div>' +
         '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store" style="' + moveBtnStyle + '">⇄</button>' +
         '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
@@ -878,7 +891,7 @@ function renderHome() {
         alphabetizedItems.forEach(i => {
           html += '<div class="item-row purchased">' +
             '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
-            '<div class="item-name">' + escapeHtml(i.name) + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + escapeHtml(i.quantity) + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + escapeHtml(i.recipe_tag) + '</span>' : '') + '</div>' +
+            '<div class="item-name">' + escapeHtml(i.name) + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + escapeHtml(i.quantity) + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
             '<div class="item-meta">✓ ' + escapeHtml(i.purchased_by || '') + '</div>' +
             '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
             '</div>';
@@ -932,6 +945,22 @@ function renderHome() {
     const newQty=prompt('Enter quantity (e.g. 2, 500g, 1 lb):', currentQty);
     if(newQty===null) return;
     await updateItemQuantity(id, newQty);
+  }));
+
+  $$('.recipe-tag-btn').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
+    const rName = el.dataset.recipe;
+    if (!rName) return;
+    $('#recipeTagModalTitle').textContent = rName;
+    $('#recipeTagModal').classList.add('active');
+    $('#btnFilterByRecipe').onclick = () => {
+      if ($('#recipeFilter')) {
+        filterRecipeName = rName;
+        $('#recipeFilter').value = rName;
+        renderHome();
+      }
+      $('#recipeTagModal').classList.remove('active');
+    };
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
@@ -1565,6 +1594,7 @@ async function moveItem(targetStoreId) {
   renderHome();
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
+if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));
 $$('.modal-overlay').forEach(modal => {
   modal.addEventListener('click', e => {
     if (e.target === e.currentTarget) modal.classList.remove('active');
