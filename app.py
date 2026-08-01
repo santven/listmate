@@ -441,19 +441,39 @@ def stripe_webhook():
         hhid = metadata.get("household_id")
         uid = metadata.get("app_user_id") or session_obj.get("client_reference_id")
         customer_id = session_obj.get("customer")
+        subscription_id = session_obj.get("subscription")
         
         if not hhid and uid:
             hhid = _find_household_id_from_uid(uid)
             
         if hhid:
+            current_period_end = None
+            if subscription_id:
+                try:
+                    import urllib.request, json, os
+                    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+                    if stripe_secret:
+                        req = urllib.request.Request(
+                            f"https://api.stripe.com/v1/subscriptions/{subscription_id}",
+                            headers={"Authorization": f"Bearer {stripe_secret}"}
+                        )
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            sub_data = json.loads(resp.read().decode("utf-8"))
+                            current_period_end = sub_data.get("current_period_end")
+                except Exception as e:
+                    print(f"Error fetching subscription {subscription_id}: {e}")
+            
             if customer_id:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ? WHERE id = ?", (customer_id, hhid))
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE id = ?", (customer_id, current_period_end, hhid))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ? WHERE id = ?", (customer_id, hhid))
             else:
                 authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active' WHERE id = ?", (hhid,))
             print(f"[Stripe Webhook] Upgraded household {hhid} due to checkout.session.completed")
         else:
             print(f"[Stripe Webhook] Could not resolve household_id for uid: {uid}")
-            
+
     elif event_type in ["customer.subscription.updated", "customer.subscription.created"]:
         sub_obj = data.get("data", {}).get("object", {})
         customer_id = sub_obj.get("customer")
@@ -461,13 +481,20 @@ def stripe_webhook():
         current_period_end = sub_obj.get("current_period_end")
         cancel_at_period_end = sub_obj.get("cancel_at_period_end")
         
-        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}")
+        metadata = sub_obj.get("metadata", {})
+        hhid = metadata.get("household_id")
+        
+        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}, hhid: {hhid}")
+        
         if customer_id and current_period_end:
-            if status in ["active", "trialing"]:
-                db_status = "canceled" if cancel_at_period_end else "active"
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (db_status, current_period_end, customer_id))
-            elif status in ["canceled", "unpaid", "past_due"]:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (status, current_period_end, customer_id))
+            db_status = "canceled" if cancel_at_period_end else ("active" if status in ["active", "trialing"] else status)
+            is_premium = True if db_status in ["active", "trialing"] else False
+            
+            # Use hhid if available (for robustness if customer_id not yet linked)
+            if hhid:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?), stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, current_period_end, customer_id, hhid))
+            else:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (is_premium, db_status, current_period_end, customer_id))
 
     elif event_type == "customer.subscription.deleted":
         sub_obj = data.get("data", {}).get("object", {})
@@ -665,6 +692,8 @@ def billing_checkout():
                 "client_reference_id": str(user_id),
                 "metadata[household_id]": str(hhid),
                 "metadata[app_user_id]": str(user_id),
+                "subscription_data[metadata][household_id]": str(hhid),
+                "subscription_data[metadata][app_user_id]": str(user_id),
                 "success_url": success_redirect,
                 "cancel_url": cancel_redirect,
             }
