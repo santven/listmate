@@ -459,11 +459,13 @@ def stripe_webhook():
         customer_id = sub_obj.get("customer")
         status = sub_obj.get("status")
         current_period_end = sub_obj.get("current_period_end")
+        cancel_at_period_end = sub_obj.get("cancel_at_period_end")
         
-        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}")
+        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}")
         if customer_id and current_period_end:
             if status in ["active", "trialing"]:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (status, current_period_end, customer_id))
+                db_status = "canceled" if cancel_at_period_end else "active"
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (db_status, current_period_end, customer_id))
             elif status in ["canceled", "unpaid", "past_due"]:
                 authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (status, current_period_end, customer_id))
 
@@ -738,7 +740,15 @@ def billing_portal():
                     if session_data.get("url"):
                         return jsonify({"ok": True, "portal_url": session_data["url"]})
             except Exception as e:
-                print(f"[Billing Portal] Error creating Stripe portal session: {e}")
+                err_msg = str(e)
+                if hasattr(e, 'read'):
+                    err_msg += " " + e.read().decode('utf-8')
+                print(f"[Billing Portal] Error creating Stripe portal session: {err_msg}")
+                return jsonify({"error": f"Stripe Portal API Error: {err_msg}"}), 400
+        else:
+            return jsonify({"error": "No Stripe customer ID found for your household. Because you subscribed before this update, you may need to wait for your next billing cycle or contact support."}), 400
+    else:
+        return jsonify({"error": "STRIPE_SECRET_KEY is not configured on the server."}), 400
 
     stripe_portal_env = os.environ.get("STRIPE_CUSTOMER_PORTAL_URL") or os.environ.get("STRIPE_PORTAL_URL")
     if stripe_portal_env:
