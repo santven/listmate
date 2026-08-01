@@ -139,17 +139,6 @@
 
 ---
 
-### BUG-3.1: Android Premium Subscription Management
-**Description:** In the Android experience, the Settings page for premium members shows a "Manage subscription" button (which routes to Stripe). This should only be shown on the web. Android users manage their subscriptions via the Google Play Store.
-
-**Acceptance Criteria:**
-- Hide the "Manage subscription" button in the Settings page for the Android build.
-- The button continues to show for web users.
-
-**Estimated Story Points:** 1
-
----
-
 ## Epic 4: Enterprise-Grade Polish
 
 ### US-4.1: Privacy Policy & Terms of Service
@@ -325,19 +314,6 @@
 - Free tier service (e.g., UptimeRobot, BetterStack)
 
 **Estimated Story Points:** 1
-
----
-
-## Epic 8: Premium Features & Recipe Planner Enhancements
-
-### US-8.1: Recipe to List Quantity Handling
-**As a** recipe planner user, **I want** the quantity of an item in a recipe to stay in the recipe and not copy to the grocery list item **so that** my shopping list items (like "Oil") don't show confusing quantities like "2 tbsp" while I'm at the store.
-
-**Acceptance Criteria:**
-- When adding an item from a recipe to the list, the quantity on the list item list does not come from the recipe.
-- The quantity remains in the recipe for reference.
-
-**Estimated Story Points:** 2
 
 ---
 
