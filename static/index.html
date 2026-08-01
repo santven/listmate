@@ -158,7 +158,10 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       badge.style.display = 'inline-block';
     }
   }
-  document.addEventListener('DOMContentLoaded', updateSandboxBadge);
+  document.addEventListener('DOMContentLoaded', () => {
+    updateSandboxBadge();
+    checkPurchaseReturn();
+  });
 </script>
 </head>
 <body>
@@ -1693,13 +1696,175 @@ async function purchasePackage(index) {
     }
 }
 
+async function startWebCheckout(target) {
+    try {
+        if (typeof toast !== "undefined") toast('Preparing checkout...');
+        const isPriceId = target && (target.startsWith('price_') || target.startsWith('plan_'));
+        const query = isPriceId ? `price_id=${encodeURIComponent(target)}` : `package=${encodeURIComponent(target)}`;
+        const r = await fetch(`/api/billing/checkout?${query}`);
+        const d = await r.json();
+        if (d.ok && d.checkout_url) {
+            window.location.href = d.checkout_url;
+        } else {
+            if (typeof toast !== "undefined") toast(d.error || 'Failed to generate checkout link.');
+            else alert(d.error || 'Failed to generate checkout link.');
+        }
+    } catch (e) {
+        console.error('Checkout error:', e);
+        if (typeof toast !== "undefined") toast('Error connecting to checkout.');
+        else alert('Error connecting to checkout.');
+    }
+}
+
+async function loadAndRenderWebPaywall() {
+    const container = document.getElementById('paywallPackages');
+    if (!container) return;
+    
+    const pModal = document.getElementById('paywallModal');
+    if (pModal) pModal.classList.add('active');
+
+    container.innerHTML = `
+        <div style="padding:24px 0; text-align:center; color:#64748b;">
+            <div style="width:28px; height:28px; border:3px solid #e2e8f0; border-top:3px solid #059669; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 10px auto;"></div>
+            <div style="font-size:13px; font-weight:600;">Loading available plans...</div>
+        </div>
+    `;
+
+    try {
+        const r = await fetch('/api/billing/plans');
+        const d = await r.json();
+        
+        if (d.ok && d.plans && d.plans.length > 0) {
+            container.innerHTML = '';
+            d.plans.forEach(plan => {
+                const isYearly = plan.package_type === 'yearly' || (plan.interval && plan.interval.includes('year'));
+                const card = document.createElement('div');
+                card.style.cssText = isYearly 
+                    ? "background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left; position:relative; margin-bottom:10px;"
+                    : "background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:10px; text-align:left;";
+                
+                const badgeHtml = isYearly 
+                    ? `<span style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase;">Best Value</span>`
+                    : '';
+
+                const btnBg = isYearly
+                    ? "background:linear-gradient(135deg, #047857, #059669);"
+                    : "background:linear-gradient(135deg, #059669, #10b981);";
+
+                const targetParam = plan.price_id || plan.id || plan.package_type;
+
+                card.innerHTML = `
+                    ${badgeHtml}
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="font-size:16px; color:#0f172a;">${escapeHtml(plan.name)}</strong>
+                        <span style="font-size:16px; font-weight:700; color:#059669;">${escapeHtml(plan.price_string)}</span>
+                    </div>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 12px 0; line-height:1.4;">${escapeHtml(plan.description)}</p>
+                    <button onclick="startWebCheckout('${escapeHtml(targetParam)}')" style="width:100%; ${btnBg} color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.2);">
+                        Subscribe (${escapeHtml(plan.price_string)})
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+            return;
+        }
+    } catch (e) {
+        console.warn('Error fetching billing plans:', e);
+    }
+
+    container.innerHTML = `
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:10px; text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:16px; color:#0f172a;">Monthly Subscription</strong>
+          </div>
+          <button onclick="startWebCheckout('monthly')" style="width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">
+            Subscribe Monthly
+          </button>
+        </div>
+        <div style="background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:16px; color:#0f172a;">Annual Subscription</strong>
+          </div>
+          <button onclick="startWebCheckout('yearly')" style="width:100%; background:linear-gradient(135deg, #047857, #059669); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">
+            Subscribe Yearly
+          </button>
+        </div>
+    `;
+}
+
+async function checkPurchaseReturn() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('purchase') === 'success' || urlParams.get('checkout') === 'success') {
+        let modal = document.getElementById('verifyingPurchaseModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'verifyingPurchaseModal';
+            modal.className = 'modal-overlay active';
+            modal.innerHTML = `
+                <div class="modal-sheet" style="text-align:center; padding:28px 20px; border-radius:20px; max-width:380px; margin:auto;">
+                    <div style="width:38px; height:38px; border:3px solid #e2e8f0; border-top:3px solid #059669; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 16px auto;"></div>
+                    <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:700; color:#0f172a;">Verifying Purchase...</h3>
+                    <p id="verifyingStatusText" style="font-size:13px; color:#64748b; margin:0 0 16px 0; line-height:1.5;">
+                        We are confirming your subscription with Stripe. This usually takes just a few seconds.
+                    </p>
+                    <button id="refreshPurchaseBtn" onclick="pollForPremiumStatus(10)" style="display:none; width:100%; background:#059669; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">
+                        🔄 Refresh Status
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.classList.add('active');
+        }
+        pollForPremiumStatus(1);
+    }
+}
+
+async function pollForPremiumStatus(attemptCount = 1) {
+    const maxAttempts = 10;
+    try {
+        const res = await fetch('/api/settings/premium');
+        const data = await res.json();
+        if (data.is_premium || data.subscription_status === 'active' || data.subscription_status === 'premium') {
+            const modal = document.getElementById('verifyingPurchaseModal');
+            if (modal) modal.classList.remove('active');
+            
+            const cleanUrl = new URL(window.location);
+            cleanUrl.searchParams.delete('purchase');
+            cleanUrl.searchParams.delete('checkout');
+            window.history.replaceState({}, '', cleanUrl);
+
+            if (typeof toast !== 'undefined') toast('⭐ Welcome to ListMate Pro! Purchase Verified.');
+            else alert('⭐ Welcome to ListMate Pro! Purchase Verified.');
+
+            setTimeout(() => window.location.reload(), 1200);
+            return;
+        }
+    } catch (e) {
+        console.warn('[Poll Premium] Attempt error:', e);
+    }
+
+    if (attemptCount < maxAttempts) {
+        setTimeout(() => pollForPremiumStatus(attemptCount + 1), 2000);
+    } else {
+        const txt = document.getElementById('verifyingStatusText');
+        if (txt) txt.innerText = "Your payment was received by Stripe. Activation is completing in the background.";
+        const btn = document.getElementById('refreshPurchaseBtn');
+        if (btn) btn.style.display = 'block';
+    }
+}
+
 async function showPaywall() {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
+    const isNativeCapacitor = window.Capacitor && 
+        window.Capacitor.Plugins && 
+        window.Capacitor.Plugins.Purchases && 
+        (window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web'));
+
+    if (isNativeCapacitor) {
         try {
             const cfg = window.currentCfg || {};
             const rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
-            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
-            if (isNative && rcKey.startsWith('test_')) {
+            if (rcKey.startsWith('test_')) {
                 toast('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
                 return;
             }
@@ -1749,7 +1914,8 @@ async function showPaywall() {
             }
         }
     } else {
-        toast('In-app purchases are only available in the mobile app.');
+        // Web Billing Paywall - Dynamic plans from Stripe / RevenueCat
+        loadAndRenderWebPaywall();
     }
 }
 

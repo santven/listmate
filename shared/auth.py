@@ -481,12 +481,15 @@ def register_auth_routes(app):
             is_prem = False
             if hh_id:
                 _init_schema()
-                hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {_HH} WHERE id = ?", (hh_id,))
+                hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
                 sub_status = hh.get("subscription_status", "free") if hh else "free"
                 trial_ends_at = hh.get("trial_ends_at") if hh else None
                 if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
                     trial_ends_at = trial_ends_at.isoformat()
+                subscription_ends_at = hh.get("subscription_ends_at") if hh else None
+                if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
+                    subscription_ends_at = subscription_ends_at.isoformat()
                 if int(hh_id) <= 25 and not is_prem:
                     is_prem = True
                     sub_status = "premium"
@@ -514,9 +517,10 @@ def register_auth_routes(app):
             resp["is_premium"] = is_prem
             resp["subscription_status"] = sub_status if hh_id else "free"
             resp["trial_ends_at"] = trial_ends_at if hh_id else None
+            resp["subscription_ends_at"] = subscription_ends_at if hh_id else None
             resp["user_info"] = {"id": uid, "name": get_display_name(),
                 "email": get_email(), "household_id": hh_id,
-                "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None}
+                "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))
@@ -619,6 +623,9 @@ def register_auth_routes(app):
         is_prem = bool(hh.get("is_premium", False))
         sub_status = hh.get("subscription_status", "free")
         trial_ends_at = hh.get("trial_ends_at")
+        subscription_ends_at = hh.get("subscription_ends_at")
+        if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
+            subscription_ends_at = subscription_ends_at.isoformat()
         
         if sub_status == 'trial' and trial_ends_at:
             import datetime
@@ -638,7 +645,7 @@ def register_auth_routes(app):
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": is_prem, "subscription_status": sub_status, "trial_ends_at": trial_ends_at},
+            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": is_prem, "subscription_status": sub_status, "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at},
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
                           "role": "owner" if m["id"] == uid else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],

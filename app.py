@@ -363,9 +363,35 @@ def location_settings():
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
+def _find_household_id_from_uid(uid, event=None):
+    """Resolve household_id from app_user_id, household_id, or event aliases."""
+    candidates = []
+    if uid:
+        candidates.append(str(uid))
+    if event and isinstance(event, dict):
+        aliases = event.get("aliases", [])
+        if isinstance(aliases, list):
+            candidates.extend([str(a) for a in aliases])
+        orig_id = event.get("original_app_user_id")
+        if orig_id:
+            candidates.append(str(orig_id))
+
+    for cand in candidates:
+        clean = cand.replace("hh_", "").replace("user_", "").replace("hh-", "").replace("user-", "").strip()
+        if clean.isdigit():
+            cand_int = int(clean)
+            user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (cand_int,))
+            if user and user.get("household_id"):
+                return user["household_id"]
+            hh = authmod._one(f"SELECT id FROM {authmod._HH} WHERE id = ?", (cand_int,))
+            if hh and hh.get("id"):
+                return hh["id"]
+    return None
+
+
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():
-    """Handle RevenueCat webhooks for downgrades on cancellation."""
+    """Handle RevenueCat webhooks for cross-platform (iOS, Android, Web/Stripe) subscriptions."""
     expected_token = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
     if expected_token:
         auth_header = request.headers.get("Authorization")
@@ -375,58 +401,436 @@ def revenuecat_webhook():
     data = request.get_json(silent=True) or {}
     event = data.get("event", {})
     evt_type = event.get("type")
+    uid = event.get("app_user_id")
+
+    print(f"[Webhook] Processing {evt_type} for app_user_id: {uid}")
+    hhid = _find_household_id_from_uid(uid, event)
+
+    if not hhid:
+        print(f"[Webhook] Could not resolve household_id for uid: {uid}, aliases: {event.get('aliases')}")
+        return jsonify({"ok": True, "warning": "Household not found"})
 
     if evt_type == "CANCELLATION":
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing CANCELLATION for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
-                    print(f"[Webhook] Marked household {hhid} as canceled")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing downgrade: {e}")
+        authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+        print(f"[Webhook] Marked household {hhid} as canceled")
 
     elif evt_type == "EXPIRATION":
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing EXPIRATION for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    val = False
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
-                    print(f"[Webhook] Downgraded household {hhid} due to expiration")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing expiration: {e}")
-                
-    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing {evt_type} for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    val = True
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
-                    print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing upgrade: {e}")
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (False, "expired", hhid))
+        print(f"[Webhook] Downgraded household {hhid} due to expiration")
+
+    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE"]:
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (True, "active", hhid))
+        print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
 
     return jsonify({"ok": True})
+
+
+@app.route("/api/webhooks/stripe", methods=["POST"])
+def stripe_webhook():
+    """Handle Stripe webhooks directly for web billing, bypassing RevenueCat."""
+    data = request.get_json(silent=True) or {}
+    event_type = data.get("type")
+    
+    try:
+        with open("/tmp/stripe_webhook.log", "a") as logf:
+            logf.write(f"\n--- EVENT: {event_type} ---\n")
+            import json
+            logf.write(json.dumps(data) + "\n")
+    except Exception:
+        pass
+        
+    print(f"[Stripe Webhook] Received event: {event_type}")
+    
+    if event_type == "checkout.session.completed":
+        session_obj = data.get("data", {}).get("object", {})
+        
+        # Extract from metadata we set during checkout creation
+        metadata = session_obj.get("metadata", {})
+        hhid = metadata.get("household_id")
+        uid = metadata.get("app_user_id") or session_obj.get("client_reference_id")
+        customer_id = session_obj.get("customer")
+        subscription_id = session_obj.get("subscription")
+        
+        if not hhid and uid:
+            hhid = _find_household_id_from_uid(uid)
+            
+        if hhid:
+            current_period_end = None
+            if subscription_id:
+                try:
+                    import urllib.request, json, os
+                    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+                    if stripe_secret:
+                        req = urllib.request.Request(
+                            f"https://api.stripe.com/v1/subscriptions/{subscription_id}",
+                            headers={"Authorization": f"Bearer {stripe_secret}"}
+                        )
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            sub_data = json.loads(resp.read().decode("utf-8"))
+                            current_period_end = sub_data.get("current_period_end")
+                            if not current_period_end:
+                                items_data = sub_data.get("items", {}).get("data", [])
+                                if items_data:
+                                    current_period_end = items_data[0].get("current_period_end")
+                except Exception as e:
+                    print(f"Error fetching subscription {subscription_id}: {e}")
+            
+            if customer_id:
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE id = ?", (customer_id, current_period_end, hhid))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ? WHERE id = ?", (customer_id, hhid))
+            else:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active' WHERE id = ?", (hhid,))
+            print(f"[Stripe Webhook] Upgraded household {hhid} due to checkout.session.completed")
+        else:
+            print(f"[Stripe Webhook] Could not resolve household_id for uid: {uid}")
+
+    elif event_type in ["customer.subscription.updated", "customer.subscription.created"]:
+        sub_obj = data.get("data", {}).get("object", {})
+        customer_id = sub_obj.get("customer")
+        status = sub_obj.get("status")
+        current_period_end = sub_obj.get("current_period_end")
+        if not current_period_end:
+            items_data = sub_obj.get("items", {}).get("data", [])
+            if items_data:
+                current_period_end = items_data[0].get("current_period_end")
+        cancel_at_period_end = sub_obj.get("cancel_at_period_end")
+        canceled_at = sub_obj.get("canceled_at")
+        cancel_at = sub_obj.get("cancel_at")
+        
+        metadata = sub_obj.get("metadata", {})
+        hhid = metadata.get("household_id")
+        
+        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}, canceled_at: {canceled_at}, hhid: {hhid}")
+        
+        if customer_id:
+            # Fix logic: they are premium if active/trialing, regardless of cancel_at_period_end
+            is_premium = True if status in ["active", "trialing"] else False
+            is_canceled = bool(cancel_at_period_end or canceled_at or cancel_at)
+            db_status = "canceled" if is_canceled else status
+            
+            # Use hhid if available (for robustness if customer_id not yet linked)
+            if hhid:
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?), stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, current_period_end, customer_id, hhid))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, customer_id, hhid))
+            else:
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (is_premium, db_status, current_period_end, customer_id))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE stripe_customer_id = ?", (is_premium, db_status, customer_id))
+
+    elif event_type == "customer.subscription.deleted":
+        sub_obj = data.get("data", {}).get("object", {})
+        customer_id = sub_obj.get("customer")
+        print(f"[Stripe Webhook] Received subscription deleted for customer: {customer_id}")
+        if customer_id:
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = 'canceled', subscription_ends_at = NOW() WHERE stripe_customer_id = ?", (customer_id,))
+            print(f"[Stripe Webhook] Downgraded household with Stripe customer {customer_id}")
+            
+    return jsonify({"ok": True})
+
+
+
+def _fetch_stripe_plans():
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    if not stripe_secret:
+        return None
+    try:
+        url = "https://api.stripe.com/v1/prices?active=true&expand[]=data.product&limit=20"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {stripe_secret}",
+                "Accept": "application/json"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            prices = data.get("data", [])
+            plans = []
+            for p in prices:
+                if p.get("type") != "recurring":
+                    continue
+                prod = p.get("product", {})
+                if not isinstance(prod, dict):
+                    prod = {}
+                unit_cents = p.get("unit_amount", 0) or 0
+                unit_val = unit_cents / 100.0
+                currency = (p.get("currency") or "usd").upper()
+                symbol = "$" if currency == "USD" else f"{currency} "
+                interval = p.get("recurring", {}).get("interval", "month")
+                interval_label = "yr" if interval == "year" else "mo"
+                pkg_type = "yearly" if interval == "year" else "monthly"
+                name = prod.get("name") or f"ListMate Premium ({'Annual' if pkg_type == 'yearly' else 'Monthly'})"
+                desc = prod.get("description") or "Unlock AI Recipe Planner, meal generator & smart store mapping."
+                plans.append({
+                    "id": p.get("id"),
+                    "price_id": p.get("id"),
+                    "package_type": pkg_type,
+                    "name": name,
+                    "description": desc,
+                    "price_string": f"{symbol}{unit_val:.2f} / {interval_label}",
+                    "amount": unit_val,
+                    "currency": currency,
+                    "interval": interval
+                })
+            env_monthly = os.environ.get("STRIPE_PRICE_MONTHLY")
+            env_yearly = os.environ.get("STRIPE_PRICE_YEARLY")
+            
+            final_plans = []
+            seen_types = set()
+            for p in plans:
+                ptype = p["package_type"]
+                pid = p["id"]
+                if ptype == "monthly" and env_monthly and pid != env_monthly:
+                    continue
+                if ptype == "yearly" and env_yearly and pid != env_yearly:
+                    continue
+                if ptype not in seen_types:
+                    seen_types.add(ptype)
+                    final_plans.append(p)
+            
+            final_plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
+            return final_plans if final_plans else None
+    except Exception as e:
+        print(f"[Stripe API] Error fetching prices: {e}")
+        return None
+
+
+def _fetch_revenuecat_plans():
+    rc_key = os.environ.get("REVENUECAT_PUBLIC_KEY") or os.environ.get("REVENUECAT_SECRET_KEY")
+    if not rc_key:
+        return None
+    try:
+        url = "https://api.revenuecat.com/v1/subscribers/default/offerings"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {rc_key}",
+                "Accept": "application/json",
+                "X-Platform": "android"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            offerings = data.get("offerings", [])
+            plans = []
+            for off in offerings:
+                for pkg in off.get("packages", []):
+                    pkg_id = pkg.get("identifier", "")
+                    plan_type = "yearly" if ("annual" in pkg_id.lower() or "year" in pkg_id.lower()) else "monthly"
+                    prod_id = pkg.get("platform_product_identifier", "listmate_premium")
+                    plan_id = pkg.get("platform_product_plan_identifier", plan_type)
+                    label = "Annual" if plan_type == "yearly" else "Monthly"
+                    
+                    default_price = "$29.99 / yr" if plan_type == "yearly" else "$2.99 / mo"
+                    env_price = os.environ.get(f"STRIPE_PRICE_{plan_type.upper()}_AMOUNT") or os.environ.get(f"PLAN_{plan_type.upper()}_PRICE")
+                    price_str = f"${env_price}" if env_price else default_price
+
+                    plans.append({
+                        "id": pkg_id,
+                        "price_id": pkg_id,
+                        "package_type": plan_type,
+                        "name": f"ListMate Premium ({label})",
+                        "description": "Unlock AI Recipe Planner, meal generator & smart store mapping.",
+                        "price_string": price_str,
+                        "product_id": prod_id,
+                        "plan_id": plan_id
+                    })
+            return plans if plans else None
+    except Exception as e:
+        print(f"[RevenueCat API] Error fetching offerings: {e}")
+        return None
+
+
+@app.route("/api/billing/plans", methods=["GET"])
+def billing_plans():
+    """Retrieve active subscription plans dynamically from Stripe API, RevenueCat, or environment configuration."""
+    rc_plans = _fetch_revenuecat_plans()
+    if rc_plans:
+        return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
+
+    stripe_plans = _fetch_stripe_plans()
+    if stripe_plans:
+        return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
+
+    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
+    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
+    monthly_title = os.environ.get("STRIPE_PRICE_MONTHLY_TITLE") or "Monthly Plan"
+    yearly_title = os.environ.get("STRIPE_PRICE_YEARLY_TITLE") or "Annual Plan"
+
+    monthly_id = os.environ.get("STRIPE_PRICE_MONTHLY") or "monthly"
+    yearly_id = os.environ.get("STRIPE_PRICE_YEARLY") or "yearly"
+
+    default_plans = [
+        {
+            "id": monthly_id,
+            "price_id": monthly_id,
+            "package_type": "monthly",
+            "name": monthly_title,
+            "price_string": f"${monthly_price} / mo",
+            "description": "Billed monthly. Cancel anytime in Stripe Customer Portal."
+        },
+        {
+            "id": yearly_id,
+            "price_id": yearly_id,
+            "package_type": "yearly",
+            "name": yearly_title,
+            "price_string": f"${yearly_price} / yr",
+            "description": "Save on annual subscription! Billed annually."
+        }
+    ]
+    return jsonify({"ok": True, "source": "default", "plans": default_plans})
+
+
+@app.route("/api/billing/checkout", methods=["GET", "POST"])
+@require_user
+def billing_checkout():
+    """Generate or retrieve a Web Billing checkout URL for RevenueCat / Stripe."""
+    hhid = _hh()
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    pkg_type = request.args.get("package") or request.args.get("price_id") or "monthly"
+    if request.is_json and request.get_json(silent=True):
+        data = request.get_json()
+        pkg_type = data.get("price_id") or data.get("package") or pkg_type
+
+    host_url = request.host_url.rstrip("/")
+    if "localhost" not in host_url and "127.0.0.1" not in host_url and host_url.startswith("http://"):
+        host_url = host_url.replace("http://", "https://")
+    success_redirect = f"{host_url}/settings?purchase=success"
+    cancel_redirect = f"{host_url}/settings?purchase=cancel"
+
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    if stripe_secret and (pkg_type.startswith("price_") or pkg_type.startswith("plan_")):
+        try:
+            url = "https://api.stripe.com/v1/checkout/sessions"
+            body_params = {
+                "mode": "subscription",
+                "payment_method_types[0]": "card",
+                "line_items[0][price]": pkg_type,
+                "line_items[0][quantity]": "1",
+                "client_reference_id": str(user_id),
+                "metadata[household_id]": str(hhid),
+                "metadata[app_user_id]": str(user_id),
+                "subscription_data[metadata][household_id]": str(hhid),
+                "subscription_data[metadata][app_user_id]": str(user_id),
+                "success_url": success_redirect,
+                "cancel_url": cancel_redirect,
+            }
+            encoded_body = urllib.parse.urlencode(body_params).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=encoded_body,
+                headers={
+                    "Authorization": f"Bearer {stripe_secret}",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                session_data = json.loads(resp.read().decode("utf-8"))
+                if session_data.get("url"):
+                    return jsonify({"ok": True, "checkout_url": session_data["url"], "price_id": pkg_type})
+        except Exception as e:
+            print(f"[Stripe Checkout] Error creating session: {e}")
+
+    monthly_url = os.environ.get("REVENUECAT_WEB_BILLING_MONTHLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_MONTHLY")
+    yearly_url = os.environ.get("REVENUECAT_WEB_BILLING_YEARLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_YEARLY")
+
+    target_url = yearly_url if "year" in pkg_type.lower() else monthly_url
+
+    if not target_url:
+        base_pay_url = os.environ.get("REVENUECAT_WEB_BILLING_BASE_URL", "https://pay.revenuecat.com/listmate-pro")
+        target_url = f"{base_pay_url}/{pkg_type}"
+
+    sep = "&" if "?" in target_url else "?"
+    checkout_url = f"{target_url}{sep}app_user_id={user_id}&household_id={hhid}&success_url={success_redirect}&cancel_url={cancel_redirect}"
+
+    return jsonify({"ok": True, "checkout_url": checkout_url, "package": pkg_type})
+
+
+@app.route("/api/billing/portal", methods=["GET", "POST"])
+@require_user
+def billing_portal():
+    """Retrieve Stripe Customer Portal management URL via Stripe API or RevenueCat REST API."""
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    hhid = _hh()
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    
+    if stripe_secret:
+        hh = authmod._one(f"SELECT stripe_customer_id FROM {authmod._HH} WHERE id = ?", (hhid,))
+        if hh and hh.get("stripe_customer_id"):
+            try:
+                import urllib.request, json, urllib.parse
+                url = "https://api.stripe.com/v1/billing_portal/sessions"
+                
+                host_url = request.host_url.rstrip("/")
+                if "localhost" not in host_url and "127.0.0.1" not in host_url and host_url.startswith("http://"):
+                    host_url = host_url.replace("http://", "https://")
+                return_redirect = f"{host_url}/settings"
+                
+                body_params = {
+                    "customer": hh["stripe_customer_id"],
+                    "return_url": return_redirect
+                }
+                encoded_body = urllib.parse.urlencode(body_params).encode("utf-8")
+                req = urllib.request.Request(
+                    url,
+                    data=encoded_body,
+                    headers={
+                        "Authorization": f"Bearer {stripe_secret}",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    session_data = json.loads(resp.read().decode("utf-8"))
+                    if session_data.get("url"):
+                        return jsonify({"ok": True, "portal_url": session_data["url"]})
+            except Exception as e:
+                err_msg = str(e)
+                if hasattr(e, 'read'):
+                    err_msg += " " + e.read().decode('utf-8')
+                print(f"[Billing Portal] Error creating Stripe portal session: {err_msg}")
+                return jsonify({"error": f"Stripe Portal API Error: {err_msg}"}), 400
+        else:
+            return jsonify({"error": "No Stripe customer ID found for your household. Because you subscribed before this update, you may need to wait for your next billing cycle or contact support."}), 400
+    else:
+        return jsonify({"error": "STRIPE_SECRET_KEY is not configured on the server."}), 400
+
+    stripe_portal_env = os.environ.get("STRIPE_CUSTOMER_PORTAL_URL") or os.environ.get("STRIPE_PORTAL_URL")
+    if stripe_portal_env:
+        return jsonify({"ok": True, "portal_url": stripe_portal_env})
+
+    rc_secret = os.environ.get("REVENUECAT_SECRET_KEY")
+    if rc_secret:
+        try:
+            import urllib.request, json
+            req_url = f"https://api.revenuecat.com/v1/subscribers/{user_id}/management_url"
+            req = urllib.request.Request(
+                req_url,
+                headers={
+                    "Authorization": f"Bearer {rc_secret}",
+                    "Accept": "application/json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                m_url = res_data.get("management_url")
+                if m_url:
+                    return jsonify({"ok": True, "portal_url": m_url})
+        except Exception as e:
+            print(f"[Billing Portal] Error fetching management URL: {e}")
+
+    return jsonify({"error": "No billing portal available. Please contact support."}), 400
+
 
 @app.route("/api/settings/premium", methods=["GET", "POST"])
 @require_user
