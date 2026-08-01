@@ -793,10 +793,15 @@ function renderHome() {
         '</div>';
     }).join('');
 
+    let generalVerbiage = '';
+    if ((storeMap[storeId] || storeName) === 'General List') {
+      generalVerbiage = '<div style="font-size:12px; color:var(--muted); margin-top:-6px; margin-bottom:8px; font-weight:normal;">Items here can be moved to a specific store when you\'re ready.</div>';
+    }
+
     return '<div class="store-group">' +
       '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
       ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
-      '</div><div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
+      '</div>' + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
   }
@@ -1209,8 +1214,21 @@ async function loadSuggestions(){
   }catch(e){}
 }
 
-async function addToList(sid, name, qty = '') {
+async function addToList(sid, name, qty = '', skipSuggest = false) {
   if (!canEditOffline()) return false;
+
+  const storeObj = stores.find(s=>s.id===sid);
+  if (storeObj && storeObj.name === 'General List' && !skipSuggest && navigator.onLine) {
+     try {
+       const sgRes = await fetch(API+'/suggest_store?name='+encodeURIComponent(name));
+       const sgData = await sgRes.json();
+       if (sgData.store_id && sgData.store_id !== sid) {
+         if (confirm(`You frequently buy "${name}" from ${sgData.store_name}. Add it there?`)) {
+            sid = sgData.store_id;
+         }
+       }
+     } catch(e) {}
+  }
 
   if (!navigator.onLine) {
     const storeName = (stores.find(s=>s.id===sid)||{}).name || 'Store';
