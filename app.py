@@ -468,8 +468,24 @@ def _fetch_stripe_plans():
                     "currency": currency,
                     "interval": interval
                 })
-            plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
-            return plans if plans else None
+            env_monthly = os.environ.get("STRIPE_PRICE_MONTHLY")
+            env_yearly = os.environ.get("STRIPE_PRICE_YEARLY")
+            
+            final_plans = []
+            seen_types = set()
+            for p in plans:
+                ptype = p["package_type"]
+                pid = p["id"]
+                if ptype == "monthly" and env_monthly and pid != env_monthly:
+                    continue
+                if ptype == "yearly" and env_yearly and pid != env_yearly:
+                    continue
+                if ptype not in seen_types:
+                    seen_types.add(ptype)
+                    final_plans.append(p)
+            
+            final_plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
+            return final_plans if final_plans else None
     except Exception as e:
         print(f"[Stripe API] Error fetching prices: {e}")
         return None
@@ -486,7 +502,7 @@ def _fetch_revenuecat_plans():
             headers={
                 "Authorization": f"Bearer {rc_key}",
                 "Accept": "application/json",
-                "X-Platform": "stripe"
+                "X-Platform": "android"
             }
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -524,13 +540,13 @@ def _fetch_revenuecat_plans():
 @app.route("/api/billing/plans", methods=["GET"])
 def billing_plans():
     """Retrieve active subscription plans dynamically from Stripe API, RevenueCat, or environment configuration."""
-    stripe_plans = _fetch_stripe_plans()
-    if stripe_plans:
-        return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
-
     rc_plans = _fetch_revenuecat_plans()
     if rc_plans:
         return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
+
+    stripe_plans = _fetch_stripe_plans()
+    if stripe_plans:
+        return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
 
     monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
     yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
@@ -576,6 +592,8 @@ def billing_checkout():
         pkg_type = data.get("price_id") or data.get("package") or pkg_type
 
     host_url = request.host_url.rstrip("/")
+    if "localhost" not in host_url and "127.0.0.1" not in host_url and host_url.startswith("http://"):
+        host_url = host_url.replace("http://", "https://")
     success_redirect = f"{host_url}/settings?purchase=success"
     cancel_redirect = f"{host_url}/settings?purchase=cancel"
 
@@ -588,7 +606,7 @@ def billing_checkout():
                 "payment_method_types[0]": "card",
                 "line_items[0][price]": pkg_type,
                 "line_items[0][quantity]": "1",
-                "client_reference_id": f"{hhid}:{user_id}",
+                "client_reference_id": str(user_id),
                 "metadata[household_id]": str(hhid),
                 "metadata[app_user_id]": str(user_id),
                 "success_url": success_redirect,
