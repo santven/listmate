@@ -151,6 +151,7 @@
         
         <button id="upgradeBtn" onclick="showPaywall()" style="display:none; margin-top:12px; width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.25);">🎁 Upgrade to Premium</button>
         <button id="manageSubBtn" onclick="openCustomerPortal()" style="display:none; margin-top:12px; width:100%; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">💳 Manage Subscription</button>
+        <p id="androidSubNotice" style="display:none; margin-top:12px; font-size:12px; color:var(--muted); text-align:center;">Your subscription is managed via the Google Play Store.</p>
     </div>
     <div class="success" id="premiumSuccess" style="margin-top:8px;"></div>
   </div>
@@ -411,6 +412,7 @@ async function loadPremium() {
     const badge = document.getElementById("planBadge");
     const upgradeBtn = document.getElementById("upgradeBtn");
     const manageSubBtn = document.getElementById("manageSubBtn");
+    const androidSubNotice = document.getElementById("androidSubNotice");
     const planName = document.getElementById("planName");
     const tierBadge = document.getElementById("tierBadge");
     
@@ -418,8 +420,10 @@ async function loadPremium() {
       if (d.is_premium && !d.is_early_adopter) {
         const isNative = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web';
         manageSubBtn.style.display = isNative ? 'none' : 'inline-block';
+        if (androidSubNotice) androidSubNotice.style.display = isNative ? 'block' : 'none';
       } else {
         manageSubBtn.style.display = 'none';
+        if (androidSubNotice) androidSubNotice.style.display = 'none';
       }
     }
 

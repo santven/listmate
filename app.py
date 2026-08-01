@@ -410,16 +410,23 @@ def revenuecat_webhook():
         print(f"[Webhook] Could not resolve household_id for uid: {uid}, aliases: {event.get('aliases')}")
         return jsonify({"ok": True, "warning": "Household not found"})
 
+    exp_ms = event.get("expiration_at_ms")
+    exp_clause = ""
+    exp_args = []
+    if exp_ms:
+        exp_clause = ", subscription_ends_at = TO_TIMESTAMP(?)"
+        exp_args = [int(exp_ms) / 1000.0]
+
     if evt_type == "CANCELLATION":
-        authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+        authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? {exp_clause} WHERE id = ?", ("canceled", *exp_args, hhid))
         print(f"[Webhook] Marked household {hhid} as canceled")
 
     elif evt_type == "EXPIRATION":
-        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (False, "expired", hhid))
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (False, "expired", *exp_args, hhid))
         print(f"[Webhook] Downgraded household {hhid} due to expiration")
 
     elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE"]:
-        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (True, "active", hhid))
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
         print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
 
     return jsonify({"ok": True})
@@ -842,7 +849,7 @@ def premium_settings():
     authmod._init_schema()
 
     if request.method == "GET":
-        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
+        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
         is_early = bool(hhid and int(hhid) <= 25)
         sub_status = hh.get("subscription_status", "free") if hh else "free"
@@ -850,6 +857,10 @@ def premium_settings():
         if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
             trial_ends_at = trial_ends_at.isoformat()
             
+        sub_ends_at = hh.get("subscription_ends_at") if hh else None
+        if sub_ends_at and hasattr(sub_ends_at, 'isoformat'):
+            sub_ends_at = sub_ends_at.isoformat()
+
         if is_early and not is_prem:
             is_prem = True
             sub_status = "premium"
@@ -878,7 +889,8 @@ def premium_settings():
             "household_id": hhid,
             "is_early_adopter": is_early,
             "subscription_status": sub_status,
-            "trial_ends_at": trial_ends_at
+            "trial_ends_at": trial_ends_at,
+            "subscription_ends_at": sub_ends_at
         })
 
     data = request.get_json(silent=True) or {}
