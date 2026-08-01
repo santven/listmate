@@ -416,7 +416,8 @@ async function loadPremium() {
     
     if (manageSubBtn) {
       if (d.is_premium && !d.is_early_adopter) {
-        manageSubBtn.style.display = 'inline-block';
+        const isNative = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web';
+        manageSubBtn.style.display = isNative ? 'none' : 'inline-block';
       } else {
         manageSubBtn.style.display = 'none';
       }
