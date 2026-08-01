@@ -219,7 +219,7 @@
     <h2 style="color:#d94a4a; margin-bottom:8px;">⚠️ Danger Zone</h2>
     <p style="font-size:13px; color:#666; margin-bottom:14px; line-height:1.4;">
       Permanently delete your account and remove all associated grocery data. This action cannot be undone.<br><br>
-      <strong>Note for Premium Users:</strong> Deleting your account does <em>not</em> cancel your subscription. Please ensure you cancel your subscription directly in the Google Play Store to avoid recurring billing.
+      <span id="deletePremiumNotice"><strong>Note for Premium Users:</strong> Deleting your account does <em>not</em> cancel your subscription. Please ensure you cancel your subscription directly in the billing portal to avoid recurring billing.</span>
     </p>
     <button onclick="deleteAccount()" id="btnDeleteAccount" style="width:100%; padding:12px; background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">
       Delete Account
@@ -482,6 +482,23 @@ async function loadPremium() {
         badge.style.display = 'none';
         if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
       }
+    }
+    
+    // Delete account button logic for premium users
+    const btnDelete = document.getElementById("btnDeleteAccount");
+    const delNotice = document.getElementById("deletePremiumNotice");
+    if (btnDelete && delNotice) {
+        if (d.is_premium && !d.is_early_adopter && (d.subscription_status === 'active' || d.subscription_status === 'premium' || d.subscription_status === 'trial')) {
+            btnDelete.disabled = true;
+            btnDelete.style.opacity = '0.5';
+            btnDelete.style.cursor = 'not-allowed';
+            delNotice.innerHTML = "<strong style='color:#d94a4a;'>Action Required:</strong> You have an active Premium subscription. Please <strong>manage your subscription</strong> via the billing portal and cancel it before you can delete your account to prevent unwanted charges.";
+        } else {
+            btnDelete.disabled = false;
+            btnDelete.style.opacity = '1';
+            btnDelete.style.cursor = 'pointer';
+            delNotice.innerHTML = "<strong>Note for Premium Users:</strong> Deleting your account does <em>not</em> cancel your subscription. Please ensure you cancel your subscription directly in the billing portal to avoid recurring billing.";
+        }
     }
   } catch(e) {}
 }
