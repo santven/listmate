@@ -791,7 +791,7 @@ function renderHome() {
     });
 
     const isGeneral = ((storeMap[storeId] || storeName) === 'General List');
-    const moveBtnStyle = isGeneral ? 'color:var(--green-dark); font-weight:900; font-size:20px; text-shadow:0 1px 3px rgba(0,0,0,0.15); transform:scale(1.15);' : '';
+    const moveBtnStyle = isGeneral ? 'color:#1b4332; font-weight:900; font-size:18px; background:#d8f3dc; border:1.5px solid #74c69d; border-radius:8px; padding:2px 8px; margin:0 4px; box-shadow:0 1px 4px rgba(0,0,0,0.18);' : '';
     
     const itemsHtml = sortedItems.map(i => {
       return '<div class="item-row">' +
@@ -1338,13 +1338,14 @@ async function toggleItem(id, showVisitPrompt = true) {
   const wasPurchased = item?.purchased;
   let needsVisitPrompt = false;
   let visitStoreName = '';
-  if (!wasPurchased && showVisitPrompt && item) {
+  const itemStore = stores.find(s=>s.id===item?.store_id);
+  if (!wasPurchased && showVisitPrompt && item && itemStore && itemStore.name !== 'General List') {
     try {
       const res = await fetch(API+'/stores/'+item.store_id+'/visit/today');
       const data = await res.json();
       if (!data.active) {
         needsVisitPrompt = true;
-        visitStoreName = stores.find(s=>s.id===item.store_id)?.name||'this store';
+        visitStoreName = itemStore.name || 'this store';
       }
     } catch(e){}
   }

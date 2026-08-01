@@ -1685,10 +1685,11 @@ def item_frequencies():
     db = get_db()
     try:
         res = db.execute("""
-            SELECT store_id, COUNT(*) as c
-            FROM list_items
-            WHERE household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = TRUE
-            GROUP BY store_id
+            SELECT l.store_id, COUNT(*) as c
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id
+            WHERE l.household_id = ? AND LOWER(TRIM(l.name)) = LOWER(TRIM(?)) AND l.purchased = TRUE AND s.name != 'General List'
+            GROUP BY l.store_id
         """, (_hh(), name)).fetchall()
         return jsonify({r["store_id"]: r["c"] for r in res})
     finally:
@@ -1709,7 +1710,7 @@ def search_catalog():
         # Let's include all stores.
         items = db.execute('''
             SELECT si.id, si.name, si.store_id, s.name as store_name,
-              (SELECT COUNT(*) FROM list_items li WHERE li.store_id = si.store_id AND li.household_id = si.household_id AND LOWER(li.name) = LOWER(si.name) AND li.purchased = TRUE) as purchased_count
+              (SELECT COUNT(*) FROM list_items li JOIN stores st ON li.store_id = st.id WHERE li.store_id = si.store_id AND li.household_id = si.household_id AND LOWER(li.name) = LOWER(si.name) AND li.purchased = TRUE AND st.name != 'General List') as purchased_count
             FROM store_items si
             JOIN stores s ON si.store_id = s.id
             WHERE si.household_id = ? AND si.name ILIKE ?
