@@ -440,21 +440,28 @@ def stripe_webhook():
         metadata = session_obj.get("metadata", {})
         hhid = metadata.get("household_id")
         uid = metadata.get("app_user_id") or session_obj.get("client_reference_id")
+        customer_id = session_obj.get("customer")
         
         if not hhid and uid:
             hhid = _find_household_id_from_uid(uid)
             
         if hhid:
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active' WHERE id = ?", (hhid,))
+            if customer_id:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active', stripe_customer_id = ? WHERE id = ?", (customer_id, hhid))
+            else:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active' WHERE id = ?", (hhid,))
             print(f"[Stripe Webhook] Upgraded household {hhid} due to checkout.session.completed")
         else:
             print(f"[Stripe Webhook] Could not resolve household_id for uid: {uid}")
             
     elif event_type == "customer.subscription.deleted":
-        print("[Stripe Webhook] Received subscription deleted.")
-        # Full cancellation logic requires storing Stripe customer ID, 
-        # but for this iteration, we focus on granting entitlements.
-        
+        sub_obj = data.get("data", {}).get("object", {})
+        customer_id = sub_obj.get("customer")
+        print(f"[Stripe Webhook] Received subscription deleted for customer: {customer_id}")
+        if customer_id:
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = 'canceled' WHERE stripe_customer_id = ?", (customer_id,))
+            print(f"[Stripe Webhook] Downgraded household with Stripe customer {customer_id}")
+            
     return jsonify({"ok": True})
 
 
