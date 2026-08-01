@@ -425,6 +425,40 @@ def revenuecat_webhook():
     return jsonify({"ok": True})
 
 
+@app.route("/api/webhooks/stripe", methods=["POST"])
+def stripe_webhook():
+    """Handle Stripe webhooks directly for web billing, bypassing RevenueCat."""
+    data = request.get_json(silent=True) or {}
+    event_type = data.get("type")
+    
+    print(f"[Stripe Webhook] Received event: {event_type}")
+    
+    if event_type == "checkout.session.completed":
+        session_obj = data.get("data", {}).get("object", {})
+        
+        # Extract from metadata we set during checkout creation
+        metadata = session_obj.get("metadata", {})
+        hhid = metadata.get("household_id")
+        uid = metadata.get("app_user_id") or session_obj.get("client_reference_id")
+        
+        if not hhid and uid:
+            hhid = _find_household_id_from_uid(uid)
+            
+        if hhid:
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = 'active' WHERE id = ?", (hhid,))
+            print(f"[Stripe Webhook] Upgraded household {hhid} due to checkout.session.completed")
+        else:
+            print(f"[Stripe Webhook] Could not resolve household_id for uid: {uid}")
+            
+    elif event_type == "customer.subscription.deleted":
+        print("[Stripe Webhook] Received subscription deleted.")
+        # Full cancellation logic requires storing Stripe customer ID, 
+        # but for this iteration, we focus on granting entitlements.
+        
+    return jsonify({"ok": True})
+
+
+
 def _fetch_stripe_plans():
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
     if not stripe_secret:
