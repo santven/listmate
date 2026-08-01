@@ -486,7 +486,7 @@ def _fetch_revenuecat_plans():
             headers={
                 "Authorization": f"Bearer {rc_key}",
                 "Accept": "application/json",
-                "X-Platform": "android"
+                "X-Platform": "stripe"
             }
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
