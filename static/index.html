@@ -790,12 +790,15 @@ function renderHome() {
       return a.name.localeCompare(b.name);
     });
 
+    const isGeneral = ((storeMap[storeId] || storeName) === 'General List');
+    const moveBtnStyle = isGeneral ? 'color:var(--green-dark); font-weight:900; font-size:20px; text-shadow:0 1px 3px rgba(0,0,0,0.15); transform:scale(1.15);' : '';
+    
     const itemsHtml = sortedItems.map(i => {
       return '<div class="item-row">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
         '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
         '<div class="item-meta">by ' + i.added_by + '</div>' +
-        '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store">⇄</button>' +
+        '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store" style="' + moveBtnStyle + '">⇄</button>' +
         '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
         '</div>';
     }).join('');
@@ -1403,12 +1406,23 @@ $('#quickAddInput').addEventListener('input', () => {
         dropdown.style.display = 'none';
         return;
       }
-      dropdown.innerHTML = items.map(i => 
-        `<div class="quick-add-item" data-sid="${i.store_id}" data-name="${escapeHtml(i.name)}" style="padding:12px 16px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+      dropdown.innerHTML = items.map(i => {
+        let badge = '';
+        if (i.store_name === 'General List') {
+          badge = '<span style="font-size:11px; color:var(--muted); font-style:italic; margin-right:6px;">can\'t decide yet</span>';
+        } else if (i.purchased_count > 10) {
+          badge = '<span style="font-size:11px; color:#10b981; font-weight:600; background:#d1fae5; padding:2px 6px; border-radius:6px; margin-right:6px;">Frequently purchased here</span>';
+        } else if (i.purchased_count > 2) {
+          badge = '<span style="font-size:11px; color:var(--muted); margin-right:6px;">' + i.purchased_count + ' times</span>';
+        }
+        return `<div class="quick-add-item" data-sid="${i.store_id}" data-name="${escapeHtml(i.name)}" style="padding:12px 16px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
            <span style="font-weight:500; color:var(--text);">${escapeHtml(i.name)}</span>
-           <span style="font-size:12px; color:var(--muted); background:#f1f5f9; padding:2px 8px; border-radius:10px;">${escapeHtml(i.store_name)}</span>
+           <div style="display:flex; align-items:center;">
+             ${badge}
+             <span style="font-size:12px; color:var(--muted); background:#f1f5f9; padding:2px 8px; border-radius:10px;">${escapeHtml(i.store_name)}</span>
+           </div>
          </div>`
-      ).join('');
+      }).join('');
       $$('.quick-add-item').forEach(el => el.addEventListener('click', async () => {
         const sid = parseInt(el.dataset.sid);
         const name = el.dataset.name;
@@ -1486,15 +1500,40 @@ async function clearList() {
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
 let moveItemId=null;
-function openMoveModal(itemId,itemName){
-  moveItemId=itemId;
-  const item=list.find(i=>i.id===itemId);
-  $('#moveItemLabel').textContent='"'+itemName+'" — currently in '+stores.find(s=>s.id===item.store_id)?.name;
-  $('#moveStoreList').innerHTML=stores
-    .map(s=>'<button class="modal-store-option'+(s.id===item.store_id?' current':'')+'" data-sid="'+s.id+'">'+escapeHtml(s.name)+'</button>')
-    .join('');
-  $$('#moveStoreList .modal-store-option').forEach(el=>el.addEventListener('click',()=>moveItem(parseInt(el.dataset.sid))));
+async function openMoveModal(itemId, itemName) {
+  moveItemId = itemId;
+  const item = list.find(i => i.id === itemId);
+  $('#moveItemLabel').textContent = '"' + itemName + '" — currently in ' + stores.find(s => s.id === item.store_id)?.name;
+  
+  function renderOptions(freqs = {}) {
+    $('#moveStoreList').innerHTML = stores
+      .map(s => {
+        const isCurrent = s.id === item.store_id;
+        const count = freqs[s.id] || 0;
+        let badge = '';
+        if (s.name === 'General List') {
+          badge = ' <span style="font-size:11px; color:var(--muted); font-style:italic;">(can\'t decide yet)</span>';
+        } else if (count > 10) {
+          badge = ' <span style="font-size:11px; color:#10b981; font-weight:600; background:#d1fae5; padding:2px 6px; border-radius:6px; margin-left:6px;">Frequently purchased here</span>';
+        } else if (count > 2) {
+          badge = ' <span style="font-size:11px; color:var(--muted); margin-left:6px;">(' + count + ' times)</span>';
+        }
+        return '<button class="modal-store-option' + (isCurrent ? ' current' : '') + '" data-sid="' + s.id + '">' + escapeHtml(s.name) + badge + '</button>';
+      })
+      .join('');
+    $$('#moveStoreList .modal-store-option').forEach(el => el.addEventListener('click', () => moveItem(parseInt(el.dataset.sid))));
+  }
+  
+  renderOptions();
   $('#moveModal').classList.add('active');
+
+  try {
+    const res = await fetch(API + '/item_frequencies?name=' + encodeURIComponent(itemName));
+    if (res.ok) {
+      const freqs = await res.json();
+      renderOptions(freqs);
+    }
+  } catch(e) {}
 }
 
 async function moveItem(targetStoreId) {
