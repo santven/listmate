@@ -431,13 +431,13 @@ def stripe_webhook():
     data = request.get_json(silent=True) or {}
     event_type = data.get("type")
     
-    with open("/tmp/stripe_webhook.log", "a") as logf:
-        logf.write(f"
---- EVENT: {event_type} ---
-")
-        import json
-        logf.write(json.dumps(data) + "
-")
+    try:
+        with open("/tmp/stripe_webhook.log", "a") as logf:
+            logf.write(f"\n--- EVENT: {event_type} ---\n")
+            import json
+            logf.write(json.dumps(data) + "\n")
+    except Exception:
+        pass
         
     print(f"[Stripe Webhook] Received event: {event_type}")
     
