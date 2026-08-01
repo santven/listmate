@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "echo 'No build step required'",
-    "dev": "curl -sSL https://bootstrap.pypa.io/get-pip.py | python3 - && python3 -m pip install -r requirements.txt && python3 app.py"
+    "start": "python3 app.py",
+    "dev": "python3 app.py"
   },
   "repository": {
     "type": "git",
