@@ -370,12 +370,9 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
 <div class="modal-overlay" id="recipeTagModal">
   <div class="modal-sheet" style="text-align:center;">
     <div style="font-size:32px; margin-bottom:6px;">🍳</div>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); margin-bottom:4px;">Recipe</div>
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); margin-bottom:4px;">Item From Recipe</div>
     <h3 id="recipeTagModalTitle" style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:16px;"></h3>
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      <button id="btnFilterByRecipe" style="width:100%; padding:12px; background:var(--green); color:#fff; border:none; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">Filter list by this recipe</button>
-      <button id="btnRecipeTagClose" class="modal-cancel">Close</button>
-    </div>
+    <button id="btnRecipeTagClose" class="modal-cancel">Close</button>
   </div>
 </div>
 
@@ -953,14 +950,6 @@ function renderHome() {
     if (!rName) return;
     $('#recipeTagModalTitle').textContent = rName;
     $('#recipeTagModal').classList.add('active');
-    $('#btnFilterByRecipe').onclick = () => {
-      if ($('#recipeFilter')) {
-        filterRecipeName = rName;
-        $('#recipeFilter').value = rName;
-        renderHome();
-      }
-      $('#recipeTagModal').classList.remove('active');
-    };
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
@@ -1216,6 +1205,8 @@ window.addEventListener('scroll', updateFabVisibility);
 
 function showScreen(name){
   window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
   if(name==='home'){
     currentStore=null;
     $('#headerTitle').textContent='Grocery List';
@@ -1225,7 +1216,11 @@ function showScreen(name){
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
-    loadData();
+    loadData().then(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    });
     updateFabVisibility();
   } else if(name==='recipes'){
     if($('#screenHome')) $('#screenHome').style.display='none';
@@ -1235,6 +1230,9 @@ function showScreen(name){
     checkDietaryStatus();
     loadRecipeUsage();
     $('#btnBack').style.display='block';
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
   }
   updateFabVisibility();
 }
@@ -2625,8 +2623,15 @@ async function confirmAddRecipeToList() {
       await autoSaveRecipe();
 
       showScreen('home');
-
-      loadData();
+      await loadData();
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }, 100);
     } else {
       toast(res.error || 'Failed to add items to list');
     }
