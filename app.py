@@ -566,7 +566,7 @@ def billing_plans():
 def billing_checkout():
     """Generate or retrieve a Web Billing checkout URL for RevenueCat / Stripe."""
     hhid = _hh()
-    user_id = session.get("user_id")
+    user_id = get_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -629,7 +629,7 @@ def billing_checkout():
 @require_user
 def billing_portal():
     """Retrieve Stripe Customer Portal management URL via RevenueCat REST API or env override."""
-    user_id = session.get("user_id")
+    user_id = get_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
