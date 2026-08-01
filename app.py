@@ -488,16 +488,19 @@ def stripe_webhook():
         status = sub_obj.get("status")
         current_period_end = sub_obj.get("current_period_end")
         cancel_at_period_end = sub_obj.get("cancel_at_period_end")
+        canceled_at = sub_obj.get("canceled_at")
+        cancel_at = sub_obj.get("cancel_at")
         
         metadata = sub_obj.get("metadata", {})
         hhid = metadata.get("household_id")
         
-        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}, hhid: {hhid}")
+        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}, canceled_at: {canceled_at}, hhid: {hhid}")
         
         if customer_id:
             # Fix logic: they are premium if active/trialing, regardless of cancel_at_period_end
             is_premium = True if status in ["active", "trialing"] else False
-            db_status = "canceled" if cancel_at_period_end else status
+            is_canceled = bool(cancel_at_period_end or canceled_at or cancel_at)
+            db_status = "canceled" if is_canceled else status
             
             # Use hhid if available (for robustness if customer_id not yet linked)
             if hhid:

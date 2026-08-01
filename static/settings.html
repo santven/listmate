@@ -465,7 +465,17 @@ async function loadPremium() {
         badge.style.display = 'inline-block';
         if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
       } else if (d.is_premium) {
-        badge.textContent = d.subscription_status === 'canceled' ? `✨ Premium (Cancels at end of period)` : `✨ Active Premium`;
+        if (d.subscription_status === 'canceled' && d.subscription_ends_at) {
+            const dt = new Date(d.subscription_ends_at).toLocaleDateString();
+            badge.textContent = `✨ Premium (Cancels ${dt})`;
+        } else if (d.subscription_status === 'canceled') {
+            badge.textContent = `✨ Premium (Cancels at end of period)`;
+        } else if (d.subscription_ends_at) {
+            const dt = new Date(d.subscription_ends_at).toLocaleDateString();
+            badge.textContent = `✨ Active Premium (Renews ${dt})`;
+        } else {
+            badge.textContent = `✨ Active Premium`;
+        }
         badge.style.display = 'inline-block';
         if (upgradeBtn) upgradeBtn.style.display = 'none';
       } else {
