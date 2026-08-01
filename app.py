@@ -431,6 +431,14 @@ def stripe_webhook():
     data = request.get_json(silent=True) or {}
     event_type = data.get("type")
     
+    with open("/tmp/stripe_webhook.log", "a") as logf:
+        logf.write(f"
+--- EVENT: {event_type} ---
+")
+        import json
+        logf.write(json.dumps(data) + "
+")
+        
     print(f"[Stripe Webhook] Received event: {event_type}")
     
     if event_type == "checkout.session.completed":
@@ -486,15 +494,22 @@ def stripe_webhook():
         
         print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}, cancel_at_period_end: {cancel_at_period_end}, hhid: {hhid}")
         
-        if customer_id and current_period_end:
-            db_status = "canceled" if cancel_at_period_end else ("active" if status in ["active", "trialing"] else status)
-            is_premium = True if db_status in ["active", "trialing"] else False
+        if customer_id:
+            # Fix logic: they are premium if active/trialing, regardless of cancel_at_period_end
+            is_premium = True if status in ["active", "trialing"] else False
+            db_status = "canceled" if cancel_at_period_end else status
             
             # Use hhid if available (for robustness if customer_id not yet linked)
             if hhid:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?), stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, current_period_end, customer_id, hhid))
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?), stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, current_period_end, customer_id, hhid))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, stripe_customer_id = ? WHERE id = ?", (is_premium, db_status, customer_id, hhid))
             else:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (is_premium, db_status, current_period_end, customer_id))
+                if current_period_end:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (is_premium, db_status, current_period_end, customer_id))
+                else:
+                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE stripe_customer_id = ?", (is_premium, db_status, customer_id))
 
     elif event_type == "customer.subscription.deleted":
         sub_obj = data.get("data", {}).get("object", {})
