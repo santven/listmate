@@ -1256,7 +1256,7 @@ def add_recipe_to_list_endpoint():
             store_id = item.get("store_id")
             if not store_id:
                 continue
-            quantity = (item.get("amount") or item.get("quantity") or "").strip()
+            quantity = ""
 
             # Ensure store item exists for auto-complete, and copy its category
             cat_row = db.execute(
