@@ -468,6 +468,10 @@ def stripe_webhook():
                         with urllib.request.urlopen(req, timeout=5) as resp:
                             sub_data = json.loads(resp.read().decode("utf-8"))
                             current_period_end = sub_data.get("current_period_end")
+                            if not current_period_end:
+                                items_data = sub_data.get("items", {}).get("data", [])
+                                if items_data:
+                                    current_period_end = items_data[0].get("current_period_end")
                 except Exception as e:
                     print(f"Error fetching subscription {subscription_id}: {e}")
             
@@ -487,6 +491,10 @@ def stripe_webhook():
         customer_id = sub_obj.get("customer")
         status = sub_obj.get("status")
         current_period_end = sub_obj.get("current_period_end")
+        if not current_period_end:
+            items_data = sub_obj.get("items", {}).get("data", [])
+            if items_data:
+                current_period_end = items_data[0].get("current_period_end")
         cancel_at_period_end = sub_obj.get("cancel_at_period_end")
         canceled_at = sub_obj.get("canceled_at")
         cancel_at = sub_obj.get("cancel_at")
