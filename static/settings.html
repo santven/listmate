@@ -494,10 +494,12 @@ async function openCustomerPortal() {
     }
 }
 
-async function startWebCheckout(pkgType) {
+async function startWebCheckout(target) {
     try {
         if (typeof toast !== "undefined") toast('Preparing checkout...');
-        const r = await fetch(`/api/billing/checkout?package=${pkgType}`);
+        const isPriceId = target && (target.startsWith('price_') || target.startsWith('plan_'));
+        const query = isPriceId ? `price_id=${encodeURIComponent(target)}` : `package=${encodeURIComponent(target)}`;
+        const r = await fetch(`/api/billing/checkout?${query}`);
         const d = await r.json();
         if (d.ok && d.checkout_url) {
             window.location.href = d.checkout_url;
@@ -508,6 +510,82 @@ async function startWebCheckout(pkgType) {
         console.error('Checkout error:', e);
         alert('Error connecting to checkout.');
     }
+}
+
+async function loadAndRenderWebPaywall() {
+    const container = document.getElementById('paywallPackages');
+    if (!container) return;
+    
+    const pModal = document.getElementById('paywallModal');
+    if (pModal) pModal.classList.add('active');
+
+    container.innerHTML = `
+        <div style="padding:24px 0; text-align:center; color:#64748b;">
+            <div style="width:28px; height:28px; border:3px solid #e2e8f0; border-top:3px solid #059669; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 10px auto;"></div>
+            <div style="font-size:13px; font-weight:600;">Loading available plans...</div>
+        </div>
+    `;
+
+    try {
+        const r = await fetch('/api/billing/plans');
+        const d = await r.json();
+        
+        if (d.ok && d.plans && d.plans.length > 0) {
+            container.innerHTML = '';
+            d.plans.forEach(plan => {
+                const isYearly = plan.package_type === 'yearly' || (plan.interval && plan.interval.includes('year'));
+                const card = document.createElement('div');
+                card.style.cssText = isYearly 
+                    ? "background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left; position:relative; margin-bottom:10px;"
+                    : "background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:10px; text-align:left;";
+                
+                const badgeHtml = isYearly 
+                    ? `<span style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase;">Best Value</span>`
+                    : '';
+
+                const btnBg = isYearly
+                    ? "background:linear-gradient(135deg, #047857, #059669);"
+                    : "background:linear-gradient(135deg, #059669, #10b981);";
+
+                const targetParam = plan.price_id || plan.id || plan.package_type;
+
+                card.innerHTML = `
+                    ${badgeHtml}
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="font-size:16px; color:#0f172a;">${escapeHtml(plan.name)}</strong>
+                        <span style="font-size:16px; font-weight:700; color:#059669;">${escapeHtml(plan.price_string)}</span>
+                    </div>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 12px 0; line-height:1.4;">${escapeHtml(plan.description)}</p>
+                    <button onclick="startWebCheckout('${escapeHtml(targetParam)}')" style="width:100%; ${btnBg} color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.2);">
+                        Subscribe (${escapeHtml(plan.price_string)})
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+            return;
+        }
+    } catch (e) {
+        console.warn('Error fetching billing plans:', e);
+    }
+
+    container.innerHTML = `
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:10px; text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:16px; color:#0f172a;">Monthly Subscription</strong>
+          </div>
+          <button onclick="startWebCheckout('monthly')" style="width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">
+            Subscribe Monthly
+          </button>
+        </div>
+        <div style="background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:16px; color:#0f172a;">Annual Subscription</strong>
+          </div>
+          <button onclick="startWebCheckout('yearly')" style="width:100%; background:linear-gradient(135deg, #047857, #059669); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">
+            Subscribe Yearly
+          </button>
+        </div>
+    `;
 }
 
 async function checkPurchaseReturn() {
@@ -699,35 +777,8 @@ async function showPaywall() {
             }
         }
     } else {
-        // Web Billing Paywall
-        const container = document.getElementById('paywallPackages');
-        if (container) {
-            container.innerHTML = `
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:8px; text-align:left;">
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <strong style="font-size:16px; color:#0f172a;">Monthly Plan</strong>
-                    <span style="font-size:16px; font-weight:700; color:#059669;">$2.99 / mo</span>
-                  </div>
-                  <p style="font-size:12px; color:#64748b; margin:0 0 12px 0;">Billed monthly. Cancel anytime in Stripe Customer Portal.</p>
-                  <button onclick="startWebCheckout('monthly')" style="width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.2);">
-                    Subscribe Monthly ($2.99/mo)
-                  </button>
-                </div>
-                <div style="background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left; position:relative;">
-                  <span style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase;">Best Value</span>
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <strong style="font-size:16px; color:#0f172a;">Annual Plan</strong>
-                    <span style="font-size:16px; font-weight:700; color:#059669;">$29.99 / yr</span>
-                  </div>
-                  <p style="font-size:12px; color:#64748b; margin:0 0 12px 0;">Save over 16%! Billed annually.</p>
-                  <button onclick="startWebCheckout('yearly')" style="width:100%; background:linear-gradient(135deg, #047857, #059669); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(5,150,105,0.25);">
-                    Subscribe Yearly ($29.99/yr)
-                  </button>
-                </div>
-            `;
-            const pModal = document.getElementById('paywallModal');
-            if (pModal) pModal.classList.add('active');
-        }
+        // Web Billing Paywall - Dynamic plans from Stripe / RevenueCat
+        loadAndRenderWebPaywall();
     }
 }
 

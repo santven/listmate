@@ -425,6 +425,142 @@ def revenuecat_webhook():
     return jsonify({"ok": True})
 
 
+def _fetch_stripe_plans():
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    if not stripe_secret:
+        return None
+    try:
+        url = "https://api.stripe.com/v1/prices?active=true&expand[]=data.product&limit=20"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {stripe_secret}",
+                "Accept": "application/json"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            prices = data.get("data", [])
+            plans = []
+            for p in prices:
+                if p.get("type") != "recurring":
+                    continue
+                prod = p.get("product", {})
+                if not isinstance(prod, dict):
+                    prod = {}
+                unit_cents = p.get("unit_amount", 0) or 0
+                unit_val = unit_cents / 100.0
+                currency = (p.get("currency") or "usd").upper()
+                symbol = "$" if currency == "USD" else f"{currency} "
+                interval = p.get("recurring", {}).get("interval", "month")
+                interval_label = "yr" if interval == "year" else "mo"
+                pkg_type = "yearly" if interval == "year" else "monthly"
+                name = prod.get("name") or f"ListMate Premium ({'Annual' if pkg_type == 'yearly' else 'Monthly'})"
+                desc = prod.get("description") or "Unlock AI Recipe Planner, meal generator & smart store mapping."
+                plans.append({
+                    "id": p.get("id"),
+                    "price_id": p.get("id"),
+                    "package_type": pkg_type,
+                    "name": name,
+                    "description": desc,
+                    "price_string": f"{symbol}{unit_val:.2f} / {interval_label}",
+                    "amount": unit_val,
+                    "currency": currency,
+                    "interval": interval
+                })
+            plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
+            return plans if plans else None
+    except Exception as e:
+        print(f"[Stripe API] Error fetching prices: {e}")
+        return None
+
+
+def _fetch_revenuecat_plans():
+    rc_key = os.environ.get("REVENUECAT_PUBLIC_KEY") or os.environ.get("REVENUECAT_SECRET_KEY")
+    if not rc_key:
+        return None
+    try:
+        url = "https://api.revenuecat.com/v1/subscribers/default/offerings"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {rc_key}",
+                "Accept": "application/json",
+                "X-Platform": "android"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            offerings = data.get("offerings", [])
+            plans = []
+            for off in offerings:
+                for pkg in off.get("packages", []):
+                    pkg_id = pkg.get("identifier", "")
+                    plan_type = "yearly" if ("annual" in pkg_id.lower() or "year" in pkg_id.lower()) else "monthly"
+                    prod_id = pkg.get("platform_product_identifier", "listmate_premium")
+                    plan_id = pkg.get("platform_product_plan_identifier", plan_type)
+                    label = "Annual" if plan_type == "yearly" else "Monthly"
+                    
+                    default_price = "$29.99 / yr" if plan_type == "yearly" else "$2.99 / mo"
+                    env_price = os.environ.get(f"STRIPE_PRICE_{plan_type.upper()}_AMOUNT") or os.environ.get(f"PLAN_{plan_type.upper()}_PRICE")
+                    price_str = f"${env_price}" if env_price else default_price
+
+                    plans.append({
+                        "id": pkg_id,
+                        "price_id": pkg_id,
+                        "package_type": plan_type,
+                        "name": f"ListMate Premium ({label})",
+                        "description": "Unlock AI Recipe Planner, meal generator & smart store mapping.",
+                        "price_string": price_str,
+                        "product_id": prod_id,
+                        "plan_id": plan_id
+                    })
+            return plans if plans else None
+    except Exception as e:
+        print(f"[RevenueCat API] Error fetching offerings: {e}")
+        return None
+
+
+@app.route("/api/billing/plans", methods=["GET"])
+def billing_plans():
+    """Retrieve active subscription plans dynamically from Stripe API, RevenueCat, or environment configuration."""
+    stripe_plans = _fetch_stripe_plans()
+    if stripe_plans:
+        return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
+
+    rc_plans = _fetch_revenuecat_plans()
+    if rc_plans:
+        return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
+
+    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
+    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
+    monthly_title = os.environ.get("STRIPE_PRICE_MONTHLY_TITLE") or "Monthly Plan"
+    yearly_title = os.environ.get("STRIPE_PRICE_YEARLY_TITLE") or "Annual Plan"
+
+    monthly_id = os.environ.get("STRIPE_PRICE_MONTHLY") or "monthly"
+    yearly_id = os.environ.get("STRIPE_PRICE_YEARLY") or "yearly"
+
+    default_plans = [
+        {
+            "id": monthly_id,
+            "price_id": monthly_id,
+            "package_type": "monthly",
+            "name": monthly_title,
+            "price_string": f"${monthly_price} / mo",
+            "description": "Billed monthly. Cancel anytime in Stripe Customer Portal."
+        },
+        {
+            "id": yearly_id,
+            "price_id": yearly_id,
+            "package_type": "yearly",
+            "name": yearly_title,
+            "price_string": f"${yearly_price} / yr",
+            "description": "Save on annual subscription! Billed annually."
+        }
+    ]
+    return jsonify({"ok": True, "source": "default", "plans": default_plans})
+
+
 @app.route("/api/billing/checkout", methods=["GET", "POST"])
 @require_user
 def billing_checkout():
@@ -434,18 +570,50 @@ def billing_checkout():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
-    pkg_type = request.args.get("package", "monthly").lower()
+    pkg_type = request.args.get("package") or request.args.get("price_id") or "monthly"
     if request.is_json and request.get_json(silent=True):
-        pkg_type = request.get_json().get("package", pkg_type).lower()
+        data = request.get_json()
+        pkg_type = data.get("price_id") or data.get("package") or pkg_type
 
     host_url = request.host_url.rstrip("/")
     success_redirect = f"{host_url}/settings?purchase=success"
     cancel_redirect = f"{host_url}/settings?purchase=cancel"
 
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    if stripe_secret and (pkg_type.startswith("price_") or pkg_type.startswith("plan_")):
+        try:
+            url = "https://api.stripe.com/v1/checkout/sessions"
+            body_params = {
+                "mode": "subscription",
+                "payment_method_types[0]": "card",
+                "line_items[0][price]": pkg_type,
+                "line_items[0][quantity]": "1",
+                "client_reference_id": f"{hhid}:{user_id}",
+                "metadata[household_id]": str(hhid),
+                "metadata[app_user_id]": str(user_id),
+                "success_url": success_redirect,
+                "cancel_url": cancel_redirect,
+            }
+            encoded_body = urllib.parse.urlencode(body_params).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=encoded_body,
+                headers={
+                    "Authorization": f"Bearer {stripe_secret}",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                session_data = json.loads(resp.read().decode("utf-8"))
+                if session_data.get("url"):
+                    return jsonify({"ok": True, "checkout_url": session_data["url"], "price_id": pkg_type})
+        except Exception as e:
+            print(f"[Stripe Checkout] Error creating session: {e}")
+
     monthly_url = os.environ.get("REVENUECAT_WEB_BILLING_MONTHLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_MONTHLY")
     yearly_url = os.environ.get("REVENUECAT_WEB_BILLING_YEARLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_YEARLY")
 
-    target_url = yearly_url if pkg_type == "yearly" else monthly_url
+    target_url = yearly_url if "year" in pkg_type.lower() else monthly_url
 
     if not target_url:
         base_pay_url = os.environ.get("REVENUECAT_WEB_BILLING_BASE_URL", "https://pay.revenuecat.com/listmate-pro")
