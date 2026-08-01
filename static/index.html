@@ -65,6 +65,7 @@
   .modal-store-option:hover, .modal-store-option:active { background: #e8f5e9; }
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
+  .quick-add-item:hover, .quick-add-item:active { background: #f0f4ed; }
   .visit-toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
   .visit-toast.show { display: block; }
   .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
@@ -195,6 +196,12 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
         🍳 Recipe Planner
       </button>
+    </div>
+
+    <div class="quick-add-wrap" style="position:relative; margin-bottom:16px;">
+      <input type="text" id="quickAddInput" placeholder="Quick add (e.g. Milk)..." autocomplete="off" style="width:100%; padding:14px; font-size:16px; border-radius:12px; border:2px solid var(--green); outline:none; box-shadow:0 2px 8px rgba(16,185,129,0.1);">
+      <button id="btnQuickAdd" style="position:absolute; right:8px; top:8px; bottom:8px; background:var(--green); color:#fff; border:none; padding:0 16px; border-radius:8px; font-weight:600; cursor:pointer;">Add</button>
+      <div id="quickAddDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:12px; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:100; max-height:250px; overflow-y:auto;"></div>
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
@@ -1370,6 +1377,69 @@ async function deleteItem(id) {
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
 }
+
+let quickAddTimeout;
+$('#quickAddInput').addEventListener('input', () => {
+  clearTimeout(quickAddTimeout);
+  const q = $('#quickAddInput').value.trim();
+  const dropdown = $('#quickAddDropdown');
+  if (!q) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  quickAddTimeout = setTimeout(async () => {
+    try {
+      const res = await fetch(API + '/search_catalog?q=' + encodeURIComponent(q));
+      if (!res.ok) return;
+      const items = await res.json();
+      if (items.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+      }
+      dropdown.innerHTML = items.map(i => 
+        `<div class="quick-add-item" data-sid="${i.store_id}" data-name="${escapeHtml(i.name)}" style="padding:12px 16px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+           <span style="font-weight:500; color:var(--text);">${escapeHtml(i.name)}</span>
+           <span style="font-size:12px; color:var(--muted); background:#f1f5f9; padding:2px 8px; border-radius:10px;">${escapeHtml(i.store_name)}</span>
+         </div>`
+      ).join('');
+      $$('.quick-add-item').forEach(el => el.addEventListener('click', async () => {
+        const sid = parseInt(el.dataset.sid);
+        const name = el.dataset.name;
+        dropdown.style.display = 'none';
+        $('#quickAddInput').value = '';
+        await addToList(sid, name, '', true); // skip suggest since explicit
+      }));
+      dropdown.style.display = 'block';
+    } catch(e) {}
+  }, 300);
+});
+
+$('#btnQuickAdd').addEventListener('click', async () => {
+  const name = $('#quickAddInput').value.trim();
+  if (!name) return;
+  
+  const gl = stores.find(s => s.name === 'General List');
+  if (!gl) { toast('General List missing'); return; }
+  
+  $('#btnQuickAdd').disabled = true;
+  $('#quickAddDropdown').style.display = 'none';
+  const added = await addToList(gl.id, name);
+  if (added) {
+    $('#quickAddInput').value = '';
+  }
+  $('#btnQuickAdd').disabled = false;
+});
+$('#quickAddInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('#btnQuickAdd').click();
+  }
+});
+document.addEventListener('click', e => {
+  if ($('.quick-add-wrap') && !$('.quick-add-wrap').contains(e.target)) {
+    if ($('#quickAddDropdown')) $('#quickAddDropdown').style.display = 'none';
+  }
+});
 
 $('#btnNewStore').addEventListener('click',async()=>{
   const name=$('#newStoreInput').value.trim(); if(!name)return;

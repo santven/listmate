@@ -1676,6 +1676,41 @@ def list_grocery():
         db.close()
 
 
+@app.route("/api/search_catalog", methods=["GET"])
+@require_user
+def search_catalog():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify([])
+        
+    db = get_db()
+    hh = _hh()
+    try:
+        # Get matching items across all stores for this household
+        # Only suggest from actual stores (not General List, or maybe include General List if they want?)
+        # Let's include all stores.
+        items = db.execute('''
+            SELECT si.id, si.name, si.store_id, s.name as store_name
+            FROM store_items si
+            JOIN stores s ON si.store_id = s.id
+            WHERE si.household_id = ? AND si.name ILIKE ?
+            ORDER BY si.name, s.name
+            LIMIT 20
+        ''', (hh, f"%{query}%")).fetchall()
+        
+        # We need to deduplicate by name to show unique items first, or maybe group by name
+        res = []
+        seen = set()
+        for i in items:
+            key = (i["name"].lower(), i["store_id"])
+            if key not in seen:
+                seen.add(key)
+                res.append(dict(i))
+                
+        return jsonify(res)
+    finally:
+        db.close()
+
 @app.route("/api/suggest_store", methods=["GET"])
 @require_user
 def suggest_store():
@@ -1690,7 +1725,7 @@ def suggest_store():
             SELECT s.id, s.name, COUNT(*) as c
             FROM list_items l
             JOIN stores s ON l.store_id = s.id
-            WHERE l.household_id = %s AND l.name ILIKE %s AND s.name != 'General List'
+            WHERE l.household_id = ? AND l.name ILIKE ? AND s.name != 'General List'
             GROUP BY s.id, s.name
             ORDER BY c DESC
             LIMIT 1
