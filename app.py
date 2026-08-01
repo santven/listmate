@@ -687,10 +687,45 @@ def billing_checkout():
 @app.route("/api/billing/portal", methods=["GET", "POST"])
 @require_user
 def billing_portal():
-    """Retrieve Stripe Customer Portal management URL via RevenueCat REST API or env override."""
+    """Retrieve Stripe Customer Portal management URL via Stripe API or RevenueCat REST API."""
     user_id = get_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
+
+    hhid = _hh()
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    
+    if stripe_secret:
+        hh = authmod._one(f"SELECT stripe_customer_id FROM {authmod._HH} WHERE id = ?", (hhid,))
+        if hh and hh.get("stripe_customer_id"):
+            try:
+                import urllib.request, json, urllib.parse
+                url = "https://api.stripe.com/v1/billing_portal/sessions"
+                
+                host_url = request.host_url.rstrip("/")
+                if "localhost" not in host_url and "127.0.0.1" not in host_url and host_url.startswith("http://"):
+                    host_url = host_url.replace("http://", "https://")
+                return_redirect = f"{host_url}/settings"
+                
+                body_params = {
+                    "customer": hh["stripe_customer_id"],
+                    "return_url": return_redirect
+                }
+                encoded_body = urllib.parse.urlencode(body_params).encode("utf-8")
+                req = urllib.request.Request(
+                    url,
+                    data=encoded_body,
+                    headers={
+                        "Authorization": f"Bearer {stripe_secret}",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    session_data = json.loads(resp.read().decode("utf-8"))
+                    if session_data.get("url"):
+                        return jsonify({"ok": True, "portal_url": session_data["url"]})
+            except Exception as e:
+                print(f"[Billing Portal] Error creating Stripe portal session: {e}")
 
     stripe_portal_env = os.environ.get("STRIPE_CUSTOMER_PORTAL_URL") or os.environ.get("STRIPE_PORTAL_URL")
     if stripe_portal_env:
@@ -716,8 +751,7 @@ def billing_portal():
         except Exception as e:
             print(f"[Billing Portal] Error fetching management URL: {e}")
 
-    fallback_url = "https://billing.stripe.com/p/login/listmate"
-    return jsonify({"ok": True, "portal_url": fallback_url})
+    return jsonify({"error": "No billing portal available. Please contact support."}), 400
 
 
 @app.route("/api/settings/premium", methods=["GET", "POST"])
