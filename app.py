@@ -454,12 +454,25 @@ def stripe_webhook():
         else:
             print(f"[Stripe Webhook] Could not resolve household_id for uid: {uid}")
             
+    elif event_type in ["customer.subscription.updated", "customer.subscription.created"]:
+        sub_obj = data.get("data", {}).get("object", {})
+        customer_id = sub_obj.get("customer")
+        status = sub_obj.get("status")
+        current_period_end = sub_obj.get("current_period_end")
+        
+        print(f"[Stripe Webhook] Received subscription {event_type} for customer: {customer_id}, status: {status}")
+        if customer_id and current_period_end:
+            if status in ["active", "trialing"]:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = True, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (status, current_period_end, customer_id))
+            elif status in ["canceled", "unpaid", "past_due"]:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = ?, subscription_ends_at = TO_TIMESTAMP(?) WHERE stripe_customer_id = ?", (status, current_period_end, customer_id))
+
     elif event_type == "customer.subscription.deleted":
         sub_obj = data.get("data", {}).get("object", {})
         customer_id = sub_obj.get("customer")
         print(f"[Stripe Webhook] Received subscription deleted for customer: {customer_id}")
         if customer_id:
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = 'canceled' WHERE stripe_customer_id = ?", (customer_id,))
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = False, subscription_status = 'canceled', subscription_ends_at = NOW() WHERE stripe_customer_id = ?", (customer_id,))
             print(f"[Stripe Webhook] Downgraded household with Stripe customer {customer_id}")
             
     return jsonify({"ok": True})
