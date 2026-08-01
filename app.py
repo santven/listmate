@@ -363,9 +363,35 @@ def location_settings():
     return jsonify({"ok": True, "zip_code": zip_code, "country": country})
 
 
+def _find_household_id_from_uid(uid, event=None):
+    """Resolve household_id from app_user_id, household_id, or event aliases."""
+    candidates = []
+    if uid:
+        candidates.append(str(uid))
+    if event and isinstance(event, dict):
+        aliases = event.get("aliases", [])
+        if isinstance(aliases, list):
+            candidates.extend([str(a) for a in aliases])
+        orig_id = event.get("original_app_user_id")
+        if orig_id:
+            candidates.append(str(orig_id))
+
+    for cand in candidates:
+        clean = cand.replace("hh_", "").replace("user_", "").replace("hh-", "").replace("user-", "").strip()
+        if clean.isdigit():
+            cand_int = int(clean)
+            user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (cand_int,))
+            if user and user.get("household_id"):
+                return user["household_id"]
+            hh = authmod._one(f"SELECT id FROM {authmod._HH} WHERE id = ?", (cand_int,))
+            if hh and hh.get("id"):
+                return hh["id"]
+    return None
+
+
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():
-    """Handle RevenueCat webhooks for downgrades on cancellation."""
+    """Handle RevenueCat webhooks for cross-platform (iOS, Android, Web/Stripe) subscriptions."""
     expected_token = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
     if expected_token:
         auth_header = request.headers.get("Authorization")
@@ -375,58 +401,97 @@ def revenuecat_webhook():
     data = request.get_json(silent=True) or {}
     event = data.get("event", {})
     evt_type = event.get("type")
+    uid = event.get("app_user_id")
+
+    print(f"[Webhook] Processing {evt_type} for app_user_id: {uid}")
+    hhid = _find_household_id_from_uid(uid, event)
+
+    if not hhid:
+        print(f"[Webhook] Could not resolve household_id for uid: {uid}, aliases: {event.get('aliases')}")
+        return jsonify({"ok": True, "warning": "Household not found"})
 
     if evt_type == "CANCELLATION":
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing CANCELLATION for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
-                    print(f"[Webhook] Marked household {hhid} as canceled")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing downgrade: {e}")
+        authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? WHERE id = ?", ("canceled", hhid))
+        print(f"[Webhook] Marked household {hhid} as canceled")
 
     elif evt_type == "EXPIRATION":
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing EXPIRATION for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    val = False
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "expired", hhid))
-                    print(f"[Webhook] Downgraded household {hhid} due to expiration")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing expiration: {e}")
-                
-    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE"]:
-        uid = event.get("app_user_id")
-        print(f"[Webhook] Processing {evt_type} for uid: {uid}")
-        if uid and uid.isdigit():
-            try:
-                uid_int = int(uid)
-                user = authmod._one(f"SELECT household_id FROM {authmod._USERS} WHERE id = ?", (uid_int,))
-                if user and user.get("household_id"):
-                    hhid = user["household_id"]
-                    val = True
-                    authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "active", hhid))
-                    print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
-                else:
-                    print(f"[Webhook] User {uid_int} not found or no household")
-            except Exception as e:
-                print(f"[Webhook] Error processing upgrade: {e}")
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (False, "expired", hhid))
+        print(f"[Webhook] Downgraded household {hhid} due to expiration")
+
+    elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE"]:
+        authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (True, "active", hhid))
+        print(f"[Webhook] Upgraded household {hhid} due to {evt_type}")
 
     return jsonify({"ok": True})
+
+
+@app.route("/api/billing/checkout", methods=["GET", "POST"])
+@require_user
+def billing_checkout():
+    """Generate or retrieve a Web Billing checkout URL for RevenueCat / Stripe."""
+    hhid = _hh()
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    pkg_type = request.args.get("package", "monthly").lower()
+    if request.is_json and request.get_json(silent=True):
+        pkg_type = request.get_json().get("package", pkg_type).lower()
+
+    host_url = request.host_url.rstrip("/")
+    success_redirect = f"{host_url}/settings?purchase=success"
+    cancel_redirect = f"{host_url}/settings?purchase=cancel"
+
+    monthly_url = os.environ.get("REVENUECAT_WEB_BILLING_MONTHLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_MONTHLY")
+    yearly_url = os.environ.get("REVENUECAT_WEB_BILLING_YEARLY_URL") or os.environ.get("REVENUECAT_WEB_BILLING_URL") or os.environ.get("STRIPE_CHECKOUT_URL_YEARLY")
+
+    target_url = yearly_url if pkg_type == "yearly" else monthly_url
+
+    if not target_url:
+        base_pay_url = os.environ.get("REVENUECAT_WEB_BILLING_BASE_URL", "https://pay.revenuecat.com/listmate-pro")
+        target_url = f"{base_pay_url}/{pkg_type}"
+
+    sep = "&" if "?" in target_url else "?"
+    checkout_url = f"{target_url}{sep}app_user_id={user_id}&household_id={hhid}&success_url={success_redirect}&cancel_url={cancel_redirect}"
+
+    return jsonify({"ok": True, "checkout_url": checkout_url, "package": pkg_type})
+
+
+@app.route("/api/billing/portal", methods=["GET", "POST"])
+@require_user
+def billing_portal():
+    """Retrieve Stripe Customer Portal management URL via RevenueCat REST API or env override."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    stripe_portal_env = os.environ.get("STRIPE_CUSTOMER_PORTAL_URL") or os.environ.get("STRIPE_PORTAL_URL")
+    if stripe_portal_env:
+        return jsonify({"ok": True, "portal_url": stripe_portal_env})
+
+    rc_secret = os.environ.get("REVENUECAT_SECRET_KEY")
+    if rc_secret:
+        try:
+            import urllib.request, json
+            req_url = f"https://api.revenuecat.com/v1/subscribers/{user_id}/management_url"
+            req = urllib.request.Request(
+                req_url,
+                headers={
+                    "Authorization": f"Bearer {rc_secret}",
+                    "Accept": "application/json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                m_url = res_data.get("management_url")
+                if m_url:
+                    return jsonify({"ok": True, "portal_url": m_url})
+        except Exception as e:
+            print(f"[Billing Portal] Error fetching management URL: {e}")
+
+    fallback_url = "https://billing.stripe.com/p/login/listmate"
+    return jsonify({"ok": True, "portal_url": fallback_url})
+
 
 @app.route("/api/settings/premium", methods=["GET", "POST"])
 @require_user

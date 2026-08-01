@@ -150,6 +150,7 @@
         </div>
         
         <button id="upgradeBtn" onclick="showPaywall()" style="display:none; margin-top:12px; width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.25);">🎁 Upgrade to Premium</button>
+        <button id="manageSubBtn" onclick="openCustomerPortal()" style="display:none; margin-top:12px; width:100%; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">💳 Manage Subscription</button>
     </div>
     <div class="success" id="premiumSuccess" style="margin-top:8px;"></div>
   </div>
@@ -245,7 +246,7 @@ let householdData = null;
   window.currentCfg = cfg;
 
   // Load household data
-  Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
+  Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]);
   // Load premium plan
   
   // Load dietary preferences
@@ -409,9 +410,18 @@ async function loadPremium() {
     }
     const badge = document.getElementById("planBadge");
     const upgradeBtn = document.getElementById("upgradeBtn");
+    const manageSubBtn = document.getElementById("manageSubBtn");
     const planName = document.getElementById("planName");
     const tierBadge = document.getElementById("tierBadge");
     
+    if (manageSubBtn) {
+      if (d.is_premium && !d.is_early_adopter) {
+        manageSubBtn.style.display = 'inline-block';
+      } else {
+        manageSubBtn.style.display = 'none';
+      }
+    }
+
     if (planName) {
       if (d.subscription_status === 'premium' || d.subscription_status === 'active' || d.subscription_status === 'canceled') {
         planName.textContent = "🌟 ListMate Premium";
@@ -468,6 +478,100 @@ async function loadPremium() {
 
 let revenueCatOfferings = null;
 
+async function openCustomerPortal() {
+    try {
+        if (typeof toast !== "undefined") toast('Opening subscription portal...');
+        const r = await fetch('/api/billing/portal');
+        const d = await r.json();
+        if (d.ok && d.portal_url) {
+            window.location.href = d.portal_url;
+        } else {
+            alert(d.error || 'Unable to open portal link.');
+        }
+    } catch (e) {
+        console.error('Portal error:', e);
+        alert('Failed to connect to subscription portal.');
+    }
+}
+
+async function startWebCheckout(pkgType) {
+    try {
+        if (typeof toast !== "undefined") toast('Preparing checkout...');
+        const r = await fetch(`/api/billing/checkout?package=${pkgType}`);
+        const d = await r.json();
+        if (d.ok && d.checkout_url) {
+            window.location.href = d.checkout_url;
+        } else {
+            alert(d.error || 'Failed to generate checkout link.');
+        }
+    } catch (e) {
+        console.error('Checkout error:', e);
+        alert('Error connecting to checkout.');
+    }
+}
+
+async function checkPurchaseReturn() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('purchase') === 'success' || urlParams.get('checkout') === 'success') {
+        let modal = document.getElementById('verifyingPurchaseModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'verifyingPurchaseModal';
+            modal.className = 'modal-overlay active';
+            modal.innerHTML = `
+                <div class="modal-sheet" style="text-align:center; padding:28px 20px; border-radius:20px; max-width:380px; margin:auto;">
+                    <div style="width:38px; height:38px; border:3px solid #e2e8f0; border-top:3px solid #059669; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 16px auto;"></div>
+                    <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:700; color:#0f172a;">Verifying Purchase...</h3>
+                    <p id="verifyingStatusText" style="font-size:13px; color:#64748b; margin:0 0 16px 0; line-height:1.5;">
+                        We are confirming your subscription with Stripe. This usually takes just a few seconds.
+                    </p>
+                    <button id="refreshPurchaseBtn" onclick="pollForPremiumStatus(10)" style="display:none; width:100%; background:#059669; color:#fff; border:none; padding:12px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">
+                        🔄 Refresh Status
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.classList.add('active');
+        }
+        pollForPremiumStatus(1);
+    }
+}
+
+async function pollForPremiumStatus(attemptCount = 1) {
+    const maxAttempts = 10;
+    try {
+        const res = await fetch('/api/settings/premium');
+        const data = await res.json();
+        if (data.is_premium || data.subscription_status === 'active' || data.subscription_status === 'premium') {
+            const modal = document.getElementById('verifyingPurchaseModal');
+            if (modal) modal.classList.remove('active');
+            
+            const cleanUrl = new URL(window.location);
+            cleanUrl.searchParams.delete('purchase');
+            cleanUrl.searchParams.delete('checkout');
+            window.history.replaceState({}, '', cleanUrl);
+
+            if (typeof toast !== 'undefined') toast('⭐ Welcome to ListMate Pro! Purchase Verified.');
+            else alert('⭐ Welcome to ListMate Pro! Purchase Verified.');
+
+            if (typeof loadPremium === 'function') loadPremium();
+            if (typeof loadHousehold === 'function') loadHousehold();
+            return;
+        }
+    } catch (e) {
+        console.warn('[Poll Premium] Attempt error:', e);
+    }
+
+    if (attemptCount < maxAttempts) {
+        setTimeout(() => pollForPremiumStatus(attemptCount + 1), 2000);
+    } else {
+        const txt = document.getElementById('verifyingStatusText');
+        if (txt) txt.innerText = "Your payment was received by Stripe. Activation is completing in the background.";
+        const btn = document.getElementById('refreshPurchaseBtn');
+        if (btn) btn.style.display = 'block';
+    }
+}
 
 async function restorePurchases() {
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
@@ -500,6 +604,7 @@ async function restorePurchases() {
         console.error(e);
     }
 }
+
 async function purchasePackage(index) {
     if (!revenueCatOfferings || !revenueCatOfferings[index]) return;
     const packageToBuy = revenueCatOfferings[index];
@@ -535,12 +640,16 @@ async function purchasePackage(index) {
 }
 
 async function showPaywall() {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
+    const isNativeCapacitor = window.Capacitor && 
+        window.Capacitor.Plugins && 
+        window.Capacitor.Plugins.Purchases && 
+        (window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web'));
+
+    if (isNativeCapacitor) {
         try {
             const cfg = window.currentCfg || {};
             const rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
-            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
-            if (isNative && rcKey.startsWith('test_')) {
+            if (rcKey.startsWith('test_')) {
                 alert('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
                 return;
             }
@@ -590,7 +699,35 @@ async function showPaywall() {
             }
         }
     } else {
-        alert('In-app purchases are only available in the mobile app.');
+        // Web Billing Paywall
+        const container = document.getElementById('paywallPackages');
+        if (container) {
+            container.innerHTML = `
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:8px; text-align:left;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="font-size:16px; color:#0f172a;">Monthly Plan</strong>
+                    <span style="font-size:16px; font-weight:700; color:#059669;">$2.99 / mo</span>
+                  </div>
+                  <p style="font-size:12px; color:#64748b; margin:0 0 12px 0;">Billed monthly. Cancel anytime in Stripe Customer Portal.</p>
+                  <button onclick="startWebCheckout('monthly')" style="width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.2);">
+                    Subscribe Monthly ($2.99/mo)
+                  </button>
+                </div>
+                <div style="background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left; position:relative;">
+                  <span style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase;">Best Value</span>
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="font-size:16px; color:#0f172a;">Annual Plan</strong>
+                    <span style="font-size:16px; font-weight:700; color:#059669;">$29.99 / yr</span>
+                  </div>
+                  <p style="font-size:12px; color:#64748b; margin:0 0 12px 0;">Save over 16%! Billed annually.</p>
+                  <button onclick="startWebCheckout('yearly')" style="width:100%; background:linear-gradient(135deg, #047857, #059669); color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(5,150,105,0.25);">
+                    Subscribe Yearly ($29.99/yr)
+                  </button>
+                </div>
+            `;
+            const pModal = document.getElementById('paywallModal');
+            if (pModal) pModal.classList.add('active');
+        }
     }
 }
 
