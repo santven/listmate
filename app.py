@@ -1272,7 +1272,7 @@ def add_recipe_to_list_endpoint():
 
             # Ensure store item exists for auto-complete, and copy its category
             cat_row = db.execute(
-                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
                 (store_id, hhid, name),
             ).fetchone()
 
@@ -1291,7 +1291,7 @@ def add_recipe_to_list_endpoint():
                     pass
 
             existing = db.execute(
-                "SELECT id, quantity, recipe_tag FROM list_items WHERE household_id = ? AND store_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                "SELECT id, quantity, recipe_tag FROM list_items WHERE household_id = ? AND store_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
                 (hhid, store_id, name)
             ).fetchall()
 
@@ -1379,13 +1379,19 @@ def init_data():
     db = get_db()
     hh = _hh()
     try:
-        stores = db.execute("SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)).fetchall()
+        # Ensure General List exists
+        gl = db.execute("SELECT id FROM stores WHERE household_id = ? AND name = 'General List'", (hh,)).fetchone()
+        if not gl:
+            db.execute("INSERT INTO stores (household_id, name) VALUES (?, 'General List')", (hh,))
+            db.commit()
+
+        stores = db.execute("SELECT * FROM stores WHERE household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)).fetchall()
         list_items = db.execute('''
             SELECT l.*, s.name as store_name, s.category_order as store_category_order
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
         ''', (hh, hh)).fetchall()
         recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hh,)).fetchall()
         
@@ -1419,7 +1425,7 @@ def list_stores():
     try:
         hh = _hh()
         stores = db.execute(
-            "SELECT * FROM stores WHERE household_id = ? ORDER BY name", (hh,)
+            "SELECT * FROM stores WHERE household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)
         ).fetchall()
         return jsonify([dict(s) for s in stores])
     except Exception as e:
@@ -1564,7 +1570,7 @@ def add_store_item(store_id):
             return jsonify({"error": "store not found"}), 404
 
         existing = db.execute(
-            "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+            "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
             (store_id, _hh(), name),
         ).fetchone()
         if existing:
@@ -1584,7 +1590,7 @@ def add_store_item(store_id):
         )
         db.commit()
 
-        row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+        row = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
                          (store_id, _hh(), name)).fetchone()
         return jsonify({"ok": True, "id": row["id"] if row else 0})
     finally:
@@ -1663,12 +1669,94 @@ def list_grocery():
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
         """, (_hh(), _hh())).fetchall()
         return jsonify([dict(r) for r in items])
     finally:
         db.close()
 
+
+@app.route("/api/item_frequencies", methods=["GET"])
+@require_user
+def item_frequencies():
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({})
+    db = get_db()
+    try:
+        res = db.execute("""
+            SELECT l.store_id, COUNT(*) as c
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id
+            WHERE l.household_id = ? AND LOWER(TRIM(l.name)) = LOWER(TRIM(?)) AND l.purchased = TRUE AND s.name != 'General List'
+            GROUP BY l.store_id
+        """, (_hh(), name)).fetchall()
+        return jsonify({r["store_id"]: r["c"] for r in res})
+    finally:
+        db.close()
+
+@app.route("/api/search_catalog", methods=["GET"])
+@require_user
+def search_catalog():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify([])
+        
+    db = get_db()
+    hh = _hh()
+    try:
+        # Get matching items across all stores for this household
+        # Only suggest from actual stores (not General List, or maybe include General List if they want?)
+        # Let's include all stores.
+        items = db.execute('''
+            SELECT si.id, si.name, si.store_id, s.name as store_name,
+              (SELECT COUNT(*) FROM list_items li JOIN stores st ON li.store_id = st.id WHERE li.store_id = si.store_id AND li.household_id = si.household_id AND LOWER(li.name) = LOWER(si.name) AND li.purchased = TRUE AND st.name != 'General List') as purchased_count
+            FROM store_items si
+            JOIN stores s ON si.store_id = s.id
+            WHERE si.household_id = ? AND si.name ILIKE ?
+            ORDER BY si.name, s.name
+            LIMIT 20
+        ''', (hh, f"%{query}%")).fetchall()
+        
+        # We need to deduplicate by name to show unique items first, or maybe group by name
+        res = []
+        seen = set()
+        for i in items:
+            key = (i["name"].lower(), i["store_id"])
+            if key not in seen:
+                seen.add(key)
+                res.append(dict(i))
+                
+        return jsonify(res)
+    finally:
+        db.close()
+
+@app.route("/api/suggest_store", methods=["GET"])
+@require_user
+def suggest_store():
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"store_id": None})
+    
+    db = get_db()
+    hh = _hh()
+    try:
+        row = db.execute('''
+            SELECT s.id, s.name, COUNT(*) as c
+            FROM list_items l
+            JOIN stores s ON l.store_id = s.id
+            WHERE l.household_id = ? AND l.name ILIKE ? AND s.name != 'General List'
+            GROUP BY s.id, s.name
+            ORDER BY c DESC
+            LIMIT 1
+        ''', (hh, name)).fetchone()
+        
+        if row:
+            return jsonify({"store_id": row["id"], "store_name": row["name"]})
+        else:
+            return jsonify({"store_id": None})
+    finally:
+        db.close()
 
 @app.route("/api/list", methods=["POST"])
 @require_user
@@ -1689,7 +1777,7 @@ def add_to_list():
             return jsonify({"error": "store not found"}), 404
 
         existing = db.execute(
-            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
             (store_id, _hh(), name),
         ).fetchone()
         if existing:
@@ -1697,7 +1785,7 @@ def add_to_list():
 
         # Ensure store item exists for auto-complete, and copy its category
         cat_row = db.execute(
-            "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+            "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
             (store_id, _hh(), name),
         ).fetchone()
         existing_category = (cat_row["category"] if cat_row else "")
@@ -1721,7 +1809,7 @@ def add_to_list():
         )
         db.commit()
 
-        row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
+        row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
                          (store_id, _hh(), name)).fetchone()
         return jsonify({"ok": True, "id": row["id"] if row else 0})
     except Exception as e:
@@ -1835,14 +1923,14 @@ def move_list_item(item_id):
         )
 
         # Also ensure the item exists in the target store's catalog for autocomplete
-        try:
+        exists = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", 
+                            (target_store_id, _hh(), item["name"])).fetchone()
+        if not exists:
             db.execute(
-                "INSERT INTO store_items (household_id, store_id, name) VALUES (?, ?, ?)",
-                (_hh(), target_store_id, item["name"]),
+                "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                (_hh(), target_store_id, item["name"], item.get("category", "")),
             )
-        except Exception:
-            pass
-
+        
         db.commit()
         return jsonify({"ok": True})
     except Exception as e:
@@ -1894,12 +1982,12 @@ def sync_offline_actions():
                     store = db.execute("SELECT id FROM stores WHERE id = ? AND household_id = ?", (store_id, hh_id)).fetchone()
                     if store:
                         existing = db.execute(
-                            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?) AND purchased = FALSE",
+                            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
                             (store_id, hh_id, name)
                         ).fetchone()
                         if not existing:
                             cat_row = db.execute(
-                                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(name) = LOWER(?)",
+                                "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
                                 (store_id, hh_id, name)
                             ).fetchone()
                             existing_category = cat_row["category"] if cat_row else categorize(name)
@@ -1951,7 +2039,7 @@ def sync_offline_actions():
             FROM list_items l
             JOIN stores s ON l.store_id = s.id AND s.household_id = ?
             WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
         """, (hh_id, hh_id)).fetchall()
 
         return jsonify({"ok": True, "synced_count": applied_count, "list": [dict(r) for r in items]})

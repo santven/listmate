@@ -65,6 +65,7 @@
   .modal-store-option:hover, .modal-store-option:active { background: #e8f5e9; }
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
+  .quick-add-item:hover, .quick-add-item:active { background: #f0f4ed; }
   .visit-toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
   .visit-toast.show { display: block; }
   .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
@@ -195,6 +196,12 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
       <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
         🍳 Recipe Planner
       </button>
+    </div>
+
+    <div class="quick-add-wrap" style="position:relative; margin-bottom:16px;">
+      <input type="text" id="quickAddInput" placeholder="Quick add (e.g. Milk)..." autocomplete="off" style="width:100%; padding:14px; font-size:16px; border-radius:12px; border:2px solid var(--green); outline:none; box-shadow:0 2px 8px rgba(16,185,129,0.1);">
+      <button id="btnQuickAdd" style="position:absolute; right:8px; top:8px; bottom:8px; background:var(--green); color:#fff; border:none; padding:0 16px; border-radius:8px; font-weight:600; cursor:pointer;">Add</button>
+      <div id="quickAddDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:12px; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:100; max-height:250px; overflow-y:auto;"></div>
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
@@ -783,26 +790,41 @@ function renderHome() {
       return a.name.localeCompare(b.name);
     });
 
+    const isGeneral = ((storeMap[storeId] || storeName) === 'General List');
+    const moveBtnStyle = isGeneral ? 'color:#1b4332; font-weight:900; font-size:18px; background:#d8f3dc; border:1.5px solid #74c69d; border-radius:8px; padding:2px 8px; margin:0 4px; box-shadow:0 1px 4px rgba(0,0,0,0.18);' : '';
+    
     const itemsHtml = sortedItems.map(i => {
       return '<div class="item-row">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
         '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <span class="recipe-badge" style="display:inline-block; font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:6px; margin-left:6px; font-weight:600; vertical-align:middle;">🍳 ' + i.recipe_tag + '</span>' : '') + '</div>' +
         '<div class="item-meta">by ' + i.added_by + '</div>' +
-        '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store">⇄</button>' +
+        '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store" style="' + moveBtnStyle + '">⇄</button>' +
         '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
         '</div>';
     }).join('');
 
+    let generalVerbiage = '';
+    if ((storeMap[storeId] || storeName) === 'General List') {
+      generalVerbiage = '<div style="font-size:12px; color:var(--muted); margin-top:-6px; margin-bottom:8px; font-weight:normal;">Items here can be moved to a specific store when you\'re ready.</div>';
+    }
+
     return '<div class="store-group">' +
       '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
       ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
-      '</div><div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
+      '</div>' + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
   }
   
   let html = '';
-  // Active items first
+  // Active items first, following the store order from API
+  stores.forEach(s => {
+    if (activeGroups[s.id]) {
+      html += renderGroup(s.id, activeGroups[s.id]);
+      delete activeGroups[s.id]; // mark as rendered
+    }
+  });
+  // Any leftover stores (should be none, but just in case)
   for(const [sid,items] of Object.entries(activeGroups)) {
     html += renderGroup(parseInt(sid), items);
   }
@@ -1209,8 +1231,21 @@ async function loadSuggestions(){
   }catch(e){}
 }
 
-async function addToList(sid, name, qty = '') {
+async function addToList(sid, name, qty = '', skipSuggest = false) {
   if (!canEditOffline()) return false;
+
+  const storeObj = stores.find(s=>s.id===sid);
+  if (storeObj && storeObj.name === 'General List' && !skipSuggest && navigator.onLine) {
+     try {
+       const sgRes = await fetch(API+'/suggest_store?name='+encodeURIComponent(name));
+       const sgData = await sgRes.json();
+       if (sgData.store_id && sgData.store_id !== sid) {
+         if (confirm(`You frequently buy "${name}" from ${sgData.store_name}. Add it there?`)) {
+            sid = sgData.store_id;
+         }
+       }
+     } catch(e) {}
+  }
 
   if (!navigator.onLine) {
     const storeName = (stores.find(s=>s.id===sid)||{}).name || 'Store';
@@ -1303,13 +1338,14 @@ async function toggleItem(id, showVisitPrompt = true) {
   const wasPurchased = item?.purchased;
   let needsVisitPrompt = false;
   let visitStoreName = '';
-  if (!wasPurchased && showVisitPrompt && item) {
+  const itemStore = stores.find(s=>s.id===item?.store_id);
+  if (!wasPurchased && showVisitPrompt && item && itemStore && itemStore.name !== 'General List') {
     try {
       const res = await fetch(API+'/stores/'+item.store_id+'/visit/today');
       const data = await res.json();
       if (!data.active) {
         needsVisitPrompt = true;
-        visitStoreName = stores.find(s=>s.id===item.store_id)?.name||'this store';
+        visitStoreName = itemStore.name || 'this store';
       }
     } catch(e){}
   }
@@ -1353,6 +1389,80 @@ async function deleteItem(id) {
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
 }
 
+let quickAddTimeout;
+$('#quickAddInput').addEventListener('input', () => {
+  clearTimeout(quickAddTimeout);
+  const q = $('#quickAddInput').value.trim();
+  const dropdown = $('#quickAddDropdown');
+  if (!q) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  quickAddTimeout = setTimeout(async () => {
+    try {
+      const res = await fetch(API + '/search_catalog?q=' + encodeURIComponent(q));
+      if (!res.ok) return;
+      const items = await res.json();
+      if (items.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+      }
+      dropdown.innerHTML = items.map(i => {
+        let badge = '';
+        if (i.store_name === 'General List') {
+          badge = '<span style="font-size:11px; color:var(--muted); font-style:italic; margin-right:6px;">can\'t decide yet</span>';
+        } else if (i.purchased_count > 10) {
+          badge = '<span style="font-size:11px; color:#10b981; font-weight:600; background:#d1fae5; padding:2px 6px; border-radius:6px; margin-right:6px;">Frequently purchased here</span>';
+        } else if (i.purchased_count > 2) {
+          badge = '<span style="font-size:11px; color:var(--muted); margin-right:6px;">' + i.purchased_count + ' times</span>';
+        }
+        return `<div class="quick-add-item" data-sid="${i.store_id}" data-name="${escapeHtml(i.name)}" style="padding:12px 16px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+           <span style="font-weight:500; color:var(--text);">${escapeHtml(i.name)}</span>
+           <div style="display:flex; align-items:center;">
+             ${badge}
+             <span style="font-size:12px; color:var(--muted); background:#f1f5f9; padding:2px 8px; border-radius:10px;">${escapeHtml(i.store_name)}</span>
+           </div>
+         </div>`
+      }).join('');
+      $$('.quick-add-item').forEach(el => el.addEventListener('click', async () => {
+        const sid = parseInt(el.dataset.sid);
+        const name = el.dataset.name;
+        dropdown.style.display = 'none';
+        $('#quickAddInput').value = '';
+        await addToList(sid, name, '', true); // skip suggest since explicit
+      }));
+      dropdown.style.display = 'block';
+    } catch(e) {}
+  }, 300);
+});
+
+$('#btnQuickAdd').addEventListener('click', async () => {
+  const name = $('#quickAddInput').value.trim();
+  if (!name) return;
+  
+  const gl = stores.find(s => s.name === 'General List');
+  if (!gl) { toast('General List missing'); return; }
+  
+  $('#btnQuickAdd').disabled = true;
+  $('#quickAddDropdown').style.display = 'none';
+  const added = await addToList(gl.id, name);
+  if (added) {
+    $('#quickAddInput').value = '';
+  }
+  $('#btnQuickAdd').disabled = false;
+});
+$('#quickAddInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('#btnQuickAdd').click();
+  }
+});
+document.addEventListener('click', e => {
+  if ($('.quick-add-wrap') && !$('.quick-add-wrap').contains(e.target)) {
+    if ($('#quickAddDropdown')) $('#quickAddDropdown').style.display = 'none';
+  }
+});
+
 $('#btnNewStore').addEventListener('click',async()=>{
   const name=$('#newStoreInput').value.trim(); if(!name)return;
   $('#btnNewStore').disabled=true;
@@ -1391,15 +1501,40 @@ async function clearList() {
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
 let moveItemId=null;
-function openMoveModal(itemId,itemName){
-  moveItemId=itemId;
-  const item=list.find(i=>i.id===itemId);
-  $('#moveItemLabel').textContent='"'+itemName+'" — currently in '+stores.find(s=>s.id===item.store_id)?.name;
-  $('#moveStoreList').innerHTML=stores
-    .map(s=>'<button class="modal-store-option'+(s.id===item.store_id?' current':'')+'" data-sid="'+s.id+'">'+escapeHtml(s.name)+'</button>')
-    .join('');
-  $$('#moveStoreList .modal-store-option').forEach(el=>el.addEventListener('click',()=>moveItem(parseInt(el.dataset.sid))));
+async function openMoveModal(itemId, itemName) {
+  moveItemId = itemId;
+  const item = list.find(i => i.id === itemId);
+  $('#moveItemLabel').textContent = '"' + itemName + '" — currently in ' + stores.find(s => s.id === item.store_id)?.name;
+  
+  function renderOptions(freqs = {}) {
+    $('#moveStoreList').innerHTML = stores
+      .map(s => {
+        const isCurrent = s.id === item.store_id;
+        const count = freqs[s.id] || 0;
+        let badge = '';
+        if (s.name === 'General List') {
+          badge = ' <span style="font-size:11px; color:var(--muted); font-style:italic;">(can\'t decide yet)</span>';
+        } else if (count > 10) {
+          badge = ' <span style="font-size:11px; color:#10b981; font-weight:600; background:#d1fae5; padding:2px 6px; border-radius:6px; margin-left:6px;">Frequently purchased here</span>';
+        } else if (count > 2) {
+          badge = ' <span style="font-size:11px; color:var(--muted); margin-left:6px;">(' + count + ' times)</span>';
+        }
+        return '<button class="modal-store-option' + (isCurrent ? ' current' : '') + '" data-sid="' + s.id + '">' + escapeHtml(s.name) + badge + '</button>';
+      })
+      .join('');
+    $$('#moveStoreList .modal-store-option').forEach(el => el.addEventListener('click', () => moveItem(parseInt(el.dataset.sid))));
+  }
+  
+  renderOptions();
   $('#moveModal').classList.add('active');
+
+  try {
+    const res = await fetch(API + '/item_frequencies?name=' + encodeURIComponent(itemName));
+    if (res.ok) {
+      const freqs = await res.json();
+      renderOptions(freqs);
+    }
+  } catch(e) {}
 }
 
 async function moveItem(targetStoreId) {
