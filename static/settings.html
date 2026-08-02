@@ -170,6 +170,7 @@
         <div>
           <div style="font-weight:600; font-size:13px; color:#1f2937;">AI Recipe Planner</div>
           <div style="font-size:11px; color:#6b7280; margin-top:2px; line-height:1.35;">Weekly meal plans & custom recipes using your dietary preferences.</div>
+          <button id="btnSettingsRecipePlanner" onclick="openRecipePlanner()" style="display:none; margin-top:8px; width:100%; background:var(--green); color:#fff; border:none; padding:8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;">🍳 Open Recipe Planner</button>
         </div>
       </div>
 
@@ -487,6 +488,11 @@ async function loadPremium() {
         badge.style.display = 'none';
         if (upgradeBtn) upgradeBtn.style.display = 'inline-block';
       }
+      
+      const btnPlanner = document.getElementById("btnSettingsRecipePlanner");
+      if (btnPlanner) {
+        btnPlanner.style.display = (d.is_premium) ? 'block' : 'none';
+      }
     }
     
     // Delete account button logic for premium users
@@ -509,6 +515,11 @@ async function loadPremium() {
 }
 
 let revenueCatOfferings = null;
+
+function openRecipePlanner() {
+    localStorage.setItem('open_recipes', '1');
+    window.location.href = '/';
+}
 
 async function openCustomerPortal() {
     try {
