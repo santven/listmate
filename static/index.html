@@ -1578,7 +1578,14 @@ async function moveItem(targetStoreId) {
   if (!navigator.onLine) {
     const item = list.find(i => String(i.id) === String(moveItemId));
     if (item) {
-      item.store_id = targetStoreId;
+      // Check if target store already has this exact item active (unpurchased)
+      const existing = list.find(i => String(i.store_id) === String(targetStoreId) && i.name.toLowerCase().trim() === item.name.toLowerCase().trim() && !i.purchased);
+      if (existing) {
+        // Deduplicate: remove the original item
+        list = list.filter(i => String(i.id) !== String(moveItemId));
+      } else {
+        item.store_id = targetStoreId;
+      }
       saveCache();
       $('#moveModal').classList.remove('active');
       toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');

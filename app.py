@@ -1916,11 +1916,24 @@ def move_list_item(item_id):
         if not target:
             return jsonify({"error": "target store not found"}), 404
 
-        # Move the item
-        db.execute(
-            "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
-            (target_store_id, item_id, _hh()),
-        )
+        # Check if target store already has this exact item active (unpurchased)
+        existing_list_item = db.execute(
+            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
+            (target_store_id, _hh(), item["name"])
+        ).fetchone()
+
+        if existing_list_item:
+            # Deduplicate: just delete the original item being moved
+            db.execute(
+                "DELETE FROM list_items WHERE id = ? AND household_id = ?",
+                (item_id, _hh())
+            )
+        else:
+            # Move the item
+            db.execute(
+                "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
+                (target_store_id, item_id, _hh()),
+            )
 
         # Also ensure the item exists in the target store's catalog for autocomplete
         exists = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", 
