@@ -225,8 +225,8 @@ def _clear(): session.pop(COOKIE_NAME, None)
 def _get():
     s = session.get(COOKIE_NAME)
     if not s:
-        # Always bypass auth in dev server by forcing is_dev=True
-        is_dev = True 
+        is_dev = not bool(os.environ.get("DATABASE_URL")) and "RENDER" not in os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")
+         
         if is_dev:
             s = {"user_id": 1, "email": "dev@listmate.local", "name": "Dev User", "household_id": 1, "household_name": "Dev Household"}
             session[COOKIE_NAME] = s
