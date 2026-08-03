@@ -273,7 +273,7 @@ async function loadHousehold() {
       if (householdData.is_owner) {
           banner.innerHTML = `Your Free plan includes 1 active member. Your additional household members currently have <b>Read-Only</b> access. <a href='javascript:void(0)' onclick='document.getElementById("premiumModal").classList.add("active")' style='color:#b67c00; font-weight:bold;'>Upgrade to Pro</a> to resume real-time collaboration.`;
       } else {
-          banner.innerHTML = "Live household sync is paused because your household is on the Free plan. You currently have <b>Read-Only</b> access.<br><br><button onclick='spinOffHousehold()' style='background:var(--card); color:var(--text); border:1px solid var(--border); padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer;'>Spin off Personal Household</button>";
+          banner.innerHTML = "Live household sync is paused because your household is on the Free plan. You currently have <b>Read-Only</b> access.<br><br><button onclick='showSpinOffModal()' style='background:var(--card); color:var(--text); border:1px solid var(--border); padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer;'>Spin off Personal Household</button>";
       }
       const titleContainer = document.getElementById('householdTitle').parentNode;
       titleContainer.parentNode.insertBefore(banner, titleContainer.nextSibling);
@@ -901,19 +901,40 @@ window.addEventListener('click', e => {
   }
 });
 
-async function spinOffHousehold() {
-  if (!confirm('This will create a new personal household for you. You will lose access to the current household. Continue?')) return;
+function showSpinOffModal() {
+  const modal = document.getElementById('spinOffModal');
+  if (modal) modal.classList.add('active');
+  const readOnlyModal = document.getElementById('readOnlyModal');
+  if (readOnlyModal) readOnlyModal.classList.remove('active');
+}
+
+async function executeSpinOff() {
+  const nameInput = document.getElementById('spinOffName');
+  const name = nameInput ? nameInput.value.trim() : '';
+  const btn = document.getElementById('btnExecuteSpinOff');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = 'Creating...';
+  btn.disabled = true;
+  
   try {
-    const res = await fetch('/api/auth/household/spinoff', { method: 'POST' });
+    const res = await fetch('/api/auth/household/spinoff', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
     const data = await res.json();
     if (res.ok) {
-      window.location.reload();
+      window.location.href = '/settings';
     } else {
       alert(data.error || 'Failed to spin off');
+      btn.innerHTML = originalText;
+      btn.disabled = false;
     }
   } catch (e) {
     console.error(e);
     alert('Network error');
+    btn.innerHTML = originalText;
+    btn.disabled = false;
   }
 }
 
@@ -921,19 +942,40 @@ async function spinOffHousehold() {
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});
-async function spinOffHousehold() {
-  if (!confirm('This will create a new personal household for you. You will lose access to the current household. Continue?')) return;
+function showSpinOffModal() {
+  const modal = document.getElementById('spinOffModal');
+  if (modal) modal.classList.add('active');
+  const readOnlyModal = document.getElementById('readOnlyModal');
+  if (readOnlyModal) readOnlyModal.classList.remove('active');
+}
+
+async function executeSpinOff() {
+  const nameInput = document.getElementById('spinOffName');
+  const name = nameInput ? nameInput.value.trim() : '';
+  const btn = document.getElementById('btnExecuteSpinOff');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = 'Creating...';
+  btn.disabled = true;
+  
   try {
-    const res = await fetch('/api/auth/household/spinoff', { method: 'POST' });
+    const res = await fetch('/api/auth/household/spinoff', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
     const data = await res.json();
     if (res.ok) {
-      window.location.reload();
+      window.location.href = '/settings';
     } else {
       alert(data.error || 'Failed to spin off');
+      btn.innerHTML = originalText;
+      btn.disabled = false;
     }
   } catch (e) {
     console.error(e);
     alert('Network error');
+    btn.innerHTML = originalText;
+    btn.disabled = false;
   }
 }
 

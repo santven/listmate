@@ -453,18 +453,40 @@ function enforceReadOnly() {
   return false;
 }
 
-async function spinOffHousehold() {
-  if (!confirm('This will create a new personal household for you. You will lose access to the current household. Continue?')) return;
+function showSpinOffModal() {
+  const modal = document.getElementById('spinOffModal');
+  if (modal) modal.classList.add('active');
+  const readOnlyModal = document.getElementById('readOnlyModal');
+  if (readOnlyModal) readOnlyModal.classList.remove('active');
+}
+
+async function executeSpinOff() {
+  const nameInput = document.getElementById('spinOffName');
+  const name = nameInput ? nameInput.value.trim() : '';
+  const btn = document.getElementById('btnExecuteSpinOff');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = 'Creating...';
+  btn.disabled = true;
+  
   try {
-    const res = await fetch('/api/auth/household/spinoff', { method: 'POST' });
+    const res = await fetch('/api/auth/household/spinoff', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
     const data = await res.json();
     if (res.ok) {
       window.location.href = '/settings';
     } else {
       alert(data.error || 'Failed to spin off');
+      btn.innerHTML = originalText;
+      btn.disabled = false;
     }
   } catch (e) {
+    console.error(e);
     alert('Network error');
+    btn.innerHTML = originalText;
+    btn.disabled = false;
   }
 }
 
@@ -2873,10 +2895,8 @@ async function deleteSavedRecipe(id) {
       You currently have <b>Read-Only</b> access.
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <button onclick="location.href='/settings'" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
-        Notify Owner
-      </button>
-      <button onclick="spinOffHousehold()" style="background:var(--card); color:var(--text); border:1px solid var(--border); padding:14px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer;">
+
+      <button onclick="showSpinOffModal()" style="background:var(--card); color:var(--text); border:1px solid var(--border); padding:14px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer;">
         Spin off Personal Household
       </button>
       <button onclick="document.getElementById('readOnlyModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">Close</button>

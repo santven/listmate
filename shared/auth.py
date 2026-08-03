@@ -845,8 +845,11 @@ def register_auth_routes(app):
         if not status or not status["is_read_only"]:
             return jsonify({"error": "Spin-off is only for read-only secondary members."}), 400
             
-        user = _one(f"SELECT name FROM {_USERS} WHERE id = ?", (uid,))
-        new_name = user["name"] + "'s Household"
+        data = request.get_json(silent=True) or {}
+        new_name = data.get("name")
+        if not new_name:
+            user = _one(f"SELECT name FROM {_USERS} WHERE id = ?", (uid,))
+            new_name = user["name"] + "'s Household" if user and user.get("name") else "My Personal Household"
         
         # Create new household without premium/trial
         import secrets
