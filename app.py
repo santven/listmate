@@ -1212,7 +1212,14 @@ def recipes_endpoint():
     db = get_db()
     try:
         if request.method == "GET":
-            rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hhid,)).fetchall()
+            hh_status = authmod.get_household_status()
+            is_read_only = hh_status.get("is_read_only") if hh_status else False
+            downgraded_at = hh_status.get("downgraded_at") if hh_status else None
+            
+            if is_read_only and downgraded_at:
+                rows = db.execute("SELECT * FROM recipes WHERE household_id = ? AND created_at <= ? ORDER BY id DESC", (hhid, downgraded_at)).fetchall()
+            else:
+                rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hhid,)).fetchall()
             recipes = []
             for r in rows:
                 rec = dict(r)
@@ -1426,7 +1433,10 @@ def init_data():
                 WHERE l.household_id = %s
                 ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
             ''', (hh, hh)).fetchall()
-        recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hh,)).fetchall()
+        if is_read_only and downgraded_at:
+            recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? AND created_at <= ? ORDER BY id DESC", (hh, downgraded_at)).fetchall()
+        else:
+            recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hh,)).fetchall()
         
         recipes = []
         import json
