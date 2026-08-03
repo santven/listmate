@@ -2791,5 +2791,24 @@ async function deleteSavedRecipe(id) {
     }
   })();
 </script>
+
+<div id="readOnlyModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Live Sync Paused</h3>
+      <button class="modal-close" onclick="$('#readOnlyModal').classList.remove('active')">&times;</button>
+    </div>
+    <div class="modal-body" style="text-align:center; padding: 20px;">
+      <div style="font-size: 3rem; margin-bottom:10px;">⏸️</div>
+      <p style="margin-bottom: 20px; color: var(--text-secondary);">
+        Live household sync is paused because your household is on the Free plan. 
+        You currently have <b>Read-Only</b> access.
+      </p>
+      <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="location.href='/settings'">Notify Owner</button>
+      <button class="btn btn-secondary" style="width:100%;" onclick="spinOffHousehold()">Spin off Personal Household</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

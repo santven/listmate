@@ -1378,21 +1378,33 @@ register_auth_routes(app)
 def init_data():
     db = get_db()
     hh = _hh()
+    hh_status = authmod.get_household_status()
+    is_read_only = hh_status.get("is_read_only") if hh_status else False
+    downgraded_at = hh_status.get("downgraded_at") if hh_status else None
+    
     try:
-        # Ensure General List exists
-        gl = db.execute("SELECT id FROM stores WHERE household_id = ? AND name = 'General List'", (hh,)).fetchone()
+        gl = db.execute("SELECT id FROM stores WHERE household_id = %s AND name = 'General List'", (hh,)).fetchone()
         if not gl:
-            db.execute("INSERT INTO stores (household_id, name) VALUES (?, 'General List')", (hh,))
-            db.commit()
-
-        stores = db.execute("SELECT * FROM stores WHERE household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)).fetchall()
-        list_items = db.execute('''
-            SELECT l.*, s.name as store_name, s.category_order as store_category_order
-            FROM list_items l
-            JOIN stores s ON l.store_id = s.id AND s.household_id = ?
-            WHERE l.household_id = ?
-            ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
-        ''', (hh, hh)).fetchall()
+            db.execute("INSERT INTO stores (household_id, name) VALUES (%s, 'General List')", (hh,))
+        
+        if is_read_only and downgraded_at:
+            stores = db.execute("SELECT * FROM stores WHERE household_id = %s AND (created_at <= %s OR name = 'General List') ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh, downgraded_at)).fetchall()
+            list_items = db.execute('''
+                SELECT l.*, s.name as store_name, s.category_order as store_category_order
+                FROM list_items l
+                JOIN stores s ON l.store_id = s.id AND s.household_id = %s
+                WHERE l.household_id = %s AND l.added_at <= %s
+                ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ''', (hh, hh, downgraded_at)).fetchall()
+        else:
+            stores = db.execute("SELECT * FROM stores WHERE household_id = %s ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)).fetchall()
+            list_items = db.execute('''
+                SELECT l.*, s.name as store_name, s.category_order as store_category_order
+                FROM list_items l
+                JOIN stores s ON l.store_id = s.id AND s.household_id = %s
+                WHERE l.household_id = %s
+                ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
+            ''', (hh, hh)).fetchall()
         recipes_rows = db.execute("SELECT * FROM recipes WHERE household_id = ? ORDER BY id DESC", (hh,)).fetchall()
         
         recipes = []
@@ -1410,7 +1422,8 @@ def init_data():
         return jsonify({
             "stores": [dict(s) for s in stores],
             "list": [dict(r) for r in list_items],
-            "recipes": recipes
+            "recipes": recipes,
+            "is_read_only": is_read_only
         })
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -1974,6 +1987,12 @@ def sync_offline_actions():
     actions = data.get("actions", [])
     if not isinstance(actions, list):
         return jsonify({"error": "actions array required"}), 400
+        
+    hh_status = authmod.get_household_status()
+    if request.method == "POST":
+        if hh_status and hh_status.get("is_read_only"):
+            return jsonify({"error": "Live household sync is paused because your household is on the Free plan. Only the owner can make changes, or you can spin off into a personal household.", "code": "read_only"}), 403
+
 
     db = get_db()
     applied_count = 0

@@ -138,7 +138,7 @@ def _init_schema():
             household_id INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         """CREATE TABLE IF NOT EXISTS auth_households (
-            id SERIAL PRIMARY KEY, name TEXT NOT NULL,
+            id SERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id INTEGER, downgraded_at TIMESTAMP,
             invite_code TEXT UNIQUE,
             dietary_restrictions TEXT DEFAULT '',
             zip_code TEXT DEFAULT '',
@@ -169,6 +169,44 @@ def _init_schema():
     ]:
         _run(stmt)
     for stmt in [
+        
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS owner_id INTEGER",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS downgraded_at TIMESTAMP",
+        "UPDATE auth_households h SET owner_id = (SELECT id FROM auth_users u WHERE u.household_id = h.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL",
+        """CREATE TABLE IF NOT EXISTS household_subscription_history (
+            id SERIAL PRIMARY KEY,
+            household_id INTEGER NOT NULL REFERENCES auth_households(id),
+            is_premium BOOLEAN,
+            subscription_status TEXT,
+            subscription_ends_at TIMESTAMP,
+            trial_ends_at TIMESTAMP,
+            downgraded_at TIMESTAMP,
+            changed_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE OR REPLACE FUNCTION log_hh_sub_history() RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' OR OLD.is_premium IS DISTINCT FROM NEW.is_premium OR OLD.subscription_status IS DISTINCT FROM NEW.subscription_status OR OLD.subscription_ends_at IS DISTINCT FROM NEW.subscription_ends_at OR OLD.trial_ends_at IS DISTINCT FROM NEW.trial_ends_at OR OLD.downgraded_at IS DISTINCT FROM NEW.downgraded_at THEN
+                INSERT INTO household_subscription_history (household_id, is_premium, subscription_status, subscription_ends_at, trial_ends_at, downgraded_at)
+                VALUES (NEW.id, NEW.is_premium, NEW.subscription_status, NEW.subscription_ends_at, NEW.trial_ends_at, NEW.downgraded_at);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql""",
+        """DROP TRIGGER IF EXISTS trg_log_hh_sub_history ON auth_households""",
+        """CREATE TRIGGER trg_log_hh_sub_history AFTER INSERT OR UPDATE OF is_premium, subscription_status, subscription_ends_at, trial_ends_at, downgraded_at ON auth_households FOR EACH ROW EXECUTE FUNCTION log_hh_sub_history()""",
+        """CREATE OR REPLACE FUNCTION update_downgraded_at() RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.is_premium = TRUE OR NEW.subscription_status = 'trial' THEN
+                NEW.downgraded_at = NULL;
+            ELSIF (NEW.is_premium = FALSE AND OLD.is_premium = TRUE) OR (NEW.subscription_status IN ('expired', 'free', 'canceled') AND OLD.subscription_status IN ('premium', 'active', 'trial')) THEN
+                NEW.downgraded_at = COALESCE(NEW.downgraded_at, NOW());
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql""",
+        """DROP TRIGGER IF EXISTS trg_update_downgraded_at ON auth_households""",
+        """CREATE TRIGGER trg_update_downgraded_at BEFORE UPDATE ON auth_households FOR EACH ROW EXECUTE FUNCTION update_downgraded_at()""",
+
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
@@ -235,6 +273,49 @@ def _get():
         else:
             return None
     return s
+
+def get_household_status():
+    hhid = get_household_id()
+    uid = get_user_id()
+    if not hhid or not uid: return None
+    hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
+    if not hh: return None
+    is_prem = bool(hh.get("is_premium", False))
+    sub_status = hh.get("subscription_status", "free")
+    trial_ends_at = hh.get("trial_ends_at")
+    
+    if sub_status == 'trial' and trial_ends_at:
+        import datetime
+        try:
+            t_end = trial_ends_at
+            if isinstance(t_end, str):
+                if 'T' in t_end:
+                    t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                else:
+                    t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+            now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+            if t_end > now:
+                is_prem = True
+        except:
+            pass
+            
+    members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,))
+    is_read_only = False
+    over_limit = False
+    if not is_prem and len(members) > 1:
+        over_limit = True
+        if hh.get("owner_id") != uid:
+            is_read_only = True
+            
+    return {
+        "is_premium": is_prem,
+        "subscription_status": sub_status,
+        "is_read_only": is_read_only,
+        "over_limit": over_limit,
+        "downgraded_at": hh.get("downgraded_at"),
+        "owner_id": hh.get("owner_id")
+    }
+
 def is_logged_in(): 
     s = _get()
     return bool(s)
@@ -282,7 +363,7 @@ def register_auth_routes(app):
                 import secrets
                 code = secrets.token_hex(4).upper()
                 prem_val = True
-                _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                 hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                 hh_id = hh["id"] if hh else 1
                 hh_name = hh.get("name", "Root Household") if hh else "Root Household"
@@ -337,7 +418,7 @@ def register_auth_routes(app):
                     import secrets
                     code = secrets.token_hex(4).upper()
                     prem_val = True
-                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -440,7 +521,7 @@ def register_auth_routes(app):
                     import secrets
                     code = secrets.token_hex(4).upper()
                     prem_val = True
-                    _exec(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
+                    _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
                     hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
@@ -616,41 +697,33 @@ def register_auth_routes(app):
     def auth_household():
         hhid = get_household_id(); uid = get_user_id()
         if not hhid: return jsonify({"error": "No household"}), 404
-        
         _init_schema()
         hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
         if not hh: return jsonify({"error": "Household not found"}), 404
         
-        is_prem = bool(hh.get("is_premium", False))
-        sub_status = hh.get("subscription_status", "free")
+        status = get_household_status()
+        is_prem = status["is_premium"]
+        sub_status = status["subscription_status"]
         trial_ends_at = hh.get("trial_ends_at")
         subscription_ends_at = hh.get("subscription_ends_at")
         if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
             subscription_ends_at = subscription_ends_at.isoformat()
-        
-        if sub_status == 'trial' and trial_ends_at:
-            import datetime
-            try:
-                t_end = trial_ends_at
-                if isinstance(t_end, str):
-                    if 'T' in t_end:
-                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
-                    else:
-                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
-                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
-                if t_end > now:
-                    is_prem = True
-            except:
-                pass
-                
+            
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
         invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
+        
         return jsonify({"ok": True,
-            "household": {"id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), "is_premium": is_prem, "subscription_status": sub_status, "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at},
-            "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"],
-                          "role": "owner" if m["id"] == uid else "member"} for m in members],
+            "household": {
+                "id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), 
+                "is_premium": is_prem, "subscription_status": sub_status, 
+                "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at,
+                "is_read_only": status["is_read_only"],
+                "over_limit": status["over_limit"]
+            },
+            "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"], 
+                         "role": "owner" if m["id"] == hh.get("owner_id") else "member"} for m in members],
             "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],
-            "current_user_id": uid, "is_owner": True})
+            "current_user_id": uid, "is_owner": (uid == hh.get("owner_id"))})
 
     @app.route("/api/auth/household/invites/<token>", methods=["DELETE"])
     @require_user
@@ -761,3 +834,58 @@ def register_auth_routes(app):
         hh_name = hh.get("name","") if hh else ""
         _set(uid, user["email"], user["name"], invite["household_id"], hh_name)
         return jsonify({"ok": True, "household_id": invite["household_id"], "household_name": hh_name})
+
+    @app.route("/api/auth/household/spinoff", methods=["POST"])
+    @require_user
+    def auth_spinoff_household():
+        uid = get_user_id()
+        old_hhid = get_household_id()
+        if not old_hhid: return jsonify({"error": "No household"}), 404
+        
+        status = get_household_status()
+        if not status or not status["is_read_only"]:
+            return jsonify({"error": "Spin-off is only for read-only secondary members."}), 400
+            
+        user = _one(f"SELECT name FROM {_USERS} WHERE id = ?", (uid,))
+        new_name = user["name"] + "'s Household"
+        
+        # Create new household without premium/trial
+        import secrets
+        code = secrets.token_hex(4).upper()
+        res = _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, owner_id) VALUES (?, ?, False, 'active', ?) RETURNING id", (new_name, code, uid))
+        new_hhid = res["id"]
+        
+        # Move the user to the new household
+        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
+        
+        # We need to copy lists, etc.
+        # But this is inside auth.py, we might not have all tables imported. 
+        # The schema is standard, we can just run queries directly.
+        
+        downgraded_at = status["downgraded_at"]
+        
+        # Copy stores
+        old_stores = _run("SELECT * FROM stores WHERE household_id = ?", (old_hhid,))
+        for s in old_stores:
+            if downgraded_at and s.get("created_at") and s["created_at"] > downgraded_at: continue
+            r = _one("INSERT INTO stores (household_id, name) VALUES (?, ?) RETURNING id", (new_hhid, s["name"]))
+            new_store_id = r["id"]
+            
+            # Copy store items
+            # store_items doesn't have created_at
+            _run("INSERT INTO store_items (store_id, household_id, name, category) SELECT ?, ?, name, category FROM store_items WHERE store_id = ?", (new_store_id, new_hhid, s["id"]))
+            
+            # Copy list items (filtered by downgraded_at)
+            if downgraded_at:
+                _run("INSERT INTO list_items (store_id, household_id, name, category, added_by, purchased, purchased_by, quantity) SELECT ?, ?, name, category, added_by, purchased, purchased_by, quantity FROM list_items WHERE store_id = ? AND added_at <= ?", (new_store_id, new_hhid, s["id"], downgraded_at))
+            else:
+                _run("INSERT INTO list_items (store_id, household_id, name, category, added_by, purchased, purchased_by, quantity) SELECT ?, ?, name, category, added_by, purchased, purchased_by, quantity FROM list_items WHERE store_id = ?", (new_store_id, new_hhid, s["id"]))
+        
+        # Copy recipes
+        if downgraded_at:
+            _run("INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) SELECT ?, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients FROM recipes WHERE household_id = ? AND created_at <= ?", (new_hhid, old_hhid, downgraded_at))
+        else:
+            _run("INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) SELECT ?, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients FROM recipes WHERE household_id = ?", (new_hhid, old_hhid))
+
+        _set(uid, get_email(), get_display_name(), new_hhid, new_name)
+        return jsonify({"ok": True, "household_id": new_hhid})
