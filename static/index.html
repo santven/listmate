@@ -1463,6 +1463,10 @@ async function toggleItem(id, showVisitPrompt = true) {
 }
 
 async function deleteItem(id) {
+  if (window.currentCfg && window.currentCfg.is_read_only) {
+    if (document.getElementById('readOnlyModal')) document.getElementById('readOnlyModal').classList.add('active');
+    return;
+  }
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
@@ -1634,6 +1638,10 @@ async function openMoveModal(itemId, itemName) {
 }
 
 async function moveItem(targetStoreId) {
+  if (window.currentCfg && window.currentCfg.is_read_only) {
+    if (document.getElementById('readOnlyModal')) document.getElementById('readOnlyModal').classList.add('active');
+    return;
+  }
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
@@ -1672,6 +1680,7 @@ $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remov
 if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));
 window.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
+    if (e.target.id === 'paywallModal' || e.target.id === 'premiumModal' || e.target.id === 'readOnlyModal') return;
     e.target.classList.remove('active');
   }
 });
@@ -2856,19 +2865,21 @@ async function deleteSavedRecipe(id) {
 </script>
 
 <div id="readOnlyModal" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 class="modal-title">Live Sync Paused</h3>
-      <button class="modal-close" onclick="$('#readOnlyModal').classList.remove('active')">&times;</button>
-    </div>
-    <div class="modal-body" style="text-align:center; padding: 20px;">
-      <div style="font-size: 3rem; margin-bottom:10px;">⏸️</div>
-      <p style="margin-bottom: 20px; color: var(--text-secondary);">
-        Live household sync is paused because your household is on the Free plan. 
-        You currently have <b>Read-Only</b> access.
-      </p>
-      <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="location.href='/settings'">Notify Owner</button>
-      <button class="btn btn-secondary" style="width:100%;" onclick="spinOffHousehold()">Spin off Personal Household</button>
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+    <div style="font-size:48px; margin-bottom:12px;">⏸️</div>
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Live Sync Paused</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+      Live household sync is paused because your household is on the Free plan. 
+      You currently have <b>Read-Only</b> access.
+    </p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button onclick="location.href='/settings'" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+        Notify Owner
+      </button>
+      <button onclick="spinOffHousehold()" style="background:var(--card); color:var(--text); border:1px solid var(--border); padding:14px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer;">
+        Spin off Personal Household
+      </button>
+      <button onclick="document.getElementById('readOnlyModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">Close</button>
     </div>
   </div>
 </div>

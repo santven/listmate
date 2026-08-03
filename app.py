@@ -100,7 +100,25 @@ def _ensure_schema():
     except Exception:
         pass
 
+
 @app.before_request
+def enforce_read_only():
+    if request.method in ["POST", "PUT", "DELETE"]:
+        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path == "/api/sync":
+            # Allowed for read-only: None, but wait, maybe some specific ones?
+            if request.path == "/api/recipes/generate":
+                # Recipes generate might require premium entirely, but let's just guard modifications to data.
+                pass
+            import shared.auth as authmod_local
+            try:
+                hh_status = authmod_local.get_household_status()
+                if hh_status and hh_status.get("is_read_only"):
+                    return jsonify({"error": "Live household sync is paused because your household is on the Free plan. Only the owner can make changes, or you can spin off into a personal household.", "code": "read_only"}), 403
+            except Exception:
+                pass
+
+@app.before_request
+
 def _check_migration():
     _ensure_schema()
 
@@ -861,11 +879,7 @@ def premium_settings():
         if sub_ends_at and hasattr(sub_ends_at, 'isoformat'):
             sub_ends_at = sub_ends_at.isoformat()
 
-        if is_early and not is_prem:
-            is_prem = True
-            sub_status = "premium"
-            val = True
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, "premium", hhid))
+
 
         if sub_status == 'trial' and trial_ends_at:
             import datetime
@@ -901,7 +915,7 @@ def premium_settings():
     is_early = bool(hhid and int(hhid) <= 25)
     return jsonify({
         "ok": True,
-        "is_premium": is_premium or is_early,
+        "is_premium": is_premium,
         "household_id": hhid,
         "is_early_adopter": is_early
     })

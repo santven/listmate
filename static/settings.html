@@ -896,6 +896,7 @@ async function deleteAccount() {
 
 window.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
+    if (e.target.id === 'paywallModal' || e.target.id === 'premiumModal' || e.target.id === 'readOnlyModal') return;
     e.target.classList.remove('active');
   }
 });

@@ -563,7 +563,7 @@ def register_auth_routes(app):
             is_prem = False
             if hh_id:
                 _init_schema()
-                hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at FROM {_HH} WHERE id = ?", (hh_id,))
+                hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at, owner_id FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
                 sub_status = hh.get("subscription_status", "free") if hh else "free"
                 trial_ends_at = hh.get("trial_ends_at") if hh else None
@@ -572,11 +572,7 @@ def register_auth_routes(app):
                 subscription_ends_at = hh.get("subscription_ends_at") if hh else None
                 if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
                     subscription_ends_at = subscription_ends_at.isoformat()
-                if int(hh_id) <= 25 and not is_prem:
-                    is_prem = True
-                    sub_status = "premium"
-                    val = True
-                    _run(f"UPDATE {_HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, 'premium', hh_id))
+
                 
                 # Check active trial
                 if sub_status == 'trial' and trial_ends_at:

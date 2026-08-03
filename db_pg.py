@@ -10,7 +10,7 @@ def _ensure_local_pg():
     if os.environ.get("DATABASE_URL"):
         return
     try:
-        subprocess.run("id postgres || useradd -r -s /bin/bash -d /var/lib/postgresql -m postgres || true; mkdir -p /var/run/postgresql /tmp/pgdata && chown -R postgres:postgres /var/run/postgresql /tmp/pgdata /home/postgres /var/lib/postgresql 2>/dev/null || true", shell=True, check=False)
+        subprocess.run("mkdir -p /var/run/postgresql /tmp/pgdata && chown -R postgres:postgres /var/run/postgresql /tmp/pgdata 2>/dev/null || true", shell=True, check=False)
         check_res = subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/pgdata status'", shell=True, capture_output=True)
         if check_res.returncode != 0:
             subprocess.run("su - postgres -c '/usr/lib/postgresql/15/bin/initdb -D /tmp/pgdata'", shell=True, capture_output=True)
