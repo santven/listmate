@@ -852,7 +852,7 @@ def register_auth_routes(app):
         # Create new household without premium/trial
         import secrets
         code = secrets.token_hex(4).upper()
-        res = _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, owner_id) VALUES (?, ?, False, 'active', ?) RETURNING id", (new_name, code, uid))
+        res = _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, owner_id) VALUES (?, ?, False, 'free', ?) RETURNING id", (new_name, code, uid))
         new_hhid = res["id"]
         
         # Move the user to the new household
