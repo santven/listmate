@@ -869,7 +869,8 @@ def premium_settings():
     if request.method == "GET":
         hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
-        is_early = bool(hhid and int(hhid) <= 25)
+        sub_status = hh.get("subscription_status", "free") if hh else "free"
+        is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= 25)
         sub_status = hh.get("subscription_status", "free") if hh else "free"
         trial_ends_at = hh.get("trial_ends_at") if hh else None
         if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
@@ -910,9 +911,16 @@ def premium_settings():
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium
-    status = "active" if is_premium else "free"
+    is_early_eligible = bool(hhid and int(hhid) <= 25)
+    
+    if is_premium and is_early_eligible:
+        status = "premium"
+    else:
+        status = "active" if is_premium else "free"
+        
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
-    is_early = bool(hhid and int(hhid) <= 25)
+    is_early = bool(is_premium and status == "premium" and hhid and int(hhid) <= 25)
+    
     return jsonify({
         "ok": True,
         "is_premium": is_premium,
@@ -1124,7 +1132,6 @@ def generate_recipe_endpoint():
     authmod._init_schema()
     hh = authmod._one(f"SELECT is_premium, dietary_restrictions, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
     is_prem = bool(hh.get("is_premium")) if hh else False
-    is_early = bool(hhid and int(hhid) <= 25)
     sub_status = hh.get("subscription_status", "free") if hh else "free"
     trial_ends_at = hh.get("trial_ends_at") if hh else None
 
@@ -1143,7 +1150,7 @@ def generate_recipe_endpoint():
         except:
             pass
 
-    if not (is_prem or is_early):
+    if not is_prem:
         return jsonify({
             "error": "Recipe Planner is a Premium feature. Please upgrade to Premium in Settings.",
             "code": "PREMIUM_REQUIRED"
