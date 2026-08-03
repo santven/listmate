@@ -346,6 +346,7 @@
 
 ## Completed Features
 - [x] **US-112: Recipe Planner & AI Generator (Premium Feature)** — Formatted recipes, Gemini AI credit generator, dietary restrictions integration, store mapping modal, recipe tagging on list items, and saved recipe library.
+- [x] **US-8.2: API Security and Rate Limiting** — In-memory rate limiting applied per IP address to protect auth and API endpoints.
 
 ## Epic 8: API Security and Future Edge Cases
 
@@ -355,9 +356,5 @@
 - Warn users if they are leaving a household by accepting an invite.
 - Prevent household owners from accepting invites unless they transfer ownership or we support multi-household functionality.
 
-### US-8.2: API Security and Rate Limiting
-**As a** platform owner, **I want to** implement proper rate limiting and API security measures **so that** the app is protected against abuse, brute-forcing, and denial of service.
-**Acceptance Criteria:**
-- Rate limiting implemented on authentication and API routes.
-- API endpoints secured against abuse.
+### ~US-8.2: API Security and Rate Limiting~ (Completed)
 
