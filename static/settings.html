@@ -894,10 +894,10 @@ async function deleteAccount() {
   }
 }
 
-document.querySelectorAll('.modal-overlay').forEach(modal => {
-  modal.addEventListener('click', e => {
-    if (e.target === e.currentTarget) modal.classList.remove('active');
-  });
+window.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('active');
+  }
 });
 </script>
 <div class="ad-banner-bottom">

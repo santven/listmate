@@ -431,6 +431,30 @@ function getItemDateInfo(item) {
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}
 
+function enforceReadOnly() {
+  if (window.currentCfg && window.currentCfg.is_read_only) {
+    const modal = document.getElementById('readOnlyModal');
+    if (modal) modal.classList.add('active');
+    return true;
+  }
+  return false;
+}
+
+async function spinOffHousehold() {
+  if (!confirm('This will create a new personal household for you. You will lose access to the current household. Continue?')) return;
+  try {
+    const res = await fetch('/api/auth/household/spinoff', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = '/settings';
+    } else {
+      alert(data.error || 'Failed to spin off');
+    }
+  } catch (e) {
+    alert('Network error');
+  }
+}
+
 async function checkAuth() {
   if (!navigator.onLine) {
     let cfg = null;
@@ -453,7 +477,7 @@ async function checkAuth() {
       document.body.classList.remove('is-premium');
     }
     if (tierBadge) {
-      if (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled') {
+      if (cfg.is_premium && (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled')) {
         tierBadge.textContent = 'Premium';
         tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
         tierBadge.style.border = 'none';
@@ -497,7 +521,7 @@ async function checkAuth() {
     }
     
     if (tierBadge) {
-      if (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled') {
+      if (cfg.is_premium && (cfg.subscription_status === 'premium' || cfg.subscription_status === 'active' || cfg.subscription_status === 'canceled')) {
         tierBadge.textContent = 'Premium';
         tierBadge.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
         tierBadge.style.border = 'none';
@@ -1267,6 +1291,7 @@ async function loadSuggestions(){
 }
 
 async function addToList(sid, name, qty = '', skipSuggest = false) {
+  if (enforceReadOnly()) return;
   if (!canEditOffline()) return false;
 
   const storeObj = stores.find(s=>s.id===sid);
@@ -1325,6 +1350,7 @@ async function addToList(sid, name, qty = '', skipSuggest = false) {
 }
 
 async function updateItemQuantity(id, newQty) {
+  if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
   if (!navigator.onLine) {
@@ -1354,6 +1380,7 @@ async function updateItemQuantity(id, newQty) {
 }
 
 async function toggleItem(id, showVisitPrompt = true) {
+  if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
   if (!navigator.onLine) {
@@ -1405,6 +1432,7 @@ async function toggleItem(id, showVisitPrompt = true) {
 }
 
 async function deleteItem(id) {
+  if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
   if (!navigator.onLine) {
@@ -1516,6 +1544,7 @@ $('#btnClear').addEventListener('click',async()=>{
 });
 
 async function clearList() {
+  if (enforceReadOnly()) return;
   if (!confirm('Remove all open items from the list?')) return;
   if (!canEditOffline()) return;
 
@@ -1537,6 +1566,7 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 
 let moveItemId=null;
 async function openMoveModal(itemId, itemName) {
+  if (enforceReadOnly()) return;
   moveItemId = itemId;
   const item = list.find(i => i.id === itemId);
   $('#moveItemLabel').textContent = '"' + itemName + '" — currently in ' + stores.find(s => s.id === item.store_id)?.name;
@@ -1573,6 +1603,7 @@ async function openMoveModal(itemId, itemName) {
 }
 
 async function moveItem(targetStoreId) {
+  if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
   if (!navigator.onLine) {
@@ -1608,10 +1639,10 @@ async function moveItem(targetStoreId) {
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));
-$$('.modal-overlay').forEach(modal => {
-  modal.addEventListener('click', e => {
-    if (e.target === e.currentTarget) modal.classList.remove('active');
-  });
+window.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('active');
+  }
 });
 
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
@@ -2345,6 +2376,7 @@ function toggleIngRowState(idx) {
 }
 
 async function handleItemStoreChange(selectEl, idx) {
+  if (enforceReadOnly()) return;
   if (selectEl.value === '__new__') {
     const newName = prompt('Enter name for the new store:');
     const defaultStoreId = getIntelligentDefaultStoreId();
