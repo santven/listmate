@@ -814,6 +814,7 @@ def register_auth_routes(app):
     @app.route("/api/auth/invite/<token>/accept", methods=["POST"])
     @require_user
     def auth_accept_invite(token):
+        from flask import request
         _init_schema()
         invite = _one("SELECT * FROM invites WHERE token = ? AND used_by IS NULL", (token,))
         if not invite:
@@ -824,6 +825,19 @@ def register_auth_routes(app):
 
         if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
             return jsonify({"error": "This invite is for a different email address"}), 403
+
+        current_hh_id = user.get("household_id")
+        if current_hh_id and current_hh_id != invite["household_id"] and current_hh_id != 0:
+            current_hh = _one(f"SELECT owner_id FROM {_HH} WHERE id = ?", (current_hh_id,))
+            if current_hh and current_hh.get("owner_id") == uid:
+                return jsonify({"error": "You are the owner of a household. You cannot accept this invite without transferring ownership first."}), 403
+            
+            force = request.args.get("force") or request.form.get("force") or (request.is_json and request.json.get("force"))
+            if str(force).lower() not in ["true", "1"]:
+                return jsonify({
+                    "requires_confirmation": True,
+                    "warning": "You are currently in another household. Accepting this invite will switch your household and you will lose access to the current one. Continue?"
+                }), 409
 
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
         import datetime as _dt2

@@ -462,12 +462,24 @@ function showInviteBanner() {
   }).catch(function(){ showStep2Error('Could not verify invite.'); });
 }
 
-function acceptInvite() {
+function acceptInvite(force) {
   var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
-  fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
-    if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
-  }).catch(function(){ showStep2Error('Network error.'); });
-  b.disabled=false;
+  var url = '/api/auth/invite/'+inviteToken+'/accept';
+  if (force) url += '?force=1';
+  fetch(url,{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+    if(d.ok) {
+      setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+    } else if (d.requires_confirmation) {
+      if (confirm(d.warning)) {
+        acceptInvite(true);
+      } else {
+        b.disabled=false;
+      }
+    } else {
+      showStep2Error(d.error||'Failed');
+      b.disabled=false;
+    }
+  }).catch(function(){ showStep2Error('Network error.'); b.disabled=false; });
 }
 
 function createHousehold() {

@@ -20,9 +20,20 @@ from shared.auth import (
 from categorize import categorize
 
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__, static_folder="static")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
+
+# API Security and Rate Limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["1000 per day", "300 per hour"],
+    storage_uri="memory://"
+)
+
 install_auth(app, cookie_name="listmate_session", cookie_secure=False)
 
 CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID",
@@ -151,6 +162,7 @@ def add_security_headers(response):
     return response
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("20 per minute")
 def login_page():
     if request.method == "POST":
         id_token_str = request.form.get("id_token")
@@ -264,6 +276,7 @@ def auth_callback():
 
 
 @app.route("/login_google_native", methods=["POST"])
+@limiter.limit("20 per minute")
 def login_google_native():
     c = request.form.get("credential")
     intent_id = request.form.get("intent")
