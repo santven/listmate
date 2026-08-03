@@ -275,7 +275,8 @@ async function loadHousehold() {
       } else {
           banner.innerHTML = "Live household sync is paused because your household is on the Free plan. You currently have <b>Read-Only</b> access.";
       }
-      document.getElementById('householdTitle').parentNode.insertBefore(banner, document.getElementById('householdTitle').nextSibling);
+      const titleContainer = document.getElementById('householdTitle').parentNode;
+      titleContainer.parentNode.insertBefore(banner, titleContainer.nextSibling);
     }
 
     document.getElementById('householdDesc').textContent =
