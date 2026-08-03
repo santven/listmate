@@ -110,6 +110,19 @@
   .share-btn:hover, .share-btn:active { background: var(--green); color: #fff; }
   .suggestion-chip { display: inline-block; padding: 6px 12px; background: #f0f4ed; border: 1px solid var(--border); border-radius: 16px; font-size: 13px; color: var(--text); cursor: pointer; margin-right: 6px; margin-bottom: 6px; transition: all .15s; }
   .suggestion-chip:hover { background: #e8f5e9; border-color: var(--green); }
+
+body.is-read-only .btn-qty, 
+body.is-read-only .btn-move, 
+body.is-read-only .btn-delete, 
+body.is-read-only .shop-btn,
+body.is-read-only #btnMenuClear,
+body.is-read-only #btnCatalogAdd,
+body.is-read-only #btnAddStore,
+body.is-read-only #btnDeleteStore,
+
+body.is-read-only .suggestion-chip { display: none !important; }
+body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !important; }
+
 </style>
 
 <style>
@@ -469,6 +482,11 @@ async function checkAuth() {
     if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
     
     const tierBadge = document.getElementById('tierBadge');
+    if (cfg.is_read_only) {
+      document.body.classList.add('is-read-only');
+    } else {
+      document.body.classList.remove('is-read-only');
+    }
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');
@@ -515,6 +533,11 @@ async function checkAuth() {
     
     
     const tierBadge = document.getElementById('tierBadge');
+    if (cfg.is_read_only) {
+      document.body.classList.add('is-read-only');
+    } else {
+      document.body.classList.remove('is-read-only');
+    }
     if (cfg.is_premium) {
       document.body.classList.add('is-premium');
       document.body.classList.remove('has-ads');

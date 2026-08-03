@@ -596,10 +596,13 @@ def register_auth_routes(app):
                     except:
                         pass
 
+            status = get_household_status() if hh_id else {"is_read_only": False, "over_limit": False}
             resp["is_premium"] = is_prem
             resp["subscription_status"] = sub_status if hh_id else "free"
             resp["trial_ends_at"] = trial_ends_at if hh_id else None
             resp["subscription_ends_at"] = subscription_ends_at if hh_id else None
+            resp["is_read_only"] = status["is_read_only"]
+            resp["is_owner"] = (uid == hh.get("owner_id")) if (hh_id and hh) else True
             resp["user_info"] = {"id": uid, "name": get_display_name(),
                 "email": get_email(), "household_id": hh_id,
                 "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None}
