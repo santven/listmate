@@ -346,3 +346,18 @@
 
 ## Completed Features
 - [x] **US-112: Recipe Planner & AI Generator (Premium Feature)** — Formatted recipes, Gemini AI credit generator, dietary restrictions integration, store mapping modal, recipe tagging on list items, and saved recipe library.
+
+## Epic 8: API Security and Future Edge Cases
+
+### US-8.1: Handle Cross-Household Invite Logic
+**As a** system, **I need to** prevent or safely handle when a user who is already a household owner (or in another household) accepts an invite to a different household **so that** we don't create orphaned households or unintentionally overwrite their only household context.
+**Acceptance Criteria:**
+- Warn users if they are leaving a household by accepting an invite.
+- Prevent household owners from accepting invites unless they transfer ownership or we support multi-household functionality.
+
+### US-8.2: API Security and Rate Limiting
+**As a** platform owner, **I want to** implement proper rate limiting and API security measures **so that** the app is protected against abuse, brute-forcing, and denial of service.
+**Acceptance Criteria:**
+- Rate limiting implemented on authentication and API routes.
+- API endpoints secured against abuse.
+
