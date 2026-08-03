@@ -102,6 +102,27 @@ function doSignIn() {
   _doSignIn();
 }
 
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+  window.Capacitor.Plugins.App.addListener('appUrlOpen', function(data) {
+    if (data.url && data.url.includes('sso_callback')) {
+      if (window.Capacitor.Plugins.Browser) {
+        try { window.Capacitor.Plugins.Browser.close(); } catch(e) {}
+      }
+      // Trigger a poll immediately if intent is active
+      if (typeof currentIntentId !== 'undefined' && currentIntentId) {
+        fetch('/api/auth/poll?intent=' + encodeURIComponent(currentIntentId) + '&_t=' + Date.now(), { cache: 'no-store', credentials: 'include' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.ok) {
+              if (activePoll) { clearInterval(activePoll); activePoll = null; }
+              setTimeout(function(){ location.replace('/?_=' + Date.now()); }, 100);
+            }
+          });
+      }
+    }
+  });
+}
+
 var activePoll = null;
 function startPollingIntent(intentId) {
   if (activePoll) clearInterval(activePoll);
