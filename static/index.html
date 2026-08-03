@@ -484,13 +484,17 @@ async function checkAuth() {
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'default';
         tierBadge.onclick = null;
-      } else {
+        tierBadge.style.display = 'inline-block';
+      } else if (cfg.is_owner !== false) {
         tierBadge.textContent = '🎁 Upgrade';
         tierBadge.style.background = 'rgba(255,255,255,0.2)';
         tierBadge.style.border = '1px solid rgba(255,255,255,0.4)';
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'pointer';
         tierBadge.onclick = window.showPaywall;
+        tierBadge.style.display = 'inline-block';
+      } else {
+        tierBadge.style.display = 'none';
       }
     }
 
@@ -528,17 +532,21 @@ async function checkAuth() {
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'default';
         tierBadge.onclick = null;
-      } else {
+        tierBadge.style.display = 'inline-block';
+      } else if (cfg.is_owner !== false) {
         tierBadge.textContent = '🎁 Upgrade';
         tierBadge.style.background = 'rgba(255,255,255,0.2)';
         tierBadge.style.border = '1px solid rgba(255,255,255,0.4)';
         tierBadge.style.color = '#fff';
         tierBadge.style.cursor = 'pointer';
         tierBadge.onclick = window.showPaywall;
+        tierBadge.style.display = 'inline-block';
+      } else {
+        tierBadge.style.display = 'none';
       }
     }
 
-    if (cfg.subscription_status === 'trial' && cfg.trial_ends_at) {
+    if (cfg.subscription_status === 'trial' && cfg.trial_ends_at && cfg.is_owner !== false) {
         const daysLeft = Math.ceil((new Date(cfg.trial_ends_at) - new Date()) / (1000*60*60*24));
         if (daysLeft >= 0) {
             let banner = document.getElementById('trialBanner');

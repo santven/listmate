@@ -717,7 +717,7 @@ def register_auth_routes(app):
                 "id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), 
                 "is_premium": is_prem, "subscription_status": sub_status, 
                 "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at,
-                "is_read_only": status["is_read_only"],
+                "is_owner": uid == hh.get("owner_id"), "is_read_only": status["is_read_only"],
                 "over_limit": status["over_limit"]
             },
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"], 
