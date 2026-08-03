@@ -1000,5 +1000,27 @@ async function executeSpinOff() {
   </div>
 </div>
 
+
+<!-- Spin Off Modal -->
+<div class="modal-overlay" id="spinOffModal">
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+    <div style="font-size:48px; margin-bottom:12px;">🏠</div>
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Create Personal Household</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+      This will create a new personal household for you. We will copy all the stores, items, and recipes you previously had access to from the current household into your new one. You will lose access to the current shared household.
+    </p>
+    <div style="text-align:left; margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">New Household Name</label>
+        <input type="text" id="spinOffName" placeholder="My Personal Household" style="width:100%; padding:14px; border:1px solid var(--border); border-radius:12px; font-size:15px; outline:none; transition:border 0.2s;" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button id="btnExecuteSpinOff" onclick="executeSpinOff()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+        Create & Migrate
+      </button>
+      <button onclick="document.getElementById('spinOffModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
