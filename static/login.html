@@ -363,7 +363,23 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
         return;
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});
+        var url = '/api/auth/invite/'+inviteToken+'/accept';
+        fetch(url,{method:'POST', credentials:'include'}).then(function(res){return res.json()}).then(function(d){
+          if (d.ok) {
+            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          } else if (d.requires_confirmation) {
+            if (confirm(d.warning)) {
+              fetch(url+'?force=1',{method:'POST', credentials:'include'}).then(function(){
+                setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+              });
+            } else {
+              setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+            }
+          } else {
+            alert(d.error || 'Failed to accept invite');
+            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          }
+        }).catch(function(){ setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); });
       } else {
         setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
       }
@@ -425,7 +441,23 @@ function handleCredential(credential, isIntentCallback) {
         return;
       }
       if (inviteToken) {
-        fetch('/api/auth/invite/'+inviteToken+'/accept',{method:'POST', credentials:'include'}).then(function(){setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);});
+        var url = '/api/auth/invite/'+inviteToken+'/accept';
+        fetch(url,{method:'POST', credentials:'include'}).then(function(res){return res.json()}).then(function(d){
+          if (d.ok) {
+            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          } else if (d.requires_confirmation) {
+            if (confirm(d.warning)) {
+              fetch(url+'?force=1',{method:'POST', credentials:'include'}).then(function(){
+                setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+              });
+            } else {
+              setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+            }
+          } else {
+            alert(d.error || 'Failed to accept invite');
+            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          }
+        }).catch(function(){ setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); });
       } else {
         setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
       }
