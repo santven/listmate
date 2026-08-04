@@ -710,7 +710,13 @@ async function pollForPremiumStatus(attemptCount = 1) {
 async function restorePurchases() {
     if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
     try {
-        const rcKey = (window.currentCfg && window.currentCfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+        const rcKey = getRevenueCatKey();
+        const platform = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : 'web';
+        if (platform === 'ios' && (!rcKey || !rcKey.startsWith('appl_'))) {
+            const msg = "iOS purchases require setting REVENUECAT_APPLE_KEY (appl_...) in Render environment variables.";
+            if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+            return;
+        }
         await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
             if (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) {
                 await window.Capacitor.Plugins.Purchases.logIn({ appUserID: String(window.currentCfg.user_info.id) });
@@ -773,6 +779,15 @@ async function purchasePackage(index) {
     }
 }
 
+function getRevenueCatKey() {
+    const cfg = window.currentCfg || {};
+    const platform = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : 'web';
+    if (platform === 'ios') {
+        return cfg.revenuecat_apple_key || '';
+    }
+    return cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+}
+
 async function showPaywall() {
     const isNativeCapacitor = window.Capacitor && 
         window.Capacitor.Plugins && 
@@ -782,13 +797,25 @@ async function showPaywall() {
     if (isNativeCapacitor) {
         try {
             const cfg = window.currentCfg || {};
-            let rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
             const platform = window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
-            if (platform === 'ios' && cfg.revenuecat_apple_key) {
-                rcKey = cfg.revenuecat_apple_key;
+            let rcKey = platform === 'ios' ? (cfg.revenuecat_apple_key || '') : (cfg.revenuecat_public_key || '');
+            if (!rcKey) {
+                rcKey = "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            }
+
+            if (platform === 'ios' && !rcKey.startsWith('appl_')) {
+                const msg = 'iOS in-app purchases require setting REVENUECAT_APPLE_KEY (appl_...) in Render environment variables.';
+                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+                return;
+            }
+            if (platform === 'android' && !rcKey.startsWith('goog_')) {
+                const msg = 'Android in-app purchases require setting REVENUECAT_PUBLIC_KEY (goog_...) in Render environment variables.';
+                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+                return;
             }
             if (rcKey.startsWith('test_')) {
-                alert('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
+                const msg = 'In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) or REVENUECAT_APPLE_KEY (appl_...) in Render.';
+                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
                 return;
             }
             console.log("[RevenueCat] Configuring SDK with key:", rcKey);
