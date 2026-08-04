@@ -218,7 +218,7 @@
 
 ## Epic 5: Migration & Transition
 
-### US-5.1: Data Export for Personal Instance
+### ~US-5.1: Data Export for Personal Instance~ (Cancelled)
 **As** Venkat, **I want** to export my household's grocery data from the Pi **so that** I can import it into the new cloud instance.
 
 **Acceptance Criteria:**
@@ -232,7 +232,7 @@
 
 ---
 
-### US-5.2: Cutover Plan
+### ~US-5.2: Cutover Plan~ (Cancelled)
 **As** Venkat, **I want** a documented cutover plan **so that** my family doesn't lose access or data during the transition.
 
 **Acceptance Criteria:**
@@ -262,7 +262,7 @@
 
 ---
 
-### US-6.2: Google Play Store Submission
+### ~US-6.2: Google Play Store Submission~ (Completed - In Closed Testing)
 **As a** platform owner, **I want** the app published on Google Play **so that** Android users can download it.
 
 **Acceptance Criteria:**
@@ -278,7 +278,7 @@
 
 ## Epic 7: Operational Readiness
 
-### US-7.1: CI/CD Pipeline
+### ~US-7.1: CI/CD Pipeline~ (Completed - Render auto-deploys)
 **As a** developer, **I want** automated builds and deployments **so that** pushing to main automatically updates production.
 
 **Acceptance Criteria:**
@@ -347,6 +347,11 @@
 ## Completed Features
 - [x] **US-112: Recipe Planner & AI Generator (Premium Feature)** — Formatted recipes, Gemini AI credit generator, dietary restrictions integration, store mapping modal, recipe tagging on list items, and saved recipe library.
 - [x] **US-8.2: API Security and Rate Limiting** — In-memory rate limiting applied per IP address to protect auth and API endpoints.
+
+
+- [x] **US-7.1: CI/CD Pipeline** — GitHub to Render auto-deploys are active for staging and main.
+- [x] **US-6.2: Google Play Store Submission** — App submitted and in closed testing phase.
+- [x] **US-5.1 & US-5.2: Migration & Cutover** — Cancelled. Decision made to start with a fresh database and discard legacy test data.
 
 ## Epic 8: API Security and Future Edge Cases
 
