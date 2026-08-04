@@ -9,7 +9,7 @@
 
 ## Epic 1: Cloud Migration (off Pi, onto managed infrastructure)
 
-### US-1.1: Database Migration to PostgreSQL
+### ~US-1.1: Database Migration to PostgreSQL~ (Completed)
 **As a** platform owner, **I want** to migrate from SQLite to PostgreSQL **so that** the app can handle multiple concurrent users and is not limited by a single-file database.
 
 **Acceptance Criteria:**
@@ -22,7 +22,7 @@
 
 ---
 
-### US-1.2: Deploy to Managed Cloud Platform
+### ~US-1.2: Deploy to Managed Cloud Platform~ (Completed)
 **As a** platform owner, **I want** the backend hosted on a managed platform (Render or Fly.io) **so that** the app is not dependent on a Raspberry Pi in my house.
 
 **Acceptance Criteria:**
@@ -36,7 +36,7 @@
 
 ---
 
-### US-1.3: Cloudflare DNS + Domain for Production
+### ~US-1.3: Cloudflare DNS + Domain for Production~ (Completed)
 **As a** platform owner, **I want** a dedicated domain (not raghavfamily.com) for the public app **so that** the product has its own identity.
 
 **Acceptance Criteria:**
@@ -51,7 +51,7 @@
 
 ## Epic 2: Authentication & Multi-Tenancy
 
-### US-2.1: Email + Password Authentication
+### ~US-2.1: Email + Password Authentication~ (Completed)
 **As a** new user, **I want** to sign up with my email and password **so that** I don't need a Google account to use the app.
 
 **Acceptance Criteria:**
@@ -65,7 +65,7 @@
 
 ---
 
-### US-2.2: Social Login (Google + Apple)
+### ~US-2.2: Social Login (Google + Apple)~ (Completed)
 **As a** new user, **I want** to sign in with my Google or Apple account **so that** I can get started without creating a password.
 
 **Acceptance Criteria:**
@@ -78,7 +78,7 @@
 
 ---
 
-### US-2.3: Household Multi-Tenancy
+### ~US-2.3: Household Multi-Tenancy~ (Completed)
 **As a** household member, **I want** to invite my family to a shared household account **so that** we all see the same grocery list and stores.
 
 **Acceptance Criteria:**
@@ -95,7 +95,7 @@
 
 ## Epic 3: Mobile App
 
-### US-3.1: React Native or Expo App Shell
+### ~US-3.1: React Native or Expo App Shell~ (Completed)
 **As a** mobile user, **I want** a native mobile app **so that** I can use the grocery list on my phone without opening a browser.
 
 **Acceptance Criteria:**
@@ -109,7 +109,7 @@
 
 ---
 
-### US-3.2: Core Screens (Mobile)
+### ~US-3.2: Core Screens (Mobile)~ (Completed)
 **As a** mobile user, **I want** the same store-based grocery list experience as the web app **so that** I don't lose functionality when switching platforms.
 
 **Acceptance Criteria:**
@@ -125,7 +125,7 @@
 
 ---
 
-### US-3.3: Push Notifications
+### ~US-3.3: Push Notifications~ (Completed)
 **As a** shopper, **I want** to receive notifications when my partner adds items to the list **so that** I know what's been added while I'm at the store.
 
 **Acceptance Criteria:**
@@ -141,7 +141,7 @@
 
 ## Epic 4: Enterprise-Grade Polish
 
-### US-4.1: Privacy Policy & Terms of Service
+### ~US-4.1: Privacy Policy & Terms of Service~ (Completed)
 **As a** platform owner, **I want** a privacy policy and ToS linked in the app **so that** we comply with App Store requirements and data protection laws.
 
 **Acceptance Criteria:**
@@ -156,7 +156,7 @@
 
 ---
 
-### US-4.2: Account Deletion
+### ~US-4.2: Account Deletion~ (Completed)
 **As a** user, **I want** to delete my account and all associated data **so that** I have control over my personal information.
 
 **Acceptance Criteria:**
@@ -171,7 +171,7 @@
 
 ---
 
-### US-4.3: Error Handling & Logging
+### ~US-4.3: Error Handling & Logging~ (Completed)
 **As a** platform owner, **I want** structured error logging **so that** I can debug issues without SSH-ing into a server.
 
 **Acceptance Criteria:**
@@ -185,7 +185,7 @@
 
 ---
 
-### US-4.4: Input Validation & Security
+### ~US-4.4: Input Validation & Security~ (Completed)
 **As a** platform owner, **I want** all user inputs validated and sanitized **so that** the app is not vulnerable to injection or XSS attacks.
 
 **Acceptance Criteria:**
@@ -200,7 +200,7 @@
 
 ---
 
-### US-4.5: App Store Listing Assets
+### ~US-4.5: App Store Listing Assets~ (Completed)
 **As a** platform owner, **I want** App Store and Play Store listing assets **so that** the app can be submitted for review.
 
 **Acceptance Criteria:**
@@ -248,7 +248,7 @@
 
 ## Epic 6: Publish & Launch
 
-### US-6.1: iOS App Store Submission
+### ~US-6.1: iOS App Store Submission~ (Completed)
 **As a** platform owner, **I want** the app approved on the Apple App Store **so that** iPhone users can download it.
 
 **Acceptance Criteria:**
@@ -292,7 +292,7 @@
 
 ---
 
-### US-7.2: Automated Database Backups
+### ~US-7.2: Automated Database Backups~ (Completed)
 **As a** platform owner, **I want** daily automated backups of the production database **so that** data is never lost.
 
 **Acceptance Criteria:**
@@ -305,7 +305,7 @@
 
 ---
 
-### US-7.3: Uptime Monitoring
+### ~US-7.3: Uptime Monitoring~ (Completed)
 **As a** platform owner, **I want** to know when the app is down **so that** I can address issues before users notice.
 
 **Acceptance Criteria:**
