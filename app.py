@@ -466,11 +466,16 @@ def revenuecat_webhook():
             for cand in transferred_from:
                 old_hhid = old_hhid or _find_household_id_from_uid(str(cand))
             if old_hhid:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (False, "expired", old_hhid))
+                # Explicitly set downgraded_at to NOW() just in case the trigger doesn't fire (e.g. if is_premium was already false)
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, downgraded_at = NOW() WHERE id = ?", (False, "expired", old_hhid))
                 print(f"[Webhook] Downgraded old household {old_hhid} due to TRANSFER")
         
         if hhid:
-            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
+            # TRANSFER events usually don't have expiration_at_ms, so we copy it from the old household
+            if old_hhid and not exp_clause:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = (SELECT subscription_ends_at FROM {authmod._HH} WHERE id = ?), trial_ends_at = (SELECT trial_ends_at FROM {authmod._HH} WHERE id = ?) WHERE id = ?", (True, "active", old_hhid, old_hhid, hhid))
+            else:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
             print(f"[Webhook] Upgraded new household {hhid} due to TRANSFER")
 
     elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE"]:
