@@ -318,8 +318,6 @@ function _doAppleSignIn() {
 
   if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios' && window.Capacitor.Plugins && window.Capacitor.Plugins.SignInWithApple) {
     window.Capacitor.Plugins.SignInWithApple.authorize({
-      clientId: getAppleClientId(),
-      redirectURI: location.origin + '/login',
       state: 'intent_' + currentIntentId,
       scopes: 'email name'
     }).then(function(res) {
