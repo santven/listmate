@@ -769,7 +769,8 @@ async function purchasePackage(index) {
             setTimeout(() => window.location.reload(), 1500);
     } catch (e) {
         console.error("[RevenueCat] Purchase Error:", e);
-        if (!e.userCancelled) {
+        const isCancelled = e.userCancelled || e.code === 'PURCHASE_CANCELLED_ERROR' || (e.message && e.message.toLowerCase().includes('cancel'));
+        if (!isCancelled) {
             let errDetail = e.underlyingErrorMessage || e.readableErrorCode || e.message || e.code || JSON.stringify(e);
             if (errDetail.includes("One or more of the arguments provided are invalid")) {
                 errDetail = "Play Store configuration error (billing unavailable). Ensure your test account is opted-in and the app version matches Play Console.";
