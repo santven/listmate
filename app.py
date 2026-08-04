@@ -473,7 +473,7 @@ def revenuecat_webhook():
         if hhid:
             # TRANSFER events usually don't have expiration_at_ms, so we copy it from the old household
             if old_hhid and not exp_clause:
-                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = (SELECT subscription_ends_at FROM {authmod._HH} WHERE id = ?), trial_ends_at = (SELECT trial_ends_at FROM {authmod._HH} WHERE id = ?) WHERE id = ?", (True, "active", old_hhid, old_hhid, hhid))
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ?, subscription_ends_at = (SELECT subscription_ends_at, owner_id FROM {authmod._HH} WHERE id = ?), trial_ends_at = (SELECT trial_ends_at FROM {authmod._HH} WHERE id = ?) WHERE id = ?", (True, "active", old_hhid, old_hhid, hhid))
             else:
                 authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
             print(f"[Webhook] Upgraded new household {hhid} due to TRANSFER")
@@ -902,7 +902,7 @@ def premium_settings():
     authmod._init_schema()
 
     if request.method == "GET":
-        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
+        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at, owner_id FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
         sub_status = hh.get("subscription_status", "free") if hh else "free"
         is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= 25)
@@ -934,13 +934,16 @@ def premium_settings():
             except:
                 pass
 
+        uid = authmod.get_user_id()
+        is_owner = (uid == hh.get("owner_id")) if hh else False
         return jsonify({
             "is_premium": is_prem,
             "household_id": hhid,
             "is_early_adopter": is_early,
             "subscription_status": sub_status,
             "trial_ends_at": trial_ends_at,
-            "subscription_ends_at": sub_ends_at
+            "subscription_ends_at": sub_ends_at,
+            "is_owner": is_owner
         })
 
     data = request.get_json(silent=True) or {}

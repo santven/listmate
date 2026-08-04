@@ -622,6 +622,16 @@ def register_auth_routes(app):
 
         _init_schema()
 
+        if hhid:
+            hh = _one(f"SELECT is_premium, subscription_status, owner_id FROM {_HH} WHERE id = ?", (hhid,))
+            if hh and hh.get("owner_id") == uid:
+                is_prem = hh.get("is_premium")
+                sub_status = hh.get("subscription_status")
+                is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= 25)
+                if is_prem and not is_early and sub_status in ['active', 'premium', 'trial']:
+                    return jsonify({"error": "You cannot delete your account while you have an active subscription as the household owner. Please cancel your subscription first."}), 403
+
+
         # 1. Delete feature flags
         try: _run(f"DELETE FROM {_FLAGS} WHERE user_id = ?", (uid,))
         except Exception: pass
