@@ -406,6 +406,9 @@ def _find_household_id_from_uid(uid, event=None):
         orig_id = event.get("original_app_user_id")
         if orig_id:
             candidates.append(str(orig_id))
+        transferred_to = event.get("transferred_to", [])
+        if isinstance(transferred_to, list):
+            candidates.extend([str(a) for a in transferred_to])
 
     for cand in candidates:
         clean = cand.replace("hh_", "").replace("user_", "").replace("hh-", "").replace("user-", "").strip()
@@ -455,6 +458,20 @@ def revenuecat_webhook():
     elif evt_type == "EXPIRATION":
         authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (False, "expired", *exp_args, hhid))
         print(f"[Webhook] Downgraded household {hhid} due to expiration")
+
+    elif evt_type == "TRANSFER":
+        transferred_from = event.get("transferred_from", [])
+        if isinstance(transferred_from, list):
+            old_hhid = None
+            for cand in transferred_from:
+                old_hhid = old_hhid or _find_household_id_from_uid(str(cand))
+            if old_hhid:
+                authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (False, "expired", old_hhid))
+                print(f"[Webhook] Downgraded old household {old_hhid} due to TRANSFER")
+        
+        if hhid:
+            authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
+            print(f"[Webhook] Upgraded new household {hhid} due to TRANSFER")
 
     elif evt_type in ["INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE"]:
         authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? {exp_clause} WHERE id = ?", (True, "active", *exp_args, hhid))
