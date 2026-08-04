@@ -353,9 +353,10 @@
 - [x] **US-6.2: Google Play Store Submission** — App submitted and in closed testing phase.
 - [x] **US-5.1 & US-5.2: Migration & Cutover** — Cancelled. Decision made to start with a fresh database and discard legacy test data.
 
+- [x] **US-8.1: Handle Cross-Household Invite Logic** — Cross-household invites prompt confirmation if user is member of another household, and prevents household owners from accepting.
 ## Epic 8: API Security and Future Edge Cases
 
-### US-8.1: Handle Cross-Household Invite Logic
+### ~US-8.1: Handle Cross-Household Invite Logic~ (Completed)
 **As a** system, **I need to** prevent or safely handle when a user who is already a household owner (or in another household) accepts an invite to a different household **so that** we don't create orphaned households or unintentionally overwrite their only household context.
 **Acceptance Criteria:**
 - Warn users if they are leaving a household by accepting an invite.
