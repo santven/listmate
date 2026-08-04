@@ -11,6 +11,7 @@ from google.auth.exceptions import GoogleAuthError
 GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID", "").strip() or \
     "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com"
 REVENUECAT_PUBLIC_KEY = os.environ.get("REVENUECAT_PUBLIC_KEY", "test_IiwuzQXuzucZlwihcMHIsqAMwby").strip()
+REVENUECAT_APPLE_KEY = os.environ.get("REVENUECAT_APPLE_KEY", "").strip()
 COOKIE_NAME = "listmate_session"
 COOKIE_SECURE = False
 _schema_done = False
@@ -554,7 +555,7 @@ def register_auth_routes(app):
 
     @app.route("/api/auth/config")
     def auth_config():
-        resp = {"client_id": GOOGLE_CLIENT_ID, "revenuecat_public_key": REVENUECAT_PUBLIC_KEY}
+        resp = {"client_id": GOOGLE_CLIENT_ID, "revenuecat_public_key": REVENUECAT_PUBLIC_KEY, "revenuecat_apple_key": REVENUECAT_APPLE_KEY}
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()

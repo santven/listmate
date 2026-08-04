@@ -349,7 +349,14 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     <div style="margin-top:14px;">
         <button onclick="restorePurchases()" style="background:none; border:none; color:var(--green); padding:10px; font-size:14px; font-weight:600; cursor:pointer;">Restore Purchases</button>
     </div>
+    <div style="font-size:11px; color:#999; line-height:1.4; margin:10px 0; text-align:center;">
+        Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your account settings on the App Store after purchase.
+    </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
+    <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
+      <a href="/privacy" target="_blank" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="/terms" target="_blank" style="color: #888; text-decoration: underline;">Terms of Use</a>
+    </div>
   </div>
 </div>
 
@@ -608,8 +615,12 @@ async function checkAuth() {
     // RevenueCat Init
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) {
         try {
-            const rcKey = (cfg && cfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
-            const isNative = window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : (window.Capacitor.getPlatform && window.Capacitor.getPlatform() !== 'web');
+            let rcKey = (cfg && cfg.revenuecat_public_key) || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            const platform = window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
+            if (platform === 'ios' && cfg && cfg.revenuecat_apple_key) {
+                rcKey = cfg.revenuecat_apple_key;
+            }
+            const isNative = platform !== 'web';
             if (isNative && rcKey.startsWith('test_')) {
                 console.warn("RevenueCat SDK skipped: Test API key cannot be used in native release builds. Please set REVENUECAT_PUBLIC_KEY with your Google Play public key (goog_...).");
             } else {
@@ -2134,7 +2145,11 @@ async function showPaywall() {
     if (isNativeCapacitor) {
         try {
             const cfg = window.currentCfg || {};
-            const rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            let rcKey = cfg.revenuecat_public_key || "test_IiwuzQXuzucZlwihcMHIsqAMwby";
+            const platform = window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : 'web';
+            if (platform === 'ios' && cfg.revenuecat_apple_key) {
+                rcKey = cfg.revenuecat_apple_key;
+            }
             if (rcKey.startsWith('test_')) {
                 toast('In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) in environment variables.');
                 return;

@@ -1986,21 +1986,21 @@ def move_list_item(item_id):
                 (item_id, _hh())
             )
         else:
-        # Check if item with exact same name already exists in target store list
-        existing_list_item = db.execute(
-            "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
-            (target_store_id, _hh(), item["name"])
-        ).fetchone()
+            # Check if item with exact same name already exists in target store list
+            existing_list_item = db.execute(
+                "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                (target_store_id, _hh(), item["name"])
+            ).fetchone()
 
-        if existing_list_item:
-            # Item already in target list, deduplicate: just delete the one being moved
-            db.execute("DELETE FROM list_items WHERE id = ? AND household_id = ?", (item_id, _hh()))
-        else:
-            # Move the item
-            db.execute(
-                "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
-                (target_store_id, item_id, _hh()),
-            )
+            if existing_list_item:
+                # Item already in target list, deduplicate: just delete the one being moved
+                db.execute("DELETE FROM list_items WHERE id = ? AND household_id = ?", (item_id, _hh()))
+            else:
+                # Move the item
+                db.execute(
+                    "UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?",
+                    (target_store_id, item_id, _hh()),
+                )
 
         # Also ensure the item exists in the target store's catalog for autocomplete
         exists = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", 
