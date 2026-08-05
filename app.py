@@ -709,13 +709,13 @@ def _fetch_revenuecat_plans():
 @app.route("/api/billing/plans", methods=["GET"])
 def billing_plans():
     """Retrieve active subscription plans dynamically from Stripe API, RevenueCat, or environment configuration."""
-    rc_plans = _fetch_revenuecat_plans()
-    if rc_plans:
-        return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
-
     stripe_plans = _fetch_stripe_plans()
     if stripe_plans:
         return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
+
+    rc_plans = _fetch_revenuecat_plans()
+    if rc_plans:
+        return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
 
     monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
     yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
