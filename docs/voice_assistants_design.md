@@ -26,11 +26,21 @@ Integrating ListMate with voice assistants allows users to seamlessly add items 
 5. **Certification & Review**
    - Publishing an Alexa Skill or Google Action requires passing a manual review process, providing privacy policies, and ensuring all edge cases (like asking for help or cancelling) are handled gracefully.
 
+
+6. **Store-Specific Additions**
+   - Users should be able to specify the store in their command: "Add milk to Costco list in ListMate".
+   - **Challenge**: The assistant needs to recognize both the item and the store name as variables (slots). We need dynamic or fuzzy matching to map the spoken store name to the user's actual custom stores (or create a new one if it doesn't exist).
+   - **Interaction Models**:
+     - *Implicit Store*: "Add milk to ListMate" (adds to a default store or no specific store).
+     - *Explicit Store*: "Add milk to Costco list in ListMate" -> `AddItemToStoreIntent` with slots `{ItemName}` and `{StoreName}`.
+
 ## High-Level Design by Platform
 
 ### 1. Amazon Alexa
 - **Component**: Custom Alexa Skill
-- **Interaction Model**: Invocation Name: "ListMate". Intent: `AddItemIntent` with a slot `{ItemName}`.
+- **Interaction Model**: Invocation Name: "ListMate". 
+  - Intent 1: `AddItemIntent` with a slot `{ItemName}`.
+  - Intent 2: `AddItemToStoreIntent` with slots `{ItemName}` and `{StoreName}`.
 - **Backend**: We expose a new webhook (e.g., `/api/voice/alexa/webhook`).
 - **Auth**: User links account. Alexa sends an Access Token in every webhook payload.
 - **Flow**: Alexa -> Webhook -> Validate Token -> Find User -> Add Item -> Return SSML Response.
