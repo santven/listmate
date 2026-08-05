@@ -232,6 +232,10 @@ def _init_schema():
     except Exception as e:
         print(f'[seed dev error] {e}', flush=True)
 
+    try:
+        _run("UPDATE auth_households SET owner_id = (SELECT id FROM auth_users WHERE auth_users.household_id = auth_households.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL")
+    except Exception:
+        pass
     _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -698,7 +702,7 @@ def register_auth_routes(app):
         status = 'premium' if is_early else 'trial'
         trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "30")
         trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
-        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr}) RETURNING id", (hname, code, prem_val, status))
+        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id) VALUES (?,?,?,?, {trial_expr}, ?) RETURNING id", (hname, code, prem_val, status, uid))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
@@ -729,7 +733,8 @@ def register_auth_routes(app):
                 "is_premium": is_prem, "subscription_status": sub_status, 
                 "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at,
                 "is_owner": uid == hh.get("owner_id"), "is_read_only": status["is_read_only"],
-                "over_limit": status["over_limit"]
+                "over_limit": status["over_limit"],
+                "free_tier_member_limit": int(__import__("os").environ.get("FREE_TIER_MEMBER_LIMIT", 1))
             },
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"], 
                          "role": "owner" if m["id"] == hh.get("owner_id") else "member"} for m in members],

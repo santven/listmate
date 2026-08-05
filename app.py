@@ -2394,6 +2394,16 @@ def auth_google_callback():
         traceback.print_exc(file=sys.stderr)
         return '<h3>Login failed</h3><p>Server error: ' + str(exc) + '</p><a href="/login">Try again</a>', 500
 
+
+@app.route("/api/debug/migrate_owners")
+def debug_migrate_owners():
+    try:
+        from shared.auth import _run
+        _run("UPDATE auth_households SET owner_id = (SELECT id FROM auth_users WHERE auth_users.household_id = auth_households.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL")
+        return "Migration successful!"
+    except Exception as e:
+        return str(e)
+
 if __name__ == "__main__":
     from db_pg import init_db
     init_db()

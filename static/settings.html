@@ -317,7 +317,8 @@ async function loadHousehold() {
       const btnAdd = document.getElementById('btnAdd');
       const emailInput = document.getElementById('newMemberEmail');
       
-      if (!householdData.household.is_premium && members.length >= 1) {
+      const limit = householdData.household.free_tier_member_limit || 1;
+      if (!householdData.household.is_premium && members.length >= limit) {
         btnAdd.textContent = 'Add (Premium)';
         btnAdd.style.opacity = '0.5';
         btnAdd.onclick = (e) => { e.preventDefault(); showPaywall(); };
