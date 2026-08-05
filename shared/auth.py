@@ -158,6 +158,14 @@ def _init_schema():
         """CREATE INDEX IF NOT EXISTS idx_au_email ON auth_users(email)""",
         """CREATE INDEX IF NOT EXISTS idx_au_hh ON auth_users(household_id)""",
         
+        
+        """CREATE TABLE IF NOT EXISTS auth_household_members (
+            user_id INTEGER NOT NULL REFERENCES auth_users(id),
+            household_id INTEGER NOT NULL REFERENCES auth_households(id),
+            role TEXT NOT NULL DEFAULT 'member',
+            joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, household_id)
+        )""",
         """CREATE TABLE IF NOT EXISTS login_intents (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         
         """CREATE TABLE IF NOT EXISTS invites (
@@ -236,6 +244,12 @@ def _init_schema():
         _run("UPDATE auth_households SET owner_id = (SELECT id FROM auth_users WHERE auth_users.household_id = auth_households.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL")
     except Exception:
         pass
+    
+    # Data Migration to junction table
+    _run("INSERT INTO auth_household_members (user_id, household_id, role) SELECT id, household_id, 'member' FROM auth_users WHERE household_id > 0 ON CONFLICT DO NOTHING", None)
+    _run("UPDATE auth_household_members SET role = 'owner' FROM auth_households WHERE auth_household_members.user_id = auth_households.owner_id AND auth_household_members.household_id = auth_households.id", None)
+    # End Migration
+
     _schema_done = True
 
 # ── Session ─────────────────────────────────────────────────
@@ -383,6 +397,74 @@ def register_auth_routes(app):
             return jsonify({"ok": False, "status": "completed", "needs_signup": True, "message": "No household"})
         return jsonify({"ok": True, "status": "completed"})
 
+
+    def _process_login(gid, email, name, data):
+        _init_schema()
+        user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+        if not user:
+            user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid,))
+            
+        is_new_user = False
+        if not user:
+            is_new_user = True
+            _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid, email, name))
+            user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid,))
+            
+        if user and user.get("google_id") != gid:
+            _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
+
+        uid = user["id"]
+        
+        open_invites = _run("SELECT * FROM invites WHERE LOWER(email) = LOWER(?) AND used_by IS NULL", (email,))
+        if is_new_user and open_invites:
+            inv = open_invites[0]
+            _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, inv["household_id"]))
+            _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, inv["id"]))
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (inv["household_id"], uid))
+            user["household_id"] = inv["household_id"]
+
+        hh_id = user.get("household_id", 0) if user else 0
+        hh_name = ""
+        
+        if not is_new_user:
+            owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+            if owned:
+                hh_id = owned["household_id"]
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+            elif hh_id == 0:
+                mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                if mem:
+                    hh_id = mem["household_id"]
+                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+
+        if not hh_id:
+            hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
+            if hh_count and hh_count.get("cnt", 0) == 0:
+                import secrets
+                code = secrets.token_hex(4).upper()
+                _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, True, 'premium'))
+                hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
+                hh_id = hh["id"] if hh else 1
+                hh_name = hh["name"] if hh else "Root Household"
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+            else:
+                _set(uid, email, name, 0, "")
+                intent_id = data.get("intent")
+                if intent_id:
+                    _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, uid))
+                return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
+
+        if hh_id and not hh_name:
+            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+            hh_name = hh.get("name", "") if hh else ""
+
+        _set(uid, email, name, hh_id, hh_name)
+        intent_id = data.get("intent")
+        if intent_id:
+            _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, uid))
+            
+        return jsonify({"ok": True, "name": name, "email": email, "household_id": hh_id, "household_name": hh_name})
+
     @app.route("/api/auth/google", methods=["POST"])
     def auth_google():
         try:
@@ -394,60 +476,7 @@ def register_auth_routes(app):
             gid = info["sub"]
             email = info.get("email", "")
             name = info.get("name") or (email.split("@")[0] if email else "User")
-            
-            _init_schema()
-            
-            # Find user — match by email first (case-insensitive on all DBs)
-            user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
-            if not user:
-                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid,))
-            
-            if not user:
-                _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                     (gid, email, name))
-                user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid,))
-            
-            # Update Google ID if different
-            if user and user.get("google_id") != gid:
-                _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
-            
-            hh_id = user.get("household_id", 0) if user else 0
-            hh_name = ""
-            
-            # Auto-assign: only auto-create a household if NO households exist at all (first user ever)
-            # Otherwise leave them unassigned — they need to sign up or accept an invite
-            if not hh_id:
-                hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
-                if hh_count and hh_count.get("cnt", 0) == 0:
-                    # First user on a fresh system — create household
-                    import secrets
-                    code = secrets.token_hex(4).upper()
-                    prem_val = True
-                    _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
-                    hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
-                    hh_id = hh["id"] if hh else 1
-                    hh_name = hh["name"] if hh else "Root Household"
-                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-                else:
-                    _set(user["id"], email, name, 0, "")
-                    intent_id = data.get("intent")
-                    if intent_id:
-                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                    return jsonify({"ok": False, "needs_signup": True,
-                                    "message": "No household — please complete signup"}), 200
-            if hh_id and not hh_name:
-                hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-                hh_name = hh.get("name", "") if hh else ""
-            
-            _set(user["id"], email, name, hh_id, hh_name)
-
-            intent_id = data.get("intent")
-            if intent_id:
-                _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-
-
-            return jsonify({"ok": True, "name": name, "email": email,
-                            "household_id": hh_id, "household_name": hh_name})
+            return _process_login(gid, email, name, data)
         except Exception as e:
             # GoogleAuthError (MalformedError, etc) → 401; anything else → 500
             if isinstance(e, GoogleAuthError):
@@ -688,6 +717,7 @@ def register_auth_routes(app):
             hh = _one(f"SELECT * FROM {_HH} WHERE invite_code = ?", (invite,))
             if not hh: return jsonify({"error": "Invalid invite code"}), 404
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh["id"], uid))
+            _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, hh["id"]))
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
@@ -706,6 +736,42 @@ def register_auth_routes(app):
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
+
+
+    @app.route("/api/auth/households_list")
+    @require_user
+    def auth_households_list():
+        uid = get_user_id()
+        _init_schema()
+        # Get active household
+        active_hhid = get_household_id()
+        
+        # Get all households they belong to
+        hhs = _run("SELECT h.id, h.name, h.subscription_status, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
+        
+        # Get open invites for their email
+        email = get_email()
+        invites = _run("SELECT i.id, i.token, h.name as household_name FROM invites i JOIN auth_households h ON i.household_id = h.id WHERE LOWER(i.email) = LOWER(?) AND i.used_by IS NULL", (email,))
+        
+        return jsonify({"ok": True, "active_id": active_hhid, "households": hhs, "invites": invites})
+
+    @app.route("/api/auth/switch_household", methods=["POST"])
+    @require_user
+    def auth_switch_household():
+        data = request.get_json(silent=True) or {}
+        target_id = data.get("household_id")
+        uid = get_user_id()
+        if not target_id: return jsonify({"error": "Missing household_id"}), 400
+        
+        _init_schema()
+        # Verify membership
+        mem = _one("SELECT 1 FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, target_id))
+        if not mem: return jsonify({"error": "Not a member of that household"}), 403
+        
+        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (target_id, uid))
+        hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (target_id,))
+        _set(uid, get_email(), get_display_name(), target_id, hh["name"] if hh else "")
+        return jsonify({"ok": True})
 
     @app.route("/api/auth/household")
     @require_user
@@ -830,6 +896,7 @@ def register_auth_routes(app):
 
     @app.route("/api/auth/invite/<token>/accept", methods=["POST"])
     @require_user
+
     def auth_accept_invite(token):
         from flask import request
         _init_schema()
@@ -843,27 +910,20 @@ def register_auth_routes(app):
         if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
             return jsonify({"error": "This invite is for a different email address"}), 403
 
-        current_hh_id = user.get("household_id")
-        if current_hh_id and current_hh_id != invite["household_id"] and current_hh_id != 0:
-            current_hh = _one(f"SELECT owner_id FROM {_HH} WHERE id = ?", (current_hh_id,))
-            if current_hh and current_hh.get("owner_id") == uid:
-                return jsonify({"error": "You are the owner of a household. You cannot accept this invite without transferring ownership first."}), 403
-            
-            force = request.args.get("force") or request.form.get("force") or (request.is_json and request.json.get("force"))
-            if str(force).lower() not in ["true", "1"]:
-                return jsonify({
-                    "requires_confirmation": True,
-                    "warning": "You are currently in another household. Accepting this invite will switch your household and you will lose access to the current one. Continue?"
-                }), 409
-
+        # Add to junction table
+        _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, invite["household_id"]))
+        
+        # Switch active household to the new one
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
-        import datetime as _dt2
-        _exec("UPDATE invites SET used_by = ?, used_at = ? WHERE id = ?", (uid, _dt2.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), invite["id"]))
-
+        
+        _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
+        
         hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (invite["household_id"],))
-        hh_name = hh.get("name","") if hh else ""
+        hh_name = hh.get("name", "") if hh else ""
         _set(uid, user["email"], user["name"], invite["household_id"], hh_name)
+        
         return jsonify({"ok": True, "household_id": invite["household_id"], "household_name": hh_name})
+
 
     @app.route("/api/auth/household/spinoff", methods=["POST"])
     @require_user

@@ -75,8 +75,10 @@
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
       <a href="/">📋 List</a>
+      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <div class="divider"></div>
       <a href="/settings">⚙️ Settings</a>
+      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
     </div>
@@ -971,6 +973,75 @@ async function executeSpinOff() {
   }
 }
 
+
+function showHouseholdSwitcher() {
+    const modal = document.getElementById('switcherModal');
+    if (!modal) return;
+    if (typeof toggleBurger === 'function') toggleBurger();
+    modal.classList.add('active');
+    
+    fetch('/api/auth/households_list')
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) return;
+        let html = '';
+        if (res.households.length > 0) {
+            html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Your Households</div>';
+            res.households.forEach(h => {
+                const isActive = h.id === res.active_id;
+                const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
+                const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                html += `
+                    <div onclick="${isActive ? '' : `switchHousehold(${h.id})`}" style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; cursor:${isActive ? 'default' : 'pointer'};">
+                        <div>
+                            <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
+                        </div>
+                        <div>${isActive ? '✅' : '➡️'}</div>
+                    </div>
+                `;
+            });
+        }
+        if (res.invites && res.invites.length > 0) {
+            html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:12px; margin-bottom:4px;">Pending Invites</div>';
+            res.invites.forEach(inv => {
+                html += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:12px;">
+                        <div>
+                            <div style="font-weight:600; color:var(--text);">${escapeHtml(inv.household_name)}</div>
+                            <div style="font-size:12px; color:var(--muted);">Invite</div>
+                        </div>
+                        <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                    </div>
+                `;
+            });
+        }
+        document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
+    });
+}
+function closeHouseholdSwitcher() {
+    const m = document.getElementById('switcherModal');
+    if (m) m.classList.remove('active');
+}
+function switchHousehold(id) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Switching...</div>';
+    fetch('/api/auth/switch_household', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ household_id: id })
+    }).then(() => window.location.reload());
+}
+function acceptInvite(token) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+    fetch('/api/auth/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+    }).then(() => window.location.reload());
+}
+window.addEventListener('click', e => {
+  if (e.target.id === 'switcherModal') closeHouseholdSwitcher();
+});
+
 </script>
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
@@ -1011,6 +1082,75 @@ async function executeSpinOff() {
     btn.disabled = false;
   }
 }
+
+
+function showHouseholdSwitcher() {
+    const modal = document.getElementById('switcherModal');
+    if (!modal) return;
+    if (typeof toggleBurger === 'function') toggleBurger();
+    modal.classList.add('active');
+    
+    fetch('/api/auth/households_list')
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) return;
+        let html = '';
+        if (res.households.length > 0) {
+            html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Your Households</div>';
+            res.households.forEach(h => {
+                const isActive = h.id === res.active_id;
+                const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
+                const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                html += `
+                    <div onclick="${isActive ? '' : `switchHousehold(${h.id})`}" style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; cursor:${isActive ? 'default' : 'pointer'};">
+                        <div>
+                            <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
+                        </div>
+                        <div>${isActive ? '✅' : '➡️'}</div>
+                    </div>
+                `;
+            });
+        }
+        if (res.invites && res.invites.length > 0) {
+            html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:12px; margin-bottom:4px;">Pending Invites</div>';
+            res.invites.forEach(inv => {
+                html += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:12px;">
+                        <div>
+                            <div style="font-weight:600; color:var(--text);">${escapeHtml(inv.household_name)}</div>
+                            <div style="font-size:12px; color:var(--muted);">Invite</div>
+                        </div>
+                        <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                    </div>
+                `;
+            });
+        }
+        document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
+    });
+}
+function closeHouseholdSwitcher() {
+    const m = document.getElementById('switcherModal');
+    if (m) m.classList.remove('active');
+}
+function switchHousehold(id) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Switching...</div>';
+    fetch('/api/auth/switch_household', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ household_id: id })
+    }).then(() => window.location.reload());
+}
+function acceptInvite(token) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+    fetch('/api/auth/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+    }).then(() => window.location.reload());
+}
+window.addEventListener('click', e => {
+  if (e.target.id === 'switcherModal') closeHouseholdSwitcher();
+});
 
 </script>
 </div>

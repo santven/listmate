@@ -364,3 +364,18 @@
 
 ### ~US-8.2: API Security and Rate Limiting~ (Completed)
 
+
+## Epic 9: Multi-Household & Seamless Login
+
+### ~US-9.1: Multi-Household Architecture & Seamless Login~ (In Progress)
+**As a** user with access to multiple households, **I want** to seamlessly log into my primary household and switch between others using a modal **so that** I don’t have to create multiple accounts or struggle with invites.
+
+**Acceptance Criteria:**
+- Introduce a junction table (`auth_household_members`) for multi-tenant mapping.
+- New users clicking an invite are auto-joined and set to that household.
+- Existing users with invites see them in a Household Switcher modal (accessible from Settings).
+- Active `household_id` on `auth_users` represents the current session context to ensure data isolation.
+- UI for switching households matches the premium paywall modal styling.
+- Seamless UX: Owners login directly to their owned household by default.
+
+**Estimated Story Points:** 8
