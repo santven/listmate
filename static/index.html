@@ -1978,10 +1978,9 @@ function switchHousehold(id) {
 }
 function acceptInvite(token) {
     document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
-    fetch('/api/auth/invite/accept', {
+    fetch(`/api/auth/invite/${token}/accept`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token })
+        headers: { 'Content-Type': 'application/json' }
     }).then(() => window.location.reload());
 }
 window.addEventListener('click', e => {
