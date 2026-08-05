@@ -79,7 +79,7 @@ if (urlParams.get('needs_signup')) {
   setTimeout(function() {
     document.getElementById('step1').classList.remove('active');
     document.getElementById('step2').classList.add('active');
-    if (inviteToken) { showInviteBanner(); } else { document.getElementById('createSection').style.display='block'; document.getElementById('btnAccept').style.display='none'; }
+    showSignupOrInvites();
   }, 100);
 }
 if (inviteToken) sessionStorage.removeItem('listmate_invite');
@@ -146,10 +146,7 @@ function startPollingIntent(intentId) {
           }
           document.getElementById('step1').classList.remove('active');
           document.getElementById('step2').classList.add('active');
-          if (inviteToken) { showInviteBanner(); } else {
-            document.getElementById('createSection').style.display='block';
-            document.getElementById('btnAccept').style.display='none';
-          }
+          showSignupOrInvites();
         }
       }).catch(function(){});
   }, 2000);
@@ -399,10 +396,7 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       }
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
-      if (inviteToken) { showInviteBanner(); } else {
-        document.getElementById('createSection').style.display='block';
-        document.getElementById('btnAccept').style.display='none';
-      }
+      showSignupOrInvites();
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
@@ -456,10 +450,7 @@ function handleCredential(credential, isIntentCallback) {
       }
       document.getElementById('step1').classList.remove('active');
       document.getElementById('step2').classList.add('active');
-      if (inviteToken) { showInviteBanner(); } else {
-        document.getElementById('createSection').style.display='block';
-        document.getElementById('btnAccept').style.display='none';
-      }
+      showSignupOrInvites();
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
@@ -477,6 +468,52 @@ function showInviteBanner() {
       document.getElementById('subtitle').textContent='Accept your invitation';
     } else { showStep2Error(d.error||'Invalid invite'); }
   }).catch(function(){ showStep2Error('Could not verify invite.'); });
+}
+
+
+function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
+function showSignupOrInvites() {
+    if (inviteToken) { 
+        showInviteBanner(); 
+    } else {
+        document.getElementById('createSection').style.display='block';
+        document.getElementById('btnAccept').style.display='none';
+        
+        fetch('/api/auth/households_list').then(function(r){return r.json()}).then(function(d){
+            if (d.ok && d.invites && d.invites.length > 0) {
+                var html = '<div style="margin-top:24px; text-align:left;">';
+                html += '<div style="font-size:14px; font-weight:700; color:#555; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">Or join a household you were invited to</div>';
+                d.invites.forEach(function(inv) {
+                    html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;">' +
+                        '<div>' +
+                            '<div style="font-weight:600; color:#111; font-size:15px;">' + escapeHtml(inv.household_name) + '</div>' +
+                        '</div>' +
+                        '<button onclick="acceptPendingInvite(\'' + inv.token + '\')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>' +
+                    '</div>';
+                });
+                html += '</div>';
+                
+                var container = document.getElementById('pendingInvitesContainer');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = 'pendingInvitesContainer';
+                    var cs = document.getElementById('createSection');
+                    cs.parentNode.insertBefore(container, cs.nextSibling);
+                }
+                container.innerHTML = html;
+            }
+        }).catch(console.error);
+    }
+}
+
+function acceptPendingInvite(token) {
+    showStep2Error('');
+    fetch('/api/auth/invite/' + token + '/accept', {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.ok) location.replace('/?_='+Date.now());
+        else showStep2Error(d.error||'Failed to accept');
+    }).catch(function(){showStep2Error('Network error.');});
 }
 
 function acceptInvite(force) {

@@ -415,14 +415,7 @@ def register_auth_routes(app):
 
         uid = user["id"]
         
-        open_invites = _run("SELECT * FROM invites WHERE LOWER(email) = LOWER(?) AND used_by IS NULL", (email,))
-        if is_new_user and open_invites:
-            inv = open_invites[0]
-            _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, inv["household_id"]))
-            _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, inv["id"]))
-            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (inv["household_id"], uid))
-            user["household_id"] = inv["household_id"]
-
+        
         hh_id = user.get("household_id", 0) if user else 0
         hh_name = ""
         
