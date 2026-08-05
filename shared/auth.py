@@ -696,7 +696,8 @@ def register_auth_routes(app):
         is_early = existing_cnt < int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25))
         prem_val = is_early
         status = 'premium' if is_early else 'trial'
-        trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"
+        trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "30")
+        trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at) VALUES (?,?,?,?, {trial_expr}) RETURNING id", (hname, code, prem_val, status))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)

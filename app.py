@@ -1152,11 +1152,12 @@ def recipe_usage_endpoint():
     db = get_db()
     try:
         used = _get_weekly_recipe_count(db, hhid)
+        limit = int(__import__("os").environ.get("WEEKLY_RECIPE_LIMIT", 7))
         return jsonify({
             "ok": True,
             "used": used,
-            "limit": 7,
-            "remaining": max(0, 7 - used)
+            "limit": limit,
+            "remaining": max(0, limit - used)
         })
     finally:
         db.close()
@@ -1198,12 +1199,13 @@ def generate_recipe_endpoint():
     db = get_db()
     try:
         used = _get_weekly_recipe_count(db, hhid)
-        if used >= 7:
+        limit = int(__import__("os").environ.get("WEEKLY_RECIPE_LIMIT", 7))
+        if used >= limit:
             return jsonify({
-                "error": "Weekly limit reached (7 of 7 recipes generated this week). Quota resets on Sunday.",
+                "error": f"Weekly limit reached ({limit} of {limit} recipes generated this week). Quota resets on Sunday.",
                 "code": "WEEKLY_LIMIT_REACHED",
                 "used": used,
-                "limit": 7,
+                "limit": limit,
                 "remaining": 0
             }), 400
 
@@ -1231,8 +1233,8 @@ def generate_recipe_endpoint():
                 "recipe": recipe_data,
                 "weekly_usage": {
                     "used": new_used,
-                    "limit": 7,
-                    "remaining": max(0, 7 - new_used)
+                    "limit": limit,
+                    "remaining": max(0, limit - new_used)
                 }
             })
         else:

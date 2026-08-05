@@ -1260,7 +1260,7 @@ function updateRecipeUsageUI(used, limit, remaining) {
       btn.disabled = true;
       btn.style.opacity = '0.6';
       btn.style.cursor = 'not-allowed';
-      btn.innerHTML = '⚠️ Weekly Limit Reached (7/7 Generated) • Resets Sun';
+      btn.innerHTML = `⚠️ Weekly Limit Reached (${limit}/${limit} Generated) • Resets Sun`;
     } else {
       btn.disabled = false;
       btn.style.opacity = '1';
