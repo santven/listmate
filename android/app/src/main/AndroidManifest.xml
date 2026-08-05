@@ -33,7 +33,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
-    </application>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+</application>
 
     <!-- Permissions -->
 

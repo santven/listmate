@@ -1,5 +1,41 @@
 package com.pvkslabs.listmate;
 
+import android.content.Intent;
+import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
-public class MainActivity extends BridgeActivity {}
+public class MainActivity extends BridgeActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        handleVoiceIntent(getIntent());
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleVoiceIntent(intent);
+    }
+
+    private void handleVoiceIntent(Intent intent) {
+        if (intent != null && intent.getExtras() != null) {
+            String itemName = intent.getStringExtra("itemName");
+            String listName = intent.getStringExtra("listName");
+            if (itemName != null && !itemName.isEmpty()) {
+                final String safeItem = itemName.replace("'", "\\'");
+                final String safeList = listName != null ? listName.replace("'", "\\'") : "";
+                
+                final String jsCode = "window.pendingVoiceAction = {itemName: '" + safeItem + "', listName: '" + safeList + "'}; " +
+                                      "if (window.dispatchEvent) window.dispatchEvent(new CustomEvent('onVoiceAction', {detail: window.pendingVoiceAction}));";
+                
+                // Give the webview a moment to initialize if this is a cold boot
+                new android.os.Handler().postDelayed(() -> {
+                    if (bridge != null && bridge.getWebView() != null) {
+                        bridge.getWebView().evaluateJavascript(jsCode, null);
+                    }
+                }, 2000);
+            }
+        }
+    }
+}
