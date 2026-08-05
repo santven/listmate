@@ -1,4 +1,4 @@
-# Listmate 🛒
+# ListMate 🛒
 
 Store-specific grocery list for households. Know what to buy at every store.
 
@@ -56,7 +56,7 @@ listmate/
 ```
 
 ## Background Jobs
-Listmate uses a single consolidated cron script `scripts/cron_daily.py` designed to run daily (e.g., at 8 AM). 
+ListMate uses a single consolidated cron script `scripts/cron_daily.py` designed to run daily (e.g., at 8 AM). 
 
 It handles multiple automated workflows while ensuring a user receives **at most one combined email** per day:
 - **Trial Expirations**: Reminds users 3 days before and on the day their 30-day trial ends.

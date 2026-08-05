@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Listmate auth — Google SSO + household management.
+"""ListMate auth — Google SSO + household management.
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps

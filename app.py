@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Listmate — store-specific grocery list for households.
+"""ListMate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
 import os, json, sys, time, re, urllib.request

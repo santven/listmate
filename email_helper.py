@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""SendGrid email helper — shared by grocery and Listmate apps."""
+"""SendGrid email helper — shared by grocery and ListMate apps."""
 import os
 
 FROM_EMAIL = os.environ.get("SENDGRID_FROM", "hello@grocerlist.app")
-FROM_NAME = os.environ.get("SENDGRID_FROM_NAME", "Listmate")
+FROM_NAME = os.environ.get("SENDGRID_FROM_NAME", "ListMate")
 
 
 def _send_via_api(api_key: str, payload: dict) -> bool:
@@ -41,15 +41,15 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
         "personalizations": [{
             "to": [{"email": to_email}],
         }],
-        "subject": f"{inviter_name} invited you to join {household_name} on Listmate",
+        "subject": f"{inviter_name} invited you to join {household_name} on ListMate",
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on Listmate — a shared grocery list app for your household.\n\nTo accept this invitation, click the link below and sign in with your Google account:\n\n{invite_link}\n\nThis link expires in 7 days.\n\n— The Listmate Team",
+                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n\nTo accept this invitation, click the link below and sign in with your Google account:\n\n{invite_link}\n\nThis link expires in 7 days.\n\n— The ListMate Team",
             },
             {
                 "type": "text/html",
-                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 You\'re invited!</h2><p style="font-size:16px">{inviter_name} invited you to join <strong>{household_name}</strong> on Listmate.</p><p>Listmate helps your household keep shared grocery lists, organized by store.</p><p style="margin:24px 0"><a href="{invite_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Accept Invitation</a></p><p style="font-size:12px;color:#888">This link expires in 7 days.</p></div>',
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 You\'re invited!</h2><p style="font-size:16px">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p>ListMate helps your household keep shared grocery lists, organized by store.</p><p style="margin:24px 0"><a href="{invite_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Accept Invitation</a></p><p style="font-size:12px;color:#888">This link expires in 7 days.</p></div>',
             },
         ],
         "tracking_settings": {
@@ -84,7 +84,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi {user_name},\n\nYour ListMate {term} {urgency_text}.\n\nDon't lose access to your shared grocery lists! Tap the link below to upgrade your household and keep everything syncing seamlessly.\n\n{upgrade_link}\n\n— The Listmate Team",
+                "value": f"Hi {user_name},\n\nYour ListMate {term} {urgency_text}.\n\nDon't lose access to your shared grocery lists! Tap the link below to upgrade your household and keep everything syncing seamlessly.\n\n{upgrade_link}\n\n— The ListMate Team",
             },
             {
                 "type": "text/html",
@@ -122,7 +122,7 @@ def send_activation_notice(to_email: str, user_name: str) -> bool:
                     f"When everyone adds items as they run out, whoever visits the store always has the exact, up-to-date list in their pocket.\n\n"
                     f"Tap the link below to add your first items and invite your household:\n\n"
                     f"{app_link}\n\n"
-                    f"— The Listmate Team"
+                    f"— The ListMate Team"
                 ),
             },
             {
@@ -170,7 +170,7 @@ def send_reengagement_notice(to_email: str, user_name: str) -> bool:
                     f"Check out our latest features, including instant store-based aisle organization, to make your next trip seamless.\n\n"
                     f"Tap the link below to plan your next grocery trip:\n\n"
                     f"{app_link}\n\n"
-                    f"— The Listmate Team"
+                    f"— The ListMate Team"
                 ),
             },
             {
@@ -245,7 +245,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict) -> bool:
     if not ('expiration' in events):
         html_sections.append(f'<p style="margin:24px 0"><a href="{app_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Open ListMate</a></p>')
 
-    text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + "\n\n— The Listmate Team"
+    text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + "\n\n— The ListMate Team"
     html_body = f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><p style="font-size:16px">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
 
     payload = {
