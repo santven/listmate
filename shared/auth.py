@@ -216,6 +216,8 @@ def _init_schema():
         """DROP TRIGGER IF EXISTS trg_update_downgraded_at ON auth_households""",
         """CREATE TRIGGER trg_update_downgraded_at BEFORE UPDATE ON auth_households FOR EACH ROW EXECUTE FUNCTION update_downgraded_at()""",
 
+        
+        "INSERT INTO auth_household_members (user_id, household_id, role) SELECT u.id, u.household_id, CASE WHEN h.owner_id = u.id THEN 'owner' ELSE 'member' END FROM auth_users u JOIN auth_households h ON h.id = u.household_id WHERE u.household_id > 0 ON CONFLICT (user_id, household_id) DO NOTHING",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS rc_app_user_id TEXT",
