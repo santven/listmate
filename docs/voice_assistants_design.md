@@ -29,7 +29,7 @@ Integrating ListMate with voice assistants allows users to seamlessly add items 
 
 6. **Store-Specific Additions**
    - Users should be able to specify the store in their command: "Add milk to Costco list in ListMate".
-   - **Challenge**: The assistant needs to recognize both the item and the store name as variables (slots). We need dynamic or fuzzy matching to map the spoken store name to the user's actual custom stores (or create a new one if it doesn't exist).
+   - **Challenge & Fallback Strategy**: The assistant needs to recognize both the item and the store name as variables (slots). We need dynamic or fuzzy matching to map the spoken store name to the user's actual custom stores. Every household has a default store called "General List". If the fuzzy matching fails to recognize the spoken store (or if no store is specified), the item should fallback and be added to the "General List".
    - **Interaction Models**:
      - *Implicit Store*: "Add milk to ListMate" (adds to a default store or no specific store).
      - *Explicit Store*: "Add milk to Costco list in ListMate" -> `AddItemToStoreIntent` with slots `{ItemName}` and `{StoreName}`.
