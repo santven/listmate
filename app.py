@@ -767,6 +767,23 @@ def billing_checkout():
     cancel_redirect = f"{host_url}/settings?purchase=cancel"
 
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    
+    # Map non-Stripe package types (like '$rc_monthly', 'monthly', 'yearly') to Stripe price IDs if possible
+    if stripe_secret and not (pkg_type.startswith("price_") or pkg_type.startswith("plan_")):
+        is_yearly = "year" in pkg_type.lower() or "annual" in pkg_type.lower()
+        mapped_price = os.environ.get("STRIPE_PRICE_YEARLY") if is_yearly else os.environ.get("STRIPE_PRICE_MONTHLY")
+        
+        if not mapped_price:
+            stripe_plans = _fetch_stripe_plans()
+            if stripe_plans:
+                for p in stripe_plans:
+                    if (is_yearly and p["package_type"] == "yearly") or (not is_yearly and p["package_type"] == "monthly"):
+                        mapped_price = p["price_id"]
+                        break
+        
+        if mapped_price:
+            pkg_type = mapped_price
+
     if stripe_secret and (pkg_type.startswith("price_") or pkg_type.startswith("plan_")):
         try:
             url = "https://api.stripe.com/v1/checkout/sessions"
