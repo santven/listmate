@@ -303,7 +303,7 @@ def get_household_status():
     members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,))
     is_read_only = False
     over_limit = False
-    if not is_prem and len(members) > 1:
+    if not is_prem and len(members) > int(__import__("os").environ.get("FREE_TIER_MEMBER_LIMIT", 1)):
         over_limit = True
         if hh.get("owner_id") != uid:
             is_read_only = True
@@ -627,7 +627,7 @@ def register_auth_routes(app):
             if hh and hh.get("owner_id") == uid:
                 is_prem = hh.get("is_premium")
                 sub_status = hh.get("subscription_status")
-                is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= 25)
+                is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
                 if is_prem and not is_early and sub_status in ['active', 'premium', 'trial']:
                     return jsonify({"error": "You cannot delete your account while you have an active subscription as the household owner. Please cancel your subscription first."}), 403
 
@@ -693,7 +693,7 @@ def register_auth_routes(app):
         code = secrets.token_hex(4).upper()
         count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
         existing_cnt = count_row.get("cnt", 0) if count_row else 0
-        is_early = existing_cnt < 25
+        is_early = existing_cnt < int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25))
         prem_val = is_early
         status = 'premium' if is_early else 'trial'
         trial_expr = "NOW() + INTERVAL '30 days'" if not is_early else "NULL"

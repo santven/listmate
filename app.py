@@ -905,7 +905,7 @@ def premium_settings():
         hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at, owner_id FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
         sub_status = hh.get("subscription_status", "free") if hh else "free"
-        is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= 25)
+        is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
         sub_status = hh.get("subscription_status", "free") if hh else "free"
         trial_ends_at = hh.get("trial_ends_at") if hh else None
         if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
@@ -943,13 +943,14 @@ def premium_settings():
             "subscription_status": sub_status,
             "trial_ends_at": trial_ends_at,
             "subscription_ends_at": sub_ends_at,
-            "is_owner": is_owner
+            "is_owner": is_owner,
+            "early_adopter_limit": int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25))
         })
 
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium
-    is_early_eligible = bool(hhid and int(hhid) <= 25)
+    is_early_eligible = bool(hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
     
     if is_premium and is_early_eligible:
         status = "premium"
@@ -957,7 +958,7 @@ def premium_settings():
         status = "active" if is_premium else "free"
         
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
-    is_early = bool(is_premium and status == "premium" and hhid and int(hhid) <= 25)
+    is_early = bool(is_premium and status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
     
     return jsonify({
         "ok": True,
@@ -1028,7 +1029,7 @@ def _call_gemini_recipe(prompt, dietary_restrictions=""):
             if key: break
 
     # Prioritize Gemini 3.6 Flash and Gemini 3.1 Flash Lite (higher allowance/free tier friendly)
-    models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-latest"]
+    models_to_try = [m.strip() for m in __import__("os").environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-flash-latest").split(",") if m.strip()]
 
     if key:
         system_instruction = (

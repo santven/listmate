@@ -465,7 +465,7 @@ async function loadPremium() {
     }
     if (badge) {
       if (d.is_early_adopter) {
-        badge.textContent = `🎉 Early Adopter (Household #${d.household_id || ''} of 25)`;
+        badge.textContent = `🎉 Early Adopter (Household #${d.household_id || ''} of ${d.early_adopter_limit || 25})`;
         badge.style.display = 'inline-block';
         if (upgradeBtn) upgradeBtn.style.display = 'none';
       } else if (d.subscription_status === 'trial') {
