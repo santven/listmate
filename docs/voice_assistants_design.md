@@ -49,7 +49,13 @@ Integrating ListMate with voice assistants allows users to seamlessly add items 
 - *Note: Google recently deprecated Conversational Actions in favor of App Actions (Android).*
 - **Component**: Android App Actions (BII - Built-in Intents).
 - **Interaction**: "Hey Google, add milk to ListMate."
-- **Flow**: Google Assistant triggers an intent directly to our installed Android app. The Android app receives the intent, adds the item locally, and syncs it to the backend via our existing API.
+- **Flow (On Phone)**: Google Assistant triggers an intent directly to our installed Android app. The Android app receives the intent, adds the item locally, and syncs it to the backend via our existing API.
+- **Flow (On Smart Speakers / Google Home)**: Because Google killed cloud-based Conversational Actions, smart speakers now act as a proxy. 
+  1. The user speaks to the Google Home device.
+  2. Google's cloud recognizes the command belongs to the ListMate Android App Action.
+  3. Google sends an execution request to the Android phone linked to that same Google account.
+  4. The phone wakes up the ListMate app in the background to execute the task and sync it to the DB.
+  5. **Limitation**: If the user's Android phone is dead, offline, or they only have an iPhone, the smart speaker will fail and say "To do that, you need to install the ListMate app on your phone." 
 
 ### 3. Apple Siri (App Intents)
 - **Component**: App Intents framework (iOS).
