@@ -1937,12 +1937,21 @@ function showHouseholdSwitcher() {
                 const isActive = h.id === res.active_id;
                 const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                
+                let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
+                
+                // Add a Leave button if it's not the only one? Or just always add it.
+                // We'll put it in a flex container
+                
                 html += `
-                    <div onclick="${isActive ? '' : `switchHousehold(${h.id})`}" style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; cursor:${isActive ? 'default' : 'pointer'};">
-                        <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; margin-bottom:8px;">
+                        <div style="cursor:${isActive ? 'default' : 'pointer'}; flex-grow:1;" onclick="${isActive ? '' : `switchHousehold(${h.id})`}">
                             <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
                         </div>
-                        <div>${isActive ? '✅' : '➡️'}</div>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            ${actionHtml}
+                            <button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px;" title="Leave Household">🚪</button>
+                        </div>
                     </div>
                 `;
             });
@@ -1951,12 +1960,15 @@ function showHouseholdSwitcher() {
             html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:12px; margin-bottom:4px;">Pending Invites</div>';
             res.invites.forEach(inv => {
                 html += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:12px; margin-bottom:8px;">
                         <div>
                             <div style="font-weight:600; color:var(--text);">${escapeHtml(inv.household_name)}</div>
                             <div style="font-size:12px; color:var(--muted);">Invite</div>
                         </div>
-                        <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="confirmDeclineInvite('${inv.token}', '${escapeHtml(inv.household_name)}')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Decline</button>
+                            <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                        </div>
                     </div>
                 `;
             });
@@ -1964,6 +1976,33 @@ function showHouseholdSwitcher() {
         document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
     });
 }
+
+function confirmLeaveHousehold(id, name) {
+    if (confirm('Are you sure you want to leave "' + name + '"?')) {
+        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
+        fetch('/api/auth/household/' + id + '/leave', { method: 'POST', headers: {'Content-Type':'application/json'} })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) window.location.reload();
+            else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
+        })
+        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+    }
+}
+
+function confirmDeclineInvite(token, name) {
+    if (confirm('Are you sure you want to decline the invite for "' + name + '"?')) {
+        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
+        fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', headers: {'Content-Type':'application/json'} })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) window.location.reload();
+            else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
+        })
+        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+    }
+}
+
 function closeHouseholdSwitcher() {
     const m = document.getElementById('switcherModal');
     if (m) m.classList.remove('active');

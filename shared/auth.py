@@ -414,11 +414,9 @@ def register_auth_routes(app):
             _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
 
         uid = user["id"]
-        
-        
         hh_id = user.get("household_id", 0) if user else 0
         hh_name = ""
-        
+
         if not is_new_user:
             owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
             if owned:
@@ -429,6 +427,11 @@ def register_auth_routes(app):
                 if mem:
                     hh_id = mem["household_id"]
                     _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+
+        open_invites = _run("SELECT id FROM invites WHERE LOWER(email) = LOWER(?) AND used_by IS NULL", (email,))
+        is_owner = False
+        if not is_new_user:
+            is_owner = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,)) is not None
 
         if not hh_id:
             hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
@@ -446,6 +449,9 @@ def register_auth_routes(app):
                 if intent_id:
                     _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, uid))
                 return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
+        elif open_invites and not is_owner:
+            _set(uid, email, name, hh_id, "")
+            return jsonify({"ok": False, "needs_signup": True, "message": "Pending invites interception"}), 200
 
         if hh_id and not hh_name:
             hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
@@ -916,6 +922,49 @@ def register_auth_routes(app):
         _set(uid, user["email"], user["name"], invite["household_id"], hh_name)
         
         return jsonify({"ok": True, "household_id": invite["household_id"], "household_name": hh_name})
+
+    @app.route("/api/auth/invite/<token>/decline", methods=["POST"])
+    @require_user
+    def auth_decline_invite(token):
+        _init_schema()
+        invite = _one("SELECT * FROM invites WHERE token = ? AND used_by IS NULL", (token,))
+        if not invite:
+            return jsonify({"error": "Invalid or expired invite"}), 404
+            
+        uid = get_user_id()
+        user = _one(f"SELECT email FROM {_USERS} WHERE id = ?", (uid,))
+        if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
+            return jsonify({"error": "This invite is for a different email address"}), 403
+            
+        _run("DELETE FROM invites WHERE id = ?", (invite["id"],))
+        return jsonify({"ok": True})
+
+    @app.route("/api/auth/household/<int:hh_id>/leave", methods=["POST"])
+    @require_user
+    def auth_leave_household(hh_id):
+        _init_schema()
+        uid = get_user_id()
+        mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
+        if not mem:
+            return jsonify({"error": "Not a member"}), 404
+            
+        if mem["role"] == "owner":
+            owners_count = _one("SELECT COUNT(*) as c FROM auth_household_members WHERE household_id = ? AND role = 'owner'", (hh_id,))
+            if owners_count and owners_count["c"] <= 1:
+                return jsonify({"error": "You are the only owner. You cannot leave without assigning another owner or deleting the household."}), 400
+                
+        _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
+        
+        user = _one(f"SELECT household_id FROM {_USERS} WHERE id = ?", (uid,))
+        if user and user.get("household_id") == hh_id:
+            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+            if other:
+                new_id = other["household_id"]
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_id, uid))
+            else:
+                _run(f"UPDATE {_USERS} SET household_id = 0 WHERE id = ?", (uid,))
+        
+        return jsonify({"ok": True})
 
 
     @app.route("/api/auth/household/spinoff", methods=["POST"])
