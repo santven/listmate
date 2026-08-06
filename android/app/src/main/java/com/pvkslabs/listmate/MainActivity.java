@@ -28,12 +28,7 @@ public class MainActivity extends BridgeActivity {
                 listName = intent.getStringExtra("listName");
             }
             
-            // Fallback for older Google Assistant intents
-            if ("com.google.android.gms.actions.CREATE_NOTE".equals(intent.getAction())) {
-                if (intent.hasExtra(Intent.EXTRA_TEXT)) {
-                    itemName = intent.getStringExtra(Intent.EXTRA_TEXT);
-                }
-            }
+
             if (itemName != null && !itemName.isEmpty()) {
                 final String safeItem = itemName.replace("'", "\\'");
                 final String safeList = listName != null ? listName.replace("'", "\\'") : "";
