@@ -600,6 +600,10 @@ async function loadAndRenderWebPaywall() {
         const r = await fetch('/api/billing/plans');
         const d = await r.json();
         
+        if (d.error) {
+            container.innerHTML = `<div style="color: red; padding: 10px; background: #fee2e2; border-radius: 8px; margin-bottom: 10px; font-size: 13px;">${escapeHtml(d.error)}</div>`;
+            return;
+        }
         if (d.ok && d.plans && d.plans.length > 0) {
             container.innerHTML = '';
             d.plans.forEach(plan => {

@@ -659,10 +659,23 @@ def _fetch_stripe_plans():
                     final_plans.append(p)
             
             final_plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
-            return final_plans if final_plans else None
+            if not final_plans and plans:
+                # Fallback: if they had active prices but none matched the environment variables, just take the first ones we found
+                for p in plans:
+                    if p["package_type"] not in seen_types:
+                        seen_types.add(p["package_type"])
+                        final_plans.append(p)
+                final_plans.sort(key=lambda x: 0 if x["package_type"] == "monthly" else 1)
+                
+            if not final_plans:
+                return {"error": "No active recurring prices (subscriptions) were found in your Stripe account. Please ensure you have created Products with recurring Prices and marked them as active."}
+            return final_plans
     except Exception as e:
-        print(f"[Stripe API] Error fetching prices: {e}")
-        return None
+        err_str = str(e)
+        if hasattr(e, 'read'):
+            err_str += " " + e.read().decode('utf-8')
+        print(f"[Stripe API] Error fetching prices: {err_str}")
+        return {"error": f"Stripe API Error: {err_str}"}
 
 
 def _fetch_revenuecat_plans():
@@ -714,8 +727,16 @@ def _fetch_revenuecat_plans():
 @app.route("/api/billing/plans", methods=["GET"])
 def billing_plans():
     """Retrieve active subscription plans dynamically from Stripe API, RevenueCat, or environment configuration."""
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    if stripe_secret:
+        stripe_plans = _fetch_stripe_plans()
+        if stripe_plans and isinstance(stripe_plans, list):
+            return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
+        elif isinstance(stripe_plans, dict) and "error" in stripe_plans:
+            return jsonify({"ok": False, "error": stripe_plans["error"]})
+            
     stripe_plans = _fetch_stripe_plans()
-    if stripe_plans:
+    if stripe_plans and isinstance(stripe_plans, list):
         return jsonify({"ok": True, "source": "stripe_api", "plans": stripe_plans})
 
     rc_plans = _fetch_revenuecat_plans()
