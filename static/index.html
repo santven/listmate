@@ -3023,49 +3023,6 @@ function addSavedRecipeToList(id) {
   openRecipeStoreModal(r);
 }
 
-
-// ── Voice Assistant Integration (Premium) ──
-window.addEventListener('onVoiceAction', async (e) => {
-  const { itemName, listName } = e.detail;
-  if (!itemName) return;
-
-  if (!window.currentCfg || !window.currentCfg.is_premium) {
-      toast('Voice Assistant is a Premium feature. Upgrade to use hands-free adding!');
-      return;
-  }
-  
-  let targetStoreId = null;
-  
-  if (listName) {
-      const lStore = listName.toLowerCase().trim();
-      const match = stores.find(s => s.name.toLowerCase() === lStore);
-      if (match) targetStoreId = match.id;
-  }
-
-  if (!targetStoreId) {
-      const gen = stores.find(s => s.name.toLowerCase() === 'general list');
-      if (gen) targetStoreId = gen.id;
-  }
-
-  if (!targetStoreId && stores.length > 0) {
-      targetStoreId = stores[0].id;
-  }
-  
-  if (targetStoreId) {
-      await addToList(targetStoreId, itemName, '', true);
-      toast(`🎙️ Added ${itemName}`);
-  }
-});
-
-if (window.pendingVoiceAction) {
-  setTimeout(() => {
-    if (window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('onVoiceAction', {detail: window.pendingVoiceAction}));
-    }
-    window.pendingVoiceAction = null;
-  }, 1500);
-}
-
 async function deleteSavedRecipe(id) {
   if (!confirm('Are you sure you want to delete this saved recipe?')) return;
   try {

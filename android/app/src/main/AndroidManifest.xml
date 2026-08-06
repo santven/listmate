@@ -21,13 +21,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-                        <!-- Required for App Actions shortcuts -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="listmate" android:host="assistant" />
-            </intent-filter>
 
         </activity>
 
@@ -40,8 +33,7 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
-</application>
+    </application>
 
     <!-- Permissions -->
 
