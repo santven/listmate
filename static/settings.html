@@ -862,7 +862,7 @@ async function showPaywall() {
                         if (label === 'ANNUAL') label = 'Yearly';
                         else if (label === 'MONTHLY') label = 'Monthly';
                         
-                        btn.innerText = `Subscribe to ${label} for ${pkg.product.priceString}`;
+                        btn.innerHTML = `<div style="font-size:16px;">ListMate Premium</div><div style="font-weight:normal; font-size:13px; margin-top:2px;">${label} Subscription &bull; ${pkg.product.priceString}</div>`;
                         btn.onclick = () => purchasePackage(index);
                         container.appendChild(btn);
                     });
@@ -1136,8 +1136,8 @@ window.addEventListener('click', e => {
     </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
     <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
-      <a href="/privacy" target="_blank" style="color: #888; text-decoration: underline;">Privacy Policy</a>
-      <a href="/terms" target="_blank" style="color: #888; text-decoration: underline;">Terms of Use</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
   </div>
 </div>
