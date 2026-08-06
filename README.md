@@ -62,3 +62,4 @@ It handles multiple automated workflows while ensuring a user receives **at most
 - **Trial Expirations**: Reminds users 3 days before and on the day their 30-day trial ends.
 - **Activation**: Engages users who signed up 3 days ago but haven't added any items to their list.
 - **Re-engagement**: Re-engages users who haven't added an item in 14 days.
+# Trigger CI
