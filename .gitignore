@@ -11,3 +11,4 @@ listmate.db*
 listmate_auth.db
 release_body.json
 data.db
+# trigger CI build
