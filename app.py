@@ -598,6 +598,8 @@ def _fetch_stripe_plans():
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
     if not stripe_secret:
         return None
+    if stripe_secret.startswith("pk_"):
+        return {"error": "STRIPE_SECRET_KEY is configured with a Publishable Key (pk_***). You must use your Secret Key (sk_***) from the Stripe Dashboard."}
     try:
         url = "https://api.stripe.com/v1/prices?active=true&expand[]=data.product&limit=20"
         req = urllib.request.Request(
@@ -793,7 +795,9 @@ def billing_checkout():
     cancel_redirect = f"{host_url}/settings?purchase=cancel"
 
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
-    
+    if stripe_secret and stripe_secret.startswith("pk_"):
+        return jsonify({"error": "Configuration Error: STRIPE_SECRET_KEY is set to a Publishable Key (pk_***). Please use the Secret Key (sk_***)."}), 400
+        
     # Map non-Stripe package types (like '$rc_monthly', 'monthly', 'yearly') to Stripe price IDs if possible
     if stripe_secret and not (pkg_type.startswith("price_") or pkg_type.startswith("plan_")):
         is_yearly = "year" in pkg_type.lower() or "annual" in pkg_type.lower()
