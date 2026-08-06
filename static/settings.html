@@ -583,6 +583,11 @@ async function loadAndRenderWebPaywall() {
     
     const pModal = document.getElementById('paywallModal');
     if (pModal) pModal.classList.add('active');
+    
+    const legalText = document.getElementById('paywallLegalText');
+    if (legalText) {
+        legalText.innerText = "Payment will be processed securely. Subscription automatically renews unless canceled. You can manage or cancel your subscription anytime in your account settings.";
+    }
 
     container.innerHTML = `
         <div style="padding:24px 0; text-align:center; color:#64748b;">
@@ -838,6 +843,15 @@ async function showPaywall() {
             const offerings = await window.Capacitor.Plugins.Purchases.getOfferings();
             console.log("[RevenueCat] Offerings fetched:", offerings);
             
+            const legalText = document.getElementById('paywallLegalText');
+            if (legalText) {
+                if (platform === 'ios') {
+                    legalText.innerText = "Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your account settings on the App Store after purchase.";
+                } else if (platform === 'android') {
+                    legalText.innerText = "Payment will be charged to your Google Play account at confirmation of purchase. Subscription automatically renews unless canceled. You can manage and cancel your subscriptions by going to your account settings on Google Play after purchase.";
+                }
+            }
+
             if (offerings.current && offerings.current.availablePackages.length > 0) {
                 revenueCatOfferings = offerings.current.availablePackages;
                 const container = document.getElementById('paywallPackages');
@@ -1120,7 +1134,7 @@ window.addEventListener('click', e => {
     <div style="margin-top:14px;">
         <button onclick="restorePurchases()" style="background:none; border:none; color:var(--green); padding:10px; font-size:14px; font-weight:600; cursor:pointer;">Restore Purchases</button>
     </div>
-    <div style="font-size:11px; color:#999; line-height:1.4; margin:10px 0; text-align:center;">
+    <div id="paywallLegalText" style="font-size:11px; color:#999; line-height:1.4; margin:10px 0; text-align:center;">
         Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your account settings on the App Store after purchase.
     </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
