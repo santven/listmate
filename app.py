@@ -640,6 +640,11 @@ def _fetch_stripe_plans():
             env_monthly = os.environ.get("STRIPE_PRICE_MONTHLY")
             env_yearly = os.environ.get("STRIPE_PRICE_YEARLY")
             
+            if env_monthly and not (env_monthly.startswith("price_") or env_monthly.startswith("plan_")):
+                env_monthly = None
+            if env_yearly and not (env_yearly.startswith("price_") or env_yearly.startswith("plan_")):
+                env_yearly = None
+                
             final_plans = []
             seen_types = set()
             for p in plans:
@@ -773,6 +778,9 @@ def billing_checkout():
         is_yearly = "year" in pkg_type.lower() or "annual" in pkg_type.lower()
         mapped_price = os.environ.get("STRIPE_PRICE_YEARLY") if is_yearly else os.environ.get("STRIPE_PRICE_MONTHLY")
         
+        if mapped_price and not (mapped_price.startswith("price_") or mapped_price.startswith("plan_")):
+            mapped_price = None
+            
         if not mapped_price:
             stripe_plans = _fetch_stripe_plans()
             if stripe_plans:
@@ -822,6 +830,8 @@ def billing_checkout():
     target_url = yearly_url if "year" in pkg_type.lower() else monthly_url
 
     if not target_url:
+        if stripe_secret:
+            return jsonify({"error": "Failed to create Stripe Checkout session. Please ensure your Stripe API keys and active Products are correctly configured."}), 400
         base_pay_url = os.environ.get("REVENUECAT_WEB_BILLING_BASE_URL", "https://pay.revenuecat.com/listmate-pro")
         target_url = f"{base_pay_url}/{pkg_type}"
 
