@@ -855,16 +855,36 @@ async function showPaywall() {
                 if (container) {
                     container.innerHTML = '';
                     revenueCatOfferings.forEach((pkg, index) => {
-                        const btn = document.createElement('button');
-                        btn.style.cssText = "background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;";
-                        
                         let label = pkg.packageType;
                         if (label === 'ANNUAL') label = 'Yearly';
                         else if (label === 'MONTHLY') label = 'Monthly';
+
+                        const isYearly = pkg.packageType === 'ANNUAL';
+                        const card = document.createElement('div');
+                        card.style.cssText = isYearly 
+                            ? "background:#f0fdf4; border:2px solid #10b981; border-radius:12px; padding:16px; text-align:left; position:relative; margin-bottom:10px;"
+                            : "background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:10px; text-align:left;";
                         
-                        btn.innerHTML = `<div style="font-size:16px;">ListMate Premium</div><div style="font-weight:normal; font-size:13px; margin-top:2px;">${label} Subscription &bull; ${pkg.product.priceString}</div>`;
-                        btn.onclick = () => purchasePackage(index);
-                        container.appendChild(btn);
+                        const badgeHtml = isYearly 
+                            ? `<span style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase;">Best Value</span>`
+                            : '';
+
+                        const btnBg = isYearly
+                            ? "background:linear-gradient(135deg, #047857, #059669);"
+                            : "background:linear-gradient(135deg, #059669, #10b981);";
+
+                        card.innerHTML = `
+                            ${badgeHtml}
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <strong style="font-size:16px; color:#0f172a;">ListMate Premium (${label})</strong>
+                                <span style="font-size:16px; font-weight:700; color:#059669;">${pkg.product.priceString}</span>
+                            </div>
+                            <p style="font-size:12px; color:#64748b; margin:0 0 12px 0; line-height:1.4;">Unlock AI tools, smart mapping, and premium features.</p>
+                            <button onclick="purchasePackage(${index})" style="width:100%; ${btnBg} color:#fff; border:none; padding:12px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.2);">
+                                Subscribe (${pkg.product.priceString})
+                            </button>
+                        `;
+                        container.appendChild(card);
                     });
                     
                     const pModal = document.getElementById('paywallModal');
@@ -948,7 +968,7 @@ async function deleteAccount() {
 
 window.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
-    if (e.target.id === 'paywallModal' || e.target.id === 'premiumModal' || e.target.id === 'readOnlyModal') return;
+    if (e.target.id === 'readOnlyModal') return;
     e.target.classList.remove('active');
   }
 });
