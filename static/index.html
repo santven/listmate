@@ -219,8 +219,11 @@ body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toa
     </div>
 
     <div class="quick-add-wrap" style="position:relative; margin-bottom:16px;">
-      <input type="text" id="quickAddInput" placeholder="Quick add (e.g. Milk)..." autocomplete="off" style="width:100%; padding:14px; font-size:16px; border-radius:12px; border:2px solid var(--green); outline:none; box-shadow:0 2px 8px rgba(16,185,129,0.1);">
-      <button id="btnQuickAdd" style="position:absolute; right:8px; top:8px; bottom:8px; background:var(--green); color:#fff; border:none; padding:0 16px; border-radius:8px; font-weight:600; cursor:pointer;">Add</button>
+      <input type="text" id="quickAddInput" placeholder="Quick add (e.g. Milk)..." autocomplete="off" style="width:100%; padding:14px; padding-right:110px; font-size:16px; border-radius:12px; border:2px solid var(--green); outline:none; box-shadow:0 2px 8px rgba(16,185,129,0.1);">
+      <div style="position:absolute; right:8px; top:8px; bottom:8px; display:flex; gap:4px;">
+        <button id="btnVoiceAdd" style="background:none; color:var(--green); border:none; padding:0 8px; border-radius:8px; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;" title="Add by Voice">🎙️</button>
+        <button id="btnQuickAdd" style="background:var(--green); color:#fff; border:none; padding:0 16px; border-radius:8px; font-weight:600; cursor:pointer;">Add</button>
+      </div>
       <div id="quickAddDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:12px; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:100; max-height:250px; overflow-y:auto;"></div>
     </div>
 
@@ -3086,6 +3089,121 @@ async function deleteSavedRecipe(id) {
       });
     }
   })();
+
+// --- Voice Recognition Feature ---
+let voiceRecognition = null;
+let isVoiceListening = false;
+
+function initVoiceRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    if (window.Capacitor && window.Capacitor.getPlatform() !== 'web') {
+        toast("Native speech plugin not yet integrated. Web fallback unavailable.", 3000);
+    } else {
+        toast("Speech recognition is not supported in this browser. Try Chrome/Safari.", 3000);
+    }
+    return false;
+  }
+  
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.lang = 'en-US';
+
+  voiceRecognition.onstart = function() {
+    isVoiceListening = true;
+    const btn = $('#btnVoiceAdd');
+    if(btn) {
+      btn.innerHTML = '🔴';
+      btn.style.opacity = '0.5';
+      btn.style.animation = 'pulse 1s infinite alternate';
+    }
+    $('#quickAddInput').placeholder = 'Listening... (e.g. Milk, eggs)';
+  };
+
+  voiceRecognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    processVoiceInput(transcript);
+  };
+
+  voiceRecognition.onerror = function(event) {
+    console.error("Speech recognition error", event.error);
+    if(event.error !== 'no-speech') {
+        toast("Voice error: " + event.error);
+    }
+    resetVoiceUI();
+  };
+
+  voiceRecognition.onend = function() {
+    resetVoiceUI();
+  };
+  return true;
+}
+
+function resetVoiceUI() {
+  isVoiceListening = false;
+  const btn = $('#btnVoiceAdd');
+  if(btn) {
+    btn.innerHTML = '🎙️';
+    btn.style.opacity = '1';
+    btn.style.animation = 'none';
+  }
+  $('#quickAddInput').placeholder = 'Quick add (e.g. Milk)...';
+}
+
+async function processVoiceInput(text) {
+  let cleaned = text.toLowerCase().trim();
+  const prefixes = ["add ", "please add ", "i need ", "can you add "];
+  for(let p of prefixes) {
+    if(cleaned.startsWith(p)) {
+      cleaned = cleaned.substring(p.length).trim();
+    }
+  }
+  
+  let items = cleaned.split(/\s+and\s+|,\s*/).map(s => s.trim()).filter(s => s.length > 0);
+  
+  if (items.length === 0) return;
+
+  const gl = stores.find(s => s.name === 'General List');
+  if (!gl) { toast('General List missing'); return; }
+
+  $('#btnQuickAdd').disabled = true;
+  $('#btnVoiceAdd').disabled = true;
+  
+  let addedCount = 0;
+  for (let item of items) {
+     item = item.charAt(0).toUpperCase() + item.slice(1);
+     const added = await addToList(gl.id, item, '', true);
+     if (added) addedCount++;
+  }
+  
+  if (addedCount > 0) {
+    toast(`Added ${addedCount} item(s) via Voice`);
+  }
+  
+  $('#btnQuickAdd').disabled = false;
+  $('#btnVoiceAdd').disabled = false;
+}
+
+if ($('#btnVoiceAdd')) {
+  $('#btnVoiceAdd').addEventListener('click', () => {
+    if (isVoiceListening) {
+      voiceRecognition.stop();
+    } else {
+      if (!voiceRecognition) {
+        if (!initVoiceRecognition()) return;
+      }
+      if (voiceRecognition) {
+        try {
+          voiceRecognition.start();
+        } catch(e) {
+          console.error(e);
+        }
+      }
+    }
+  });
+}
+// ---------------------------------
 </script>
 
 <div id="readOnlyModal" class="modal-overlay">
@@ -3128,5 +3246,5 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
-</body>
+<style>@keyframes pulse { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.2); opacity: 1; } }</style></body>
 </html>
