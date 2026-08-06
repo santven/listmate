@@ -28,6 +28,16 @@ public class MainActivity extends BridgeActivity {
                 listName = intent.getStringExtra("listName");
             }
             
+            if (intent.getData() != null) {
+                android.net.Uri uri = intent.getData();
+                if (itemName == null && uri.getQueryParameter("itemName") != null) {
+                    itemName = uri.getQueryParameter("itemName");
+                }
+                if (listName == null && uri.getQueryParameter("listName") != null) {
+                    listName = uri.getQueryParameter("listName");
+                }
+            }
+            
 
             if (itemName != null && !itemName.isEmpty()) {
                 final String safeItem = itemName.replace("'", "\\'");
