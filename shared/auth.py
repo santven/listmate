@@ -653,6 +653,24 @@ def register_auth_routes(app):
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout(): _clear(); return jsonify({"ok": True})
 
+    @app.route("/api/auth/marketing", methods=["POST"])
+    @require_user
+    def auth_marketing_opt_in():
+        data = request.get_json(silent=True) or {}
+        opt_in = data.get('marketing_opt_in')
+        if opt_in is None:
+            return jsonify({"error": "Missing marketing_opt_in"}), 400
+        uid = get_user_id()
+        hhid = get_household_id()
+        if not uid or not hhid:
+            return jsonify({"error": "Missing context"}), 400
+        try:
+            _run("UPDATE auth_household_members SET marketing_opt_in = ? WHERE user_id = ? AND household_id = ?", (opt_in, uid, hhid))
+            return jsonify({"ok": True, "marketing_opt_in": bool(opt_in)})
+        except Exception as e:
+            print("Error updating marketing_opt_in:", e)
+            return jsonify({"error": "Database error"}), 500
+
     @app.route("/api/auth/delete-account", methods=["POST", "DELETE"])
     @require_user
     def auth_delete_account():
