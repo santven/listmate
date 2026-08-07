@@ -127,6 +127,7 @@
   <div class="card">
     <h2>📍 Your Location</h2>
     <p class="note" style="margin-bottom:12px;">Helps auto-populate store items and local aisle arrangements for your area.</p>
+    <div id="debugGeo" style="background:#fee2e2; color:#b91c1c; padding:8px; border-radius:6px; font-size:12px; font-weight:bold; margin-bottom:12px; display:none;"></div>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div>
         <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">ZIP / Postal Code</label>
@@ -263,6 +264,7 @@ let householdData = null;
   if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]);
+  if (window.currentCfg && window.currentCfg.geo) { const debugGeo = document.getElementById("debugGeo"); if (debugGeo) { debugGeo.style.display = "block"; debugGeo.textContent = "DEBUG GEO COUNTRY: " + window.currentCfg.geo.country; } }
   // Load premium plan
   
   // Load dietary preferences
