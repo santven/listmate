@@ -36,9 +36,9 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-            marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
-        marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
-        payload = {
+        marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
+    marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
+    payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
             "to": [{"email": to_email}],
@@ -87,9 +87,9 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
     upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
-        unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-        unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
-        payload = {
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
         "subject": subject,
@@ -121,9 +121,9 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
     app_link = "https://listmate.app/?source=email_activation"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
-        unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-        unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
-        payload = {
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
         "subject": "Simplify your grocery runs with ListMate",
@@ -172,9 +172,9 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
     app_link = "https://listmate.app/?source=email_reengagement"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
-        unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-        unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
-        payload = {
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
         "subject": "It's been a while! Streamline your next grocery trip",
@@ -267,19 +267,19 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     html_body = f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><p style="font-size:16px">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
-        unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-        unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
-        payload = {
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
         "subject": subject,
         "content": [
-            {"type": "text/plain", "value": text_body},
-            {"type": "text/html", "value": html_body},
+            {"type": "text/plain", "value": text_body + unsub_txt},
+            {"type": "text/html", "value": html_body.replace("</div>", unsub_html + "</div>")},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": False},
             "open_tracking": {"enable": False},
         },
     }
-    return _send_via_api(api_key, payload){unsub_html}{unsub_txt}{unsub_html}{unsub_txt}{unsub_html}{unsub_txt}{unsub_html}
+    return _send_via_api(api_key, payload)
