@@ -56,15 +56,7 @@
 			<array>
 				<string>listmate</string>
 			</array>
-			<key>NSMicrophoneUsageDescription</key>
-	<string>Listmate requires microphone access to let you quickly add items to your list using your voice.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Listmate uses speech recognition to transcribe your voice into grocery items.</string>
-</dict>
+		</dict>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Listmate requires microphone access to let you quickly add items to your list using your voice.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Listmate uses speech recognition to transcribe your voice into grocery items.</string>
 </dict>
 </plist>
