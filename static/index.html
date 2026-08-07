@@ -3122,12 +3122,8 @@ function initVoiceRecognition() {
   };
 
   voiceRecognition.onresult = function(event) {
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        const transcript = event.results[i][0].transcript;
-        processVoiceInput(transcript);
-      }
-    }
+    const transcript = event.results[0][0].transcript;
+    processVoiceInput(transcript);
   };
 
   voiceRecognition.onerror = function(event) {
