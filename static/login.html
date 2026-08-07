@@ -66,7 +66,6 @@ body { padding-bottom: 50px; }
           <input type="checkbox" id="marketingOptIn" style="width:auto; margin:0;">
           <label for="marketingOptIn" style="margin:0; font-weight:normal; font-size:13px; color:var(--text);">Send me tips, reminders, and updates (you can unsubscribe anytime).</label>
       </div>
-      <div id="geoInfo" style="font-size:11px; color:#888; margin-bottom:16px;"></div>
       <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
     </div>
     <button class="btn" id="btnAccept" onclick="acceptInvite()" style="display:none">Accept Invitation</button>
@@ -100,9 +99,7 @@ function checkSessionAndProceed(proceedFn) {
       r.json().then(function(c) {
         if (c.geo) {
             var cb = document.getElementById('marketingOptIn');
-            var gi = document.getElementById('geoInfo');
             if (cb) cb.checked = !c.geo.is_eu;
-            if (gi) gi.textContent = 'Detected Country: ' + c.geo.country + (c.geo.is_eu ? ' (EU - Opt-in required)' : ' (Non-EU - Default Opted-in)');
         }
         if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
       });

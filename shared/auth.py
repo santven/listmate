@@ -653,6 +653,36 @@ def register_auth_routes(app):
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout(): _clear(); return jsonify({"ok": True})
 
+    @app.route("/api/unsubscribe", methods=["GET"])
+    def auth_unsubscribe():
+        from flask import request
+        token = request.args.get("token")
+        if not token:
+            return "Missing token", 400
+        try:
+            import base64, json
+            data = json.loads(base64.urlsafe_b64decode(token.encode()).decode())
+            uid = data.get("uid")
+            if not uid:
+                return "Invalid token", 400
+            
+            _init_schema()
+            _run("UPDATE auth_household_members SET marketing_opt_in = FALSE WHERE user_id = ?", (uid,))
+            
+            return """
+            <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; } .success { color: #10b981; font-size: 48px; margin-bottom: 20px; } h2 { color: #333; } p { color: #666; }</style></head>
+            <body>
+                <div class="success">✓</div>
+                <h2>Unsubscribed Successfully</h2>
+                <p>You have been unsubscribed from all ListMate marketing emails.</p>
+                <p><a href="/" style="color: #10b981; text-decoration: none; font-weight: 600;">Return to App</a></p>
+            </body>
+            </html>
+            """
+        except Exception as e:
+            print("Unsubscribe error:", e)
+            return "Invalid or expired token", 400
+
     @app.route("/api/auth/marketing", methods=["POST"])
     @require_user
     def auth_marketing_opt_in():
