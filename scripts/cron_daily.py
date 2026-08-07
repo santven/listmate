@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.auth import _run, _init_schema
 from email_helper import send_subscription_notice, send_activation_notice, send_reengagement_notice, send_combined_notice
 
-def process_email_events(email, user_name, events):
+def process_email_events(email, user_name, events, user_id=0):
     if not email:
         return False
         
@@ -20,17 +20,17 @@ def process_email_events(email, user_name, events):
             is_trial = events['expiration']['is_trial']
             days_left = events['expiration']['days_left']
             print(f"[{email}] Sending specific expiration notice ({days_left} days).")
-            return send_subscription_notice(email, user_name, is_trial, days_left)
+            return send_subscription_notice(email, user_name, is_trial, days_left, user_id)
         elif 'activation' in events:
             print(f"[{email}] Sending specific activation notice.")
-            return send_activation_notice(email, user_name)
+            return send_activation_notice(email, user_name, user_id)
         elif 'reengagement' in events:
             print(f"[{email}] Sending specific re-engagement notice.")
-            return send_reengagement_notice(email, user_name)
+            return send_reengagement_notice(email, user_name, user_id)
             
     # If there are multiple events, send the combined template
     print(f"[{email}] Sending COMBINED notice for multiple events: {list(events.keys())}")
-    return send_combined_notice(email, user_name, events)
+    return send_combined_notice(email, user_name, events, user_id)
 
 def run_cron():
     _init_schema()
@@ -43,10 +43,10 @@ def run_cron():
     # Format: { 'user@email.com': { 'user_name': 'John', 'events': { 'expiration': {'days_left': 3, 'is_trial': True}, 'activation': True } } }
     users_to_notify = {}
     
-    def add_user_event(email, name, event_name, event_data=True):
+    def add_user_event(email, name, event_name, event_data=True, user_id=0):
         if not email: return
         if email not in users_to_notify:
-            users_to_notify[email] = {'user_name': name, 'events': {}}
+            users_to_notify[email] = {'user_name': name, 'events': {}, 'user_id': user_id}
         users_to_notify[email]['events'][event_name] = event_data
 
     # --- 1. Expirations ---
@@ -55,14 +55,17 @@ def run_cron():
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
         h.name as household_name, 
+        u.id as user_id,
         u.email, 
         u.name as user_name, 
         h.subscription_status,
         h.trial_ends_at
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
+    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE 
         (h.subscription_status = 'trial' AND DATE(h.trial_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
+        AND ahm.marketing_opt_in = TRUE
     ORDER BY h.id, u.created_at ASC
     """
     households_expiring = _run(query_expirations)
@@ -89,45 +92,51 @@ def run_cron():
                 days_left = 3
                 
             if days_left is not None:
-                add_user_event(hh.get("email"), hh.get("user_name"), 'expiration', {'is_trial': is_trial, 'days_left': days_left})
+                add_user_event(hh.get("email"), hh.get("user_name"), 'expiration', {'is_trial': is_trial, 'days_left': days_left}, hh.get("user_id"))
 
     # --- 2. Activations (Day 3, 0 items) ---
     print("Fetching Activations...")
     query_activations = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
+        u.id as user_id,
         u.email, 
         u.name as user_name
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
+    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     LEFT JOIN list_items l ON h.id = l.household_id
     WHERE DATE(h.created_at) = CURRENT_DATE - INTERVAL '3 days'
-    GROUP BY h.id, u.email, u.name, u.created_at
+      AND ahm.marketing_opt_in = TRUE
+    GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING COUNT(l.id) = 0
     ORDER BY h.id, u.created_at ASC
     """
     households_activation = _run(query_activations)
     for hh in households_activation:
-        add_user_event(hh.get("email"), hh.get("user_name"), 'activation')
+        add_user_event(hh.get("email"), hh.get("user_name"), 'activation', True, hh.get("user_id"))
 
     # --- 3. Re-engagement (Day 14 since last item added) ---
     print("Fetching Re-engagements...")
     query_reengagement = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
+        u.id as user_id,
         u.email, 
         u.name as user_name,
         MAX(l.added_at) as last_active
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
+    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     JOIN list_items l ON h.id = l.household_id
-    GROUP BY h.id, u.email, u.name, u.created_at
+    WHERE ahm.marketing_opt_in = TRUE
+    GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING DATE(MAX(l.added_at)) = CURRENT_DATE - INTERVAL '14 days'
     ORDER BY h.id, u.created_at ASC
     """
     households_reengagement = _run(query_reengagement)
     for hh in households_reengagement:
-        add_user_event(hh.get("email"), hh.get("user_name"), 'reengagement')
+        add_user_event(hh.get("email"), hh.get("user_name"), 'reengagement', True, hh.get("user_id"))
 
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
     
@@ -135,7 +144,7 @@ def run_cron():
         with ThreadPoolExecutor(max_workers=min(32, len(users_to_notify))) as executor:
             futures = []
             for email, data in users_to_notify.items():
-                futures.append(executor.submit(process_email_events, email, data['user_name'], data['events']))
+                futures.append(executor.submit(process_email_events, email, data['user_name'], data['events'], data.get('user_id', 0)))
                 
             for future in as_completed(futures):
                 try:

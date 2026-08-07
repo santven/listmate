@@ -179,6 +179,7 @@ def _init_schema():
         _run(stmt)
     for stmt in [
         
+        "ALTER TABLE auth_household_members ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS owner_id INTEGER",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS downgraded_at TIMESTAMP",
         "UPDATE auth_households h SET owner_id = (SELECT id FROM auth_users u WHERE u.household_id = h.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL",
@@ -590,6 +591,10 @@ def register_auth_routes(app):
     @app.route("/api/auth/config")
     def auth_config():
         resp = {"client_id": GOOGLE_CLIENT_ID, "revenuecat_public_key": REVENUECAT_PUBLIC_KEY, "revenuecat_apple_key": REVENUECAT_APPLE_KEY}
+        country = request.headers.get('CF-IPCountry') or request.headers.get('X-Appengine-Country') or request.headers.get('X-Country') or 'US'
+        eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
+        resp["geo"] = {"country": country, "is_eu": country in eu_countries}
+
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()
@@ -634,7 +639,9 @@ def register_auth_routes(app):
             resp["subscription_ends_at"] = subscription_ends_at if hh_id else None
             resp["is_read_only"] = status["is_read_only"]
             resp["is_owner"] = (uid == hh.get("owner_id")) if (hh_id and hh) else True
-            resp["user_info"] = {"id": uid, "name": get_display_name(),
+            mem_opt_in = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id)) if hh_id else None
+            opt_in_val = bool(mem_opt_in['marketing_opt_in']) if mem_opt_in and mem_opt_in.get('marketing_opt_in') is not None else True
+            resp["user_info"] = {"id": uid, "name": get_display_name(), "marketing_opt_in": opt_in_val,
                 "email": get_email(), "household_id": hh_id,
                 "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None}
             if uid:
@@ -706,11 +713,20 @@ def register_auth_routes(app):
     def auth_signup():
         data = request.get_json(silent=True) or {}
         hname = (data.get("household_name") or "").strip()
+        opt_in = data.get("marketing_opt_in")
+        if opt_in is None:
+            country = request.headers.get('CF-IPCountry') or request.headers.get('X-Appengine-Country') or request.headers.get('X-Country') or 'US'
+            eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
+            opt_in = country not in eu_countries
         invite = (data.get("invite_code") or "").strip()
         uid = get_user_id()
 
         _init_schema()
         user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+        if user:
+            mem = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, user['household_id']))
+            user['marketing_opt_in'] = bool(mem['marketing_opt_in']) if mem and mem.get('marketing_opt_in') is not None else True
+
         if not user: return jsonify({"error": "User not found"}), 404
         if user["household_id"] != 0: return jsonify({"error": "Already in household"}), 400
 
@@ -718,7 +734,7 @@ def register_auth_routes(app):
             hh = _one(f"SELECT * FROM {_HH} WHERE invite_code = ?", (invite,))
             if not hh: return jsonify({"error": "Invalid invite code"}), 404
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh["id"], uid))
-            _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, hh["id"]))
+            _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', (SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1)) ON CONFLICT DO NOTHING", (uid, hh["id"], hh["id"]))
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
@@ -734,6 +750,7 @@ def register_auth_routes(app):
         trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "30")
         trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id) VALUES (?,?,?,?, {trial_expr}, ?) RETURNING id", (hname, code, prem_val, status, uid))
+        _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
@@ -907,12 +924,16 @@ def register_auth_routes(app):
 
         uid = get_user_id()
         user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+        if user:
+            mem = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, user['household_id']))
+            user['marketing_opt_in'] = bool(mem['marketing_opt_in']) if mem and mem.get('marketing_opt_in') is not None else True
+
 
         if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
             return jsonify({"error": "This invite is for a different email address"}), 403
 
         # Add to junction table
-        _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING", (uid, invite["household_id"]))
+        _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, invite["household_id"], invite["household_id"]))
         
         # Switch active household to the new one
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
