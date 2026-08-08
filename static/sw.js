@@ -1,8 +1,9 @@
-// v23 — offline-first static shell caching
-const CACHE_NAME = 'listmate-static-v23';
+// v24 — offline-first static shell caching
+const CACHE_NAME = 'listmate-static-v24';
 const PRECACHE_ASSETS = [
   '/static/index.html',
   '/static/settings.html',
+  '/static/confetti.browser.min.js',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
