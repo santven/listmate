@@ -1493,13 +1493,20 @@ function fireCelebration(isAllItems) {
 
   try {
     if (isAllItems) {
-      const duration = 2800;
+      const duration = 3000;
       const end = Date.now() + duration;
-      (function frame() {
-        c({ particleCount: 7, angle: 60, spread: 60, origin: { x: 0, y: 0.7 }, zIndex: 99999 });
-        c({ particleCount: 7, angle: 120, spread: 60, origin: { x: 1, y: 0.7 }, zIndex: 99999 });
-        if (Date.now() < end) requestAnimationFrame(frame);
-      }());
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 99999 };
+      function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+      
+      const interval = setInterval(function() {
+        const timeLeft = end - Date.now();
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+        const particleCount = 40 * (timeLeft / duration);
+        c(Object.assign({}, defaults, { particleCount: Math.floor(particleCount), origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+        c(Object.assign({}, defaults, { particleCount: Math.floor(particleCount), origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+      }, 250);
     } else {
       c({
         particleCount: 100,
