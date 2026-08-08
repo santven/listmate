@@ -10,7 +10,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/icon-192.png">
-<title>Grocery List</title>
+<title>Grocery List</title><script src="/static/confetti.browser.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
@@ -1457,38 +1457,65 @@ async function updateItemQuantity(id, newQty) {
   } catch(e) { toast('Network error'); }
 }
 
+function isUnpurchased(i) {
+  if (!i) return false;
+  return i.purchased === false || i.purchased === 0 || i.purchased === '0' || i.purchased === 'false' || !i.purchased;
+}
+
+function fireCelebration(isAllItems) {
+  const c = window.confetti || (typeof confetti === 'function' ? confetti : null);
+  if (!c) {
+    console.warn('Confetti library not available');
+    return;
+  }
+  try {
+    if (isAllItems) {
+      const duration = 2500;
+      const end = Date.now() + duration;
+      (function frame() {
+        c({ particleCount: 6, angle: 60, spread: 65, origin: { x: 0, y: 0.8 } });
+        c({ particleCount: 6, angle: 120, spread: 65, origin: { x: 1, y: 0.8 } });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      }());
+    } else {
+      c({
+        particleCount: 80,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
+    }
+  } catch (e) {
+    console.error('Confetti error:', e);
+  }
+}
+
 async function toggleItem(id, showVisitPrompt = true) {
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
-  const item = list.find(i=>String(i.id)===String(id));
+  const item = list.find(i => String(i.id) === String(id));
   if (!item) return;
 
-  const wasPurchased = item.purchased;
+  const wasPurchased = isUnpurchased(item) ? false : true;
+  const itemStoreId = String(item.store_id);
 
-  const storeItemsBefore = list.filter(i => i.store_id === item.store_id && !i.purchased);
-  const allItemsBefore = list.filter(i => !i.purchased);
+  const storeItemsBefore = list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i));
+  const allItemsBefore = list.filter(i => isUnpurchased(i));
 
   const applyLocalToggleAndCheckConfetti = () => {
     item.purchased = !item.purchased;
     saveCache();
     renderHome();
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
-    
-    if (item.purchased && window.confetti) {
-      const storeItemsAfter = list.filter(i => i.store_id === item.store_id && !i.purchased);
-      const allItemsAfter = list.filter(i => !i.purchased);
-      
+
+    if (!isUnpurchased(item)) {
+      const storeItemsAfter = list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i));
+      const allItemsAfter = list.filter(i => isUnpurchased(i));
+
       if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
-        const duration = 3000;
-        const end = Date.now() + duration;
-        (function frame() {
-          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 1 } });
-          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 1 } });
-          if (Date.now() < end) requestAnimationFrame(frame);
-        }());
+        fireCelebration(true);
       } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
-        confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
+        fireCelebration(false);
       }
     }
   };
@@ -1502,11 +1529,11 @@ async function toggleItem(id, showVisitPrompt = true) {
 
   let needsVisitPrompt = false;
   let visitStoreName = '';
-  const itemStore = stores.find(s=>s.id===item?.store_id);
+  const itemStore = stores.find(s => String(s.id) === itemStoreId);
 
   if (!wasPurchased && showVisitPrompt && itemStore && itemStore.name !== 'General List') {
     try {
-      const res = await fetch(API+'/stores/'+item.store_id+'/visit/today');
+      const res = await fetch(API + '/stores/' + item.store_id + '/visit/today');
       const data = await res.json();
       if (!data.active) {
         needsVisitPrompt = true;
@@ -1517,8 +1544,8 @@ async function toggleItem(id, showVisitPrompt = true) {
 
   applyLocalToggleAndCheckConfetti();
 
-  await fetch(API+'/list/'+id+'/toggle', {method:'POST'});
-  list = await fetch(API+'/list').then(r=>r.json());
+  await fetch(API + '/list/' + id + '/toggle', { method: 'POST' });
+  list = await fetch(API + '/list').then(r => r.json());
   saveCache();
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
@@ -1528,7 +1555,7 @@ async function toggleItem(id, showVisitPrompt = true) {
     $('#visitMsg').textContent = 'Shopping at ' + visitStoreName + '?';
     $('#visitToast').classList.add('show');
     $('#btnVisitYes').onclick = async () => {
-      await fetch(API+'/stores/'+item.store_id+'/visit', {method:'POST'});
+      await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
       $('#visitToast').classList.remove('show');
       loadSuggestions();
     };
@@ -3155,6 +3182,6 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
 </body>
 </html>
