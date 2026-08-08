@@ -86,8 +86,7 @@
   .catalog-search { margin-bottom: 14px; }
   .catalog-search input { width: 100%; padding: 14px 16px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); outline: none; }
   .catalog-search input:focus { border-color: var(--green); }
-  .catalog-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .catalog-item-card.span-full { grid-column: 1 / -1; }
+  .catalog-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
   @media (min-width: 480px) { .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
   .catalog-item { padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); font-size: 14px; cursor: pointer; text-align: center; transition: all .15s; display: flex; align-items: center; justify-content: center; min-height: 44px; word-break: break-word; }
   .catalog-item:hover, .catalog-item:active { border-color: var(--green); background: #f5faf3; }
@@ -1139,8 +1138,7 @@ function renderCatalog(filter) {
       const activeListItem = list.find(l => l.store_id === currentStore.id && !l.purchased && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
       const isAdded = !!activeListItem;
       const itemNameEsc = escapeHtml(i.name);
-      const isLong = itemNameEsc.length > 15;
-    return '<div class="catalog-item-card ' + (isLong ? 'span-full' : '') + '" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
+      return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
         '<div class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="flex:1; cursor:' + (isAdded ? 'default' : 'pointer') + '; min-width:0; display:flex; flex-direction:column; gap:4px; overflow:hidden;" title="' + itemNameEsc + '">'+
           '<span style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; line-height:1.3; font-weight:500; font-size:14px; color:var(--text);">' + itemNameEsc + '</span>' +
           (isAdded ? '<span class="btn-remove-from-list" data-list-id="'+activeListItem.id+'" data-name="'+itemNameEsc+'" style="font-size:11px; color:#1e5132; background:#e8f4ed; border:1px solid #bbf7d0; padding:2px 8px; border-radius:6px; font-weight:600; width:fit-content; white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Click to remove from shopping list">✓ On List <span style="font-weight:700; color:#dc2626; font-size:11px; margin-left:2px;">✕</span></span>' : '') +
