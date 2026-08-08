@@ -29,12 +29,15 @@ def _send_via_api(api_key: str, payload: dict) -> bool:
         return False
 
 
-def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone") -> bool:
+def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", marketing_opt_in: bool = False) -> bool:
     """Send a household invite email. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
+
+    marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
+    marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -45,11 +48,11 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n\nTo accept this invitation, click the link below and sign in with your Google account:\n\n{invite_link}\n\nThis link expires in 7 days.\n\n— The ListMate Team",
+                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n\nTo accept this invitation, click the link below and sign in with your Google account:\n\n{invite_link}\n\nThis link expires in 7 days.\n\n— The ListMate Team" + marketing_txt,
             },
             {
                 "type": "text/html",
-                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 You\'re invited!</h2><p style="font-size:16px">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p>ListMate helps your household keep shared grocery lists, organized by store.</p><p style="margin:24px 0"><a href="{invite_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Accept Invitation</a></p><p style="font-size:12px;color:#888">This link expires in 7 days.</p></div>',
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 You\'re invited!</h2><p style="font-size:16px">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p>ListMate helps your household keep shared grocery lists, organized by store.</p><p style="margin:24px 0"><a href="{invite_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Accept Invitation</a></p><p style="font-size:12px;color:#888">This link expires in 7 days.</p>' + marketing_html + '</div>',
             },
         ],
         "tracking_settings": {
@@ -59,8 +62,14 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
     }
     return _send_via_api(api_key, payload)
 
+def _get_unsub_link(user_id: int) -> str:
+    if not user_id: return ""
+    import base64, json
+    data = {"uid": user_id}
+    token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+    return f"https://grocerlist.app/api/unsubscribe?token={token}"
 
-def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int) -> bool:
+def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int, user_id: int = 0) -> bool:
     """Send subscription ending notice. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -77,6 +86,9 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
 
     upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
 
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
@@ -84,7 +96,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi {user_name},\n\nYour ListMate {term} {urgency_text}.\n\nDon't lose access to your shared grocery lists! Tap the link below to upgrade your household and keep everything syncing seamlessly.\n\n{upgrade_link}\n\n— The ListMate Team",
+                "value": f"Hi {user_name},\n\nYour ListMate {term} {urgency_text}.\n\nDon't lose access to your shared grocery lists! Tap the link below to upgrade your household and keep everything syncing seamlessly.\n\n{upgrade_link}\n\n— The ListMate Team" + unsub_txt,
             },
             {
                 "type": "text/html",
@@ -99,7 +111,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
     return _send_via_api(api_key, payload)
 
 
-def send_activation_notice(to_email: str, user_name: str) -> bool:
+def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> bool:
     """Send Day 3 onboarding/activation notice to inactive users."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -108,6 +120,9 @@ def send_activation_notice(to_email: str, user_name: str) -> bool:
 
     app_link = "https://listmate.app/?source=email_activation"
 
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
@@ -147,7 +162,7 @@ def send_activation_notice(to_email: str, user_name: str) -> bool:
     return _send_via_api(api_key, payload)
 
 
-def send_reengagement_notice(to_email: str, user_name: str) -> bool:
+def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) -> bool:
     """Send Day 14 re-engagement notice to dormant users."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -156,6 +171,9 @@ def send_reengagement_notice(to_email: str, user_name: str) -> bool:
 
     app_link = "https://listmate.app/?source=email_reengagement"
 
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
@@ -195,7 +213,7 @@ def send_reengagement_notice(to_email: str, user_name: str) -> bool:
     return _send_via_api(api_key, payload)
 
 
-def send_combined_notice(to_email: str, user_name: str, events: dict) -> bool:
+def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: int = 0) -> bool:
     """Send a combined notice when multiple daily events occur for the same user."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -248,13 +266,16 @@ def send_combined_notice(to_email: str, user_name: str, events: dict) -> bool:
     text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + "\n\n— The ListMate Team"
     html_body = f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><p style="font-size:16px">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
 
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{"to": [{"email": to_email}]}],
         "subject": subject,
         "content": [
-            {"type": "text/plain", "value": text_body},
-            {"type": "text/html", "value": html_body},
+            {"type": "text/plain", "value": text_body + unsub_txt},
+            {"type": "text/html", "value": html_body.replace("</div>", unsub_html + "</div>")},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": False},

@@ -217,6 +217,16 @@
     </div>
   </div>
 
+  <!-- Marketing Emails -->
+  <div class="card">
+    <h2>📧 Marketing Emails</h2>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()" style="width:auto; margin:0;">
+      <label for="marketingOptInSetting" style="margin:0; font-size:14px; color:var(--text);">Send me tips, reminders, and updates.</label>
+    </div>
+    <div class="success" id="marketingSuccess" style="margin-top:8px;"></div>
+  </div>
+
   <!-- Danger Zone: Account Deletion -->
   <div class="card" style="border:1px solid #fecaca; background:#fffdfd; margin-top:20px;">
     <h2 style="color:#d94a4a; margin-bottom:8px;">⚠️ Danger Zone</h2>
@@ -249,6 +259,9 @@ let householdData = null;
   window.currentCfg = cfg;
 
   // Load household data
+    const marketingCb = document.getElementById('marketingOptInSetting');
+  if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
+
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]);
   // Load premium plan
   
@@ -256,6 +269,36 @@ let householdData = null;
   
     
 })();
+
+
+async function saveMarketingOptIn() {
+  const cb = document.getElementById('marketingOptInSetting');
+  const msg = document.getElementById('marketingSuccess');
+  if (!cb) return;
+  msg.style.display = 'none';
+  try {
+    const res = await fetch('/api/auth/marketing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketing_opt_in: cb.checked })
+    });
+    if (res.ok) {
+      msg.textContent = 'Settings saved.';
+      msg.style.display = 'block';
+      setTimeout(() => msg.style.display = 'none', 3000);
+      if (window.currentCfg && window.currentCfg.user_info) {
+          window.currentCfg.user_info.marketing_opt_in = cb.checked;
+      }
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to save settings');
+      cb.checked = !cb.checked;
+    }
+  } catch(e) {
+    alert('Network error');
+    cb.checked = !cb.checked;
+  }
+}
 
 async function loadHousehold() {
   try {

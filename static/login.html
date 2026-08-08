@@ -62,6 +62,10 @@ body { padding-bottom: 50px; }
       <h2>Set up your household</h2>
       <label for="householdName">Household Name</label>
       <input type="text" id="householdName" placeholder="e.g. Raghav household" maxlength="60">
+      <div id="geoOptInContainer" style="display:flex; align-items:center; gap:8px; margin-top:12px; margin-bottom:16px;">
+          <input type="checkbox" id="marketingOptIn" style="width:auto; margin:0;">
+          <label for="marketingOptIn" style="margin:0; font-weight:normal; font-size:13px; color:var(--text);">Send me tips, reminders, and updates (you can unsubscribe anytime).</label>
+      </div>
       <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
     </div>
     <button class="btn" id="btnAccept" onclick="acceptInvite()" style="display:none">Accept Invitation</button>
@@ -93,6 +97,10 @@ function checkSessionAndProceed(proceedFn) {
   fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
     if (r.ok) {
       r.json().then(function(c) {
+        if (c.geo) {
+            var cb = document.getElementById('marketingOptIn');
+            if (cb) cb.checked = !c.geo.is_eu;
+        }
         if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
       });
     } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
@@ -570,7 +578,8 @@ function createHousehold() {
   var n=document.getElementById('householdName').value.trim();
   if(!n){showStep2Error('Enter a household name');return;}
   var b=document.getElementById('btnCreate'); b.disabled=true; showStep2Error('');
-  fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n})})
+  var optIn = document.getElementById('marketingOptIn'); optIn = optIn ? optIn.checked : true;
+  fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n, marketing_opt_in:optIn})})
     .then(function(r){return r.json()}).then(function(d){
     if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
