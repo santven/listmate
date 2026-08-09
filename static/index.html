@@ -1916,6 +1916,16 @@ window.addEventListener('click', e => {
   }
 });
 
+
+  if ($('#historyPlanSaveBtn')) {
+    $('#historyPlanSaveBtn').addEventListener('click', () => {
+      const sid = parseInt($('#historyPlanInput').dataset.sid);
+      const val = $('#historyPlanInput').value;
+      savePlanDate(sid, val);
+      $('#historyModal').classList.remove('active');
+    });
+  }
+
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
 
 // ---- Share / Copy to Text ----
