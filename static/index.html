@@ -202,6 +202,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div class="burger-dropdown" id="burgerMenu">
       <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
+      <a href="#" onclick="showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
     </div>
@@ -335,6 +336,25 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <span>✅ Add Items to List</span>
         <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
       </button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="globalPlanModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">Plan a Visit</h3>
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Store</label>
+      <select id="globalPlanStoreSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;"></select>
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Date</label>
+      <input type="date" id="globalPlanDateInput" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;">
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnGlobalPlanSave" style="flex:1; background:var(--green); color:#fff; border:none; padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Save & Go to Store</button>
+      <button onclick="document.getElementById('globalPlanModal').classList.remove('active')" style="flex:1; background:none; color:#888; border:1px solid var(--border); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -1462,6 +1482,7 @@ function showScreen(name){
     $('#screenHome').style.display='block';
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData().then(() => {
@@ -1470,11 +1491,22 @@ function showScreen(name){
       document.documentElement.scrollTop = 0;
     });
     updateFabVisibility();
+  } else if(name==='globalVisits'){
+    if (typeof toggleBurger === 'function') toggleBurger();
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
+    $('#headerTitle').textContent='Store Visits';
+    $('#btnBack').style.display='block';
+    loadGlobalVisits();
   } else if(name==='recipes'){
     document.querySelector('.header').classList.add('hide-badges');
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
@@ -1484,6 +1516,84 @@ function showScreen(name){
     document.documentElement.scrollTop = 0;
   }
   updateFabVisibility();
+}
+
+
+async function loadGlobalVisits() {
+  $('#globalVisitsList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading visits...</div>';
+  try {
+    const res = await fetch(API+'/visits/history');
+    if (res.ok) {
+      const visits = await res.json();
+      if (visits.length === 0) {
+        $('#globalVisitsList').innerHTML = '<div style="padding:40px 20px; text-align:center; color:var(--muted); font-size:15px; background:var(--card); border-radius:12px; border:1px solid var(--border);">No past store visits recorded yet.</div>';
+      } else {
+        $('#globalVisitsList').innerHTML = visits.map(v => {
+          const d = new Date(v.visit_date);
+          // Assuming yyyy-mm-dd
+          let dStr = v.visit_date;
+          if (!isNaN(d.getTime())) {
+             const [y,m,day] = v.visit_date.split('-');
+             const localD = new Date(y, m-1, day);
+             dStr = localD.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+          }
+          return '<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border:1px solid var(--border); background:var(--card); border-radius:12px; margin-bottom:10px;">' +
+                 '  <div><div style="font-weight:600; font-size:15px; color:var(--text); margin-bottom:4px;">' + escapeHtml(v.store_name) + '</div>' +
+                 '  <div style="font-size:13px; color:var(--muted);">' + dStr + '</div></div>' +
+                 '  <div style="font-size:12px; font-weight:600; background:#f0f4ed; color:var(--green); padding:4px 10px; border-radius:12px;">' + v.items_count + ' items</div>' +
+                 '</div>';
+        }).join('');
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    $('#globalVisitsList').innerHTML = '<div style="padding:20px;text-align:center;color:#d94a4a;">Failed to load visits.</div>';
+  }
+}
+
+function openGlobalPlanModal() {
+  const sel = $('#globalPlanStoreSelect');
+  sel.innerHTML = '';
+  const validStores = stores.filter(s => s.name !== 'General List');
+  if (validStores.length === 0) {
+    toast('No stores available to plan.');
+    return;
+  }
+  validStores.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    sel.appendChild(opt);
+  });
+  
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  $('#globalPlanDateInput').value = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth()+1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
+  
+  $('#btnGlobalPlanSave').onclick = async () => {
+    const sid = parseInt(sel.value);
+    const dt = $('#globalPlanDateInput').value;
+    if(!dt) { toast('Please select a date'); return; }
+    
+    $('#globalPlanModal').classList.remove('active');
+    try {
+      await fetch(API+'/stores/'+sid+'/plan', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({date: dt})
+      });
+      const st = stores.find(s => s.id === sid);
+      if(st) st.planned_visit_date = dt;
+      saveCache();
+      renderHome();
+      showScreen('home');
+      setTimeout(() => openStore(sid), 100);
+    } catch(e) {
+      toast('Failed to save plan');
+    }
+  };
+  
+  $('#globalPlanModal').classList.add('active');
 }
 
 async function loadSuggestions(){
