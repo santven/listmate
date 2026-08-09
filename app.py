@@ -71,6 +71,7 @@ def _ensure_schema():
             """CREATE TABLE IF NOT EXISTS stores (
                 id SERIAL PRIMARY KEY, name TEXT NOT NULL,
                 household_id INTEGER NOT NULL DEFAULT 1,
+                planned_visit_date DATE,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
             """CREATE TABLE IF NOT EXISTS store_items (
                 id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id),
@@ -102,6 +103,9 @@ def _ensure_schema():
         for stmt in store_tables:
             try: authmod._run(stmt)
             except Exception: pass
+            
+        try: authmod._run("ALTER TABLE stores ADD COLUMN planned_visit_date DATE")
+        except Exception: pass
 
         try:
             from db_pg import init_db as init_store_db
@@ -1562,7 +1566,7 @@ def list_stores():
     try:
         hh = _hh()
         stores = db.execute(
-            "SELECT * FROM stores WHERE household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)
+            "SELECT s.*, (SELECT MAX(visit_date) FROM store_visits WHERE store_id = s.id AND household_id = ?) as last_visited FROM stores s WHERE s.household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh, hh)
         ).fetchall()
         return jsonify([dict(s) for s in stores])
     except Exception as e:
@@ -2007,6 +2011,32 @@ def toggle_list_item(item_id):
                     "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
                     (item["store_id"], _hh(), today)
                 )
+            db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (item["store_id"], _hh()))
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+
+@app.route("/api/stores/<int:store_id>/history")
+@require_user
+def get_store_history(store_id):
+    db = get_db()
+    try:
+        visits = db.execute("SELECT visit_date, items_count FROM store_visits WHERE store_id = ? AND household_id = ? ORDER BY visit_date DESC LIMIT 50", (store_id, _hh())).fetchall()
+        return jsonify([dict(v) for v in visits])
+    finally:
+        db.close()
+
+@app.route("/api/stores/<int:store_id>/plan", methods=["POST"])
+@require_user
+def plan_store_visit(store_id):
+    data = request.get_json(silent=True) or {}
+    date = data.get("date")
+    db = get_db()
+    try:
+        db.execute("UPDATE stores SET planned_visit_date = ? WHERE id = ? AND household_id = ?", (date if date else None, store_id, _hh()))
         db.commit()
         return jsonify({"ok": True})
     finally:
@@ -2254,6 +2284,7 @@ def mark_visit(store_id):
                 "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
                 (store_id, _hh(), today)
             )
+        db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (store_id, _hh()))
         db.commit()
         return jsonify({"ok": True})
     finally:
