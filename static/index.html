@@ -36,6 +36,8 @@
   .store-btn { padding: 16px 12px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--card); font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; transition: all .15s; color: var(--text); }
   .store-btn:hover, .store-btn:active { border-color: var(--green); background: #f5faf3; }
   .store-btn .count { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .store-visit-card:hover, .store-visit-card:active { border-color: var(--green); background: #f5faf3; }
+
   .new-store-wrap { display: flex; gap: 8px; margin-bottom: 20px; }
   .new-store-wrap input { flex: 1; padding: 12px 14px; font-size: 15px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); outline: none; }
   .new-store-wrap input:focus { border-color: var(--green); }
@@ -311,9 +313,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
   <!-- Store Visits Screen -->
   <div id="screenGlobalVisits" style="display:none; padding-bottom:30px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <h2 style="margin:0; font-size:18px; font-weight:700;">Store Visits</h2>
-      <button onclick="openGlobalPlanModal()" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">🗓️ Plan a Visit</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Store Visits</div>
+      </div>
+      <button onclick="openGlobalPlanModal()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">🗓️ Plan a Visit</button>
     </div>
     <div id="globalVisitsList"></div>
   </div>
@@ -1564,9 +1568,9 @@ async function loadGlobalVisits() {
            html += '<div style="font-size:13px; font-weight:700; color:var(--muted); margin: 20px 0 10px 4px; text-transform:uppercase; letter-spacing:0.5px;">' + dStr + '</div>';
            
            dayVisits.forEach(v => {
-             html += '<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 14px; border:1px solid var(--border); background:var(--card); border-radius:12px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.03); cursor:pointer; transition:all 0.15s;" onclick="toast(\'Detailed view coming soon!\')">' +
-                     '  <div style="font-weight:600; font-size:16px; color:var(--text);">' + escapeHtml(v.store_name) + '</div>' +
-                     '  <div style="font-size:13px; font-weight:600; background:#f0fdf4; color:var(--green-dark); padding:6px 12px; border-radius:12px; border:1px solid #bbf7d0;">' + v.items_count + ' items</div>' +
+             html += '<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 12px; border:2px solid var(--border); background:var(--card); border-radius:var(--radius); margin-bottom:10px; cursor:pointer; transition:all 0.15s;" onclick="toast(\'Detailed view coming soon!\')">' +
+                     '  <div style="font-weight:600; font-size:15px; color:var(--text);">' + escapeHtml(v.store_name) + '</div>' +
+                     '  <div style="font-size:12px; font-weight:600; color:var(--muted);">' + v.items_count + ' items</div>' +
                      '</div>';
            });
         }
