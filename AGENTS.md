@@ -30,3 +30,7 @@ When creating or generating release notes for ListMate:
 *   **CRITICAL:** The `main` branch is treated as production-ready (in app review/release stage). 
 *   **NEVER** merge the entire `staging` branch into `main` via PRs or direct merges unless explicitly commanded by the user with "merge staging into main".
 *   To push a specific feature or bug fix to `main`, **ONLY** cherry-pick the specific commits, or apply the specific file changes as a targeted commit directly to `main`. Do not pull in unrelated changes sitting in `staging` (like experimental features or geolocation).
+
+### Hard Guardrails for Main Branch Pushes
+*   **Git Pre-push Hook Installed**: A local `.git/hooks/pre-push` script has been permanently installed in this repository to physically reject **any** push to the `main` branch.
+*   **Bypassing the Guardrail**: You cannot push to `main` by accident. If and ONLY IF the user grants explicit permission to push to main, you must prepend the `EXPLICIT_MAIN_PUSH=1` environment variable to your command (e.g., `EXPLICIT_MAIN_PUSH=1 git push origin main`). Do not use this variable unless the user explicitly requested a push to main in the immediate conversation.
