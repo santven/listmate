@@ -74,7 +74,12 @@
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
   .quick-add-item:hover, .quick-add-item:active { background: #f0f4ed; }
-            .modal-cancel { display: block; width: 100%; padding: 14px; border-radius: 12px; border: none; background: #eee; font-size: 15px; cursor: pointer; }
+  .visit-toast { position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 22px; border-radius: 16px; z-index: 300; font-size: 14px; display: none; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+  .visit-toast.show { display: block; }
+  .visit-toast button { margin: 6px 4px 0; padding: 8px 16px; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
+  .visit-toast .btn-yes { background: var(--green); color: #fff; }
+  .visit-toast .btn-no { background: #666; color: #fff; }
+  .modal-cancel { display: block; width: 100%; padding: 14px; border-radius: 12px; border: none; background: #eee; font-size: 15px; cursor: pointer; }
 
   .catalog { display: none; }
   .catalog.active { display: block; }
@@ -135,8 +140,8 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
 body.is-premium .ad-banner-bottom, body.has-no-ads .ad-banner-bottom { display: none !important; }
 body.has-ads .container { padding-bottom: 95px !important; }
 body.is-premium .container, body.has-no-ads .container { padding-bottom: 24px; }
-body.has-ads .toast { bottom: 115px; }
-body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
+body.has-ads .visit-toast, body.has-ads .toast { bottom: 115px; }
+body.is-premium .visit-toast, body.is-premium .toast, body.has-no-ads .visit-toast, body.has-no-ads .toast { bottom: 30px; }
 
 .offline-badge {
   display: flex;
@@ -1579,13 +1584,13 @@ async function toggleItem(id, showVisitPrompt = true) {
 
   if (needsVisitPrompt) {
     $('#visitMsg').textContent = 'Shopping at ' + visitStoreName + '?';
-    $('#visitModal').classList.add('active');
+    $('#visitToast').classList.add('show');
     $('#btnVisitYes').onclick = async () => {
       await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
-      $('#visitModal').classList.remove('active');
+      $('#visitToast').classList.remove('show');
       loadSuggestions();
     };
-    $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
+    $('#btnVisitNo').onclick = () => { $('#visitToast').classList.remove('show'); };
   }
 }
 async function deleteItem(id) {
@@ -3137,23 +3142,7 @@ async function deleteSavedRecipe(id) {
 
 
 </script>
-<div class="modal-overlay" id="visitModal">
-  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
-    <div style="font-size:48px; margin-bottom:12px;">🏪</div>
-    <h3 id="visitMsg" style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Are you at Store?</h3>
-    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
-      Checking off items? Would you like to log a visit to this store today?
-    </p>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <button id="btnVisitYes" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
-        Yes, I'm here
-      </button>
-      <button id="btnVisitNo" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">
-        Not right now
-      </button>
-    </div>
-  </div>
-</div>
+<div class="visit-toast" id="visitToast"><span id="visitMsg"></span><br><button class="btn-yes" id="btnVisitYes">Yes, I'm here</button> <button class="btn-no" id="btnVisitNo">Nope</button></div>
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
