@@ -1088,7 +1088,7 @@ function renderHome() {
   $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
   $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
   $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
-  $$('.history-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openHistoryModal(parseInt(el.dataset.sid));}));
+  $$('.history-btn').forEach(el=>el.addEventListener('click',e=>{e.stopImmediatePropagation();openHistoryModal(parseInt(el.dataset.sid));}));
   $$('.btn-qty').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
     const id=el.dataset.lid;
@@ -1917,14 +1917,12 @@ window.addEventListener('click', e => {
 });
 
 
-  if ($('#historyPlanSaveBtn')) {
-    $('#historyPlanSaveBtn').addEventListener('click', () => {
-      const sid = parseInt($('#historyPlanInput').dataset.sid);
-      const val = $('#historyPlanInput').value;
-      savePlanDate(sid, val);
-      $('#historyModal').classList.remove('active');
-    });
-  }
+  window.savePlanDateFromModal = function() {
+    const sid = parseInt($('#historyPlanInput').dataset.sid);
+    const val = $('#historyPlanInput').value;
+    savePlanDate(sid, val);
+    $('#historyModal').classList.remove('active');
+  };
 
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
 
@@ -3350,7 +3348,7 @@ async function deleteSavedRecipe(id) {
       <label style="display:block; font-size:13px; font-weight:600; color:#555; margin-bottom:8px;">Next Planned Visit</label>
       <div style="display:flex; gap:8px;">
         <input type="date" id="historyPlanInput" style="flex-grow:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:16px;">
-        <button id="historyPlanSaveBtn" style="background:var(--green); color:#fff; border:none; padding:10px 16px; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">Save</button>
+        <button id="historyPlanSaveBtn" onclick="savePlanDateFromModal()" style="background:var(--green); color:#fff; border:none; padding:10px 16px; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">Save</button>
       </div>
     </div>
     <h4 style="margin:0 0 10px 0; font-size:15px; font-weight:600; color:#444;">Past Visits</h4>
