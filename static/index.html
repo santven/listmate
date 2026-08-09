@@ -973,7 +973,7 @@ function renderHome() {
     return '<div class="store-group">' +
       '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
       ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
-      ((storeMap[storeId] || storeName) !== 'General List' ? ' <button class="shop-btn history-btn" data-sid="' + storeId + '" style="background:#fff; color:#666; border:1px solid #ccc; margin-right:4px;">🗓️</button>' : '') +
+      ((storeMap[storeId] || storeName) !== 'General List' ? ' <button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 10px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; margin-right:4px; cursor:pointer;">🗓️</button>' : '') +
       '</div>' + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
@@ -1088,7 +1088,7 @@ function renderHome() {
   $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
   $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
   $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
-  $$('.history-btn').forEach(el=>el.addEventListener('click',e=>{e.stopImmediatePropagation();openHistoryModal(parseInt(el.dataset.sid));}));
+  $$('.history-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openHistoryModal(parseInt(el.dataset.sid));}));
   $$('.btn-qty').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
     const id=el.dataset.lid;
