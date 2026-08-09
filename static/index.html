@@ -329,12 +329,12 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <button onclick="showScreen('globalVisits')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0;">← Back</button>
         <div id="visitDetailTitle" style="font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.5px;">Visit Details</div>
       </div>
-      <button onclick="replanSelectedItems()" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">+ Add to List</button>
+      <button onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">+ Add to List</button>
     </div>
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-size:14px; font-weight:600; color:var(--text);">Purchased Items</div>
-        <button onclick="toggleSelectAllVisitItems()" id="btnSelectAllVisitItems" style="background:none; border:none; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer;">Select All</button>
+        <button onclick="toggleSelectAllVisitItems()" id="btnSelectAllVisitItems" type="button" style="background:none; border:none; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer;">Select All</button>
       </div>
       <div id="visitDetailItemsList" style="display:flex; flex-direction:column; gap:8px;">
       </div>
@@ -1528,7 +1528,7 @@ function showScreen(name){
     });
     updateFabVisibility();
   } else if(name==='globalVisits'){
-    if (typeof toggleBurger === 'function') toggleBurger();
+    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
     document.querySelector('.header').classList.add('hide-badges');
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
@@ -2425,7 +2425,7 @@ function showPremiumModal(featureName) {
 function showHouseholdSwitcher() {
     const modal = document.getElementById('switcherModal');
     if (!modal) return;
-    if (typeof toggleBurger === 'function') toggleBurger();
+    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
     modal.classList.add('active');
     
     fetch('/api/auth/households_list')

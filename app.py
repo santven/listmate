@@ -2094,7 +2094,7 @@ def get_global_visits():
     db = get_db()
     try:
         visits = db.execute('''
-            SELECT v.visit_date, v.items_count, s.name as store_name
+            SELECT v.store_id, v.visit_date, v.items_count, s.name as store_name
             FROM store_visits v
             JOIN stores s ON v.store_id = s.id
             WHERE v.household_id = ? AND s.name != 'General List'
