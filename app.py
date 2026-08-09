@@ -2043,7 +2043,7 @@ def get_global_visits():
             SELECT v.visit_date, v.items_count, s.name as store_name
             FROM store_visits v
             JOIN stores s ON v.store_id = s.id
-            WHERE v.household_id = ?
+            WHERE v.household_id = ? AND s.name != 'General List'
             ORDER BY v.visit_date DESC
             LIMIT 100
         ''', (_hh(),)).fetchall()
