@@ -145,6 +145,8 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
         except Exception: pass
+        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_date DATE")
+        except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")

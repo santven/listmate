@@ -250,6 +250,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
       <div style="font-weight:600; font-size:15px; color:var(--text);" id="catalogStoreName">Store Catalog</div>
       <div style="display:flex; gap:8px;">
+        <button id="btnStoreHistory" style="background:#fff; border:1px solid #ccc; color:#666; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Plan Trip">🗓️ Plan</button>
         <button id="btnRenameStore" style="background:#f0f4ed; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Rename Store">✏️ Rename</button>
         <button id="btnDeleteStore" style="background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Delete Store">🗑 Delete</button>
       </div>
@@ -844,6 +845,55 @@ function updateFiltersUI() {
 }
 
 
+
+function getVisitLabel(store) {
+  if (store.planned_visit_date) {
+    // Adjust for timezone issues by using UTC methods if it's an ISO date, 
+    // or just assume local if it parses to midnight. For simplicity, we parse local.
+    // The server returns YYYY-MM-DD
+    let planned;
+    if (store.planned_visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y,m,d] = store.planned_visit_date.split('-');
+      planned = new Date(y, m-1, d);
+    } else {
+      planned = new Date(store.planned_visit_date);
+    }
+    if (isNaN(planned.getTime())) return '';
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const diffTime = planned.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Planned: Today';
+    if (diffDays === 1) return 'Planned: Tomorrow';
+    if (diffDays === -1) return 'Planned: Yesterday (overdue)';
+    if (diffDays < -1) return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    
+    if (diffDays > 1 && diffDays <= 7) {
+      return 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
+    }
+    return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
+  } else if (store.last_visited) {
+    let last;
+    if (store.last_visited.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y,m,d] = store.last_visited.split('-');
+      last = new Date(y, m-1, d);
+    } else {
+      last = new Date(store.last_visited);
+    }
+    if (isNaN(last.getTime())) return '';
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const diffTime = today.getTime() - last.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Last visited: Today';
+    if (diffDays === 1) return 'Last visited: Yesterday';
+    return `Last visited: ${diffDays} days ago`;
+  }
+  return '';
+}
+
 function renderHome() {
   const filterRecipeName = $('#recipeFilter') ? $('#recipeFilter').value : '';
   let filteredList = list;
@@ -852,7 +902,10 @@ function renderHome() {
   }
   
   const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
-  $('#storeGrid').innerHTML=stores.map(s=>'<div class="store-btn" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span></div>').join('');
+  $('#storeGrid').innerHTML=stores.map(s=>{
+    const vLabel = getVisitLabel(s);
+    return '<div class="store-btn" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span>' + (vLabel ? '<span style="display:block; font-size:10px; color:#888; margin-top:2px; font-weight:normal;">' + escapeHtml(vLabel) + '</span>' : '') + '</div>';
+  }).join('');
   $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
   
   const storeFilterVal = $('#storeFilter') ? $('#storeFilter').value : '';
@@ -928,10 +981,21 @@ function renderHome() {
       generalVerbiage = '<div style="font-size:12px; color:var(--muted); margin-top:-6px; margin-bottom:8px; font-weight:normal;">Items here can be moved to a specific store when you\'re ready.</div>';
     }
 
+    const st = stores.find(s => s.id === parseInt(storeId));
+    let vLabelHtml = '';
+    if (st && (storeMap[storeId] || storeName) !== 'General List') {
+      const vLabel = getVisitLabel(st);
+      if (vLabel) vLabelHtml = '<div style="font-size:11px; font-weight:500; color:#888; margin-top:-4px; margin-bottom:10px; padding:0 4px;">' + escapeHtml(vLabel) + '</div>';
+    }
+
     return '<div class="store-group">' +
-      '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
-      ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
-      '</div>' + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
+      '<div class="store-group-title">' +
+      '<div style="display:flex;align-items:baseline;gap:6px;"><span>' + escapeHtml(storeMap[storeId] || storeName) + '</span><span style="opacity:0.6;font-size:10px;">' + items.length + '</span></div>' +
+      '<div style="display:flex;align-items:center;gap:4px;">' +
+      ((storeMap[storeId] || storeName) !== 'General List' ? '<button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 8px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; cursor:pointer;">🗓️ Plan</button>' : '') +
+      '<button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
+      '</div>' +
+      '</div>' + vLabelHtml + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
   }
@@ -1045,6 +1109,7 @@ function renderHome() {
   $$('.item-check').forEach(el=>el.addEventListener('click',()=>toggleItem(el.dataset.lid)));
   $$('.btn-delete').forEach(el=>el.addEventListener('click',()=>deleteItem(el.dataset.lid)));
   $$('.btn-move').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openMoveModal(parseInt(el.dataset.lid),el.dataset.name);}));
+  $$('.history-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openHistoryModal(parseInt(el.dataset.sid));}));
   $$('.btn-qty').forEach(el=>el.addEventListener('click',async(e)=>{
     e.stopPropagation();
     const id=el.dataset.lid;
@@ -1063,6 +1128,75 @@ function renderHome() {
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
+}
+
+
+async function openHistoryModal(storeId) {
+  const store = stores.find(s => s.id === storeId);
+  if (!store) return;
+  $('#historyModalTitle').textContent = store.name + ' Plan';
+    let planInputVal = '';
+  if (store.planned_visit_date) {
+    if (store.planned_visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      planInputVal = store.planned_visit_date;
+    } else {
+      const d = new Date(store.planned_visit_date);
+      if (!isNaN(d.getTime())) {
+        planInputVal = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+    }
+  }
+  $('#historyPlanInput').value = planInputVal;
+  $('#historyPlanInput').dataset.sid = storeId;
+  $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading history...</div>';
+  $('#historyModal').classList.add('active');
+
+  try {
+    const res = await fetch(API+'/stores/'+storeId+'/history');
+    if (res.ok) {
+      const history = await res.json();
+      if (history.length === 0) {
+        $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">No past visits recorded.</div>';
+      } else {
+        $('#historyModalList').innerHTML = history.map(h => {
+          let dObj;
+          if (h.visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+             // Handle YYYY-MM-DD
+             let [y,m,d] = h.visit_date.split('-');
+             dObj = new Date(y, m-1, d);
+          } else {
+             // Handle RFC 1123 or other string formats
+             dObj = new Date(h.visit_date);
+          }
+          let dateStr = 'Date not available';
+          if (!isNaN(dObj.getTime())) {
+             dateStr = dObj.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+          }
+          return '<div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid #eee; font-size:14px;">' +
+                 '<span><strong>' + dateStr + '</strong></span>' +
+                 '<span style="color:#666;">' + h.items_count + ' items</span>' +
+                 '</div>';
+        }).join('');
+      }
+    } else {
+      $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#e11d48;">Error loading history.</div>';
+    }
+  } catch(e) {
+    $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#e11d48;">Network error.</div>';
+  }
+}
+
+async function savePlanDate(storeId, dateStr) {
+  try {
+    await fetch(API+'/stores/'+storeId+'/plan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: dateStr})
+    });
+    const store = stores.find(s => s.id === storeId);
+    if (store) store.planned_visit_date = dateStr;
+    renderHome();
+  } catch(e) {}
 }
 
 async function openStore(sid) {
@@ -1197,6 +1331,9 @@ function renderCatalog(filter) {
 }
 
 $('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
+$('#btnStoreHistory').addEventListener('click', () => {
+  if (currentStore) openHistoryModal(currentStore.id);
+});
 $('#btnRenameStore').addEventListener('click',async()=>{
   if(!currentStore) return;
   const newName=prompt('Enter new store name:', currentStore.name);
@@ -1583,6 +1720,13 @@ async function toggleItem(id, showVisitPrompt = true) {
     $('#btnVisitYes').onclick = async () => {
       await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
       $('#visitModal').classList.remove('active');
+      const st = stores.find(s => s.id === item.store_id);
+      if (st) {
+        st.planned_visit_date = null;
+        const d = new Date();
+        st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      }
+      renderHome();
       loadSuggestions();
     };
     $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
@@ -1810,6 +1954,14 @@ window.addEventListener('click', e => {
     e.target.classList.remove('active');
   }
 });
+
+
+  window.savePlanDateFromModal = function() {
+    const sid = parseInt($('#historyPlanInput').dataset.sid);
+    const val = $('#historyPlanInput').value;
+    savePlanDate(sid, val);
+    $('#historyModal').classList.remove('active');
+  };
 
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
 
@@ -3223,6 +3375,25 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+
+
+<div class="modal-overlay" id="historyModal">
+  <div class="modal-sheet" style="text-align:left; padding:24px 20px; border-radius:20px 20px 0 0; max-height:80vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h3 id="historyModalTitle" style="margin:0; font-size:20px; font-weight:700;">Plan Trip</h3>
+      <button onclick="$('#historyModal').classList.remove('active')" style="background:none; border:none; font-size:24px; color:#888; cursor:pointer;">×</button>
+    </div>
+    <div style="background:#f9fafb; padding:16px; border-radius:12px; margin-bottom:16px;">
+      <label style="display:block; font-size:13px; font-weight:600; color:#555; margin-bottom:8px;">Next Planned Visit</label>
+      <div style="display:flex; gap:8px;">
+        <input type="date" id="historyPlanInput" style="flex-grow:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:16px;">
+        <button id="historyPlanSaveBtn" onclick="savePlanDateFromModal()" style="background:var(--green); color:#fff; border:none; padding:10px 16px; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">Save</button>
+      </div>
+    </div>
+    <h4 style="margin:0 0 10px 0; font-size:15px; font-weight:600; color:#444;">Past Visits</h4>
+    <div id="historyModalList" style="overflow-y:auto; flex-grow:1; border:1px solid #eee; border-radius:12px;"></div>
+  </div>
+</div>
 
 </body>
 </html>
