@@ -24,3 +24,9 @@ When creating or generating release notes for ListMate:
 ## 4. Daily Cron & Notification Aggregation
 - **Unified Daily Cron**: All recurring daily checks (e.g. expirations, onboarding, re-engagement) must be consolidated inside `scripts/cron_daily.py`. Do NOT create separate cron scripts.
 - **Single Email Rule**: If a user is eligible for multiple notices on the same day, `cron_daily.py` must aggregate these events into a single dictionary per email address, and send ONE combined email (via `send_combined_notice` or by prioritizing the most critical alert) to avoid spamming the user.
+
+
+### Branch Management & Production Safety
+*   **CRITICAL:** The `main` branch is treated as production-ready (in app review/release stage). 
+*   **NEVER** merge the entire `staging` branch into `main` via PRs or direct merges unless explicitly commanded by the user with "merge staging into main".
+*   To push a specific feature or bug fix to `main`, **ONLY** cherry-pick the specific commits, or apply the specific file changes as a targeted commit directly to `main`. Do not pull in unrelated changes sitting in `staging` (like experimental features or geolocation).
