@@ -324,12 +324,12 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
   <!-- Visit Detail Screen -->
   <div id="screenVisitDetail" style="display:none; padding-bottom:30px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button onclick="showScreen('globalVisits')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0;">← Back</button>
-        <div id="visitDetailTitle" style="font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.5px;">Visit Details</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px;">
+      <div style="display:flex; align-items:flex-start; gap:8px; flex:1;">
+        <button onclick="showScreen('globalVisits')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0; white-space:nowrap; flex-shrink:0; margin-top:1px;">← Back</button>
+        <div id="visitDetailTitle" style="font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.5px; line-height:1.4; margin-top:2px;">Visit Details</div>
       </div>
-      <button onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">+ Add to List</button>
+      <button onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; flex-shrink:0; white-space:nowrap;">+ Add to List</button>
     </div>
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
        <div id="visitDetailPlanDisplay" style="font-size:14px; font-weight:600; color:var(--green-dark);"></div>
