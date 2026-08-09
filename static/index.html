@@ -848,7 +848,6 @@ function updateFiltersUI() {
 
 function getVisitLabel(store) {
   if (store.planned_visit_date) {
-    const pDate = new Date(store.planned_visit_date);
     // Adjust for timezone issues by using UTC methods if it's an ISO date, 
     // or just assume local if it parses to midnight. For simplicity, we parse local.
     // The server returns YYYY-MM-DD
@@ -986,13 +985,16 @@ function renderHome() {
     let vLabelHtml = '';
     if (st && (storeMap[storeId] || storeName) !== 'General List') {
       const vLabel = getVisitLabel(st);
-      if (vLabel) vLabelHtml = '<div style="font-size:11px; font-weight:500; color:#888; margin-top:-4px; margin-bottom:8px;">' + escapeHtml(vLabel) + '</div>';
+      if (vLabel) vLabelHtml = '<div style="font-size:11px; font-weight:500; color:#888; margin-top:-4px; margin-bottom:10px; padding:0 4px;">' + escapeHtml(vLabel) + '</div>';
     }
 
     return '<div class="store-group">' +
-      '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
-      ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
-      ((storeMap[storeId] || storeName) !== 'General List' ? ' <button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 10px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; margin-right:4px; cursor:pointer;">🗓️</button>' : '') +
+      '<div class="store-group-title">' +
+      '<div style="display:flex;align-items:baseline;gap:6px;"><span>' + escapeHtml(storeMap[storeId] || storeName) + '</span><span style="opacity:0.6;font-size:10px;">' + items.length + '</span></div>' +
+      '<div style="display:flex;align-items:center;gap:4px;">' +
+      ((storeMap[storeId] || storeName) !== 'General List' ? '<button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 8px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; cursor:pointer;">🗓️ Plan</button>' : '') +
+      '<button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
+      '</div>' +
       '</div>' + vLabelHtml + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
@@ -1718,6 +1720,13 @@ async function toggleItem(id, showVisitPrompt = true) {
     $('#btnVisitYes').onclick = async () => {
       await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
       $('#visitModal').classList.remove('active');
+      const st = stores.find(s => s.id === item.store_id);
+      if (st) {
+        st.planned_visit_date = null;
+        const d = new Date();
+        st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      }
+      renderHome();
       loadSuggestions();
     };
     $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
