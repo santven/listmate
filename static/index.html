@@ -1539,21 +1539,38 @@ async function loadGlobalVisits() {
       if (visits.length === 0) {
         $('#globalVisitsList').innerHTML = '<div style="padding:40px 20px; text-align:center; color:var(--muted); font-size:15px; background:var(--card); border-radius:12px; border:1px solid var(--border);">No past store visits recorded yet.</div>';
       } else {
-        $('#globalVisitsList').innerHTML = visits.map(v => {
-          const d = new Date(v.visit_date);
-          // Assuming yyyy-mm-dd
-          let dStr = v.visit_date;
-          if (!isNaN(d.getTime())) {
-             const [y,m,day] = v.visit_date.split('-');
+        const grouped = {};
+        visits.forEach(v => {
+          if (!grouped[v.visit_date]) grouped[v.visit_date] = [];
+          grouped[v.visit_date].push(v);
+        });
+        
+        let html = '';
+        for (const [dateKey, dayVisits] of Object.entries(grouped).sort((a,b) => b[0].localeCompare(a[0]))) {
+           let dStr = dateKey;
+           const d = new Date(dateKey);
+           if (!isNaN(d.getTime())) {
+             const [y,m,day] = dateKey.split('-');
              const localD = new Date(y, m-1, day);
-             dStr = localD.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
-          }
-          return '<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border:1px solid var(--border); background:var(--card); border-radius:12px; margin-bottom:10px;">' +
-                 '  <div><div style="font-weight:600; font-size:15px; color:var(--text); margin-bottom:4px;">' + escapeHtml(v.store_name) + '</div>' +
-                 '  <div style="font-size:13px; color:var(--muted);">' + dStr + '</div></div>' +
-                 '  <div style="font-size:12px; font-weight:600; background:#f0f4ed; color:var(--green); padding:4px 10px; border-radius:12px;">' + v.items_count + ' items</div>' +
-                 '</div>';
-        }).join('');
+             const today = new Date();
+             const yesterday = new Date(today);
+             yesterday.setDate(yesterday.getDate() - 1);
+             
+             if (localD.toDateString() === today.toDateString()) dStr = "Today";
+             else if (localD.toDateString() === yesterday.toDateString()) dStr = "Yesterday";
+             else dStr = localD.toLocaleDateString(undefined, {weekday:'long', month:'short', day:'numeric', year:'numeric'});
+           }
+           
+           html += '<div style="font-size:13px; font-weight:700; color:var(--muted); margin: 20px 0 10px 4px; text-transform:uppercase; letter-spacing:0.5px;">' + dStr + '</div>';
+           
+           dayVisits.forEach(v => {
+             html += '<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 14px; border:1px solid var(--border); background:var(--card); border-radius:12px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.03); cursor:pointer; transition:all 0.15s;" onclick="toast(\'Detailed view coming soon!\')">' +
+                     '  <div style="font-weight:600; font-size:16px; color:var(--text);">' + escapeHtml(v.store_name) + '</div>' +
+                     '  <div style="font-size:13px; font-weight:600; background:#f0fdf4; color:var(--green-dark); padding:6px 12px; border-radius:12px; border:1px solid #bbf7d0;">' + v.items_count + ' items</div>' +
+                     '</div>';
+           });
+        }
+        $('#globalVisitsList').innerHTML = html;
       }
     }
   } catch(e) {
