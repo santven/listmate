@@ -250,6 +250,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
       <div style="font-weight:600; font-size:15px; color:var(--text);" id="catalogStoreName">Store Catalog</div>
       <div style="display:flex; gap:8px;">
+        <button id="btnStoreHistory" style="background:#fff; border:1px solid #ccc; color:#666; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Trip Timeline">🗓️ History</button>
         <button id="btnRenameStore" style="background:#f0f4ed; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Rename Store">✏️ Rename</button>
         <button id="btnDeleteStore" style="background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Delete Store">🗑 Delete</button>
       </div>
@@ -1126,10 +1127,21 @@ async function openHistoryModal(storeId) {
         $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">No past visits recorded.</div>';
       } else {
         $('#historyModalList').innerHTML = history.map(h => {
-          let [y,m,d] = h.visit_date.split('-');
-          const dObj = new Date(y, m-1, d);
+          let dObj;
+          if (h.visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+             // Handle YYYY-MM-DD
+             let [y,m,d] = h.visit_date.split('-');
+             dObj = new Date(y, m-1, d);
+          } else {
+             // Handle RFC 1123 or other string formats
+             dObj = new Date(h.visit_date);
+          }
+          let dateStr = 'Date not available';
+          if (!isNaN(dObj.getTime())) {
+             dateStr = dObj.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+          }
           return '<div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid #eee; font-size:14px;">' +
-                 '<span><strong>' + dObj.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) + '</strong></span>' +
+                 '<span><strong>' + dateStr + '</strong></span>' +
                  '<span style="color:#666;">' + h.items_count + ' items</span>' +
                  '</div>';
         }).join('');
@@ -1287,6 +1299,9 @@ function renderCatalog(filter) {
 }
 
 $('#catalogSearch').addEventListener('input',()=>renderCatalog($('#catalogSearch').value.trim()));
+$('#btnStoreHistory').addEventListener('click', () => {
+  if (currentStore) openHistoryModal(currentStore.id);
+});
 $('#btnRenameStore').addEventListener('click',async()=>{
   if(!currentStore) return;
   const newName=prompt('Enter new store name:', currentStore.name);
@@ -3323,7 +3338,10 @@ async function deleteSavedRecipe(id) {
     </div>
     <div style="background:#f9fafb; padding:16px; border-radius:12px; margin-bottom:16px;">
       <label style="display:block; font-size:13px; font-weight:600; color:#555; margin-bottom:8px;">Next Planned Visit</label>
-      <input type="date" id="historyPlanInput" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:16px;">
+      <div style="display:flex; gap:8px;">
+        <input type="date" id="historyPlanInput" style="flex-grow:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:16px;">
+        <button id="historyPlanSaveBtn" style="background:var(--green); color:#fff; border:none; padding:10px 16px; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">Save</button>
+      </div>
     </div>
     <h4 style="margin:0 0 10px 0; font-size:15px; font-weight:600; color:#444;">Past Visits</h4>
     <div id="historyModalList" style="overflow-y:auto; flex-grow:1; border:1px solid #eee; border-radius:12px;"></div>
