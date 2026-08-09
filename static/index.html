@@ -321,6 +321,26 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <div id="globalVisitsList"></div>
   </div>
+
+  <!-- Visit Detail Screen -->
+  <div id="screenVisitDetail" style="display:none; padding-bottom:30px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button onclick="showScreen('globalVisits')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0;">← Back</button>
+        <div id="visitDetailTitle" style="font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.5px;">Visit Details</div>
+      </div>
+      <button onclick="replanSelectedItems()" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">+ Add to List</button>
+    </div>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-size:14px; font-weight:600; color:var(--text);">Purchased Items</div>
+        <button onclick="toggleSelectAllVisitItems()" id="btnSelectAllVisitItems" style="background:none; border:none; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer;">Select All</button>
+      </div>
+      <div id="visitDetailItemsList" style="display:flex; flex-direction:column; gap:8px;">
+      </div>
+    </div>
+  </div>
+
 </div>
 
 
@@ -1498,6 +1518,7 @@ function showScreen(name){
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData().then(() => {
@@ -1513,15 +1534,26 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Store Visits';
     $('#btnBack').style.display='block';
     loadGlobalVisits();
+  } else if(name==='visitDetail'){
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
+    $('#headerTitle').textContent='Visit Details';
+    $('#btnBack').style.display='none';
   } else if(name==='recipes'){
     document.querySelector('.header').classList.add('hide-badges');
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
@@ -1533,6 +1565,103 @@ function showScreen(name){
   updateFabVisibility();
 }
 
+
+
+let currentVisitDetailItems = [];
+let currentVisitDetailStoreId = null;
+
+async function openVisitDetail(storeId, storeName, visitDate, displayDateStr) {
+  currentVisitDetailStoreId = storeId;
+  showScreen('visitDetail');
+  $('#visitDetailTitle').textContent = escapeHtml(storeName) + ' (' + displayDateStr + ')';
+  $('#visitDetailItemsList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading items...</div>';
+  
+  try {
+    const res = await fetch(API+'/stores/' + storeId + '/visits/' + visitDate + '/items');
+    if (res.ok) {
+      currentVisitDetailItems = await res.json();
+      if (currentVisitDetailItems.length === 0) {
+        $('#visitDetailItemsList').innerHTML = '<div style="padding:40px 20px; text-align:center; color:var(--muted); font-size:15px; background:#fff; border-radius:12px; border:1px dashed var(--border);">No item data available for this visit.<br><br><span style="font-size:13px;opacity:0.7;">Older items may have been automatically pruned.</span></div>';
+        $('#btnSelectAllVisitItems').style.display = 'none';
+      } else {
+        renderVisitDetailItems();
+        $('#btnSelectAllVisitItems').style.display = 'block';
+        $('#btnSelectAllVisitItems').textContent = 'Select All';
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    $('#visitDetailItemsList').innerHTML = '<div style="padding:20px;text-align:center;color:#d94a4a;">Failed to load visit details.</div>';
+  }
+}
+
+function renderVisitDetailItems() {
+  let html = '';
+  currentVisitDetailItems.forEach((item, idx) => {
+    const isSelected = item.selected ? 'checked' : '';
+    html += '<label style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; cursor:pointer;">' +
+            '  <input type="checkbox" onchange="toggleVisitItemSelection(' + idx + ')" ' + isSelected + ' style="width:18px; height:18px; accent-color:var(--green);">' +
+            '  <div style="font-size:15px; color:var(--text); font-weight:500;">' + escapeHtml(item.name) + '</div>' +
+            '</label>';
+  });
+  $('#visitDetailItemsList').innerHTML = html;
+}
+
+function toggleVisitItemSelection(idx) {
+  if (currentVisitDetailItems[idx]) {
+    currentVisitDetailItems[idx].selected = !currentVisitDetailItems[idx].selected;
+  }
+  updateSelectAllButtonState();
+}
+
+function toggleSelectAllVisitItems() {
+  const allSelected = currentVisitDetailItems.every(i => i.selected);
+  currentVisitDetailItems.forEach(i => i.selected = !allSelected);
+  renderVisitDetailItems();
+  updateSelectAllButtonState();
+}
+
+function updateSelectAllButtonState() {
+  const allSelected = currentVisitDetailItems.length > 0 && currentVisitDetailItems.every(i => i.selected);
+  $('#btnSelectAllVisitItems').textContent = allSelected ? 'Deselect All' : 'Select All';
+}
+
+async function replanSelectedItems() {
+  const selectedItems = currentVisitDetailItems.filter(i => i.selected).map(i => i.name);
+  if (selectedItems.length === 0) {
+    toast('No items selected.');
+    return;
+  }
+  
+  const btn = event.currentTarget;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = 'Adding...';
+  btn.disabled = true;
+  
+  try {
+    const res = await fetch(API+'/stores/' + currentVisitDetailStoreId + '/visits/replan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: selectedItems })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      toast('Added ' + data.added + ' items to active list.');
+      // Refresh list in background
+      loadData(); 
+      showScreen('globalVisits');
+    } else {
+      toast('Failed to add items.', true);
+    }
+  } catch(e) {
+    console.error(e);
+    toast('Error adding items.', true);
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
 
 async function loadGlobalVisits() {
   $('#globalVisitsList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading visits...</div>';
@@ -1568,7 +1697,7 @@ async function loadGlobalVisits() {
            html += '<div style="font-size:13px; font-weight:700; color:var(--muted); margin: 20px 0 10px 4px; text-transform:uppercase; letter-spacing:0.5px;">' + dStr + '</div>';
            
            dayVisits.forEach(v => {
-             html += '<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 12px; border:2px solid var(--border); background:var(--card); border-radius:var(--radius); margin-bottom:10px; cursor:pointer; transition:all 0.15s;" onclick="toast(\'Detailed view coming soon!\')">' +
+             html += `<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 12px; border:2px solid var(--border); background:var(--card); border-radius:var(--radius); margin-bottom:10px; cursor:pointer; transition:all 0.15s;" onclick="openVisitDetail(${v.store_id}, '${escapeHtml(v.store_name).replace(/'/g, "\\'")}', '${v.visit_date}', '${dStr.replace(/'/g, "\\'")}')">` +
                      '  <div style="font-weight:600; font-size:15px; color:var(--text);">' + escapeHtml(v.store_name) + '</div>' +
                      '  <div style="font-size:12px; font-weight:600; color:var(--muted);">' + v.items_count + ' items</div>' +
                      '</div>';
