@@ -250,7 +250,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
       <div style="font-weight:600; font-size:15px; color:var(--text);" id="catalogStoreName">Store Catalog</div>
       <div style="display:flex; gap:8px;">
-        <button id="btnStoreHistory" style="background:#fff; border:1px solid #ccc; color:#666; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Trip Timeline">🗓️ History</button>
+        <button id="btnStoreHistory" style="background:#fff; border:1px solid #ccc; color:#666; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Plan Trip">🗓️ Plan</button>
         <button id="btnRenameStore" style="background:#f0f4ed; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Rename Store">✏️ Rename</button>
         <button id="btnDeleteStore" style="background:#fff0f0; border:1px solid #fecaca; color:#d94a4a; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;" title="Delete Store">🗑 Delete</button>
       </div>
@@ -852,8 +852,14 @@ function getVisitLabel(store) {
     // Adjust for timezone issues by using UTC methods if it's an ISO date, 
     // or just assume local if it parses to midnight. For simplicity, we parse local.
     // The server returns YYYY-MM-DD
-    const [y,m,d] = store.planned_visit_date.split('-');
-    const planned = new Date(y, m-1, d);
+    let planned;
+    if (store.planned_visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y,m,d] = store.planned_visit_date.split('-');
+      planned = new Date(y, m-1, d);
+    } else {
+      planned = new Date(store.planned_visit_date);
+    }
+    if (isNaN(planned.getTime())) return '';
     const today = new Date();
     today.setHours(0,0,0,0);
     const diffTime = planned.getTime() - today.getTime();
@@ -869,8 +875,14 @@ function getVisitLabel(store) {
     }
     return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
   } else if (store.last_visited) {
-    const [y,m,d] = store.last_visited.split('-');
-    const last = new Date(y, m-1, d);
+    let last;
+    if (store.last_visited.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y,m,d] = store.last_visited.split('-');
+      last = new Date(y, m-1, d);
+    } else {
+      last = new Date(store.last_visited);
+    }
+    if (isNaN(last.getTime())) return '';
     const today = new Date();
     today.setHours(0,0,0,0);
     const diffTime = today.getTime() - last.getTime();
@@ -1113,8 +1125,19 @@ function renderHome() {
 async function openHistoryModal(storeId) {
   const store = stores.find(s => s.id === storeId);
   if (!store) return;
-  $('#historyModalTitle').textContent = store.name + ' Timeline';
-  $('#historyPlanInput').value = store.planned_visit_date || '';
+  $('#historyModalTitle').textContent = store.name + ' Plan';
+    let planInputVal = '';
+  if (store.planned_visit_date) {
+    if (store.planned_visit_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      planInputVal = store.planned_visit_date;
+    } else {
+      const d = new Date(store.planned_visit_date);
+      if (!isNaN(d.getTime())) {
+        planInputVal = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+    }
+  }
+  $('#historyPlanInput').value = planInputVal;
   $('#historyPlanInput').dataset.sid = storeId;
   $('#historyModalList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading history...</div>';
   $('#historyModal').classList.add('active');
@@ -3341,7 +3364,7 @@ async function deleteSavedRecipe(id) {
 <div class="modal-overlay" id="historyModal">
   <div class="modal-sheet" style="text-align:left; padding:24px 20px; border-radius:20px 20px 0 0; max-height:80vh; display:flex; flex-direction:column;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <h3 id="historyModalTitle" style="margin:0; font-size:20px; font-weight:700;">Trip Timeline</h3>
+      <h3 id="historyModalTitle" style="margin:0; font-size:20px; font-weight:700;">Plan Trip</h3>
       <button onclick="$('#historyModal').classList.remove('active')" style="background:none; border:none; font-size:24px; color:#888; cursor:pointer;">×</button>
     </div>
     <div style="background:#f9fafb; padding:16px; border-radius:12px; margin-bottom:16px;">
