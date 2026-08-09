@@ -331,6 +331,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
       <button onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">+ Add to List</button>
     </div>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+       <div id="visitDetailPlanDisplay" style="font-size:14px; font-weight:600; color:var(--green-dark);"></div>
+       <div style="display:flex; align-items:center; gap:8px;">
+           <input type="date" id="visitDetailPlanInput" style="display:none; padding:8px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:14px; background:#f9fafb;" onchange="updateVisitDetailPlanDate(this.value)">
+           <button onclick="toggleVisitDetailPlanInput()" id="btnVisitDetailPlanToggle" style="background:none; border:none; font-size:18px; cursor:pointer; padding:4px;" title="Set Plan Date">🗓️</button>
+       </div>
+    </div>
+
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-size:14px; font-weight:600; color:var(--text);">Purchased Items</div>
@@ -1574,6 +1582,24 @@ async function openVisitDetail(storeId, storeName, visitDate, displayDateStr) {
   currentVisitDetailStoreId = storeId;
   showScreen('visitDetail');
   $('#visitDetailTitle').textContent = escapeHtml(storeName) + ' (' + displayDateStr + ')';
+  
+  const store = stores.find(s => s.id === storeId);
+  const planDisplay = $('#visitDetailPlanDisplay');
+  const planInput = $('#visitDetailPlanInput');
+  planInput.style.display = 'none';
+  if (store && store.planned_visit_date) {
+    planDisplay.textContent = getVisitLabel(store);
+    let planInputVal = store.planned_visit_date;
+    if (!planInputVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const d = new Date(store.planned_visit_date);
+      if (!isNaN(d.getTime())) planInputVal = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    planInput.value = planInputVal;
+  } else {
+    planDisplay.textContent = 'No Plan Set';
+    planInput.value = '';
+  }
+
   $('#visitDetailItemsList').innerHTML = '<div style="padding:20px;text-align:center;color:#888;">Loading items...</div>';
   
   try {
@@ -1624,6 +1650,37 @@ function toggleSelectAllVisitItems() {
 function updateSelectAllButtonState() {
   const allSelected = currentVisitDetailItems.length > 0 && currentVisitDetailItems.every(i => i.selected);
   $('#btnSelectAllVisitItems').textContent = allSelected ? 'Deselect All' : 'Select All';
+}
+
+
+function toggleVisitDetailPlanInput() {
+  const planInput = $('#visitDetailPlanInput');
+  if (planInput.style.display === 'none') {
+    planInput.style.display = 'block';
+    planInput.focus();
+    if (typeof planInput.showPicker === 'function') {
+        try { planInput.showPicker(); } catch(e) {}
+    }
+  } else {
+    planInput.style.display = 'none';
+  }
+}
+
+async function updateVisitDetailPlanDate(val) {
+  if (!currentVisitDetailStoreId) return;
+  
+  const originalText = $('#visitDetailPlanDisplay').textContent;
+  $('#visitDetailPlanDisplay').textContent = 'Saving...';
+  
+  await savePlanDate(currentVisitDetailStoreId, val);
+  
+  const store = stores.find(s => s.id === currentVisitDetailStoreId);
+  if (store && store.planned_visit_date) {
+    $('#visitDetailPlanDisplay').textContent = getVisitLabel(store);
+  } else {
+    $('#visitDetailPlanDisplay').textContent = 'No Plan Set';
+  }
+  $('#visitDetailPlanInput').style.display = 'none';
 }
 
 async function replanSelectedItems() {
