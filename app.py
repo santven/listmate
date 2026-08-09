@@ -2033,6 +2033,31 @@ def toggle_list_item(item_id):
 
 
 
+
+@app.route("/api/visits/history")
+@require_user
+def get_global_visits():
+    db = get_db()
+    try:
+        visits = db.execute('''
+            SELECT v.visit_date, v.items_count, s.name as store_name
+            FROM store_visits v
+            JOIN stores s ON v.store_id = s.id
+            WHERE v.household_id = ?
+            ORDER BY v.visit_date DESC
+            LIMIT 100
+        ''', (_hh(),)).fetchall()
+        
+        visits_list = []
+        for v in visits:
+            d = dict(v)
+            if d.get("visit_date"):
+                d["visit_date"] = str(d["visit_date"])
+            visits_list.append(d)
+        return jsonify(visits_list)
+    finally:
+        db.close()
+
 @app.route("/api/stores/<int:store_id>/history")
 @require_user
 def get_store_history(store_id):
