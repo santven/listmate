@@ -1513,7 +1513,7 @@ def init_data():
             db.execute("INSERT INTO stores (household_id, name) VALUES (%s, 'General List')", (hh,))
         
         if is_read_only and downgraded_at:
-            stores = db.execute("SELECT * FROM stores WHERE household_id = %s AND (created_at <= %s OR name = 'General List') ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh, downgraded_at)).fetchall()
+            stores = db.execute("SELECT s.*, (SELECT MAX(visit_date) FROM store_visits WHERE store_id = s.id AND household_id = %s) as last_visited FROM stores s WHERE s.household_id = %s AND (s.created_at <= %s OR s.name = 'General List') ORDER BY CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name", (hh, hh, downgraded_at)).fetchall()
             list_items = db.execute('''
                 SELECT l.*, s.name as store_name, s.category_order as store_category_order
                 FROM list_items l
@@ -1522,7 +1522,7 @@ def init_data():
                 ORDER BY l.purchased ASC, CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name, COALESCE(NULLIF(l.category,''),'ZZZ'), l.name
             ''', (hh, hh, downgraded_at)).fetchall()
         else:
-            stores = db.execute("SELECT * FROM stores WHERE household_id = %s ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh,)).fetchall()
+            stores = db.execute("SELECT s.*, (SELECT MAX(visit_date) FROM store_visits WHERE store_id = s.id AND household_id = %s) as last_visited FROM stores s WHERE s.household_id = %s ORDER BY CASE WHEN s.name = 'General List' THEN 0 ELSE 1 END, s.name", (hh, hh)).fetchall()
             list_items = db.execute('''
                 SELECT l.*, s.name as store_name, s.category_order as store_category_order
                 FROM list_items l
@@ -1547,8 +1547,14 @@ def init_data():
             except Exception: rec["ingredients"] = []
             recipes.append(rec)
 
+        stores_list = []
+        for s in stores:
+            d = dict(s)
+            if d.get("planned_visit_date"): d["planned_visit_date"] = str(d["planned_visit_date"])
+            if d.get("last_visited"): d["last_visited"] = str(d["last_visited"])
+            stores_list.append(d)
         return jsonify({
-            "stores": [dict(s) for s in stores],
+            "stores": stores_list,
             "list": [dict(r) for r in list_items],
             "recipes": recipes,
             "is_read_only": is_read_only
@@ -1568,7 +1574,15 @@ def list_stores():
         stores = db.execute(
             "SELECT s.*, (SELECT MAX(visit_date) FROM store_visits WHERE store_id = s.id AND household_id = ?) as last_visited FROM stores s WHERE s.household_id = ? ORDER BY CASE WHEN name = 'General List' THEN 0 ELSE 1 END, name", (hh, hh)
         ).fetchall()
-        return jsonify([dict(s) for s in stores])
+        stores_list = []
+        for s in stores:
+            d = dict(s)
+            if d.get("planned_visit_date"):
+                d["planned_visit_date"] = str(d["planned_visit_date"])
+            if d.get("last_visited"):
+                d["last_visited"] = str(d["last_visited"])
+            stores_list.append(d)
+        return jsonify(stores_list)
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500

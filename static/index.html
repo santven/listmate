@@ -982,11 +982,18 @@ function renderHome() {
       generalVerbiage = '<div style="font-size:12px; color:var(--muted); margin-top:-6px; margin-bottom:8px; font-weight:normal;">Items here can be moved to a specific store when you\'re ready.</div>';
     }
 
+    const st = stores.find(s => s.id === parseInt(storeId));
+    let vLabelHtml = '';
+    if (st && (storeMap[storeId] || storeName) !== 'General List') {
+      const vLabel = getVisitLabel(st);
+      if (vLabel) vLabelHtml = '<div style="font-size:11px; font-weight:500; color:#888; margin-top:-4px; margin-bottom:8px;">' + escapeHtml(vLabel) + '</div>';
+    }
+
     return '<div class="store-group">' +
       '<div class="store-group-title">' + (storeMap[storeId] || storeName) + ' <span>' + items.length + '</span>' +
       ' <button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
       ((storeMap[storeId] || storeName) !== 'General List' ? ' <button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 10px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; margin-right:4px; cursor:pointer;">🗓️</button>' : '') +
-      '</div>' + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
+      '</div>' + vLabelHtml + generalVerbiage + '<div class="suggestion-wrap" id="sug-' + storeId + '"></div>' +
       itemsHtml +
       '</div>';
   }
