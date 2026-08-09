@@ -2034,13 +2034,67 @@ def toggle_list_item(item_id):
 
 
 
+
+@app.route("/api/stores/<int:store_id>/visits/<visit_date>/items")
+@require_user
+def get_visit_items(store_id, visit_date):
+    db = get_db()
+    try:
+        # PostgreSQL specific cast: DATE(purchased_at)
+        items = db.execute('''
+            SELECT id, name, category 
+            FROM list_items 
+            WHERE store_id = ? AND household_id = ? 
+              AND purchased = TRUE 
+              AND DATE(purchased_at) = ?
+            ORDER BY name
+        ''', (store_id, _hh(), visit_date)).fetchall()
+        return jsonify([dict(r) for r in items])
+    finally:
+        db.close()
+
+@app.route("/api/stores/<int:store_id>/visits/replan", methods=["POST"])
+@require_user
+def replan_visit_items(store_id):
+    data = request.get_json(silent=True) or {}
+    items_to_add = data.get("items", [])
+    if not items_to_add:
+        return jsonify({"ok": True})
+        
+    db = get_db()
+    try:
+        added_count = 0
+        for name in items_to_add:
+            name_clean = str(name).strip()
+            if not name_clean:
+                continue
+            
+            # Check if already in active list for this store
+            existing = db.execute(
+                "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
+                (store_id, _hh(), name_clean)
+            ).fetchone()
+            
+            if not existing:
+                # Add it as a new unpurchased item without quantity
+                db.execute(
+                    "INSERT INTO list_items (store_id, name, category, household_id, added_by, purchased) VALUES (?, ?, '', ?, ?, FALSE)",
+                    (store_id, name_clean, _hh(), get_display_name())
+                )
+                added_count += 1
+                
+        db.commit()
+        return jsonify({"ok": True, "added": added_count})
+    finally:
+        db.close()
+
 @app.route("/api/visits/history")
 @require_user
 def get_global_visits():
     db = get_db()
     try:
         visits = db.execute('''
-            SELECT v.visit_date, v.items_count, s.name as store_name
+            SELECT v.store_id, v.visit_date, v.items_count, s.name as store_name
             FROM store_visits v
             JOIN stores s ON v.store_id = s.id
             WHERE v.household_id = ? AND s.name != 'General List'
