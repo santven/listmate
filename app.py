@@ -2693,8 +2693,8 @@ def get_analytics_ai():
                     generated_at = datetime.datetime.strptime(generated_at, "%Y-%m-%d %H:%M:%S")
             if (datetime.datetime.utcnow() - generated_at).days < 7:
                 next_date = (generated_at + datetime.timedelta(days=7)).strftime("%B %d, %Y")
-                # DISABLED FOR STAGING TESTING
-                # return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
+                # Return cached content if within 7 days
+                return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
 
         # Generate new insight
         recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
