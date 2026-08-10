@@ -202,6 +202,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
+      <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="#" onclick="showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
@@ -219,11 +220,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         
       </div>
       <div style="display:flex; gap:8px;">
-        <button id="btnOpenAnalytics" onclick="showAnalyticsScreen()" style="background:linear-gradient(135deg, #3b82f6, #2563eb); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(59,130,246,0.25);">
-          📊 Analytics
-        </button>
         <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          🍳 Recipes
+          🍳 Recipes Planner
         </button>
       </div>
     </div>
@@ -276,23 +274,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <!-- ANALYTICS SCREEN -->
   <div class="analytics-screen" id="screenAnalytics" style="display:none; padding-bottom:30px;">
     
-    <!-- AI Insights Section -->
-    <div id="aiInsightsSection" style="background: linear-gradient(135deg, #f0e6fc, #f5f3ff); border:1px solid #d8b4fe; border-radius:16px; padding:16px; margin-bottom:20px; position:relative; overflow:hidden;">
-      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-        <span style="font-size:20px;">✨</span>
-        <h3 style="margin:0; font-size:16px; font-weight:700; color:#5b21b6;">AI Shopping Insights</h3>
-        <span style="background:#8b5cf6; color:white; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; margin-left:auto;">PREMIUM</span>
-      </div>
-      <div id="aiInsightsContent" style="font-size:14px; color:#4c1d95; line-height:1.5;">
-        <div style="text-align:center; padding:10px; filter:blur(4px); opacity:0.6; user-select:none;">
-          You bought eggs 4 times this month! Consider buying the 24-pack next time at Costco to save $3.40. You are doing great consolidating trips on weekends.
-        </div>
-        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(255,255,255,0.2);">
-          <button onclick="fetchAIInsights()" style="background:#7c3aed; color:white; border:none; padding:10px 16px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer; box-shadow:0 4px 12px rgba(124,58,237,0.3);">Unlock AI Insights</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Charts / Stats Container -->
     <div style="display:grid; grid-template-columns: 1fr; gap:16px; margin-bottom:20px;">
       
@@ -321,6 +302,26 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
 
     </div>
+    <!-- AI Insights Section -->
+    <div id="aiInsightsSection" style="background: linear-gradient(135deg, #f0e6fc, #f5f3ff); border:1px solid #d8b4fe; border-radius:16px; padding:16px; margin-top:20px; position:relative; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">✨</span>
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:#5b21b6;">AI Shopping Insights</h3>
+          <span style="background:#8b5cf6; color:white; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">PREMIUM</span>
+        </div>
+        <button onclick="fetchAIInsights()" style="background:none; border:none; cursor:pointer; color:#7c3aed; font-size:18px;" title="Refresh Insights">🔄</button>
+      </div>
+      <div id="aiInsightsContent" style="font-size:14px; color:#4c1d95; line-height:1.5;">
+        <div style="text-align:center; padding:10px; filter:blur(4px); opacity:0.6; user-select:none;">
+          You bought eggs 4 times this month! Consider buying the 24-pack next time at Costco to save $3.40. You are doing great consolidating trips on weekends.
+        </div>
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(255,255,255,0.2);">
+          <button onclick="fetchAIInsights()" style="background:#7c3aed; color:white; border:none; padding:10px 16px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer; box-shadow:0 4px 12px rgba(124,58,237,0.3);">Unlock AI Insights</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
@@ -1615,6 +1616,7 @@ function showScreen(name){
     $('#btnBack').style.display='none';
 
   } else if(name==='analytics'){
+    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
     document.querySelector('.header').classList.add('hide-badges');
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
@@ -2624,7 +2626,7 @@ async function fetchAIInsights() {
         <div style="font-size:14px; color:#4c1d95; line-height:1.5;">
           ${formatted}
         </div>
-        ${res.cached ? '<div style="font-size:11px; color:#8b5cf6; margin-top:12px; text-align:right;">(Cached from this week)</div>' : ''}
+        ${res.cached && res.next_date ? `<div style="font-size:12px; color:#8b5cf6; margin-top:12px; text-align:right; font-weight:600; background:#f3e8ff; padding:8px; border-radius:8px;">💡 Insights are generated weekly.<br/>The next insight will become available on ${escapeHtml(res.next_date)}.</div>` : ''}
       `;
     } else {
       if (res.error && res.error.toLowerCase().includes('premium')) {

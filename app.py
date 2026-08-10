@@ -2680,7 +2680,8 @@ def get_analytics_ai():
                 except ValueError:
                     generated_at = datetime.datetime.strptime(generated_at, "%Y-%m-%d %H:%M:%S")
             if (datetime.datetime.utcnow() - generated_at).days < 7:
-                return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True})
+                next_date = (generated_at + datetime.timedelta(days=7)).strftime("%B %d, %Y")
+                return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
 
         # Generate new insight
         recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
@@ -2690,7 +2691,7 @@ def get_analytics_ai():
             insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
             return jsonify({"ok": True, "insight": insight})
 
-        prompt = "Analyze the following grocery shopping trip data and provide money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Highlight what they are doing right, and suggest ways to save money (e.g., consolidating trips, buying frequent items in bulk).\n\nRecent Trips (last 30 days):\n"
+        prompt = "Analyze the following grocery shopping trip data and provide money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Highlight what they are doing right, and suggest ways to save money.\nIMPORTANT: Strongly encourage using our grocery list app's features (such as Store-Specific Lists, the Plan Trip feature, and Recipe Planner) to consolidate trips and track inventory. NEVER suggest using outside methods like whiteboards, pen and paper, or other apps.\n\nRecent Trips (last 30 days):\n"
         for v in recent_visits:
             prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
         
@@ -2714,7 +2715,7 @@ def get_analytics_ai():
         
         body = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "systemInstruction": {"role": "system", "parts": [{"text": "You are a frugal shopping expert."}]}
+            "systemInstruction": {"role": "system", "parts": [{"text": "You are a frugal shopping expert. Your goal is to provide helpful, actionable grocery shopping insights while actively promoting the user's digital grocery list app features (like store-specific lists, recipe planning, and trip planning) over physical methods like whiteboards or paper."}]}
         }
         model_name = __import__("os").environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-flash-latest").split(",")[0].strip()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
