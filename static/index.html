@@ -2620,6 +2620,20 @@ async function fetchAIInsights() {
     }).then(r => r.json());
     
     if (res.ok) {
+      // Fire confetti if it's a newly generated insight (not from cache)
+      if (!res.cached) {
+        let c = window.confetti;
+        if (c && typeof c.create === 'function') {
+          if (!window._mainConfetti) {
+            try { window._mainConfetti = c.create(null, { resize: true, useWorker: false }); } catch (e) { window._mainConfetti = c; }
+          }
+          c = window._mainConfetti;
+        }
+        if (typeof c === 'function') {
+          c({ particleCount: 120, spread: 80, origin: { y: 0.5 }, zIndex: 9999, colors: ['#8b5cf6', '#d8b4fe', '#f0e6fc', '#5b21b6', '#3b82f6'] });
+        }
+      }
+
       // Basic markdown formatting
       let formatted = escapeHtml(res.insight).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
       contentEl.innerHTML = `
