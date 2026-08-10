@@ -138,6 +138,40 @@ def run_cron():
     for hh in households_reengagement:
         add_user_event(hh.get("email"), hh.get("user_name"), 'reengagement', True, hh.get("user_id"))
 
+
+    # --- 4. Prune Historical List Items (Issue 261) ---
+    print("Pruning Historical List Items...")
+    
+    # Free tier: > 14 days
+    free_prune_query = """
+    DELETE FROM list_items 
+    WHERE purchased = TRUE 
+      AND household_id IN (
+          SELECT id FROM auth_households WHERE is_premium = FALSE
+      )
+      AND COALESCE(purchased_at, added_at, CURRENT_TIMESTAMP) < CURRENT_DATE - INTERVAL '14 days'
+    """
+    try:
+        _run(free_prune_query)
+        print("Successfully pruned free tier items.")
+    except Exception as e:
+        print(f"Error pruning free tier: {e}")
+
+    # Premium tier: > 60 days
+    premium_prune_query = """
+    DELETE FROM list_items 
+    WHERE purchased = TRUE 
+      AND household_id IN (
+          SELECT id FROM auth_households WHERE is_premium = TRUE
+      )
+      AND COALESCE(purchased_at, added_at, CURRENT_TIMESTAMP) < CURRENT_DATE - INTERVAL '60 days'
+    """
+    try:
+        _run(premium_prune_query)
+        print("Successfully pruned premium tier items.")
+    except Exception as e:
+        print(f"Error pruning premium tier: {e}")
+
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
     
     if users_to_notify:
