@@ -304,7 +304,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <!-- AI Insights Section -->
     <div id="aiInsightsSection" style="background: linear-gradient(135deg, #f0e6fc, #f5f3ff); border:1px solid #d8b4fe; border-radius:16px; padding:16px; margin-top:20px; position:relative; overflow:hidden;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:20px;">✨</span>
           <h3 style="margin:0; font-size:16px; font-weight:700; color:#5b21b6;">AI Shopping Insights</h3>
@@ -312,6 +312,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         </div>
         <button onclick="fetchAIInsights()" style="background:none; border:none; cursor:pointer; color:#7c3aed; font-size:18px;" title="Refresh Insights">🔄</button>
       </div>
+      <div style="font-size:11px; color:#7c3aed; margin-bottom:12px; opacity:0.8;">Your personal information is not shared with AI models.</div>
       <div id="aiInsightsContent" style="font-size:14px; color:#4c1d95; line-height:1.5;">
         <div style="text-align:center; padding:10px; filter:blur(4px); opacity:0.6; user-select:none;">
           You bought eggs 4 times this month! Consider buying the 24-pack next time at Costco to save $3.40. You are doing great consolidating trips on weekends.
@@ -344,7 +345,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           </div>
         </div>
         <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Chef AI Meal & Recipe Generator</div>
-        <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">Type any recipe or meal request. Chef AI considers your household dietary preferences to craft a complete recipe & grocery mapping.</div>
+        <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">Type any recipe or meal request. Chef AI considers your household dietary preferences to craft a complete recipe & grocery mapping. <br><span style="font-size:11px; opacity:0.8;">Your personal information is not shared with AI models.</span></div>
 
         <div id="dietaryBanner" style="display:none; background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:10px; font-size:12px; margin-bottom:12px; font-weight:500;">
           🥗 Household Dietary Restrictions Active: <span id="dietaryBannerText"></span>
