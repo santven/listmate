@@ -119,6 +119,18 @@ def _ensure_schema():
             try: authmod._run(stmt)
             except Exception: pass
             
+        try:
+            authmod._run('''
+                INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                SELECT household_id, name, MAX(COALESCE(category, '')), COUNT(*), NOW()
+                FROM list_items
+                WHERE purchased = TRUE
+                GROUP BY household_id, name
+                ON CONFLICT (household_id, name) DO NOTHING
+            ''')
+        except Exception as e:
+            pass
+            
         try: authmod._run("ALTER TABLE stores ADD COLUMN planned_visit_date DATE")
         except Exception: pass
 

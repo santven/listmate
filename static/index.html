@@ -1584,6 +1584,7 @@ function showScreen(name){
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData().then(() => {
@@ -2689,6 +2690,9 @@ function showPremiumModal(featureName) {
     if (featureName === 'Share') {
       title.textContent = 'Sharing is a Premium Feature';
       desc.textContent = 'Upgrade to share your grocery lists and recipes with others, plus unlock AI auto-enrichment and more.';
+    } else if (featureName === 'AI Insights') {
+      title.textContent = 'AI Analytics is Premium';
+      desc.textContent = 'Upgrade to unlock personalized AI shopping recommendations, habit insights, and money-saving tips.';
     } else {
       title.textContent = 'Recipe Planner is Premium';
       desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
