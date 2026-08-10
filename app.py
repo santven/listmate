@@ -2697,18 +2697,18 @@ def get_analytics_ai():
                 # return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
 
         # Generate new insight
-        recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
+        recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '28 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
         top_items = db.execute("SELECT name, total_purchases FROM item_purchase_stats WHERE household_id = ? ORDER BY total_purchases DESC LIMIT 5", (hhid,)).fetchall()
 
         if not recent_visits and not top_items:
             insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
             return jsonify({"ok": True, "insight": insight})
 
-        prompt = """Act as a financial and household planner. Analyze the following grocery shopping trip data and provide genuine, actionable money-saving tips and shopping optimization insights for this household. Be concise (under 300 words).
+        prompt = """Act as a financial and household planner. Analyze the following grocery shopping trip data. Compare the household's behavior from the last 7 days against the previous 3 weeks to identify emerging trends, changes in trip frequency, or new spending habits. Provide genuine, actionable money-saving tips and shopping optimization insights based on this trend analysis. Be concise (under 300 words).
 
-Step 1: Formulate your advice based strictly on their real-world grocery habits—such as identifying too many small trips, suggesting bulk buying for frequently purchased items, or reducing food waste.
+Step 1: Formulate your advice strictly on their real-world grocery habits. Highlight how their recent week compares to their historical baseline (e.g., more frequent small trips, or successfully consolidating trips).
 Step 2: Review your advice against the ListMate app features below.
-Step 3: You may weave in a MAXIMUM OF TWO (2) ListMate features into your final response, and ONLY if they naturally solve a specific problem you identified in Step 1. Do not sound like an advertisement.
+Step 3: You may weave in a MAXIMUM OF ONE OR TWO ListMate features into your final response, and ONLY if they naturally solve a specific problem you identified in Step 1. Do not sound like an advertisement.
 
 ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
 - Store-Specific Lists (organize items by store)
@@ -2717,13 +2717,41 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
 - Shared Households (sync with family members to avoid duplicate buying)
 - Quick Add (easily drop items into lists)
 - Analytics Dashboard (view shopping habits)
-
-Recent Trips (last 30 days):
 """
-        for v in recent_visits:
-            prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
+
+        import datetime
+        now = datetime.datetime.utcnow().date()
+        last_7_days = []
+        prior_weeks = []
         
-        prompt += "\nTop Purchased Items:\n"
+        for v in recent_visits:
+            v_date = v['visit_date']
+            if isinstance(v_date, str):
+                try:
+                    v_date = datetime.datetime.strptime(v_date.split(" ")[0], "%Y-%m-%d").date()
+                except:
+                    v_date = now
+            elif isinstance(v_date, datetime.datetime):
+                v_date = v_date.date()
+                
+            if (now - v_date).days <= 7:
+                last_7_days.append(v)
+            else:
+                prior_weeks.append(v)
+
+        prompt += "\nTrips in the Last 7 Days:\n"
+        if not last_7_days:
+            prompt += "- No trips recorded\n"
+        for v in last_7_days:
+            prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
+            
+        prompt += "\nTrips in the Prior 3 Weeks:\n"
+        if not prior_weeks:
+            prompt += "- No trips recorded\n"
+        for v in prior_weeks:
+            prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
+            
+        prompt += "\nTop Purchased Items (All Time):\n"
         for t in top_items:
             prompt += f"- {t['name']} ({t['total_purchases']} times)\n"
         
