@@ -2704,7 +2704,22 @@ def get_analytics_ai():
             insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
             return jsonify({"ok": True, "insight": insight})
 
-        prompt = "Analyze the following grocery shopping trip data and provide genuine, helpful money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Focus on real-world grocery habits—such as buying frequently purchased items in bulk, noting if they are making too many small trips, or suggesting seasonal buying.\n\nIf, and only if, a feature of ListMate naturally solves a problem they are having (e.g., they make too many trips to the same store, so suggest using 'Plan Trip' or 'Store-Specific Lists' to consolidate), you may mention it organically. Otherwise, focus purely on providing excellent shopping advice without being overly promotional.\n\nListMate Features (reference ONLY if naturally helpful):\n- Store-Specific Lists\n- Plan Trip\n- Recipe Planner & Chef AI\n- Shared Households\n- Quick Add\n- Analytics Dashboard\n\nRecent Trips (last 30 days):\n"
+        prompt = """Act as a financial and household planner. Analyze the following grocery shopping trip data and provide genuine, actionable money-saving tips and shopping optimization insights for this household. Be concise (under 300 words).
+
+Step 1: Formulate your advice based strictly on their real-world grocery habits—such as identifying too many small trips, suggesting bulk buying for frequently purchased items, or reducing food waste.
+Step 2: Review your advice against the ListMate app features below.
+Step 3: You may weave in a MAXIMUM OF TWO (2) ListMate features into your final response, and ONLY if they naturally solve a specific problem you identified in Step 1. Do not sound like an advertisement.
+
+ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
+- Store-Specific Lists (organize items by store)
+- Plan Trip (set a target date for your next visit)
+- Recipe Planner & Chef AI (generate recipes to use up ingredients)
+- Shared Households (sync with family members to avoid duplicate buying)
+- Quick Add (easily drop items into lists)
+- Analytics Dashboard (view shopping habits)
+
+Recent Trips (last 30 days):
+"""
         for v in recent_visits:
             prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
         
