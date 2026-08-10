@@ -95,6 +95,21 @@ def _ensure_schema():
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 processed_at TIMESTAMP)""",
+            """CREATE TABLE IF NOT EXISTS item_purchase_stats (
+                id SERIAL PRIMARY KEY,
+                household_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT '',
+                total_purchases INTEGER NOT NULL DEFAULT 1,
+                last_purchased TIMESTAMP NOT NULL DEFAULT NOW(),
+                UNIQUE(household_id, name)
+            )""",
+            """CREATE TABLE IF NOT EXISTS ai_insights_cache (
+                id SERIAL PRIMARY KEY,
+                household_id INTEGER NOT NULL UNIQUE,
+                insight_text TEXT NOT NULL,
+                generated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_hh_name ON stores(household_id, name)""",
             """CREATE INDEX IF NOT EXISTS idx_li_store ON list_items(store_id, household_id, purchased)""",
             """CREATE INDEX IF NOT EXISTS idx_sv_store ON store_visits(store_id, household_id, visit_date)""",
@@ -2012,6 +2027,13 @@ def toggle_list_item(item_id):
                 "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
                 (get_display_name(), item_id),
             )
+            # Update item_purchase_stats
+            db.execute("""
+                INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                VALUES (?, ?, ?, 1, NOW())
+                ON CONFLICT (household_id, name)
+                DO UPDATE SET total_purchases = item_purchase_stats.total_purchases + 1, last_purchased = NOW()
+            """, (_hh(), item["name"], item["category"]))
             # Auto-record a visit for this store today
             today = __import__('datetime').date.today().isoformat()
             sv = db.execute(
@@ -2295,6 +2317,28 @@ def sync_offline_actions():
                             db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
                         else:
                             db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?", (display_name, item_id))
+                            db.execute("""
+                                INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                                VALUES (?, ?, ?, 1, NOW())
+                                ON CONFLICT (household_id, name)
+                                DO UPDATE SET total_purchases = item_purchase_stats.total_purchases + 1, last_purchased = NOW()
+                            """, (hh_id, item["name"], item["category"]))
+                            
+                            # Auto-record a visit for this store today (for offline sync as well)
+                            today = __import__('datetime').date.today().isoformat()
+                            sv = db.execute(
+                                "SELECT id FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+                                (item["store_id"], hh_id, today)
+                            ).fetchone()
+                            if sv:
+                                db.execute("UPDATE store_visits SET items_count = items_count + 1 WHERE id = ?", (sv["id"],))
+                            else:
+                                db.execute(
+                                    "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+                                    (item["store_id"], hh_id, today)
+                                )
+                            db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (item["store_id"], hh_id))
+
                         applied_count += 1
 
             elif act_type == "delete":
@@ -2579,6 +2623,135 @@ def debug_migrate_owners():
         return "Migration successful!"
     except Exception as e:
         return str(e)
+
+
+@app.route("/api/analytics", methods=["GET"])
+@require_user
+def get_analytics():
+    db = get_db()
+    try:
+        hhid = _hh()
+        # Get total trips (from store_visits)
+        visits = db.execute("SELECT visit_date, items_count FROM store_visits WHERE household_id = ? AND visit_date >= CURRENT_DATE - INTERVAL '90 days' ORDER BY visit_date ASC", (hhid,)).fetchall()
+        
+        # Get top purchased items (from item_purchase_stats)
+        top_items = db.execute("SELECT name, category, total_purchases FROM item_purchase_stats WHERE household_id = ? ORDER BY total_purchases DESC LIMIT 10", (hhid,)).fetchall()
+        
+        # Get top categories
+        top_categories = db.execute("SELECT category, SUM(total_purchases) as count FROM item_purchase_stats WHERE household_id = ? GROUP BY category ORDER BY count DESC LIMIT 5", (hhid,)).fetchall()
+        
+        visits_list = []
+        for v in visits:
+            d = dict(v)
+            if d.get("visit_date"):
+                d["visit_date"] = str(d["visit_date"])
+            visits_list.append(d)
+
+        return jsonify({
+            "ok": True,
+            "visits": visits_list,
+            "top_items": [dict(t) for t in top_items],
+            "top_categories": [dict(c) for c in top_categories]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+@app.route("/api/analytics/ai", methods=["POST"])
+@require_user
+def get_analytics_ai():
+    db = get_db()
+    try:
+        hhid = _hh()
+        hh = authmod._one(f"SELECT is_premium FROM {authmod._HH} WHERE id = ?", (hhid,))
+        is_premium = bool(hh.get("is_premium")) if hh else False
+        if not is_premium:
+            return jsonify({"error": "Premium required for AI insights"}), 403
+
+        import datetime
+        # Check cache
+        cached = db.execute("SELECT insight_text, generated_at FROM ai_insights_cache WHERE household_id = ?", (hhid,)).fetchone()
+        if cached:
+            generated_at = cached["generated_at"]
+            if isinstance(generated_at, str):
+                try:
+                    generated_at = datetime.datetime.fromisoformat(generated_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                except ValueError:
+                    generated_at = datetime.datetime.strptime(generated_at, "%Y-%m-%d %H:%M:%S")
+            if (datetime.datetime.utcnow() - generated_at).days < 7:
+                return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True})
+
+        # Generate new insight
+        recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
+        top_items = db.execute("SELECT name, total_purchases FROM item_purchase_stats WHERE household_id = ? ORDER BY total_purchases DESC LIMIT 5", (hhid,)).fetchall()
+
+        if not recent_visits and not top_items:
+            insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
+            return jsonify({"ok": True, "insight": insight})
+
+        prompt = "Analyze the following grocery shopping trip data and provide money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Highlight what they are doing right, and suggest ways to save money (e.g., consolidating trips, buying frequent items in bulk).\n\nRecent Trips (last 30 days):\n"
+        for v in recent_visits:
+            prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
+        
+        prompt += "\nTop Purchased Items:\n"
+        for t in top_items:
+            prompt += f"- {t['name']} ({t['total_purchases']} times)\n"
+        
+
+        import os
+        import json
+        import urllib.request
+        key = ""
+        for var in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"]:
+            k = os.environ.get(var, "").strip()
+            if k and not k.startswith("dev-") and not k.startswith("secret-"):
+                key = k
+                break
+        
+        if not key:
+            return jsonify({"error": "Gemini API key not configured"}), 500
+        
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "systemInstruction": {"role": "system", "parts": [{"text": "You are a frugal shopping expert."}]}
+        }
+        model_name = __import__("os").environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-flash-latest").split(",")[0].strip()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": key,
+                "User-Agent": "aistudio-build"
+            }
+        )
+        insight_text = "Analysis completed."
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates:
+                    insight_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+        except Exception as e:
+            print(f"[GEMINI ERROR] Call to {model_name} failed: {e}", flush=True)
+            return jsonify({"error": "AI generation failed: " + str(e)}), 500
+
+        
+        # Save to cache
+        db.execute("""
+            INSERT INTO ai_insights_cache (household_id, insight_text, generated_at)
+            VALUES (?, ?, NOW())
+            ON CONFLICT (household_id)
+            DO UPDATE SET insight_text = EXCLUDED.insight_text, generated_at = NOW()
+        """, (hhid, insight_text))
+        db.commit()
+        return jsonify({"ok": True, "insight": insight_text, "cached": False})
+    except Exception as e:
+        return jsonify({"error": "AI generation failed: " + str(e)}), 500
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     from db_pg import init_db

@@ -218,9 +218,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
         
       </div>
-      <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-        🍳 Recipe Planner
-      </button>
+      <div style="display:flex; gap:8px;">
+        <button id="btnOpenAnalytics" onclick="showAnalyticsScreen()" style="background:linear-gradient(135deg, #3b82f6, #2563eb); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(59,130,246,0.25);">
+          📊 Analytics
+        </button>
+        <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+          🍳 Recipes
+        </button>
+      </div>
     </div>
 
     <div class="quick-add-wrap" style="position:relative; margin-bottom:16px;">
@@ -267,6 +272,57 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 
   <!-- Recipe Planner Screen -->
+  
+  <!-- ANALYTICS SCREEN -->
+  <div class="analytics-screen" id="screenAnalytics" style="display:none; padding-bottom:30px;">
+    
+    <!-- AI Insights Section -->
+    <div id="aiInsightsSection" style="background: linear-gradient(135deg, #f0e6fc, #f5f3ff); border:1px solid #d8b4fe; border-radius:16px; padding:16px; margin-bottom:20px; position:relative; overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <span style="font-size:20px;">✨</span>
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:#5b21b6;">AI Shopping Insights</h3>
+        <span style="background:#8b5cf6; color:white; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; margin-left:auto;">PREMIUM</span>
+      </div>
+      <div id="aiInsightsContent" style="font-size:14px; color:#4c1d95; line-height:1.5;">
+        <div style="text-align:center; padding:10px; filter:blur(4px); opacity:0.6; user-select:none;">
+          You bought eggs 4 times this month! Consider buying the 24-pack next time at Costco to save $3.40. You are doing great consolidating trips on weekends.
+        </div>
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(255,255,255,0.2);">
+          <button onclick="fetchAIInsights()" style="background:#7c3aed; color:white; border:none; padding:10px 16px; border-radius:12px; font-weight:600; font-size:14px; cursor:pointer; box-shadow:0 4px 12px rgba(124,58,237,0.3);">Unlock AI Insights</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts / Stats Container -->
+    <div style="display:grid; grid-template-columns: 1fr; gap:16px; margin-bottom:20px;">
+      
+      <!-- Top Categories -->
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px;">
+        <h3 style="margin:0 0 16px 0; font-size:15px; font-weight:700; color:var(--text);">Top Categories</h3>
+        <div id="chartCategories" style="display:flex; flex-direction:column; gap:12px;">
+          <div style="color:var(--muted); font-size:13px; text-align:center;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Most Purchased Items -->
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px;">
+        <h3 style="margin:0 0 16px 0; font-size:15px; font-weight:700; color:var(--text);">Most Purchased Items</h3>
+        <div id="listTopItems" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="color:var(--muted); font-size:13px; text-align:center;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Visit Frequency -->
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px;">
+        <h3 style="margin:0 0 16px 0; font-size:15px; font-weight:700; color:var(--text);">Store Visits (Last 90 Days)</h3>
+        <div id="chartVisits" style="display:flex; flex-direction:column; gap:12px;">
+          <div style="color:var(--muted); font-size:13px; text-align:center;">Loading...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
     <!-- Tabs Header -->
     <div style="display:flex; gap:8px; margin-bottom:16px;">
@@ -1542,6 +1598,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Store Visits';
     $('#btnBack').style.display='block';
@@ -1553,13 +1610,31 @@ function showScreen(name){
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     $('#headerTitle').textContent='Visit Details';
     $('#btnBack').style.display='none';
+
+  } else if(name==='analytics'){
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
+    $('#headerTitle').textContent='Analytics';
+    $('#btnBack').style.display='block';
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+    loadAnalytics();
+
   } else if(name==='recipes'){
     document.querySelector('.header').classList.add('hide-badges');
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
@@ -2434,6 +2509,135 @@ async function shareStoreList(storeId, storeName) {
   }
 }
 
+
+
+// ── Analytics & AI Insights ──
+function showAnalyticsScreen() {
+  showScreen('analytics');
+}
+
+async function loadAnalytics() {
+  try {
+    const res = await fetch(API + '/analytics').then(r => r.json());
+    if (res.ok) {
+      renderTopCategories(res.top_categories || []);
+      renderTopItems(res.top_items || []);
+      renderVisitFrequency(res.visits || []);
+    }
+  } catch (err) {
+    console.error('Error loading analytics', err);
+  }
+}
+
+function renderTopCategories(categories) {
+  const container = $('#chartCategories');
+  if (!categories.length) {
+    container.innerHTML = '<div style="color:var(--muted); font-size:13px; text-align:center;">No data yet.</div>';
+    return;
+  }
+  const max = Math.max(...categories.map(c => c.count));
+  container.innerHTML = categories.map(c => {
+    const pct = Math.max(5, (c.count / max) * 100);
+    return `
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; color:var(--text);">
+          <span>${escapeHtml(c.category || 'Uncategorized')}</span>
+          <span>${c.count} items</span>
+        </div>
+        <div style="width:100%; height:8px; background:#f3f4f6; border-radius:4px; overflow:hidden;">
+          <div style="width:${pct}%; height:100%; background:var(--green); border-radius:4px;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderTopItems(items) {
+  const container = $('#listTopItems');
+  if (!items.length) {
+    container.innerHTML = '<div style="color:var(--muted); font-size:13px; text-align:center;">No data yet.</div>';
+    return;
+  }
+  container.innerHTML = items.map(i => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#f9fafb; border:1px solid var(--border); border-radius:8px;">
+      <div style="display:flex; flex-direction:column;">
+        <span style="font-size:14px; font-weight:600; color:var(--text);">${escapeHtml(i.name)}</span>
+        <span style="font-size:11px; color:var(--muted);">${escapeHtml(i.category || 'Uncategorized')}</span>
+      </div>
+      <div style="font-size:13px; font-weight:700; color:var(--green-dark); background:#d1fae5; padding:4px 8px; border-radius:12px;">
+        ${i.total_purchases}x
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderVisitFrequency(visits) {
+  const container = $('#chartVisits');
+  if (!visits.length) {
+    container.innerHTML = '<div style="color:var(--muted); font-size:13px; text-align:center;">No data yet.</div>';
+    return;
+  }
+  // Group by week (just roughly by month for simple view)
+  const grouped = {};
+  visits.forEach(v => {
+    if (!v.visit_date) return;
+    const month = v.visit_date.substring(0, 7); // YYYY-MM
+    grouped[month] = (grouped[month] || 0) + 1;
+  });
+  
+  const entries = Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0]));
+  const max = Math.max(...entries.map(e => e[1]));
+  
+  container.innerHTML = entries.map(e => {
+    const monthName = new Date(e[0] + '-01').toLocaleDateString('en-US', {month:'short', year:'2-digit'});
+    const pct = Math.max(5, (e[1] / max) * 100);
+    return `
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:50px; font-size:12px; font-weight:600; color:var(--muted); text-align:right;">${monthName}</div>
+        <div style="flex-grow:1; height:24px; background:#f3f4f6; border-radius:4px; overflow:hidden; position:relative;">
+          <div style="width:${pct}%; height:100%; background:#3b82f6; border-radius:4px;"></div>
+          <div style="position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:${pct > 15 ? '#fff' : '#3b82f6'};">${e[1]} trips</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function fetchAIInsights() {
+  if (!window.currentCfg || !window.currentCfg.is_premium) {
+    showPremiumModal('AI Insights');
+    return;
+  }
+  const contentEl = $('#aiInsightsContent');
+  contentEl.innerHTML = '<div style="text-align:center; padding:16px; font-weight:600; color:#7c3aed;">🤖 Analyzing shopping patterns...</div>';
+  
+  try {
+    const res = await fetch(API + '/analytics/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(r => r.json());
+    
+    if (res.ok) {
+      // Basic markdown formatting
+      let formatted = escapeHtml(res.insight).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+      contentEl.innerHTML = `
+        <div style="font-size:14px; color:#4c1d95; line-height:1.5;">
+          ${formatted}
+        </div>
+        ${res.cached ? '<div style="font-size:11px; color:#8b5cf6; margin-top:12px; text-align:right;">(Cached from this week)</div>' : ''}
+      `;
+    } else {
+      if (res.error && res.error.toLowerCase().includes('premium')) {
+         showPremiumModal('AI Insights');
+         contentEl.innerHTML = '<div style="text-align:center; padding:10px; font-weight:600; color:red;">Premium Required.</div>';
+      } else {
+         contentEl.innerHTML = '<div style="text-align:center; padding:10px; color:red;">Failed to load AI insights.</div>';
+      }
+    }
+  } catch (err) {
+    contentEl.innerHTML = '<div style="text-align:center; padding:10px; color:red;">Error connecting to AI.</div>';
+  }
+}
 
 // ── Recipe Planner & AI Generator (US-112) ──
 let currentDraftRecipe = null;
