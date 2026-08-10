@@ -2681,7 +2681,8 @@ def get_analytics_ai():
                     generated_at = datetime.datetime.strptime(generated_at, "%Y-%m-%d %H:%M:%S")
             if (datetime.datetime.utcnow() - generated_at).days < 7:
                 next_date = (generated_at + datetime.timedelta(days=7)).strftime("%B %d, %Y")
-                return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
+                # DISABLED FOR STAGING TESTING
+                # return jsonify({"ok": True, "insight": cached["insight_text"], "cached": True, "next_date": next_date})
 
         # Generate new insight
         recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
@@ -2691,7 +2692,7 @@ def get_analytics_ai():
             insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
             return jsonify({"ok": True, "insight": insight})
 
-        prompt = "Analyze the following grocery shopping trip data and provide money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Highlight what they are doing right, and suggest ways to save money.\nIMPORTANT: Strongly encourage using our grocery list app's features (such as Store-Specific Lists, the Plan Trip feature, and Recipe Planner) to consolidate trips and track inventory. NEVER suggest using outside methods like whiteboards, pen and paper, or other apps.\n\nRecent Trips (last 30 days):\n"
+        prompt = "Analyze the following grocery shopping trip data and provide money-saving tips and shopping optimization insights for this household. Be concise (under 300 words). Highlight what they are doing right, and suggest ways to save money.\nIMPORTANT: Strongly encourage using our grocery list app's features to consolidate trips and track inventory. Do NOT just give a generic list of features. Provide an informed recommendation referencing a specific feature that naturally fits their pattern.\n\nOur App Features:\n- Store-Specific Lists (organize items by store to avoid missing things)\n- Plan Trip (set a target date for your next visit)\n- Recipe Planner & Chef AI (generate recipes and auto-add ingredients)\n- Shared Households (live sync with family members so everyone adds to the same list)\n- Quick Add (easily drop items into lists as soon as you run out)\n- Analytics Dashboard (view shopping habits)\n\nNEVER suggest using outside methods like whiteboards, pen and paper, or other apps. ONLY suggest the features above.\n\nRecent Trips (last 30 days):\n"
         for v in recent_visits:
             prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
         
