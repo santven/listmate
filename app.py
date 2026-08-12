@@ -1486,6 +1486,11 @@ def logout_page():
     session.clear()
     return redirect("/login")
 
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    import os
+    return jsonify({"version": os.environ.get("RENDER_GIT_COMMIT", "local")[:7]})
+
 @app.route("/api/health")
 def health():
     return jsonify({

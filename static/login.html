@@ -73,11 +73,23 @@ body { padding-bottom: 50px; }
     <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
   </div>
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
+  <div style="margin-top: 20px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
+    <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 6px;">
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+    </div>
+    <div id="versionDisplay">Build: ...</div>
+  </div>
 </div>
 
 <script>
 var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
 var urlParams = new URLSearchParams(window.location.search);
+
+fetch('/api/version').then(r=>r.json()).then(d=>{
+  var el = document.getElementById('versionDisplay');
+  if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
+}).catch(e=>{});
 var inviteToken = urlParams.get('token') || sessionStorage.getItem('listmate_invite');
 if (urlParams.get('needs_signup')) {
   setTimeout(function() {
