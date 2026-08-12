@@ -367,7 +367,7 @@
 
 ## Epic 9: Multi-Household & Seamless Login
 
-### ~US-9.1: Multi-Household Architecture & Seamless Login~ (In Progress)
+### ~US-9.1: Multi-Household Architecture & Seamless Login~ (Completed)
 **As a** user with access to multiple households, **I want** to seamlessly log into my primary household and switch between others using a modal **so that** I don’t have to create multiple accounts or struggle with invites.
 
 **Acceptance Criteria:**
