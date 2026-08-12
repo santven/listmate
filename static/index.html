@@ -986,6 +986,49 @@ function updateFiltersUI() {
 
 
 
+function formatMonDD(dateStr) {
+  if (!dateStr) return '';
+  let y, m, d;
+  if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const parts = dateStr.split('-');
+    y = parts[0]; m = parts[1]; d = parts[2];
+  } else {
+    const dt = new Date(dateStr);
+    if (isNaN(dt.getTime())) return dateStr;
+    y = dt.getFullYear();
+    m = String(dt.getMonth() + 1).padStart(2, '0');
+    d = String(dt.getDate()).padStart(2, '0');
+  }
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const mIdx = parseInt(m, 10) - 1;
+  if (mIdx >= 0 && mIdx < 12) {
+    return `${months[mIdx]}-${String(parseInt(d, 10)).padStart(2, '0')}`;
+  }
+  return dateStr;
+}
+
+function getDaysUntilVisit(dateStr) {
+  if (!dateStr) return 999;
+  let y, m, d;
+  if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const parts = dateStr.split('-');
+    y = parseInt(parts[0], 10);
+    m = parseInt(parts[1], 10) - 1;
+    d = parseInt(parts[2], 10);
+  } else {
+    const dt = new Date(dateStr);
+    if (isNaN(dt.getTime())) return 999;
+    y = dt.getFullYear();
+    m = dt.getMonth();
+    d = dt.getDate();
+  }
+  const visitDate = new Date(y, m, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffTime = visitDate.getTime() - today.getTime();
+  return Math.round(diffTime / (1000 * 3600 * 24));
+}
+
 function getVisitLabel(store) {
   if (store.planned_visit_date) {
     // Adjust for timezone issues by using UTC methods if it's an ISO date, 
@@ -1008,9 +1051,9 @@ function getVisitLabel(store) {
     if (diffDays === 0) label = 'Planned: Today';
     else if (diffDays === 1) label = 'Planned: Tomorrow';
     else if (diffDays === -1) label = 'Planned: Yesterday (overdue)';
-    else if (diffDays < -1) label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    else if (diffDays < -1) label = `Planned: ${formatMonDD(store.planned_visit_date)} (overdue)`;
     else if (diffDays > 1 && diffDays <= 7) label = 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
-    else label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
+    else label = `Planned: ${formatMonDD(store.planned_visit_date)}`;
     
     if (store.planned_visit_by) {
       label += ' by ' + store.planned_visit_by;
@@ -2173,9 +2216,16 @@ async function checkVisitNotifications() {
   if (!window.userEmail) return;
   for (let s of stores) {
     if (s.planned_visit_date && s.planned_visit_by && s.visit_notified_users !== undefined) {
+      const daysUntil = getDaysUntilVisit(s.planned_visit_date);
+      if (daysUntil > 1) {
+        continue;
+      }
       const notified = (s.visit_notified_users || '').split(',');
       if (!notified.includes(window.userEmail)) {
-        $('#notifyVisitMsg').textContent = `${s.planned_visit_by} is going to ${s.name} on ${s.planned_visit_date}!`;
+        const formattedDate = formatMonDD(s.planned_visit_date);
+        $('#notifyVisitMsg').textContent = `${s.planned_visit_by} is going to ${s.name} on ${formattedDate}!`;
+        const btnYes = $('#btnNotifyVisitYes');
+        if (btnYes) btnYes.textContent = `Open ${s.name}`;
         $('#notifyVisitModal').classList.add('active');
         
         $('#btnNotifyVisitYes').onclick = async () => {
@@ -3916,8 +3966,8 @@ async function deleteSavedRecipe(id) {
       <span style="font-size: 11px; opacity: 0.8; color: #8b5cf6; display: block; margin-top: 8px;">✨ Store Visit Notifications are a ListMate Premium feature.</span>
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <button id="btnNotifyVisitYes" style="background:var(--primary); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
-        Yes, open store
+      <button id="btnNotifyVisitYes" style="background:var(--green, #5ebe7e); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+        Open Store
       </button>
       <button id="btnNotifyVisitDismiss" style="background:#f3f4f6; color:#374151; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">
         Dismiss
