@@ -1164,8 +1164,14 @@ window.addEventListener('click', e => {
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 11px; color: #888;">
+    <div style="margin-bottom: 8px;">
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline; margin-right: 15px;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+    </div>
+    <div id="versionDisplaySettings">Build: ...</div>
+  </div>
 </div>
-
 
 <!-- Household Switcher Modal -->
 <div class="modal-overlay" id="switcherModal">
@@ -1179,13 +1185,7 @@ window.addEventListener('click', e => {
     </div>
   </div>
 
-  <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 11px; color: #888;">
-    <div style="margin-bottom: 8px;">
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline; margin-right: 15px;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
-    </div>
-    <div id="versionDisplaySettings">Build: ...</div>
-  </div>
+
 </div>
 
 <!-- Paywall Modal -->
