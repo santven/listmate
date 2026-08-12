@@ -479,8 +479,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
     <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
   </div>
 </div>
@@ -905,6 +905,9 @@ async function loadData() {
       if (initData.user_email) {
         window.userEmail = initData.user_email;
       }
+      if (initData.user_name) {
+        window.userName = initData.user_name;
+      }
       saveCache();
       checkVisitNotifications();
     }
@@ -1322,7 +1325,10 @@ async function savePlanDate(storeId, dateStr) {
       body: JSON.stringify({date: dateStr})
     });
     const store = stores.find(s => s.id === storeId);
-    if (store) store.planned_visit_date = dateStr;
+    if (store) {
+      store.planned_visit_date = dateStr;
+      store.planned_visit_by = dateStr ? (window.userName || 'Someone') : null;
+    }
     renderHome();
   } catch(e) {}
 }
@@ -1887,7 +1893,10 @@ function openGlobalPlanModal() {
         body: JSON.stringify({date: dt})
       });
       const st = stores.find(s => s.id === sid);
-      if(st) st.planned_visit_date = dt;
+      if(st) {
+        st.planned_visit_date = dt;
+        st.planned_visit_by = dt ? (window.userName || 'Someone') : null;
+      }
       saveCache();
       renderHome();
       showScreen('home');
@@ -2137,6 +2146,7 @@ async function toggleItem(id, showVisitPrompt = true) {
       const st = stores.find(s => s.id === item.store_id);
       if (st) {
         st.planned_visit_date = null;
+        st.planned_visit_by = null;
         const d = new Date();
         st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
       }

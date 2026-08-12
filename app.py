@@ -1585,7 +1585,8 @@ def init_data():
             "list": [dict(r) for r in list_items],
             "recipes": recipes,
             "is_read_only": is_read_only,
-            "user_email": session.get("user", {}).get("email")
+            "user_email": authmod._get().get("email") if authmod._get() else "",
+            "user_name": authmod._get().get("name", "Someone").split()[0] if authmod._get() else "Someone"
         })
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -2165,10 +2166,12 @@ def plan_store_visit(store_id):
     db = get_db()
     try:
         if date:
-            first_name = session.get("user", {}).get("name", "Someone").split()[0]
+            import shared.auth as authmod
+            user_info = authmod._get() or {}
+            first_name = user_info.get("name", "Someone").split()[0]
             if len(first_name) > 8:
                 first_name = first_name[:8] + "..."
-            user_id = session.get("user", {}).get("email", "")
+            user_id = user_info.get("email", "")
             db.execute("UPDATE stores SET planned_visit_date = ?, planned_visit_by = ?, visit_notified_users = ? WHERE id = ? AND household_id = ?", (date, first_name, user_id, store_id, _hh()))
         else:
             db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (store_id, _hh()))
@@ -2182,7 +2185,9 @@ def plan_store_visit(store_id):
 def dismiss_visit_notification(store_id):
     db = get_db()
     try:
-        user_id = session.get("user", {}).get("email", "")
+        import shared.auth as authmod
+        user_info = authmod._get() or {}
+        user_id = user_info.get("email", "")
         store = db.execute("SELECT visit_notified_users FROM stores WHERE id = ? AND household_id = ?", (store_id, _hh())).fetchone()
         if store:
             notified = store.get("visit_notified_users") or ""
