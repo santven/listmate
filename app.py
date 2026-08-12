@@ -1504,7 +1504,9 @@ def health():
 
 @app.route("/<path:filename>")
 def root_files(filename):
-    if filename in ["sw.js", "manifest.json", "robots.txt"] or filename.startswith("icon-") or filename.endswith(".png"):
+    if filename == "favicon.ico":
+        return send_from_directory("static", "icon-192.png", mimetype="image/png")
+    if filename in ["sw.js", "manifest.json", "robots.txt", "favicon.ico"] or filename.startswith("icon-") or filename.endswith(".png") or filename.endswith(".ico"):
         return send_from_directory("static", filename)
     return "", 404
 
