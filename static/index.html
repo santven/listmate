@@ -902,7 +902,11 @@ async function loadData() {
       stores = initData.stores;
       list = initData.list;
       recipes = initData.recipes;
+      if (initData.user_email) {
+        window.userEmail = initData.user_email;
+      }
       saveCache();
+      checkVisitNotifications();
     }
   } catch (err) {
     if (!navigator.onLine) return;
@@ -2139,6 +2143,41 @@ async function toggleItem(id, showVisitPrompt = true) {
     $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
   }
 }
+
+async function checkVisitNotifications() {
+  if (!window.userEmail) return;
+  for (let s of stores) {
+    if (s.planned_visit_date && s.planned_visit_by && s.visit_notified_users !== undefined) {
+      const notified = (s.visit_notified_users || '').split(',');
+      if (!notified.includes(window.userEmail)) {
+        $('#notifyVisitMsg').textContent = `${s.planned_visit_by} is going to ${s.name} on ${s.planned_visit_date}!`;
+        $('#notifyVisitModal').classList.add('active');
+        
+        $('#btnNotifyVisitYes').onclick = async () => {
+          $('#notifyVisitModal').classList.remove('active');
+          await dismissNotification(s.id);
+          openStore(s.id);
+        };
+        $('#btnNotifyVisitDismiss').onclick = async () => {
+          $('#notifyVisitModal').classList.remove('active');
+          await dismissNotification(s.id);
+        };
+        return;
+      }
+    }
+  }
+}
+
+async function dismissNotification(storeId) {
+  try {
+    await fetch(API+'/stores/'+storeId+'/dismiss_visit_notification', {method: 'POST'});
+    const s = stores.find(x => x.id === storeId);
+    if (s) {
+      s.visit_notified_users = (s.visit_notified_users ? s.visit_notified_users + ',' : '') + window.userEmail;
+    }
+  } catch (e) {}
+}
+
 async function deleteItem(id) {
   if (window.currentCfg && window.currentCfg.is_read_only) {
     if (document.getElementById('readOnlyModal')) document.getElementById('readOnlyModal').classList.add('active');
@@ -3842,6 +3881,26 @@ async function deleteSavedRecipe(id) {
 
 
 </script>
+<div class="modal-overlay" id="notifyVisitModal">
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+    <div style="font-size:48px; margin-bottom:12px;">📅</div>
+    <h3 id="notifyVisitMsg" style="margin:0 0 8px 0; font-size:20px; font-weight:700;"></h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+      Do you need to add anything before they go?
+      <br>
+      <span style="font-size: 11px; opacity: 0.8; color: #8b5cf6; display: block; margin-top: 8px;">✨ Store Visit Notifications are a ListMate Premium feature.</span>
+    </p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button id="btnNotifyVisitYes" style="background:var(--primary); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+        Yes, open store
+      </button>
+      <button id="btnNotifyVisitDismiss" style="background:#f3f4f6; color:#374151; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">
+        Dismiss
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="visitModal">
   <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
     <div style="font-size:48px; margin-bottom:12px;">🏪</div>

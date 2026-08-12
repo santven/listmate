@@ -1584,7 +1584,8 @@ def init_data():
             "stores": stores_list,
             "list": [dict(r) for r in list_items],
             "recipes": recipes,
-            "is_read_only": is_read_only
+            "is_read_only": is_read_only,
+            "user_email": session.get("user", {}).get("email")
         })
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -2059,7 +2060,7 @@ def toggle_list_item(item_id):
                     "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
                     (item["store_id"], _hh(), today)
                 )
-            db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (item["store_id"], _hh()))
+            db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (item["store_id"], _hh()))
         db.commit()
         return jsonify({"ok": True})
     finally:
@@ -2163,8 +2164,32 @@ def plan_store_visit(store_id):
     date = data.get("date")
     db = get_db()
     try:
-        db.execute("UPDATE stores SET planned_visit_date = ? WHERE id = ? AND household_id = ?", (date if date else None, store_id, _hh()))
+        if date:
+            first_name = session.get("user", {}).get("name", "Someone").split()[0]
+            if len(first_name) > 8:
+                first_name = first_name[:8] + "..."
+            user_id = session.get("user", {}).get("email", "")
+            db.execute("UPDATE stores SET planned_visit_date = ?, planned_visit_by = ?, visit_notified_users = ? WHERE id = ? AND household_id = ?", (date, first_name, user_id, store_id, _hh()))
+        else:
+            db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (store_id, _hh()))
         db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+@app.route("/api/stores/<int:store_id>/dismiss_visit_notification", methods=["POST"])
+@require_user
+def dismiss_visit_notification(store_id):
+    db = get_db()
+    try:
+        user_id = session.get("user", {}).get("email", "")
+        store = db.execute("SELECT visit_notified_users FROM stores WHERE id = ? AND household_id = ?", (store_id, _hh())).fetchone()
+        if store:
+            notified = store.get("visit_notified_users") or ""
+            if user_id not in notified.split(","):
+                notified = notified + "," + user_id if notified else user_id
+                db.execute("UPDATE stores SET visit_notified_users = ? WHERE id = ? AND household_id = ?", (notified, store_id, _hh()))
+                db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -2349,7 +2374,7 @@ def sync_offline_actions():
                                     "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
                                     (item["store_id"], hh_id, today)
                                 )
-                            db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (item["store_id"], hh_id))
+                            db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (item["store_id"], hh_id))
 
                         applied_count += 1
 
@@ -2433,7 +2458,7 @@ def mark_visit(store_id):
                 "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
                 (store_id, _hh(), today)
             )
-        db.execute("UPDATE stores SET planned_visit_date = NULL WHERE id = ? AND household_id = ?", (store_id, _hh()))
+        db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (store_id, _hh()))
         db.commit()
         return jsonify({"ok": True})
     finally:
