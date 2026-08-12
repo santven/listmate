@@ -989,15 +989,18 @@ function getVisitLabel(store) {
     const diffTime = planned.getTime() - today.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Planned: Today';
-    if (diffDays === 1) return 'Planned: Tomorrow';
-    if (diffDays === -1) return 'Planned: Yesterday (overdue)';
-    if (diffDays < -1) return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    let label = '';
+    if (diffDays === 0) label = 'Planned: Today';
+    else if (diffDays === 1) label = 'Planned: Tomorrow';
+    else if (diffDays === -1) label = 'Planned: Yesterday (overdue)';
+    else if (diffDays < -1) label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    else if (diffDays > 1 && diffDays <= 7) label = 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
+    else label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
     
-    if (diffDays > 1 && diffDays <= 7) {
-      return 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
+    if (store.planned_visit_by) {
+      label += ' by ' + store.planned_visit_by;
     }
-    return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
+    return label;
   } else if (store.last_visited) {
     let last;
     if (store.last_visited.match(/^\d{4}-\d{2}-\d{2}$/)) {
