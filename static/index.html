@@ -3957,13 +3957,14 @@ async function deleteSavedRecipe(id) {
 
 </script>
 <div class="modal-overlay" id="notifyVisitModal">
-  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
-    <div style="font-size:48px; margin-bottom:12px;">📅</div>
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0; position:relative;">
+    <div style="position:absolute; top:16px; right:16px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-size:11px; font-weight:700; padding:4px 10px; border-radius:12px; text-transform:uppercase; letter-spacing:0.5px; box-shadow:0 2px 6px rgba(5,150,105,0.25); cursor:pointer;" onclick="if(typeof showPaywall==='function') showPaywall();" title="ListMate Premium Feature">
+      ✨ Premium
+    </div>
+    <div style="font-size:48px; margin-bottom:12px; margin-top:8px;">📅</div>
     <h3 id="notifyVisitMsg" style="margin:0 0 8px 0; font-size:20px; font-weight:700;"></h3>
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
       Do you need to add anything before they go?
-      <br>
-      <span style="font-size: 11px; opacity: 0.8; color: #8b5cf6; display: block; margin-top: 8px;">✨ Store Visit Notifications are a ListMate Premium feature.</span>
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <button id="btnNotifyVisitYes" style="background:var(--green, #5ebe7e); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
