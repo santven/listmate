@@ -406,10 +406,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
   </div>
-
+  <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 11px; color: #888;">
+    <div style="margin-bottom: 8px;">
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline; margin-right: 15px;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+    </div>
+    <div id="versionDisplayMain">Build: ...</div>
+  </div>
 </div>
-
-
 <!-- Recipe Store Selection Modal -->
 <div class="modal-overlay" id="recipeStoreModal">
   <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
