@@ -1178,6 +1178,14 @@ window.addEventListener('click', e => {
         <button onclick="closeHouseholdSwitcher()" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
+
+  <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 11px; color: #888;">
+    <div style="margin-bottom: 8px;">
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline; margin-right: 15px;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+    </div>
+    <div id="versionDisplaySettings">Build: ...</div>
+  </div>
 </div>
 
 <!-- Paywall Modal -->
@@ -1199,8 +1207,8 @@ window.addEventListener('click', e => {
     </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
     <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
   </div>
 </div>

@@ -479,8 +479,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
     <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url:'https://grocerlist.app/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
   </div>
 </div>
@@ -548,6 +548,11 @@ function toggleBurger() {
 }
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
+
+fetch('/api/version').then(r=>r.json()).then(d=>{
+  var el = document.getElementById('versionDisplayMain');
+  if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
+}).catch(e=>{});
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
 function getItemDateInfo(item) {
@@ -902,7 +907,14 @@ async function loadData() {
       stores = initData.stores;
       list = initData.list;
       recipes = initData.recipes;
+      if (initData.user_email) {
+        window.userEmail = initData.user_email;
+      }
+      if (initData.user_name) {
+        window.userName = initData.user_name;
+      }
       saveCache();
+      checkVisitNotifications();
     }
   } catch (err) {
     if (!navigator.onLine) return;
@@ -985,15 +997,18 @@ function getVisitLabel(store) {
     const diffTime = planned.getTime() - today.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Planned: Today';
-    if (diffDays === 1) return 'Planned: Tomorrow';
-    if (diffDays === -1) return 'Planned: Yesterday (overdue)';
-    if (diffDays < -1) return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    let label = '';
+    if (diffDays === 0) label = 'Planned: Today';
+    else if (diffDays === 1) label = 'Planned: Tomorrow';
+    else if (diffDays === -1) label = 'Planned: Yesterday (overdue)';
+    else if (diffDays < -1) label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})} (overdue)`;
+    else if (diffDays > 1 && diffDays <= 7) label = 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
+    else label = `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
     
-    if (diffDays > 1 && diffDays <= 7) {
-      return 'Planned: This ' + planned.toLocaleDateString(undefined, {weekday:'long'});
+    if (store.planned_visit_by) {
+      label += ' by ' + store.planned_visit_by;
     }
-    return `Planned: ${planned.toLocaleDateString(undefined, {month:'short', day:'numeric'})}`;
+    return label;
   } else if (store.last_visited) {
     let last;
     if (store.last_visited.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -1315,7 +1330,10 @@ async function savePlanDate(storeId, dateStr) {
       body: JSON.stringify({date: dateStr})
     });
     const store = stores.find(s => s.id === storeId);
-    if (store) store.planned_visit_date = dateStr;
+    if (store) {
+      store.planned_visit_date = dateStr;
+      store.planned_visit_by = dateStr ? (window.userName || 'Someone') : null;
+    }
     renderHome();
   } catch(e) {}
 }
@@ -1880,7 +1898,10 @@ function openGlobalPlanModal() {
         body: JSON.stringify({date: dt})
       });
       const st = stores.find(s => s.id === sid);
-      if(st) st.planned_visit_date = dt;
+      if(st) {
+        st.planned_visit_date = dt;
+        st.planned_visit_by = dt ? (window.userName || 'Someone') : null;
+      }
       saveCache();
       renderHome();
       showScreen('home');
@@ -2130,6 +2151,7 @@ async function toggleItem(id, showVisitPrompt = true) {
       const st = stores.find(s => s.id === item.store_id);
       if (st) {
         st.planned_visit_date = null;
+        st.planned_visit_by = null;
         const d = new Date();
         st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
       }
@@ -2139,6 +2161,41 @@ async function toggleItem(id, showVisitPrompt = true) {
     $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
   }
 }
+
+async function checkVisitNotifications() {
+  if (!window.userEmail) return;
+  for (let s of stores) {
+    if (s.planned_visit_date && s.planned_visit_by && s.visit_notified_users !== undefined) {
+      const notified = (s.visit_notified_users || '').split(',');
+      if (!notified.includes(window.userEmail)) {
+        $('#notifyVisitMsg').textContent = `${s.planned_visit_by} is going to ${s.name} on ${s.planned_visit_date}!`;
+        $('#notifyVisitModal').classList.add('active');
+        
+        $('#btnNotifyVisitYes').onclick = async () => {
+          $('#notifyVisitModal').classList.remove('active');
+          await dismissNotification(s.id);
+          openStore(s.id);
+        };
+        $('#btnNotifyVisitDismiss').onclick = async () => {
+          $('#notifyVisitModal').classList.remove('active');
+          await dismissNotification(s.id);
+        };
+        return;
+      }
+    }
+  }
+}
+
+async function dismissNotification(storeId) {
+  try {
+    await fetch(API+'/stores/'+storeId+'/dismiss_visit_notification', {method: 'POST'});
+    const s = stores.find(x => x.id === storeId);
+    if (s) {
+      s.visit_notified_users = (s.visit_notified_users ? s.visit_notified_users + ',' : '') + window.userEmail;
+    }
+  } catch (e) {}
+}
+
 async function deleteItem(id) {
   if (window.currentCfg && window.currentCfg.is_read_only) {
     if (document.getElementById('readOnlyModal')) document.getElementById('readOnlyModal').classList.add('active');
@@ -3842,6 +3899,26 @@ async function deleteSavedRecipe(id) {
 
 
 </script>
+<div class="modal-overlay" id="notifyVisitModal">
+  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+    <div style="font-size:48px; margin-bottom:12px;">📅</div>
+    <h3 id="notifyVisitMsg" style="margin:0 0 8px 0; font-size:20px; font-weight:700;"></h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
+      Do you need to add anything before they go?
+      <br>
+      <span style="font-size: 11px; opacity: 0.8; color: #8b5cf6; display: block; margin-top: 8px;">✨ Store Visit Notifications are a ListMate Premium feature.</span>
+    </p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button id="btnNotifyVisitYes" style="background:var(--primary); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+        Yes, open store
+      </button>
+      <button id="btnNotifyVisitDismiss" style="background:#f3f4f6; color:#374151; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">
+        Dismiss
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="visitModal">
   <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
     <div style="font-size:48px; margin-bottom:12px;">🏪</div>
