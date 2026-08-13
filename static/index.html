@@ -1406,6 +1406,7 @@ async function openStore(sid) {
     } catch(e) { if(!allStoreItems[sid]) allStoreItems[sid] = []; }
   }
   renderCatalog();
+  if (typeof updateFabVisibility === 'function') updateFabVisibility();
 }
 
 function renderCatalog(filter) {
