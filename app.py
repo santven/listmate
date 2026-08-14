@@ -460,6 +460,7 @@ def submit_feedback():
     data = request.get_json() or {}
     message = data.get("message", "").strip()
     feedback_type = data.get("type", "feedback")
+    rating = data.get("rating", 0)
     if not message:
         return jsonify({"error": "Message is required"}), 400
     
@@ -470,8 +471,8 @@ def submit_feedback():
     db = get_db()
     try:
         db.execute(
-            "INSERT INTO app_feedback (household_id, user_email, user_name, feedback_type, message) VALUES (%s, %s, %s, %s, %s)",
-            (hhid, user_email, user_name, feedback_type, message)
+            "INSERT INTO app_feedback (household_id, user_email, user_name, feedback_type, rating, message) VALUES (%s, %s, %s, %s, %s, %s)",
+            (hhid, user_email, user_name, feedback_type, rating, message)
         )
         db.commit()
     except Exception as e:

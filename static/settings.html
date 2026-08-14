@@ -1123,6 +1123,28 @@ function showHouseholdSwitcher() {
     });
 }
 
+let currentFeedbackRating = 0;
+function updateFeedbackStars() {
+  document.querySelectorAll('#starRatingContainer span').forEach(star => {
+    const val = parseInt(star.getAttribute('data-val'));
+    star.style.color = val <= currentFeedbackRating ? '#f59e0b' : '#ccc';
+  });
+}
+
+function initFeedbackStars() {
+  const container = document.getElementById('starRatingContainer');
+  if (!container) return;
+  container.querySelectorAll('span').forEach(star => {
+    star.addEventListener('click', (e) => {
+      currentFeedbackRating = parseInt(e.target.getAttribute('data-val'));
+      updateFeedbackStars();
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded', initFeedbackStars);
+// Also call immediately in case DOM is already loaded when script runs
+initFeedbackStars();
+
 function closeFeedbackModal() {
   document.getElementById('feedbackModal').classList.remove('active');
   document.getElementById('feedbackMessage').value = '';
@@ -1130,6 +1152,8 @@ function closeFeedbackModal() {
   document.getElementById('feedbackSuccess').style.display = 'none';
   document.getElementById('btnSubmitFeedback').disabled = false;
   document.getElementById('btnSubmitFeedback').textContent = 'Submit';
+  currentFeedbackRating = 0;
+  updateFeedbackStars();
 }
 
 async function submitFeedback() {
@@ -1154,7 +1178,7 @@ async function submitFeedback() {
     const res = await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: type, message: msg })
+      body: JSON.stringify({ type: type, message: msg, rating: currentFeedbackRating })
     });
     const data = await res.json();
     
@@ -1250,6 +1274,11 @@ window.addEventListener('click', e => {
       <option value="feature">Feature Request</option>
       <option value="bug">Report a Bug</option>
     </select>
+    
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Rating (Optional)</label>
+    <div id="starRatingContainer" style="display:flex; gap:8px; margin-bottom:16px; font-size:24px; color:#ccc; cursor:pointer; user-select:none;">
+      <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+    </div>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Message</label>
     <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:14px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
