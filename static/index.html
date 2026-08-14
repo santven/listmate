@@ -205,10 +205,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
-      <a href="/settings">⚙️ Settings</a>
-      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="#" onclick="showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
+      <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
+      <div class="divider"></div>
+      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
+      <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
