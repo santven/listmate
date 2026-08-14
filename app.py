@@ -461,6 +461,8 @@ def submit_feedback():
     message = data.get("message", "").strip()
     feedback_type = data.get("type", "feedback")
     rating = data.get("rating", 0)
+    if rating == 0:
+        rating = None
     if not message:
         return jsonify({"error": "Message is required"}), 400
     
