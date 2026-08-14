@@ -401,6 +401,12 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
+      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><p style="margin-top:15px;"><a href="listmate://sso_callback" style="color:#2563eb;font-weight:bold;text-decoration:underline;">Tap here if you are not automatically redirected</a></p></div>';
+        try { window.location.href = "listmate://sso_callback"; } catch(e) {}
+        try { window.close(); } catch(e) {}
+        return;
+      }
       if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup && window.opener && window.opener !== window) {
         document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app.</p></div>';
         try { window.close(); } catch(e) {}
@@ -411,6 +417,12 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       return;
     }
     if (r.data.needs_signup) {
+      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
+        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><p style="margin-top:15px;"><a href="listmate://sso_callback" style="color:#2563eb;font-weight:bold;text-decoration:underline;">Tap here if you are not automatically redirected</a></p></div>';
+        try { window.location.href = "listmate://sso_callback"; } catch(e) {}
+        try { window.close(); } catch(e) {}
+        return;
+      }
       if (typeof isIntentCallback !== 'undefined' && isIntentCallback && window.opener && window.opener !== window) {
         document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
         try { window.close(); } catch(e) {}
