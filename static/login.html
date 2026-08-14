@@ -6,6 +6,25 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#5ebe7e">
 <title>ListMate</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDuNcxOFLFJ1o3ScGnHsf1MY9OaIjMNgHI",
+    authDomain: "srp-timezone-api-1522941345463.firebaseapp.com",
+    projectId: "srp-timezone-api-1522941345463",
+    storageBucket: "srp-timezone-api-1522941345463.appspot.com",
+    messagingSenderId: "366597861699",
+    appId: "1:366597861699:web:708b146f82a90ad05afff6"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  window._firebaseAuth = auth;
+  window._GoogleAuthProvider = GoogleAuthProvider;
+  window._signInWithPopup = signInWithPopup;
+</script>
 <script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -199,29 +218,30 @@ function processInviteThenRedirect() {
   }
 }
 
-function _doSignIn() {
+async function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
-  var nonce = Math.random().toString(36).slice(2);
-  var intentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  startPollingIntent(intentId);
-  var params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    redirect_uri: location.origin + '/login',
-    response_type: 'id_token',
-    scope: 'openid email profile',
-    prompt: 'select_account',
-    nonce: nonce,
-    state: 'intent_' + intentId
-  });
-  var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-    if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-      window.Capacitor.Plugins.Browser.open({ url: url });
-    } else {
-      window.open(url, '_blank');
+    try {
+      const result = await window.Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();
+      if (result && result.credential && result.credential.idToken) {
+        handleCredential(result.credential.idToken, false);
+      } else {
+        showError('Google sign in failed (no token).');
+      }
+    } catch(e) {
+      showError('Google sign in error: ' + e.message);
     }
   } else {
-    window.open(url, '_blank');
+    try {
+      const provider = new window._GoogleAuthProvider();
+      provider.addScope('profile');
+      provider.addScope('email');
+      const result = await window._signInWithPopup(window._firebaseAuth, provider);
+      const idToken = await result.user.getIdToken();
+      handleCredential(idToken, false);
+    } catch (error) {
+      showError('Web sign in error: ' + error.message);
+    }
   }
 }
 

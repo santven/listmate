@@ -312,10 +312,14 @@ def login_google_native():
     c = request.form.get("credential")
     intent_id = request.form.get("intent")
     try:
-        from google.oauth2 import id_token
-        import google.auth.transport.requests as google_requests
-        info = id_token.verify_oauth2_token(c, google_requests.Request(), CLIENT_ID)
-        gid = info["sub"]
+        import firebase_admin
+        from firebase_admin import credentials, auth as firebase_auth
+        if not firebase_admin._apps:
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred, {'projectId': 'srp-timezone-api-1522941345463'})
+            
+        info = firebase_auth.verify_id_token(c)
+        gid = info["uid"]
         email = info.get("email", "")
         name = info.get("name") or (email.split("@")[0] if email else "User")
         
