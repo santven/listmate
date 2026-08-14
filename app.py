@@ -454,6 +454,33 @@ def _find_household_id_from_uid(uid, event=None):
     return None
 
 
+@app.route("/api/feedback", methods=["POST"])
+@require_user
+def submit_feedback():
+    data = request.get_json() or {}
+    message = data.get("message", "").strip()
+    feedback_type = data.get("type", "feedback")
+    if not message:
+        return jsonify({"error": "Message is required"}), 400
+    
+    hhid = _hh()
+    user_email = get_email()
+    user_name = get_display_name()
+    
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO app_feedback (household_id, user_email, user_name, feedback_type, message) VALUES (%s, %s, %s, %s, %s)",
+            (hhid, user_email, user_name, feedback_type, message)
+        )
+        db.commit()
+    except Exception as e:
+        print(f"Feedback insert error: {e}")
+    finally:
+        close_db(db)
+        
+    return jsonify({"success": True})
+
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():
     """Handle RevenueCat webhooks for cross-platform (iOS, Android, Web/Stripe) subscriptions."""
