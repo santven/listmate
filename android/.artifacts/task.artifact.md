@@ -1,12 +1,9 @@
-- [x] Update adaptive icon XML configurations
-    - [x] Update `ic_launcher.xml` in `mipmap-anydpi-v26`
-    - [x] Update `ic_launcher_round.xml` in `mipmap-anydpi-v26`
-- [x] Copy branded icons from `icon-override/`
-    - [x] `mipmap-hdpi`
-    - [x] `mipmap-mdpi`
-    - [x] `mipmap-xhdpi`
-    - [x] `mipmap-xxhdpi`
-    - [x] `mipmap-xxxhdpi`
-- [ ] Remove placeholder background images (Skipped for safety, unreferenced now)
+- [x] Generate Android icon assets from iOS master icon
+    - [x] Generate legacy `ic_launcher.png` (48-192px)
+    - [x] Generate round `ic_launcher_round.png` (48-192px)
+    - [x] Generate adaptive `ic_launcher_foreground.png` (108-432px)
+- [x] Restore and update adaptive icon XML configurations
+    - [x] Restore `ic_launcher.xml` in `mipmap-anydpi-v26`
+    - [x] Restore `ic_launcher_round.xml` in `mipmap-anydpi-v26`
 - [x] Verify changes
     - [x] Run `./gradlew assembleDebug`
