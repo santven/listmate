@@ -229,10 +229,29 @@ async function _doSignIn() {
         showError('Google sign in failed (no token).');
       }
     } catch(e) {
-      showError('Google sign in error: ' + e.message);
+      console.warn('Native Google Sign In failed, falling back to Browser Custom Tab', e);
+      var nonce = Math.random().toString(36).slice(2);
+      var intentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      startPollingIntent(intentId);
+      var params = new URLSearchParams({
+        client_id: '366597861699-l8k2r9adgtm9sgipbmo4idgu5dm6vluq.apps.googleusercontent.com',
+        redirect_uri: location.origin + '/login',
+        response_type: 'id_token',
+        scope: 'openid email profile',
+        prompt: 'select_account',
+        nonce: nonce,
+        state: 'intent_' + intentId
+      });
+      var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+      if (window.Capacitor.Plugins.Browser) {
+        window.Capacitor.Plugins.Browser.open({ url: url });
+      } else {
+        window.open(url, '_blank');
+      }
     }
   } else {
     try {
+      if (!window._GoogleAuthProvider) throw new Error("Firebase SDK is still loading. Please try again in a few seconds.");
       const provider = new window._GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
@@ -240,7 +259,11 @@ async function _doSignIn() {
       const idToken = await result.user.getIdToken();
       handleCredential(idToken, false);
     } catch (error) {
-      showError('Web sign in error: ' + error.message);
+      if (error.code === 'auth/unauthorized-domain') {
+        showError('Web sign in error: Domain not authorized in Firebase. Please allow a few minutes if you just added it.');
+      } else {
+        showError('Web sign in error: ' + error.message);
+      }
     }
   }
 }
