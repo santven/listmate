@@ -222,9 +222,10 @@ async function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     try {
-      const result = await window.Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();
-      if (result && result.credential && result.credential.idToken) {
-        handleCredential(result.credential.idToken, false);
+      await window.Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();
+      const tokenResult = await window.Capacitor.Plugins.FirebaseAuthentication.getIdToken();
+      if (tokenResult && tokenResult.token) {
+        handleCredential(tokenResult.token, false);
       } else {
         showError('Google sign in failed (no token).');
       }
