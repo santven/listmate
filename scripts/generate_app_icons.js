@@ -99,9 +99,55 @@ const adaptiveBgSvg = `
 </svg>
 `;
 
+function generateSplashSvg(width, height) {
+  const iconTargetSize = Math.round(Math.min(width, height) * 0.35);
+  const scale = iconTargetSize / 1024;
+  const tx = (width - iconTargetSize) / 2;
+  const ty = (height - iconTargetSize) / 2;
+
+  return `
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="splashBg" x1="0" y1="0" x2="${width}" y2="${height}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#48C774"/>
+      <stop offset="100%" stop-color="#289454"/>
+    </linearGradient>
+    <linearGradient id="badgeGrad" x1="600" y1="200" x2="840" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFD166"/>
+      <stop offset="100%" stop-color="#F49D37"/>
+    </linearGradient>
+  </defs>
+  <rect width="${width}" height="${height}" fill="url(#splashBg)"/>
+  <g transform="translate(${tx}, ${ty}) scale(${scale})">
+    <rect width="1024" height="1024" rx="230" fill="#FFFFFF" fill-opacity="0.15"/>
+    <g transform="translate(0, 10)">
+      <rect x="430" y="270" width="220" height="250" rx="24" fill="#FFFFFF" fill-opacity="0.96"/>
+      <rect x="500" y="325" width="115" height="18" rx="9" fill="#289454"/>
+      <circle cx="468" cy="334" r="9" fill="#289454"/>
+      <rect x="500" y="380" width="115" height="18" rx="9" fill="#289454"/>
+      <circle cx="468" cy="389" r="9" fill="#289454"/>
+      <rect x="500" y="435" width="85" height="18" rx="9" fill="#289454"/>
+      <circle cx="468" cy="444" r="9" fill="#289454"/>
+      <path d="M230 330 H320 L400 640 H740 L810 400 H355" 
+            stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <circle cx="430" cy="745" r="44" fill="#FFFFFF"/>
+      <circle cx="705" cy="745" r="44" fill="#FFFFFF"/>
+      <circle cx="730" cy="340" r="70" fill="url(#badgeGrad)"/>
+      <path d="M695 340 L720 365 L765 315" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+  </g>
+</svg>
+  `;
+}
+
 async function main() {
     const renderSvg = (svg, size) => {
         const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size } });
+        return resvg.render().asPng();
+    };
+
+    const renderCustomSvg = (svg, width, height) => {
+        const resvg = new Resvg(svg, { fitTo: { mode: "width", value: width } });
         return resvg.render().asPng();
     };
 
@@ -144,12 +190,54 @@ async function main() {
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@mipmap/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
-</adaptive-icon>
-`;
+</adaptive-icon>`;
         fs.writeFileSync(path.join(anydpiDir, "ic_launcher.xml"), adaptiveXml);
         fs.writeFileSync(path.join(anydpiDir, "ic_launcher_round.xml"), adaptiveXml);
     }
 
+    // Splash screens for Android drawables
+    const splashTargets = [
+      ["drawable", 480, 800],
+      ["drawable-night", 480, 800],
+      ["drawable-land-hdpi", 800, 480],
+      ["drawable-land-ldpi", 320, 240],
+      ["drawable-land-mdpi", 480, 320],
+      ["drawable-land-xhdpi", 1280, 720],
+      ["drawable-land-xxhdpi", 1600, 960],
+      ["drawable-land-xxxhdpi", 1920, 1280],
+      ["drawable-land-night-hdpi", 800, 480],
+      ["drawable-land-night-ldpi", 320, 240],
+      ["drawable-land-night-mdpi", 480, 320],
+      ["drawable-land-night-xhdpi", 1280, 720],
+      ["drawable-land-night-xxhdpi", 1600, 960],
+      ["drawable-land-night-xxxhdpi", 1920, 1280],
+      ["drawable-port-hdpi", 480, 800],
+      ["drawable-port-ldpi", 240, 320],
+      ["drawable-port-mdpi", 320, 480],
+      ["drawable-port-xhdpi", 720, 1280],
+      ["drawable-port-xxhdpi", 960, 1600],
+      ["drawable-port-xxxhdpi", 1280, 1920],
+      ["drawable-port-night-hdpi", 480, 800],
+      ["drawable-port-night-ldpi", 240, 320],
+      ["drawable-port-night-mdpi", 320, 480],
+      ["drawable-port-night-xhdpi", 720, 1280],
+      ["drawable-port-night-xxhdpi", 960, 1600],
+      ["drawable-port-night-xxxhdpi", 1280, 1920],
+    ];
+
+    for (const [folder, w, h] of splashTargets) {
+      const dir = path.join("android/app/src/main/res", folder);
+      fs.mkdirSync(dir, { recursive: true });
+      const splashPng = renderCustomSvg(generateSplashSvg(w, h), w, h);
+      fs.writeFileSync(path.join(dir, "splash.png"), splashPng);
+    }
+    
+    // Master splash
+    const masterSplash = renderCustomSvg(generateSplashSvg(2732, 2732), 2732, 2732);
+    fs.writeFileSync("assets/splash.png", masterSplash);
+    fs.writeFileSync("resources/splash.png", masterSplash);
+
+    // iOS icons
     const iosDir = "ios/App/App/Assets.xcassets/AppIcon.appiconset";
     if (fs.existsSync(iosDir)) {
         const iosSizes = [
@@ -173,7 +261,7 @@ async function main() {
         }
     }
 
-    console.log("Icons generated successfully.");
+    console.log("Icons and Splash screens generated successfully.");
 }
 
 main().catch(console.error);

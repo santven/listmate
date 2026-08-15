@@ -43,11 +43,10 @@ jobs:
           fi
           npx cap sync android
 
-      - name: Copy app icons (replace Capacitor defaults with custom adaptive & legacy icons)
+      - name: Generate & apply custom icons and splash screens
         run: |
-          mkdir -p android/app/src/main/res
-          cp -r icon-override/mipmap-* android/app/src/main/res/
-          echo "Custom icons and adaptive XMLs applied successfully"
+          node scripts/generate_app_icons.js
+          echo "Custom icons and splash screens generated and applied successfully"
 
       - name: Copy custom MainActivity (WebView URL override)
         run: |
