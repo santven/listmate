@@ -1,7 +1,12 @@
-- [x] Update build configurations
-    - [x] Update `variables.gradle` to SDK 36
-    - [x] Update root `build.gradle` to AGP 8.9.1
-    - [x] Update `gradle-wrapper.properties` to Gradle 8.12.1
+- [x] Update adaptive icon XML configurations
+    - [x] Update `ic_launcher.xml` in `mipmap-anydpi-v26`
+    - [x] Update `ic_launcher_round.xml` in `mipmap-anydpi-v26`
+- [x] Copy branded icons from `icon-override/`
+    - [x] `mipmap-hdpi`
+    - [x] `mipmap-mdpi`
+    - [x] `mipmap-xhdpi`
+    - [x] `mipmap-xxhdpi`
+    - [x] `mipmap-xxxhdpi`
+- [ ] Remove placeholder background images (Skipped for safety, unreferenced now)
 - [x] Verify changes
-    - [x] Run Gradle Sync
     - [x] Run `./gradlew assembleDebug`

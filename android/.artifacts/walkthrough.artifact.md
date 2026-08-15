@@ -1,20 +1,21 @@
-# Walkthrough - Support for Android API 36
+# Walkthrough - Fix Android App Icon
 
-I have upgraded the project's build configuration to support Android API 36, which was required by several `androidx` dependencies.
+I have updated the Android app icon to use the branded assets and correctly configured adaptive icons.
 
 ## Changes Made
 
-### Build Configuration
+### Android Resources
 
-- **`variables.gradle`**: Updated `compileSdkVersion` and `targetSdkVersion` to `36`.
-- **Root `build.gradle`**: Upgraded Android Gradle Plugin to `8.9.1`.
-- **`gradle-wrapper.properties`**: Upgraded Gradle distribution to `8.12.1` to support the new AGP version.
+- **Adaptive Icons**: Updated `ic_launcher.xml` and `ic_launcher_round.xml` in `mipmap-anydpi-v26` to use a solid white background color (`@color/ic_launcher_background`) and removed the background inset.
+- **Branded Assets**: Copied `ic_launcher.png`, `ic_launcher_round.png`, and `ic_launcher_foreground.png` from `icon-override/` to all density-specific `mipmap` folders (`hdpi`, `mdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`).
 
 ## Verification Results
 
 ### Automated Tests
-- **Gradle Sync**: Completed successfully, ensuring the IDE is correctly configured with the new SDK.
-- **Build**: Executed `./gradlew :app:assembleDebug` successfully. This confirms that the AAR metadata dependency errors (which previously blocked the build) are resolved.
+- **Build**: Successfully executed `./gradlew :app:assembleDebug`. This confirms that the resource changes are valid and the app compiles with the new icon configuration.
 
-> [!IMPORTANT]
-> If you encounter issues running the app, ensure you have the **Android 16 (API 36)** SDK components installed via the Android Studio SDK Manager.
+### Manual Verification
+- Verified that the files were correctly copied by comparing file sizes between the `icon-override` folder and the `android/app/src/main/res/mipmap-*` folders.
+
+> [!TIP]
+> To see the changes on your device, you may need to uninstall the existing app first or perform a clean build to ensure the old cached icons are cleared.
