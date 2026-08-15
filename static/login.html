@@ -238,6 +238,7 @@ async function _doSignIn() {
       const provider = new window._GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
+      provider.setCustomParameters({ prompt: 'select_account' });
       const result = await window._signInWithPopup(window._firebaseAuth, provider);
       const idToken = await result.user.getIdToken();
       handleCredential(idToken, false);
