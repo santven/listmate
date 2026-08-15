@@ -1,0 +1,7 @@
+- [x] Update build configurations
+    - [x] Update `variables.gradle` to SDK 36
+    - [x] Update root `build.gradle` to AGP 8.9.1
+    - [x] Update `gradle-wrapper.properties` to Gradle 8.12.1
+- [x] Verify changes
+    - [x] Run Gradle Sync
+    - [x] Run `./gradlew assembleDebug`
