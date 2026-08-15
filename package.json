@@ -21,7 +21,6 @@
   "homepage": "https://github.com/santven/listmate#readme",
   "dependencies": {
     "@capacitor-community/apple-sign-in": "^7.1.0",
-    "@capacitor-firebase/authentication": "^8.4.0",
     "@capacitor/android": "^8.4.2",
     "@capacitor/app": "^8.1.1",
     "@capacitor/browser": "^8.0.4",
@@ -31,10 +30,6 @@
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
     "@revenuecat/purchases-capacitor": "^13.2.4",
-    "firebase": "^12.17.1",
     "jimp": "^1.6.1"
-  },
-  "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2"
   }
 }
