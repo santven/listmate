@@ -2,6 +2,8 @@
 """ListMate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
+from dotenv import load_dotenv
+load_dotenv()
 import os, json, sys, time, re, urllib.request
 from functools import wraps
 from urllib.parse import quote, urlencode
@@ -2569,7 +2571,8 @@ _OAUTH_STATES = {}
 @app.route("/auth/google/redirect")
 def auth_google_redirect():
     """Return HTML page that redirects to Google OAuth via JS — avoids Capacitor interception."""
-    redirect_uri = 'https://grocerlist.app/auth/google/callback'
+    base_url = os.environ.get("APP_URL", request.host_url.rstrip('/'))
+    redirect_uri = f'{base_url}/auth/google/callback'
     intent_id = request.args.get("intent")
     state = ("intent_" + intent_id) if intent_id else _secrets.token_hex(16)
     _OAUTH_STATES[state] = time.time()
@@ -2609,7 +2612,8 @@ def auth_google_callback():
     
     try:
         # Exchange code for tokens
-        redirect_uri = 'https://grocerlist.app/auth/google/callback'
+        base_url = os.environ.get("APP_URL", request.host_url.rstrip('/'))
+        redirect_uri = f'{base_url}/auth/google/callback'
         client_secret = os.environ.get('SSO_GOOGLE_CLIENT_SECRET', '')
         token_url = 'https://oauth2.googleapis.com/token'
         post_data = (
