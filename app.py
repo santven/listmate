@@ -303,7 +303,7 @@ def auth_callback():
         hh_name = hh.get("name", "") if hh else ""
     authmod._set(user["id"], user.get("email", ""), user.get("name", ""), hh_id, hh_name)
     target_url = "/login?needs_signup=1" if hh_id == 0 else "/"
-    return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>function proceed(){{window.location.replace("{target_url}");}}if(window.opener && window.opener !== window){{try{{window.close();}}catch(e){{}}setTimeout(proceed, 500);}}else{{proceed();}}</script></body></html>"""
+    return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>function proceed(){{try{{window.location.href="listmate://sso_callback";}}catch(e){{}}setTimeout(function(){{window.location.replace("{target_url}");}},1000);}}if(window.opener && window.opener !== window){{try{{window.close();}}catch(e){{}}setTimeout(proceed, 500);}}else{{proceed();}}</script></body></html>"""
 
 
 @app.route("/login_google_native", methods=["POST"])
@@ -314,8 +314,8 @@ def login_google_native():
     try:
         from google.oauth2 import id_token
         import google.auth.transport.requests as google_requests
-        info = id_token.verify_oauth2_token(c, google_requests.Request(), CLIENT_ID)
-        gid = info["sub"]
+        info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
+        gid = info['sub']
         email = info.get("email", "")
         name = info.get("name") or (email.split("@")[0] if email else "User")
         

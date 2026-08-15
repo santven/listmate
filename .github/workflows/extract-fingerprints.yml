@@ -1,0 +1,12 @@
+name: Extract Keystore Fingerprints
+on: [push]
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Fingerprints
+        run: |
+          echo "${{ secrets.LISTMATE_KEYSTORE }}" | base64 -d > temp.keystore
+          echo "=== CERTIFICATE FINGERPRINTS ==="
+          keytool -list -v -keystore temp.keystore -alias "${{ secrets.KEY_ALIAS }}" -storepass "${{ secrets.KEYSTORE_PASSWORD }}" | grep -E "SHA1:|SHA256:"
+          echo "================================"

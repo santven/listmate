@@ -474,17 +474,16 @@ def register_auth_routes(app):
             c = data.get("credential")
             if not c: return jsonify({"error": "Missing credential"}), 400
             
-            info = id_token.verify_oauth2_token(c, google_requests.Request(), GOOGLE_CLIENT_ID)
-            gid = info["sub"]
+            from google.oauth2 import id_token
+            import google.auth.transport.requests as google_requests
+            info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
+            gid = info['sub']
             email = info.get("email", "")
             name = info.get("name") or (email.split("@")[0] if email else "User")
             return _process_login(gid, email, name, data)
         except Exception as e:
-            # GoogleAuthError (MalformedError, etc) → 401; anything else → 500
-            if isinstance(e, GoogleAuthError):
-                return jsonify({"error": f"Invalid token: {str(e)}"}), 401
             traceback.print_exc()
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": str(e)}), 401
 
     @app.route("/api/auth/apple", methods=["POST"])
     def auth_apple():

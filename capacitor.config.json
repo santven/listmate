@@ -15,6 +15,10 @@
     ]
   },
   "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com", "apple.com"]
+    },
     "SplashScreen": {
       "launchShowDuration": 2000,
       "backgroundColor": "#5ebe7e"

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "822823530036",
+    "project_id": "listmate-58e1a",
+    "storage_bucket": "listmate-58e1a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:822823530036:android:61dea2962ebc0401c7a461",
+        "android_client_info": {
+          "package_name": "com.pvkslabs.listmate"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "822823530036-6mis8b0h7kqnsk4al3tr7hr7fdj0e6tk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pvkslabs.listmate",
+            "certificate_hash": "9abea275afac5472cbb675afb277b92c8de91e03"
+          }
+        },
+        {
+          "client_id": "822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeJfIMxeoqSXergNSLnk8vKy_b-60P0cM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
