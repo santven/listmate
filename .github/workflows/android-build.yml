@@ -45,6 +45,8 @@ jobs:
 
       - name: Copy app icons (replace Capacitor defaults with custom adaptive & legacy icons)
         run: |
+          rm -f android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml
+          rm -f android/app/src/main/res/values/ic_launcher_background.xml
           mkdir -p android/app/src/main/res
           cp -r icon-override/mipmap-* android/app/src/main/res/
           echo "Custom icons and adaptive XMLs applied successfully"
