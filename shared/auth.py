@@ -477,7 +477,7 @@ def register_auth_routes(app):
             import firebase_admin
             from firebase_admin import credentials, auth as firebase_auth
             if not firebase_admin._apps:
-                firebase_admin.initialize_app(options={'projectId': 'srp-timezone-api-1522941345463'})
+                firebase_admin.initialize_app(options={'projectId': 'listmate-58e1a'})
                 
             info = firebase_auth.verify_id_token(c)
             gid = info["uid"]

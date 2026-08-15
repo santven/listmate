@@ -1,31 +1,44 @@
 {
   "project_info": {
-    "project_number": "366597861699",
-    "project_id": "srp-timezone-api-1522941345463",
-    "storage_bucket": "srp-timezone-api-1522941345463.appspot.com"
+    "project_number": "822823530036",
+    "project_id": "listmate-58e1a",
+    "storage_bucket": "listmate-58e1a.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:366597861699:android:708b146f82a90ad05afff6",
+        "mobilesdk_app_id": "1:822823530036:android:61dea2962ebc0401c7a461",
         "android_client_info": {
           "package_name": "com.pvkslabs.listmate"
         }
       },
       "oauth_client": [
         {
-          "client_id": "366597861699-l8k2r9adgtm9sgipbmo4idgu5dm6vluq.apps.googleusercontent.com",
+          "client_id": "822823530036-6mis8b0h7kqnsk4al3tr7hr7fdj0e6tk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pvkslabs.listmate",
+            "certificate_hash": "9abea275afac5472cbb675afb277b92c8de91e03"
+          }
+        },
+        {
+          "client_id": "822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDuNcxOFLFJ1o3ScGnHsf1MY9OaIjMNgHI"
+          "current_key": "AIzaSyCeJfIMxeoqSXergNSLnk8vKy_b-60P0cM"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
