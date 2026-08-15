@@ -39,20 +39,11 @@ jobs:
           npm ci
           npx cap sync android
 
-      - name: Copy app icons (replace Capacitor defaults & remove adaptive XMLs)
+      - name: Copy app icons (replace Capacitor defaults with custom adaptive & legacy icons)
         run: |
-          # Remove mipmap-anydpi-v26 adaptive XMLs created by Capacitor
-          # This forces Android (API 26+) to load custom ic_launcher PNGs from density folders
-          rm -rf android/app/src/main/res/mipmap-anydpi-v26
-          find android/app/src/main/res -name "ic_launcher*.xml" -type f -delete
-
-          for dir in icon-override/mipmap-*; do
-            folder=$(basename $dir)
-            cp $dir/ic_launcher.png android/app/src/main/res/$folder/ic_launcher.png
-            cp $dir/ic_launcher_round.png android/app/src/main/res/$folder/ic_launcher_round.png
-            cp $dir/ic_launcher_foreground.png android/app/src/main/res/$folder/ic_launcher_foreground.png
-          done
-          echo "Icons replaced and adaptive XML defaults removed"
+          mkdir -p android/app/src/main/res
+          cp -r icon-override/mipmap-* android/app/src/main/res/
+          echo "Custom icons and adaptive XMLs applied successfully"
 
       - name: Copy custom MainActivity (WebView URL override)
         run: |
