@@ -1,95 +1,49 @@
-name: Build Android APK/AAB
+name: Android Build
 
 on:
   push:
-    branches: [main, staging]
-    paths:
-      - 'android/**'
-      - 'capacitor.config.json'
-      - 'package.json'
-      - '.github/workflows/android-build.yml'
-      - 'icon-override/**'
-      - 'assets/**'
-      - 'static/**'
-  workflow_dispatch:
+    branches:
+      - main
+      - staging
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          distribution: 'temurin'
-          java-version: '21'
-      - uses: actions/setup-node@v4
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          node-version: '22'
-      
-      - name: Inject Staging build flag (if building from staging branch)
-        if: github.ref_name == 'staging'
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Configure Capacitor for Environment
         run: |
-          sed -i 's/window.IS_STAGING_BUILD = false;/window.IS_STAGING_BUILD = true;/' static/index.html
-          echo "Injected staging build flag into static/index.html"
+          if [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            echo "Setting server url to https://listmate-staging.onrender.com"
+            sed -i 's|"url": "https://grocerlist.app"|"url": "https://listmate-staging.onrender.com"|g' capacitor.config.json
+          else
+            echo "Keeping server url as https://grocerlist.app"
+          fi
 
-      - name: Install Capacitor & sync platform
-        run: |
-          npm ci
-          npx cap sync android
+      - name: Sync Capacitor
+        run: npx cap sync android
 
-      - name: Copy app icons (replace Capacitor defaults with custom adaptive & legacy icons)
-        run: |
-          mkdir -p android/app/src/main/res
-          cp -r icon-override/mipmap-* android/app/src/main/res/
-          echo "Custom icons and adaptive XMLs applied successfully"
+      - name: Build APK
+        working-directory: ./android
+        run: ./gradlew assembleDebug
 
-      - name: Copy custom MainActivity (WebView URL override)
-        run: |
-          mkdir -p android/app/src/main/java/com/pvkslabs/listmate
-          cp android-override/com/pvkslabs/listmate/MainActivity.java android/app/src/main/java/com/pvkslabs/listmate/MainActivity.java
-
-      - name: Inject AdMob App ID & AD_ID permission
-        run: |
-          AD_ID="ca-app-pub-8608054862395616~1608999633"
-          sed -i "s|<application|<uses-permission android:name=\"com.google.android.gms.permission.AD_ID\"/>\n    <application|" android/app/src/main/AndroidManifest.xml
-          sed -i "s|<application|<application>\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$AD_ID\"/>|" android/app/src/main/AndroidManifest.xml
-
-      - name: Setup signing & version code
-        run: |
-          echo "${{ secrets.LISTMATE_KEYSTORE }}" | base64 -d > android/app/listmate-upload.keystore
-          python3 scripts/setup-signing.py android/app/build.gradle "${{ secrets.KEYSTORE_PASSWORD }}" "${{ secrets.KEY_ALIAS }}"
-          # Bump versionCode to GitHub run number + 100 (avoids collision with failed builds)
-          VC=$(( ${{ github.run_number }} + 100 ))
-          sed -i "s/versionCode [0-9]\+/versionCode $VC/" android/app/build.gradle
-          echo "versionCode set to: $VC"
-          grep "versionCode" android/app/build.gradle
-
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
-
-      - name: Build debug APK
-        run: cd android && ./gradlew assembleDebug
-
-      - name: Build release APK
-        run: cd android && ./gradlew assembleRelease
-
-      - name: Build release AAB
-        run: cd android && ./gradlew bundleRelease
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
         with:
-          name: listmate-debug-apk
+          name: listmate-android-${{ github.ref_name }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: listmate-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Upload Release AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: listmate-release-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
