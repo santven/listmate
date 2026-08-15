@@ -312,13 +312,10 @@ def login_google_native():
     c = request.form.get("credential")
     intent_id = request.form.get("intent")
     try:
-        import firebase_admin
-        from firebase_admin import credentials, auth as firebase_auth
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(options={'projectId': 'listmate-58e1a'})
-            
-        info = firebase_auth.verify_id_token(c)
-        gid = info["uid"]
+        from google.oauth2 import id_token
+        import google.auth.transport.requests as google_requests
+        info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
+        gid = info['sub']
         email = info.get("email", "")
         name = info.get("name") or (email.split("@")[0] if email else "User")
         
