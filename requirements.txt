@@ -8,3 +8,4 @@ pyasn1-modules
 sendgrid>=6.0
 PyJWT>=2.0.0
 Flask-Limiter
+firebase-admin
