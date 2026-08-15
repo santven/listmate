@@ -562,6 +562,7 @@ fetch('/api/version').then(r=>r.json()).then(d=>{
   var el = document.getElementById('versionDisplayMain');
   if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
 }).catch(e=>{});
+function getFirstName(fullName) { if (!fullName) return ""; return fullName.split(' ')[0]; }
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
 function getItemDateInfo(item) {
@@ -1158,7 +1159,7 @@ function renderHome() {
       return '<div class="item-row">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
         '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
-        '<div class="item-meta">by ' + i.added_by + '</div>' +
+        '<div class="item-meta">by ' + escapeHtml(getFirstName(i.added_by)) + '</div>' +
         '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store" style="' + moveBtnStyle + '">⇄</button>' +
         '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
         '</div>';
@@ -1251,7 +1252,7 @@ function renderHome() {
           html += '<div class="item-row purchased">' +
             '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
             '<div class="item-name">' + escapeHtml(i.name) + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + escapeHtml(i.quantity) + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
-            '<div class="item-meta">✓ ' + escapeHtml(i.purchased_by || '') + '</div>' +
+            '<div class="item-meta">✓ ' + escapeHtml(getFirstName(i.purchased_by || '')) + '</div>' +
             '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
             '</div>';
         });
