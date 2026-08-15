@@ -2,10 +2,7 @@
 """ListMate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
-import os
-from dotenv import load_dotenv
-load_dotenv()
-import json, sys, time, re, urllib.request
+import os, json, sys, time, re, urllib.request
 from functools import wraps
 from urllib.parse import quote, urlencode
 

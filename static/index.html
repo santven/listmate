@@ -69,7 +69,7 @@
   /* Move Modal */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: flex-end; justify-content: center; }
   .modal-overlay.active { display: flex; }
-  .modal-sheet { background: #fff; width: 100%; max-width: 600px; border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); animation: slideUp .2s ease; max-height: 90vh; overflow-y: auto; }
+  .modal-sheet { background: #fff; width: 100%; max-width: 600px; border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); animation: slideUp .2s ease; }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .modal-sheet h3 { font-size: 16px; margin-bottom: 4px; }
   .modal-sheet .item-label { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
@@ -414,7 +414,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <div style="text-align: center; margin-top: 30px; margin-bottom: 20px; font-size: 11px; color: #888;">
     <div style="margin-bottom: 8px;">
       <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline; margin-right: 15px;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: ((window.Capacitor && window.Capacitor.getPlatform() === 'ios') ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' : (window.location.origin + '/terms'))}); } else { window.open(((window.Capacitor && window.Capacitor.getPlatform() === 'ios') ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' : '/terms'), '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
     <div id="versionDisplayMain">Build: ...</div>
   </div>
@@ -489,7 +489,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <button onclick="document.getElementById('paywallModal').classList.remove('active')" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer; margin-top:0;">Cancel</button>
     <div style="margin-top: 15px; font-size: 11px; color: #888; display: flex; justify-content: center; gap: 15px;">
       <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/privacy'}); } else { window.open('/privacy', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Privacy Policy</a>
-      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: ((window.Capacitor && window.Capacitor.getPlatform() === 'ios') ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' : (window.location.origin + '/terms'))}); } else { window.open(((window.Capacitor && window.Capacitor.getPlatform() === 'ios') ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' : '/terms'), '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
+      <a href="#" onclick="if(window.Capacitor && window.Capacitor.Plugins.Browser){ window.Capacitor.Plugins.Browser.open({url: window.location.origin + '/terms'}); } else { window.open('/terms', '_blank'); } return false;" style="color: #888; text-decoration: underline;">Terms of Use (EULA)</a>
     </div>
   </div>
 </div>
@@ -562,7 +562,6 @@ fetch('/api/version').then(r=>r.json()).then(d=>{
   var el = document.getElementById('versionDisplayMain');
   if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
 }).catch(e=>{});
-function getFirstName(fullName) { if (!fullName) return ""; return fullName.split(' ')[0]; }
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
 function getItemDateInfo(item) {
@@ -1159,7 +1158,7 @@ function renderHome() {
       return '<div class="item-row">' +
         '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
         '<div class="item-name">' + i.name + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + i.quantity + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
-        '<div class="item-meta">by ' + escapeHtml(getFirstName(i.added_by)) + '</div>' +
+        '<div class="item-meta">by ' + i.added_by + '</div>' +
         '<button class="btn-qty" data-lid="' + i.id + '" data-qty="' + (i.quantity || '') + '" title="Edit quantity" style="background:none;border:none;cursor:pointer;font-size:12px;color:#888;padding:2px 4px;">✏️</button><button class="btn-move" data-lid="' + i.id + '" data-name="' + escapeHtml(i.name) + '" title="Move to another store" style="' + moveBtnStyle + '">⇄</button>' +
         '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
         '</div>';
@@ -1252,7 +1251,7 @@ function renderHome() {
           html += '<div class="item-row purchased">' +
             '<div class="item-check" data-lid="' + i.id + '">✓</div>' +
             '<div class="item-name">' + escapeHtml(i.name) + (i.quantity ? ' <span class="item-qty" style="color:#777; font-size:13px; font-weight:normal;">(' + escapeHtml(i.quantity) + ')</span>' : '') + (i.recipe_tag ? ' <button class="recipe-tag-btn" data-recipe="' + escapeHtml(i.recipe_tag) + '" title="Recipe: ' + escapeHtml(i.recipe_tag) + '" style="background:#e0f2fe; color:#0369a1; border:none; padding:2px 6px; border-radius:8px; margin-left:4px; font-size:11px; cursor:pointer; vertical-align:middle; font-weight:600;">🍳</button>' : '') + '</div>' +
-            '<div class="item-meta">✓ ' + escapeHtml(getFirstName(i.purchased_by || '')) + '</div>' +
+            '<div class="item-meta">✓ ' + escapeHtml(i.purchased_by || '') + '</div>' +
             '<button class="btn-delete" data-lid="' + i.id + '">×</button>' +
             '</div>';
         });
