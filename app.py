@@ -1063,13 +1063,7 @@ def premium_settings():
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium
-    is_early_eligible = bool(hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
-    
-    if is_premium and is_early_eligible:
-        status = "premium"
-    else:
-        status = "active" if is_premium else "free"
-        
+    status = "active" if is_premium else "free"
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
     is_early = bool(is_premium and status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
     
