@@ -4,6 +4,12 @@
 import os, re, psycopg2, subprocess
 from psycopg2 import pool as _pool
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 _pool_ctx = None
 
 def _ensure_local_pg():

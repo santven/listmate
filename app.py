@@ -6,6 +6,12 @@ import os, json, sys, time, re, urllib.request
 from functools import wraps
 from urllib.parse import quote, urlencode
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, request, jsonify, session, redirect, send_from_directory
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
