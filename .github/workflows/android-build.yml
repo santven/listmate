@@ -56,9 +56,28 @@ jobs:
 
       - name: Inject AdMob App ID & AD_ID permission
         run: |
-          AD_ID="ca-app-pub-8608054862395616~1608999633"
-          sed -i "s|<application|<uses-permission android:name=\"com.google.android.gms.permission.AD_ID\"/>\n    <application|" android/app/src/main/AndroidManifest.xml
-          sed -i "s|<application|<application>\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$AD_ID\"/>|" android/app/src/main/AndroidManifest.xml
+          python3 -c "
+          import sys
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          with open(manifest_path, 'r') as f:
+              content = f.read()
+          
+          AD_ID = 'ca-app-pub-8608054862395616~1608999633'
+          perm = '    <uses-permission android:name=\"com.google.android.gms.permission.AD_ID\"/>'
+          meta = f'        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"{AD_ID}\"/>'
+          
+          # Inject permission before <application
+          if perm not in content:
+              content = content.replace('<application', f'{perm}\n    <application', 1)
+          
+          # Inject meta-data before the first <activity
+          if meta not in content:
+              content = content.replace('<activity', f'{meta}\n        <activity', 1)
+          
+          with open(manifest_path, 'w') as f:
+              f.write(content)
+          "
+          echo "Injected AdMob App ID and AD_ID permission safely"
 
       - name: Setup signing & version code
         run: |

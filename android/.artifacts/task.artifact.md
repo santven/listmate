@@ -1,8 +1,6 @@
-- [x] Update `icon-override/` with branded assets
-    - [x] Generate icons for all densities (hdpi, mdpi, xhdpi, xxhdpi, xxxhdpi)
-    - [x] Add adaptive icon XMLs to `icon-override/mipmap-anydpi-v26/`
-- [x] Update root project assets
-    - [x] Update `resources/icon.png`
-    - [x] Update `assets/icon.png`
-- [x] Verify local project state
-    - [x] Run `./gradlew assembleDebug`
+- [ ] Fix CI manifest injection logic
+    - [ ] Update `.github/workflows/android-build.yml` with safe `sed` commands
+- [ ] Verify fix locally
+    - [ ] Run simulation of the updated CI script
+- [ ] Deploy changes
+    - [ ] Commit and push to `staging`
