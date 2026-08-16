@@ -1,6 +1,6 @@
 {
   "name": "listmate",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Store-specific grocery list for households. Know what to buy at every store.",
   "main": "index.js",
   "scripts": {
