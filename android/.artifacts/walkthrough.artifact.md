@@ -1,25 +1,27 @@
-# Walkthrough - Branded Android App Icon Fix
+# Walkthrough - CI Build App Icon Fix
 
-I have successfully updated the Android app icon using the high-quality **1024x1024 master asset** found in the iOS project, ensuring proper branding across all Android versions.
+I have fixed the issue where the Android app icon was being reverted to placeholders during the CI build process.
+
+## Root Cause Analysis
+The GitHub Actions workflow (`.github/workflows/android-build.yml`) was configured to explicitly overwrite the Android project's icons with assets from the `icon-override/` folder during every build. Since `icon-override/` contained the placeholder icons, my previous local fixes were being overwritten in the `release.apk`.
 
 ## Changes Made
 
-### Icon Asset Generation
-- **Source**: Used `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024x1024@1x.png` as the high-fidelity master.
-- **Legacy & Round Icons**: Generated density-specific `ic_launcher.png` and `ic_launcher_round.png` for all mipmap levels (mdpi to xxxhdpi).
-- **Adaptive Foreground**: Generated 108dp-equivalent `ic_launcher_foreground.png` assets for modern Android adaptive icon support.
+### 1. Updated `icon-override/`
+- **Branded Assets**: Regenerated all icons (legacy, round, and adaptive) for all densities from the high-quality **1024x1024 iOS master icon**.
+- **Adaptive Configuration**: Added `ic_launcher.xml` and `ic_launcher_round.xml` to `icon-override/mipmap-anydpi-v26/`. This ensures the CI build applies the correct adaptive icon settings (white background and 16.7% inset for logo safety).
 
-### Adaptive Icon Configuration
-- **Safe Zone Centering**: Restored `ic_launcher.xml` and `ic_launcher_round.xml` with a **16.7% inset**. This ensures the branded logo fits perfectly within the "safe zone" of the adaptive icon container, preventing it from being cropped by different launcher shapes.
-- **Background**: Configured to use a solid white background color (`@color/ic_launcher_background`), matching the brand's aesthetic.
+### 2. Updated Project Source Icons
+- Updated `resources/icon.png` and `assets/icon.png` at the project root with the high-quality branded asset to ensure consistency across all Capacitor and build tools.
 
 ## Verification Results
 
 ### Automated Tests
-- **Build**: Successfully executed `./gradlew :app:assembleDebug`. All resources are correctly linked and the APK builds without errors.
-
-### Manual Verification
-- **Asset Quality**: Verified that the new assets are generated from the 81KB master icon, replacing the 24KB placeholder assets that were previously in place.
+- **Local Build**: Successfully executed `./gradlew :app:assembleDebug` after applying the `icon-override` changes to the local `res` folder. This confirms the new configuration is valid.
+- **CI Readiness**: By updating `icon-override/`, the next GitHub Actions build will now use the high-fidelity branded assets instead of placeholders.
 
 > [!IMPORTANT]
-> **Clear Cache**: To see the new high-quality icons on your device, it is highly recommended to **uninstall the existing app** first. Alternatively, run a "Clean Project" in Android Studio to ensure no old icon fragments remain in the build cache.
+> **Push to Git**: You must commit and push these changes to the `staging` or `main` branch to trigger the GitHub Actions build and generate a new `release.apk` with the correct icons.
+
+> [!TIP]
+> Once you download the new APK from GitHub, remember to **uninstall the old app** from your device to ensure the launcher cache is cleared and the new icon appears.
