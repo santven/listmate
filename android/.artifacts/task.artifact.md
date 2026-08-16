@@ -1,0 +1,6 @@
+- [ ] Fix CI manifest injection logic
+    - [ ] Update `.github/workflows/android-build.yml` with safe `sed` commands
+- [ ] Verify fix locally
+    - [ ] Run simulation of the updated CI script
+- [ ] Deploy changes
+    - [ ] Commit and push to `staging`
