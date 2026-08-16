@@ -77,10 +77,13 @@
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="/">📋 List</a>
-      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
+      <a href="/">📋 Grocery List</a>
+      <a href="/?screen=globalVisits">🗓️ Store Visits</a>
+      <a href="/?screen=analytics">📊 Analytics</a>
       <div class="divider"></div>
+      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
+      <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
     </div>
@@ -1143,6 +1146,11 @@ function showHouseholdSwitcher() {
         }
         document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
     });
+}
+
+function showFeedbackModal() {
+  if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+  document.getElementById('feedbackModal').classList.add('active');
 }
 
 let currentFeedbackRating = 0;
