@@ -503,7 +503,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <button onclick="activateEarlyAdopterPremium()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+      <button onclick="closePremiumModal(); showPaywall();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
         🎁 Upgrade to Premium
       </button>
       <a href="/settings" style="display:block; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); text-decoration:none; font-weight:600; font-size:14px;">
@@ -3294,30 +3294,8 @@ async function showPaywall() {
 }
 
 async function activateEarlyAdopterPremium() {
-  const isEarly = window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.household_id <= 25;
-  if (!isEarly) {
-      closePremiumModal();
-      showPaywall();
-      return;
-  }
-  try {
-    const res = await fetch('/api/settings/premium', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_premium: true })
-    }).then(r => r.json());
-    
-    if (res.ok) {
-      if (!window.currentCfg) window.currentCfg = {};
-      window.currentCfg.is_premium = true;
-      document.body.classList.add('is-premium');
-      closePremiumModal();
-      toast('⭐ Premium Unlocked! Welcome Early Adopter!');
-      showRecipesScreen();
-    }
-  } catch (e) {
-    toast('Error updating premium status');
-  }
+  closePremiumModal();
+  showPaywall();
 }
 
 function switchRecipeTab(tab) {

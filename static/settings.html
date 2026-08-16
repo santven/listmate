@@ -327,7 +327,7 @@ async function loadHousehold() {
       const banner = document.createElement('div');
       banner.style = "background-color: #fff3cd; color: #856404; padding: 12px; margin: 12px 0; border-radius: 8px; font-size: 14px;";
       if (householdData.is_owner) {
-          banner.innerHTML = `Your Free plan includes 1 active member. Your additional household members currently have <b>Read-Only</b> access. <a href='javascript:void(0)' onclick='document.getElementById("premiumModal").classList.add("active")' style='color:#b67c00; font-weight:bold;'>Upgrade to Pro</a> to resume real-time collaboration.`;
+          banner.innerHTML = `Your Free plan includes 1 active member. Your additional household members currently have <b>Read-Only</b> access. <a href='javascript:void(0)' onclick='showPaywall()' style='color:#b67c00; font-weight:bold;'>Upgrade to Pro</a> to resume real-time collaboration.`;
       } else {
           banner.innerHTML = "Live household sync is paused because your household is on the Free plan. You currently have <b>Read-Only</b> access.<br><br><button onclick='showSpinOffModal()' style='background:var(--card); color:var(--text); border:1px solid var(--border); padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer;'>Spin off Personal Household</button>";
       }
