@@ -827,7 +827,9 @@ def register_auth_routes(app):
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
-        if not hname: return jsonify({"error": "household_name required"}), 400
+        if not hname:
+            user_name = (user.get("name") or "").strip() or (user.get("email", "").split("@")[0] if user.get("email") else "My")
+            hname = f"{user_name}'s Household" if not user_name.lower().endswith("household") else user_name
         
         import secrets
         code = secrets.token_hex(4).upper()
@@ -842,6 +844,7 @@ def register_auth_routes(app):
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
+        _seed_stores(hhid)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
 
 

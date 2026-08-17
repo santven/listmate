@@ -344,24 +344,42 @@ def login_google_native():
         import google.auth.transport.requests as google_requests
         info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
         gid = info['sub']
-        email = info.get("email", "")
+        email = (info.get("email") or "").strip().lower()
         name = info.get("name") or (email.split("@")[0] if email else "User")
         
         import shared.auth as authmod
         authmod._init_schema()
-        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+        user = None
+        if email:
+            user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
         if not user:
-            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+            user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+        
+        is_new_user = False
         if not user:
+            is_new_user = True
             authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid, email, name))
-            user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+            user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
             
         if user:
             if user.get("google_id") != gid:
                 authmod._run(f"UPDATE {authmod._USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
             
-            hh_id = user.get("household_id", 0)
+            uid = user["id"]
+            hh_id = user.get("household_id", 0) or 0
             hh_name = ""
+            
+            if not is_new_user and hh_id == 0:
+                owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                if owned:
+                    hh_id = owned["household_id"]
+                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                else:
+                    mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                    if mem:
+                        hh_id = mem["household_id"]
+                        authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+            
             if not hh_id:
                 hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
                 if hh_count and hh_count.get("cnt", 0) == 0:
@@ -373,24 +391,25 @@ def login_google_native():
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
                     authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                    authmod._seed_stores(hh_id)
             
             if hh_id and not hh_name:
                 hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
                 hh_name = hh.get("name", "") if hh else ""
             
-            authmod._set(user["id"], email, name, hh_id, hh_name)
+            authmod._set(user["id"], email, user.get("name") or name, hh_id, hh_name)
             if intent_id:
                 authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
                 
             if hh_id == 0:
-                return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
+                return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
                 
-            return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/');</script></body></html>'''
+            return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/');</script></body></html>'''
             
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f'''<!DOCTYPE html><html><head></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
+        return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
 
 @app.route("/open")
 def open_deep_link():

@@ -3005,7 +3005,7 @@ function showHouseholdSwitcher() {
     if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
     modal.classList.add('active');
     
-    fetch('/api/auth/households_list')
+    fetch('/api/auth/households_list', {credentials: 'include'})
     .then(r => r.json())
     .then(res => {
         if (!res.ok) return;
@@ -3059,7 +3059,7 @@ function showHouseholdSwitcher() {
 function confirmLeaveHousehold(id, name) {
     if (confirm('Are you sure you want to leave "' + name + '"?')) {
         document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
-        fetch('/api/auth/household/' + id + '/leave', { method: 'POST', headers: {'Content-Type':'application/json'} })
+        fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
         .then(r => r.json())
         .then(res => {
             if (res.ok) window.location.reload();
@@ -3072,7 +3072,7 @@ function confirmLeaveHousehold(id, name) {
 function confirmDeclineInvite(token, name) {
     if (confirm('Are you sure you want to decline the invite for "' + name + '"?')) {
         document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
-        fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', headers: {'Content-Type':'application/json'} })
+        fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
         .then(r => r.json())
         .then(res => {
             if (res.ok) window.location.reload();
@@ -3090,6 +3090,7 @@ function switchHousehold(id) {
     document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Switching...</div>';
     fetch('/api/auth/switch_household', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ household_id: id })
     }).then(() => window.location.reload());
@@ -3098,6 +3099,7 @@ function acceptInvite(token) {
     document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
     fetch(`/api/auth/invite/${token}/accept`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' }
     }).then(() => window.location.reload());
 }
