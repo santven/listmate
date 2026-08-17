@@ -371,6 +371,65 @@ def login_google_native():
         traceback.print_exc()
         return f'''<!DOCTYPE html><html><head></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
 
+@app.route("/open")
+def open_deep_link():
+    url = request.args.get("url", "/")
+    if url.startswith("http"):
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path
+        if parsed.query:
+            path += "?" + parsed.query
+    else:
+        path = url
+    if not path.startswith("/"):
+        path = "/" + path
+
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Opening ListMate...</title>
+        <style>
+            body {{ font-family: -apple-system, sans-serif; text-align: center; padding-top: 60px; background: #f0f4ed; color: #2c5a2c; }}
+            .loader {{ border: 3px solid #eaf8ef; border-top: 3px solid #5ebe7e; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin: 24px auto; }}
+            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+            .btn {{ display: inline-block; background: #5ebe7e; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; margin-top: 24px; box-shadow: 0 2px 6px rgba(94,190,126,0.3); }}
+            p {{ color: #64748b; font-size: 14px; margin-top: 32px; }}
+        </style>
+    </head>
+    <body>
+        <h2 style="margin:0; font-size: 22px;">Opening ListMate...</h2>
+        <div class="loader"></div>
+        <p>If the app does not open automatically:</p>
+        <a href="https://grocerlist.app{path}" class="btn">Continue in Browser</a>
+        <script>
+            var path = "{path}";
+            var customSchemeUrl = "listmate:/" + path; // e.g. listmate://requests/1
+            var webUrl = "https://grocerlist.app" + path;
+            var intentUrl = "intent://grocerlist.app" + path + "#Intent;scheme=https;package=com.pvkslabs.listmate;S.browser_fallback_url=" + encodeURIComponent(webUrl) + ";end";
+            
+            var isAndroid = /Android/i.test(navigator.userAgent);
+            var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+            
+            setTimeout(function() {{
+                if (isAndroid) {{
+                    window.location.href = intentUrl;
+                }} else if (isIOS) {{
+                    window.location.href = customSchemeUrl;
+                    setTimeout(function() {{
+                        window.location.href = webUrl;
+                    }}, 2000);
+                }} else {{
+                    window.location.href = webUrl;
+                }}
+            }}, 100);
+        </script>
+    </body>
+    </html>
+    '''
+
 @app.route("/signup")
 def signup_page():
     return redirect("/login")

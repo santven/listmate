@@ -118,7 +118,7 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = "https://listmate.app/?source=email_activation"
+    app_link = "https://grocerlist.app/open?url=/?source=email_activation"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -169,7 +169,7 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = "https://listmate.app/?source=email_reengagement"
+    app_link = "https://grocerlist.app/open?url=/?source=email_reengagement"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -220,7 +220,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = "https://listmate.app/?source=email_combined"
+    app_link = "https://grocerlist.app/open?url=/?source=email_combined"
     upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
 
     # Build dynamic subject and content based on events
@@ -305,7 +305,7 @@ def send_feedback_resolved_email(
     clean_title = (feedback_title or "Your feedback").strip()
     build_label = f"Build #{build_number}" if build_number and not str(build_number).lower().startswith("build") else (build_number or "latest build")
     if not request_url:
-        request_url = f"https://grocerlist.app/requests/{feedback_id}"
+        request_url = f"https://grocerlist.app/open?url=/requests/{feedback_id}"
 
     subject = f"Your ListMate feedback has been resolved in {build_label}! 🎉"
 
@@ -341,7 +341,7 @@ def send_feedback_resolved_email(
         f'<a href="{request_url}" style="background:#5ebe7e;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(94,190,126,0.3);">View Resolution & Details →</a>'
         f'</div>'
         f'<div style="text-align:center;margin-top:16px;">'
-        f'<a href="https://grocerlist.app" style="color:#5ebe7e;text-decoration:none;font-size:13px;font-weight:600;">Open ListMate App</a>'
+        f'<a href="https://grocerlist.app/open?url=/" style="color:#5ebe7e;text-decoration:none;font-size:13px;font-weight:600;">Open ListMate App</a>'
         f'</div>'
         f'<hr style="border:none;border-top:1px solid #edf2f7;margin:24px 0 16px 0;">'
         f'<p style="font-size:12px;color:#94a3b8;text-align:center;margin:0;">Thank you for being part of the ListMate community and helping us improve.</p>'
