@@ -263,6 +263,26 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     updateSandboxBadge();
     checkPurchaseReturn();
     const urlParams = new URLSearchParams(window.location.search);
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+      window.Capacitor.Plugins.App.addListener('appUrlOpen', function(data) {
+        if (data.url) {
+          try {
+            const urlObj = new URL(data.url);
+            let targetPath = '/';
+            if (urlObj.protocol === 'listmate:') {
+               targetPath = '/' + urlObj.host + urlObj.pathname + urlObj.search;
+               if (targetPath === '/sso_callback') return; // Handled by login.html
+            } else {
+               targetPath = urlObj.pathname + urlObj.search;
+            }
+            if (targetPath !== '' && targetPath !== '/') {
+              window.location.href = targetPath;
+            }
+          } catch(e) { console.error('Deep link error:', e); }
+        }
+      });
+    }
+
     const screenParam = urlParams.get('screen');
     if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
