@@ -237,18 +237,39 @@ def login_page():
                     
                     gid_alias = f"apple_{apple_sub}"
                     user = None
-                    if email:
-                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+                    if apple_sub:
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE apple_id = ?", (apple_sub,))
+                    if not user and email:
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
                     if not user:
-                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                         
+                    is_new_user = False
                     if not user:
-                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid_alias, email, name))
-                        user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                        is_new_user = True
+                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, apple_id, email, name, household_id) VALUES (?,?,?,?,0)", (gid_alias, apple_sub, email, name))
+                        user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE apple_id = ? OR google_id = ?", (apple_sub, gid_alias))
+                    
+                    if user and (not user.get("apple_id") or user.get("apple_id") == ""):
+                        try:
+                            authmod._run(f"UPDATE {authmod._USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
+                            user["apple_id"] = apple_sub
+                        except Exception: pass
                     
                     if user:
-                        hh_id = user.get("household_id", 0)
+                        uid = user["id"]
+                        hh_id = user.get("household_id", 0) or 0
                         hh_name = ""
+                        if not is_new_user and hh_id == 0:
+                            owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                            if owned:
+                                hh_id = owned["household_id"]
+                                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                            else:
+                                mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                                if mem:
+                                    hh_id = mem["household_id"]
+                                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
                         if not hh_id:
                             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
                             if hh_count and hh_count.get("cnt", 0) == 0:

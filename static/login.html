@@ -135,7 +135,19 @@ function checkSessionAndProceed(proceedFn) {
             var cb = document.getElementById('marketingOptIn');
             if (cb) cb.checked = !c.geo.is_eu;
         }
-        if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
+        if (c.user && c.household_id && c.household_id !== 0) {
+          setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+        } else if (c.user && (!c.household_id || c.household_id === 0)) {
+          document.getElementById('loadingState').style.display = 'none';
+          document.getElementById('authButtonsContainer').style.display = 'none';
+          document.getElementById('step1').classList.remove('active');
+          document.getElementById('step2').classList.add('active');
+          showSignupOrInvites();
+        } else {
+          if(b1) b1.disabled=false;
+          if(b2) b2.disabled=false;
+          proceedFn();
+        }
       });
     } else { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); }
   }).catch(function() { if(b1) b1.disabled=false; if(b2) b2.disabled=false; proceedFn(); });
@@ -272,7 +284,25 @@ async function _doSignIn() {
 (function() {
   try {
     fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
-      if (r.ok) r.json().then(function(c) { if (c.user) { setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); } else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; } }); else { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
+      if (r.ok) {
+        r.json().then(function(c) {
+          if (c.user && c.household_id && c.household_id !== 0) {
+            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          } else if (c.user && (!c.household_id || c.household_id === 0)) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('authButtonsContainer').style.display = 'none';
+            document.getElementById('step1').classList.remove('active');
+            document.getElementById('step2').classList.add('active');
+            showSignupOrInvites();
+          } else {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('authButtonsContainer').style.display = 'flex';
+          }
+        });
+      } else {
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('authButtonsContainer').style.display = 'flex';
+      }
     });
   } catch(e) { document.getElementById('loadingState').style.display = 'none'; document.getElementById('authButtonsContainer').style.display = 'flex'; }
 
