@@ -34,3 +34,12 @@ When creating or generating release notes for ListMate:
 ### Hard Guardrails for Main Branch Pushes
 *   **Git Pre-push Hook Installed**: A local `.git/hooks/pre-push` script has been permanently installed in this repository to physically reject **any** push to the `main` branch.
 *   **Bypassing the Guardrail**: You cannot push to `main` by accident. If and ONLY IF the user grants explicit permission to push to main, you must prepend the `EXPLICIT_MAIN_PUSH=1` environment variable to your command (e.g., `EXPLICIT_MAIN_PUSH=1 git push origin main`). Do not use this variable unless the user explicitly requested a push to main in the immediate conversation.
+
+## 5. Automated Feedback Resolution & Loop-Closure Procedure
+When the user states that a customer feedback/request is fixed and commands you to "do the automated process" or close the loop, you MUST execute the following pipeline in sequence:
+
+1. **Resolve Request & Dispatch Email**: Update the database `app_feedback` table (or use the `/api/admin/feedback/<id>/resolve` endpoint). Set `status = 'resolved'`, assign the `build_number`, and provide a `resolution_note`. This automatically triggers the SendGrid resolution email to the customer with a deep link to their request (`/requests/<id>`).
+2. **Public Board & In-App Modal Prep**: Ensure `is_public = True` so the item appears in the "Shipped" section of the public roadmap. Ensure `acknowledged_at = NULL` in the DB so the celebratory modal ("Your Request is Live!") triggers on their next in-app page load/refresh.
+3. **GitHub Issue & PR Closure**: Ensure the original GitHub issue is closed and the feature PR is merged into `staging`.
+4. **Publish GitHub Release**: Create a new GitHub Release for the build, adhering strictly to the **Dual Release Notes Format** (Rule #2) containing both the technical GitHub notes and the "What's New" App Store notes.
+5. **Production Push (Only if commanded)**: If the user explicitly asks to push this fix to `main`, follow the cherry-pick and `EXPLICIT_MAIN_PUSH=1` guidelines above.
