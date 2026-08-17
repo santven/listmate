@@ -1967,7 +1967,9 @@ def health():
 def root_files(filename):
     if filename == "favicon.ico":
         return send_from_directory("static", "icon-192.png", mimetype="image/png")
-    if filename in ["sw.js", "manifest.json", "robots.txt", "favicon.ico"] or filename.startswith("icon-") or filename.endswith(".png") or filename.endswith(".ico"):
+    if filename in ["app-ads.txt", "ads.txt", "robots.txt"]:
+        return send_from_directory("static", filename, mimetype="text/plain")
+    if filename in ["sw.js", "manifest.json", "favicon.ico"] or filename.startswith("icon-") or filename.endswith(".png") or filename.endswith(".ico"):
         return send_from_directory("static", filename)
     return "", 404
 
