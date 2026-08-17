@@ -150,6 +150,28 @@ def init_db():
         for s in _SCHEMA: db.execute(s)
         try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS rating INTEGER")
         except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open'")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_title TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_description TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_type TEXT DEFAULT 'feature'")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS build_number TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolution_note TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS github_issue INTEGER")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP")
+        except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS notified_at TIMESTAMP")
+        except Exception: pass
+        try: db.execute("CREATE INDEX IF NOT EXISTS idx_feedback_public ON app_feedback(is_public, status)")
+        except Exception: pass
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
         except Exception: pass
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")

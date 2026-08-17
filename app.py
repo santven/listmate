@@ -388,6 +388,12 @@ def settings_page():
     return send_from_directory("static", "settings.html")
 
 
+@app.route("/requests")
+@app.route("/requests/<int:req_id>")
+def requests_page(req_id=None):
+    return send_from_directory("static", "requests.html")
+
+
 # ── Dietary restrictions (household-level) ──
 
 @app.route("/api/settings/dietary", methods=["GET", "POST"])
@@ -489,6 +495,246 @@ def submit_feedback():
         close_db(db)
         
     return jsonify({"success": True})
+
+
+# ── Feedback Loop & Roadmap APIs ──────────────────────────
+
+ADMIN_EMAILS = {"venragh@gmail.com"}
+
+def is_admin_user():
+    email = (get_email() or "").strip().lower()
+    return is_logged_in() and email in ADMIN_EMAILS
+
+def require_admin(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_admin_user():
+            return jsonify({"error": "Forbidden: Admin access only"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+def _serialize_feedback(row):
+    if not row:
+        return None
+    d = dict(row)
+    for k in ["created_at", "resolved_at", "notified_at"]:
+        if d.get(k) and hasattr(d[k], "isoformat"):
+            d[k] = d[k].isoformat()
+    return d
+
+@app.route("/api/requests", methods=["GET"])
+def get_public_requests():
+    """Public roadmap / requests list (no PII, filtered to public items)."""
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT id, public_title, public_description, public_type, status, 
+                      build_number, resolution_note, created_at, resolved_at
+               FROM app_feedback
+               WHERE is_public = TRUE
+               ORDER BY 
+                 CASE 
+                   WHEN status = 'in_progress' THEN 1 
+                   WHEN status = 'planned' THEN 2 
+                   WHEN status = 'resolved' THEN 3 
+                   ELSE 4 
+                 END, 
+                 resolved_at DESC NULLS LAST, 
+                 created_at DESC"""
+        ).fetchall()
+        data = [_serialize_feedback(r) for r in rows]
+        return jsonify({"requests": data})
+    except Exception as e:
+        print(f"Error fetching public requests: {e}")
+        return jsonify({"requests": []}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/requests/<int:req_id>", methods=["GET"])
+def get_public_request_detail(req_id):
+    """Public request detail for a specific item (or admin preview)."""
+    db = get_db()
+    try:
+        is_adm = is_admin_user()
+        if is_adm:
+            row = db.execute(
+                """SELECT id, public_title, public_description, public_type, status, 
+                          build_number, resolution_note, created_at, resolved_at, is_public,
+                          user_name, user_email, message, feedback_type, rating, github_issue, notified_at
+                   FROM app_feedback
+                   WHERE id = %s""", (req_id,)
+            ).fetchone()
+        else:
+            row = db.execute(
+                """SELECT id, public_title, public_description, public_type, status, 
+                          build_number, resolution_note, created_at, resolved_at
+                   FROM app_feedback
+                   WHERE id = %s AND is_public = TRUE""", (req_id,)
+            ).fetchone()
+        if not row:
+            return jsonify({"error": "Request not found"}), 404
+        return jsonify({"request": _serialize_feedback(row)})
+    except Exception as e:
+        print(f"Error fetching request detail: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+# ── Admin Feedback Management (venragh@gmail.com only) ──────
+
+@app.route("/api/admin/feedback", methods=["GET"])
+@require_admin
+def admin_get_feedback():
+    """List all app feedback items for admin triage."""
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT id, household_id, user_email, user_name, feedback_type, rating, 
+                      message, status, is_public, public_title, public_description, 
+                      public_type, build_number, resolution_note, github_issue, 
+                      created_at, resolved_at, notified_at
+               FROM app_feedback
+               ORDER BY created_at DESC"""
+        ).fetchall()
+        return jsonify({"feedback": [_serialize_feedback(r) for r in rows]})
+    except Exception as e:
+        print(f"Admin feedback fetch error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/admin/feedback/<int:fb_id>/triage", methods=["POST"])
+@require_admin
+def admin_triage_feedback(fb_id):
+    """Promote feedback into a public feature request or bug report."""
+    data = request.get_json() or {}
+    public_title = data.get("public_title", "").strip()
+    public_description = data.get("public_description", "").strip()
+    public_type = data.get("public_type", "feature").strip().lower()
+    status = data.get("status", "planned").strip().lower()
+    github_issue = data.get("github_issue")
+    if github_issue:
+        try: github_issue = int(github_issue)
+        except: github_issue = None
+    
+    if not public_title:
+        return jsonify({"error": "Public title is required"}), 400
+    if public_type not in ["feature", "bug", "enhancement"]:
+        public_type = "feature"
+    if status not in ["planned", "in_progress", "resolved", "open", "dismissed"]:
+        status = "planned"
+    
+    db = get_db()
+    try:
+        db.execute(
+            """UPDATE app_feedback 
+               SET is_public = TRUE, 
+                   public_title = %s, 
+                   public_description = %s, 
+                   public_type = %s, 
+                   status = %s, 
+                   github_issue = %s
+               WHERE id = %s""",
+            (public_title, public_description, public_type, status, github_issue, fb_id)
+        )
+        db.commit()
+        updated = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        return jsonify({"ok": True, "feedback": _serialize_feedback(updated)})
+    except Exception as e:
+        print(f"Admin triage error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/admin/feedback/<int:fb_id>/status", methods=["POST"])
+@require_admin
+def admin_update_feedback_status(fb_id):
+    """Update status of a feedback item (e.g. planned, in_progress, dismissed)."""
+    data = request.get_json() or {}
+    status = data.get("status", "").strip().lower()
+    if status not in ["open", "planned", "in_progress", "resolved", "dismissed"]:
+        return jsonify({"error": "Invalid status"}), 400
+    
+    db = get_db()
+    try:
+        db.execute("UPDATE app_feedback SET status = %s WHERE id = %s", (status, fb_id))
+        db.commit()
+        updated = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        return jsonify({"ok": True, "feedback": _serialize_feedback(updated)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/admin/feedback/<int:fb_id>/resolve", methods=["POST"])
+@require_admin
+def admin_resolve_feedback(fb_id):
+    """Mark feedback as resolved with Build Number, customer note, and trigger email."""
+    data = request.get_json() or {}
+    build_number = str(data.get("build_number", "")).strip()
+    resolution_note = str(data.get("resolution_note", "")).strip()
+    public_title = str(data.get("public_title", "")).strip()
+    public_description = str(data.get("public_description", "")).strip()
+    send_email = data.get("send_email", True)
+    
+    if not build_number:
+        return jsonify({"error": "Build Number is required"}), 400
+    
+    db = get_db()
+    try:
+        current = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        if not current:
+            return jsonify({"error": "Feedback not found"}), 404
+            
+        p_title = public_title or current.get("public_title") or (current.get("message", "")[:80])
+        p_desc = public_description or current.get("public_description") or current.get("message", "")
+        
+        db.execute(
+            """UPDATE app_feedback 
+               SET status = 'resolved', 
+                   is_public = TRUE, 
+                   build_number = %s, 
+                   resolution_note = %s, 
+                   public_title = %s, 
+                   public_description = %s, 
+                   resolved_at = NOW() 
+               WHERE id = %s""",
+            (build_number, resolution_note, p_title, p_desc, fb_id)
+        )
+        db.commit()
+        
+        email_sent = False
+        if send_email and current.get("user_email"):
+            import email_helper
+            recipient_email = current["user_email"].strip()
+            recipient_name = current.get("user_name") or ""
+            req_url = f"https://grocerlist.app/requests/{fb_id}"
+            
+            email_sent = email_helper.send_feedback_resolved_email(
+                to_email=recipient_email,
+                user_name=recipient_name,
+                feedback_title=p_title,
+                feedback_id=fb_id,
+                build_number=build_number,
+                resolution_note=resolution_note,
+                request_url=req_url
+            )
+            if email_sent:
+                db.execute("UPDATE app_feedback SET notified_at = NOW() WHERE id = %s", (fb_id,))
+                db.commit()
+                
+        updated = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        return jsonify({
+            "ok": True, 
+            "feedback": _serialize_feedback(updated), 
+            "email_sent": email_sent
+        })
+    except Exception as e:
+        print(f"Admin resolve feedback error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
 
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():

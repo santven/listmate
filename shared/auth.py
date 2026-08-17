@@ -640,8 +640,11 @@ def register_auth_routes(app):
             resp["is_owner"] = (uid == hh.get("owner_id")) if (hh_id and hh) else True
             mem_opt_in = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id)) if hh_id else None
             opt_in_val = bool(mem_opt_in['marketing_opt_in']) if mem_opt_in and mem_opt_in.get('marketing_opt_in') is not None else True
+            user_email = (get_email() or "").strip().lower()
+            is_adm = bool(user_email == "venragh@gmail.com")
+            resp["is_admin"] = is_adm
             resp["user_info"] = {"id": uid, "name": get_display_name(), "marketing_opt_in": opt_in_val,
-                "email": get_email(), "household_id": hh_id,
+                "email": get_email(), "is_admin": is_adm, "household_id": hh_id,
                 "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None}
             if uid:
                 _init_schema()

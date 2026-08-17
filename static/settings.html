@@ -322,6 +322,46 @@
     </button>
   </div>
 
+  <!-- Admin Feedback & Roadmap Management (Strictly venragh@gmail.com) -->
+  <div class="card" id="adminFeedbackCard" style="display:none; border:2px solid var(--green); background:#fcfefc; margin-top:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0; color:var(--green-dark); display:flex; align-items:center; gap:8px; font-size:18px;">
+        <span>🛡️ Admin Feedback Triage</span>
+      </h2>
+      <span style="background:var(--green); color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.5px;">ADMIN ONLY</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); line-height:1.45; margin-bottom:14px;">
+      Triage incoming app feedback into public feature requests or bug reports, track with GitHub issues, and close the loop with Build Number customer emails.
+    </p>
+
+    <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+      <a href="/requests" target="_blank" style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--green-dark); background:#eaf8ef; padding:8px 14px; border-radius:8px; text-decoration:none;">
+        <span>🗺️ View Public Roadmap (/requests)</span> ↗
+      </a>
+      <button onclick="loadAdminFeedback(true)" style="background:#fff; border:1px solid var(--border); padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; color:var(--text);">
+        🔄 Refresh Feedback
+      </button>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div style="display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; padding-bottom:4px;" id="adminFeedbackFilters">
+      <button class="tab-btn active" onclick="setAdminFeedbackFilter('all')" id="af-tab-all" style="padding:6px 12px; font-size:12px;">All <span class="count" id="af-cnt-all">0</span></button>
+      <button class="tab-btn" onclick="setAdminFeedbackFilter('open')" id="af-tab-open" style="padding:6px 12px; font-size:12px;">Open / Needs Triage <span class="count" id="af-cnt-open">0</span></button>
+      <button class="tab-btn" onclick="setAdminFeedbackFilter('public')" id="af-tab-public" style="padding:6px 12px; font-size:12px;">Roadmap / Public <span class="count" id="af-cnt-public">0</span></button>
+      <button class="tab-btn" onclick="setAdminFeedbackFilter('resolved')" id="af-tab-resolved" style="padding:6px 12px; font-size:12px;">Shipped / Resolved <span class="count" id="af-cnt-resolved">0</span></button>
+    </div>
+
+    <!-- Search / Filter input -->
+    <div style="margin-bottom:14px;">
+      <input type="text" id="adminFeedbackSearch" placeholder="Search feedback message, user, or ID..." oninput="renderAdminFeedbackList()" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); font-size:13px; outline:none; background:#fff;">
+    </div>
+
+    <!-- Feedback List Items Container -->
+    <div id="adminFeedbackList" style="display:flex; flex-direction:column; gap:12px; max-height:550px; overflow-y:auto; padding-right:2px;">
+      <div style="text-align:center; padding:30px; color:var(--muted); font-size:13px;">Loading feedback items...</div>
+    </div>
+  </div>
+
   <!-- Marketing Emails -->
   <div class="card">
     <h2>📧 Marketing Emails</h2>
@@ -363,16 +403,19 @@ let householdData = null;
   if (!cfg.user) { window.location.href = '/login'; return; }
   window.currentCfg = cfg;
 
+  // Check admin access (strictly guarded)
+  const isAdm = Boolean(cfg.is_admin || (cfg.user_info && (cfg.user_info.email || '').trim().toLowerCase() === 'venragh@gmail.com'));
+  if (isAdm) {
+    const adminCard = document.getElementById('adminFeedbackCard');
+    if (adminCard) adminCard.style.display = 'block';
+    loadAdminFeedback();
+  }
+
   // Load household data
-    const marketingCb = document.getElementById('marketingOptInSetting');
+  const marketingCb = document.getElementById('marketingOptInSetting');
   if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]);
-  // Load premium plan
-  
-  // Load dietary preferences
-  
-    
 })();
 
 
@@ -1320,6 +1363,323 @@ async function submitFeedback() {
   }
 }
 
+// ── Admin Feedback & Roadmap Manager (Strictly venragh@gmail.com) ──
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+let adminFeedbackData = [];
+let adminFeedbackFilter = 'all';
+
+function setAdminFeedbackFilter(f) {
+  adminFeedbackFilter = f;
+  document.querySelectorAll('#adminFeedbackFilters .tab-btn').forEach(btn => btn.classList.remove('active'));
+  const el = document.getElementById('af-tab-' + f);
+  if (el) el.classList.add('active');
+  renderAdminFeedbackList();
+}
+
+async function loadAdminFeedback(force = false) {
+  const card = document.getElementById('adminFeedbackCard');
+  if (!card) return;
+  const listEl = document.getElementById('adminFeedbackList');
+  if (force) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted); font-size:13px;">Refreshing feedback...</div>';
+
+  try {
+    const res = await fetch('/api/admin/feedback');
+    if (res.status === 403) {
+      card.style.display = 'none';
+      return;
+    }
+    const data = await res.json();
+    adminFeedbackData = data.feedback || [];
+    updateAdminFeedbackCounts();
+    renderAdminFeedbackList();
+  } catch (e) {
+    console.error('Error loading admin feedback:', e);
+    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#d94a4a; font-size:13px;">Failed to load feedback.</div>';
+  }
+}
+
+function updateAdminFeedbackCounts() {
+  const total = adminFeedbackData.length;
+  const openCount = adminFeedbackData.filter(f => !f.is_public && f.status !== 'resolved' && f.status !== 'dismissed').length;
+  const publicCount = adminFeedbackData.filter(f => f.is_public && f.status !== 'resolved').length;
+  const resolvedCount = adminFeedbackData.filter(f => f.status === 'resolved').length;
+
+  const cAll = document.getElementById('af-cnt-all'); if (cAll) cAll.textContent = total;
+  const cOpen = document.getElementById('af-cnt-open'); if (cOpen) cOpen.textContent = openCount;
+  const cPub = document.getElementById('af-cnt-public'); if (cPub) cPub.textContent = publicCount;
+  const cRes = document.getElementById('af-cnt-resolved'); if (cRes) cRes.textContent = resolvedCount;
+}
+
+function renderAdminFeedbackList() {
+  const container = document.getElementById('adminFeedbackList');
+  if (!container) return;
+  const query = (document.getElementById('adminFeedbackSearch')?.value || '').toLowerCase().trim();
+
+  let filtered = adminFeedbackData.filter(item => {
+    if (adminFeedbackFilter === 'open' && (item.is_public || item.status === 'resolved' || item.status === 'dismissed')) return false;
+    if (adminFeedbackFilter === 'public' && (!item.is_public || item.status === 'resolved')) return false;
+    if (adminFeedbackFilter === 'resolved' && item.status !== 'resolved') return false;
+
+    if (query) {
+      const matchMsg = (item.message || '').toLowerCase().includes(query);
+      const matchEmail = (item.user_email || '').toLowerCase().includes(query);
+      const matchName = (item.user_name || '').toLowerCase().includes(query);
+      const matchTitle = (item.public_title || '').toLowerCase().includes(query);
+      const matchBuild = (item.build_number || '').toLowerCase().includes(query);
+      const matchId = String(item.id).includes(query);
+      if (!matchMsg && !matchEmail && !matchName && !matchTitle && !matchBuild && !matchId) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:30px 10px; color:var(--muted); font-size:13px; background:#fff; border-radius:10px; border:1px dashed var(--border);">No feedback found matching the current view.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => {
+    const isPub = Boolean(item.is_public);
+    const isResolved = item.status === 'resolved';
+    const stars = item.rating ? '★'.repeat(item.rating) : '';
+    const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    const resDateStr = item.resolved_at ? new Date(item.resolved_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+
+    return `
+      <div style="background:#ffffff; border-radius:12px; padding:14px 16px; border:1px solid ${isResolved ? '#bbf7d0' : isPub ? '#bfdbfe' : '#e2e8f0'}; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="background:#f1f5f9; color:#475569; font-weight:700; font-size:12px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="copyFeedbackId(${item.id})" title="Click to copy ID for AI build prompt">
+              #${item.id} <span style="font-size:10px;">📋</span>
+            </span>
+            <span style="font-size:13px; font-weight:700; color:var(--text);">${escapeHtml(item.user_name || 'Anonymous')}</span>
+            <span style="font-size:12px; color:var(--muted);">&lt;${escapeHtml(item.user_email || 'no email')}&gt;</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${item.rating ? `<span style="color:#f59e0b; font-size:12px; font-weight:700;">${stars}</span>` : ''}
+            <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; ${isResolved ? 'background:#dcfce7; color:#166534;' : item.status === 'in_progress' ? 'background:#dbeafe; color:#1e40af;' : item.status === 'planned' ? 'background:#fef3c7; color:#92400e;' : 'background:#f1f5f9; color:#64748b;'}">
+              ${isResolved ? '🎉 Shipped' : item.status === 'in_progress' ? '⚙️ In Progress' : item.status === 'planned' ? '📌 Planned' : 'Open'}
+            </span>
+          </div>
+        </div>
+
+        <div style="font-size:13.5px; color:#1e293b; margin-bottom:10px; line-height:1.45; white-space:pre-wrap; background:#f8fafc; padding:10px 12px; border-radius:8px; border:1px solid #f1f5f9;">${escapeHtml(item.message || '(No message)')}</div>
+
+        ${isPub ? `
+          <div style="background:#f0fdf4; border-left:3px solid var(--green); padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:12.5px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <strong style="color:var(--green-dark); font-size:13px;">🗺️ ${escapeHtml(item.public_title || '')}</strong>
+              <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:#475569; background:#e2e8f0; padding:1px 6px; border-radius:4px;">${escapeHtml(item.public_type || 'feature')}</span>
+            </div>
+            ${item.public_description ? `<div style="color:#334155; margin-bottom:4px;">${escapeHtml(item.public_description)}</div>` : ''}
+            ${item.github_issue ? `<div style="font-size:11.5px; color:var(--muted);">GitHub Issue: <strong>#${escapeHtml(item.github_issue)}</strong></div>` : ''}
+            ${isResolved && item.build_number ? `
+              <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #bbf7d0; font-size:12px; color:#166534;">
+                <strong>🚀 Shipped in Build #${escapeHtml(item.build_number)}</strong> (${resDateStr})
+                ${item.resolution_note ? `<div style="margin-top:2px; font-style:italic; color:#14532d;">"${escapeHtml(item.resolution_note)}"</div>` : ''}
+                <div style="margin-top:4px; font-size:11px; color:#15803d;">
+                  ${item.notified_at ? '✅ Email notification delivered' : '⚠️ Email not sent / pending'}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+          ${!isPub ? `
+            <button onclick="openAdminTriageModal(${item.id})" style="background:var(--green); color:#fff; border:none; padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer;">
+              ➕ Promote to Roadmap (Feature / Bug)
+            </button>
+          ` : `
+            <button onclick="openAdminTriageModal(${item.id})" style="background:#fff; border:1px solid var(--border); color:var(--text); padding:6px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">
+              ✏️ Edit Roadmap
+            </button>
+            <a href="/requests/${item.id}" target="_blank" style="font-size:12px; color:var(--green-dark); font-weight:600; text-decoration:none; padding:6px 10px;">
+              🔗 Public Page ↗
+            </a>
+          `}
+
+          ${!isResolved ? `
+            <button onclick="openAdminResolveModal(${item.id})" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer;">
+              🚀 Resolve with Build # & Notify
+            </button>
+          ` : `
+            <button onclick="openAdminResolveModal(${item.id})" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">
+              🔄 Update Resolution
+            </button>
+          `}
+
+          <span style="margin-left:auto; font-size:11px; color:var(--muted);">${dateStr}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function copyFeedbackId(id) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(String(id)).then(() => {
+      alert(`Feedback ID #${id} copied to clipboard! You can provide this ID to the AI coder.`);
+    }).catch(() => {
+      prompt('Copy Feedback ID:', String(id));
+    });
+  } else {
+    prompt('Copy Feedback ID:', String(id));
+  }
+}
+
+function openAdminTriageModal(id) {
+  const item = adminFeedbackData.find(f => f.id === id);
+  if (!item) return;
+
+  document.getElementById('triageFeedbackId').value = item.id;
+  document.getElementById('triageFeedbackIdBadge').textContent = '#' + item.id;
+  document.getElementById('triageUserEmail').textContent = item.user_email || 'Anonymous';
+  document.getElementById('triageOriginalMessage').textContent = item.message || '';
+  document.getElementById('triagePublicTitle').value = item.public_title || (item.message ? item.message.slice(0, 60) : '');
+  document.getElementById('triagePublicDescription').value = item.public_description || item.message || '';
+  document.getElementById('triagePublicType').value = item.public_type || (item.feedback_type === 'bug' ? 'bug' : 'feature');
+  document.getElementById('triageStatus').value = item.status || 'planned';
+  document.getElementById('triageGithubIssue').value = item.github_issue || '';
+  document.getElementById('triageError').style.display = 'none';
+
+  document.getElementById('adminTriageModal').classList.add('active');
+}
+
+function closeAdminTriageModal() {
+  document.getElementById('adminTriageModal').classList.remove('active');
+}
+
+async function submitAdminTriage() {
+  const id = document.getElementById('triageFeedbackId').value;
+  const title = document.getElementById('triagePublicTitle').value.trim();
+  const desc = document.getElementById('triagePublicDescription').value.trim();
+  const type = document.getElementById('triagePublicType').value;
+  const status = document.getElementById('triageStatus').value;
+  const ghIssue = document.getElementById('triageGithubIssue').value.trim();
+  const errEl = document.getElementById('triageError');
+  const btn = document.getElementById('btnSubmitTriage');
+
+  if (!title) {
+    errEl.textContent = 'Please provide a Public Roadmap Title.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const res = await fetch(`/api/admin/feedback/${id}/triage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        public_title: title,
+        public_description: desc,
+        public_type: type,
+        status: status,
+        github_issue: ghIssue ? parseInt(ghIssue, 10) : null
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeAdminTriageModal();
+      await loadAdminFeedback();
+    } else {
+      errEl.textContent = data.error || 'Failed to update roadmap item.';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save & Publish to Roadmap';
+  }
+}
+
+function openAdminResolveModal(id) {
+  const item = adminFeedbackData.find(f => f.id === id);
+  if (!item) return;
+
+  document.getElementById('resolveFeedbackId').value = item.id;
+  document.getElementById('resolveFeedbackIdBadge').textContent = '#' + item.id;
+  document.getElementById('resolveRecipientInfo').textContent = `${item.user_name || 'User'} <${item.user_email || 'No email'}>`;
+  document.getElementById('resolvePublicTitlePreview').textContent = `Request: "${item.public_title || item.message || ''}"`;
+  document.getElementById('resolveBuildNumber').value = item.build_number || '';
+  document.getElementById('resolveNote').value = item.resolution_note || '';
+  document.getElementById('resolveSendEmail').checked = Boolean(item.user_email);
+  document.getElementById('resolveError').style.display = 'none';
+  document.getElementById('resolveSuccess').style.display = 'none';
+
+  document.getElementById('adminResolveModal').classList.add('active');
+}
+
+function closeAdminResolveModal() {
+  document.getElementById('adminResolveModal').classList.remove('active');
+}
+
+async function submitAdminResolve() {
+  const id = document.getElementById('resolveFeedbackId').value;
+  const buildNumber = document.getElementById('resolveBuildNumber').value.trim();
+  const note = document.getElementById('resolveNote').value.trim();
+  const sendEmail = document.getElementById('resolveSendEmail').checked;
+  const errEl = document.getElementById('resolveError');
+  const succEl = document.getElementById('resolveSuccess');
+  const btn = document.getElementById('btnSubmitResolve');
+
+  if (!buildNumber) {
+    errEl.textContent = 'Build Number is required (e.g. 24).';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  succEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Resolving & Notifying...';
+
+  try {
+    const res = await fetch(`/api/admin/feedback/${id}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        build_number: buildNumber,
+        resolution_note: note,
+        send_email: sendEmail
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      succEl.textContent = `Resolved in Build #${buildNumber}! ` + (data.email_sent ? '📧 Email notification delivered.' : 'Updated without email.');
+      succEl.style.display = 'block';
+      setTimeout(async () => {
+        closeAdminResolveModal();
+        await loadAdminFeedback();
+      }, 1500);
+    } else {
+      errEl.textContent = data.error || 'Failed to resolve feedback.';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Mark Resolved & Send';
+  }
+}
+
 function confirmLeaveHousehold(id, name) {
     if (confirm('Are you sure you want to leave "' + name + '"?')) {
         document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
@@ -1528,6 +1888,97 @@ async function refreshData(showToast = true) {
     <div style="display:flex; gap:10px;">
       <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Submit</button>
       <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Triage / Promote Modal -->
+<div class="modal-overlay" id="adminTriageModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left; max-height:85vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--green-dark);">🛡️ Triage to Roadmap</h3>
+      <span id="triageFeedbackIdBadge" style="font-size:12px; font-weight:700; background:#eaf8ef; color:var(--green-dark); padding:3px 8px; border-radius:8px;">#0</span>
+    </div>
+    <input type="hidden" id="triageFeedbackId">
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:16px;">
+      <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Original User Message (<span id="triageUserEmail"></span>)</div>
+      <div id="triageOriginalMessage" style="font-size:13px; color:#334155; margin-top:4px; font-style:italic;"></div>
+    </div>
+
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Public Roadmap Title *</label>
+    <input type="text" id="triagePublicTitle" placeholder="e.g. Add recipe ingredient scaling by servings" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:14px;">
+
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Public Description</label>
+    <textarea id="triagePublicDescription" rows="3" placeholder="Clean, customer-facing description of what will be built or fixed..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:13.5px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:14px;">
+      <div>
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Type</label>
+        <select id="triagePublicType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px;">
+          <option value="feature">Feature Request</option>
+          <option value="bug">Bug Report</option>
+          <option value="enhancement">Enhancement</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Roadmap Status</label>
+        <select id="triageStatus" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px;">
+          <option value="planned">📌 Planned</option>
+          <option value="in_progress">⚙️ In Progress</option>
+          <option value="resolved">🎉 Resolved</option>
+          <option value="open">Open / Backlog</option>
+          <option value="dismissed">Dismissed</option>
+        </select>
+      </div>
+    </div>
+
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">GitHub Issue # (Optional)</label>
+    <input type="number" id="triageGithubIssue" placeholder="e.g. 287" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:16px;">
+
+    <div id="triageError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
+
+    <div style="display:flex; gap:10px;">
+      <button onclick="submitAdminTriage()" id="btnSubmitTriage" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">Save & Publish to Roadmap</button>
+      <button onclick="closeAdminTriageModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Resolution Modal -->
+<div class="modal-overlay" id="adminResolveModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left; max-height:85vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--green-dark);">🚀 Resolve & Notify Requestor</h3>
+      <span id="resolveFeedbackIdBadge" style="font-size:12px; font-weight:700; background:#eaf8ef; color:var(--green-dark); padding:3px 8px; border-radius:8px;">#0</span>
+    </div>
+    <input type="hidden" id="resolveFeedbackId">
+
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; margin-bottom:16px;">
+      <div style="font-size:11px; font-weight:700; color:#166534; text-transform:uppercase;">Recipient</div>
+      <div id="resolveRecipientInfo" style="font-size:13px; font-weight:600; color:#14532d; margin-top:2px;"></div>
+      <div id="resolvePublicTitlePreview" style="font-size:12px; color:#166534; margin-top:4px;"></div>
+    </div>
+
+    <label style="display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--text);">Build Number * (e.g. 24, 105)</label>
+    <input type="text" id="resolveBuildNumber" placeholder="e.g. 24" style="width:100%; padding:12px; border-radius:10px; border:2px solid #5ebe7e; font-size:15px; font-weight:700; margin-bottom:14px; outline:none;">
+
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Resolution Note for Customer</label>
+    <textarea id="resolveNote" rows="4" placeholder="Explain what was built or fixed in friendly, non-technical terms (e.g. We have added quick quantity steppers to the grocery list!)..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:13.5px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; background:#f8fafc; padding:10px 12px; border-radius:8px;">
+      <input type="checkbox" id="resolveSendEmail" checked style="width:auto; margin:0;">
+      <label for="resolveSendEmail" style="margin:0; font-size:13px; font-weight:600; color:var(--text); cursor:pointer;">
+        📧 Send celebratory email to requestor with grocerlist.app/requests/ link
+      </label>
+    </div>
+
+    <div id="resolveError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
+    <div id="resolveSuccess" style="color:var(--green-dark); font-size:13px; margin-bottom:10px; display:none;"></div>
+
+    <div style="display:flex; gap:10px;">
+      <button onclick="submitAdminResolve()" id="btnSubmitResolve" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">Mark Resolved & Send</button>
+      <button onclick="closeAdminResolveModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>

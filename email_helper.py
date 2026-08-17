@@ -283,3 +283,87 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         },
     }
     return _send_via_api(api_key, payload)
+
+
+def send_feedback_resolved_email(
+    to_email: str,
+    user_name: str,
+    feedback_title: str,
+    feedback_id: int,
+    build_number: str,
+    resolution_note: str = "",
+    request_url: str = "",
+    user_id: int = 0
+) -> bool:
+    """Send a celebratory notification to the user when their feedback/feature request has been addressed in a specific build."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    name_str = (user_name or "there").split(" ")[0].capitalize()
+    clean_title = (feedback_title or "Your feedback").strip()
+    build_label = f"Build #{build_number}" if build_number and not str(build_number).lower().startswith("build") else (build_number or "latest build")
+    if not request_url:
+        request_url = f"https://grocerlist.app/requests/{feedback_id}"
+
+    subject = f"Your ListMate feedback has been resolved in {build_label}! 🎉"
+
+    res_note_txt = f"\n\nNote from our team:\n{resolution_note}" if resolution_note else ""
+    res_note_html = f'<div style="background:#f8faf6;border-left:4px solid #5ebe7e;padding:12px 16px;margin:16px 0;border-radius:4px;"><strong style="color:#2c5a2c;display:block;margin-bottom:4px;">Note from the team:</strong><span style="color:#333;font-size:14px;line-height:1.5;">{resolution_note}</span></div>' if resolution_note else ""
+
+    text_body = (
+        f"Hi {name_str},\n\n"
+        f"Great news! You previously gave us feedback:\n"
+        f"\"{clean_title}\"\n\n"
+        f"We're excited to let you know this has been addressed in {build_label}!"
+        f"{res_note_txt}\n\n"
+        f"You can view the resolution details and roadmap update here:\n"
+        f"{request_url}\n\n"
+        f"Thank you for helping us make ListMate better!\n\n"
+        f"— The ListMate Team"
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<div style="text-align:center;margin-bottom:20px;">'
+        f'<span style="display:inline-block;background:#eaf8ef;color:#2c5a2c;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">🎉 You Asked, We Built It</span>'
+        f'<h2 style="color:#2c5a2c;margin:12px 0 6px 0;font-size:22px;font-weight:700;">Addressed in {build_label}!</h2>'
+        f'</div>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">Hi {name_str},</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">You previously shared feedback with us:</p>'
+        f'<div style="background:#f1f5f9;border-radius:8px;padding:12px 16px;margin:12px 0;font-style:italic;color:#475569;font-size:14px;line-height:1.4;">'
+        f'"{clean_title}"'
+        f'</div>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">We wanted to close the loop and let you know that your suggestion has officially shipped in <strong>{build_label}</strong>.</p>'
+        f'{res_note_html}'
+        f'<div style="text-align:center;margin:28px 0 20px 0;">'
+        f'<a href="{request_url}" style="background:#5ebe7e;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(94,190,126,0.3);">View Resolution & Details →</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin-top:16px;">'
+        f'<a href="https://grocerlist.app" style="color:#5ebe7e;text-decoration:none;font-size:13px;font-weight:600;">Open ListMate App</a>'
+        f'</div>'
+        f'<hr style="border:none;border-top:1px solid #edf2f7;margin:24px 0 16px 0;">'
+        f'<p style="font-size:12px;color:#94a3b8;text-align:center;margin:0;">Thank you for being part of the ListMate community and helping us improve.</p>'
+        f'</div>'
+    )
+
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 20px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from feedback updates.</p>' if unsub_link else ""
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": text_body + unsub_txt},
+            {"type": "text/html", "value": html_body + (unsub_html if unsub_link else "")},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
