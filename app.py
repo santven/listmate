@@ -23,6 +23,7 @@ from shared.auth import (
     get_household_id, get_household_name, get_email, is_logged_in,
 )
 
+import pii_sanitizer
 from categorize import categorize
 
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -603,6 +604,46 @@ def admin_get_feedback():
     finally:
         close_db(db)
 
+@app.route("/api/admin/feedback/<int:fb_id>/sanitize", methods=["GET", "POST"])
+@require_admin
+def admin_sanitize_feedback(fb_id):
+    """Use AI & Rule-based PII scrubber to convert raw feedback into clean, anonymized roadmap title & description."""
+    db = get_db()
+    try:
+        row = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Feedback not found"}), 404
+        
+        sanitized = pii_sanitizer.sanitize_and_synthesize_feedback(
+            raw_message=row.get("message", ""),
+            user_name=row.get("user_name", ""),
+            user_email=row.get("user_email", ""),
+            feedback_type=row.get("feedback_type", "feature")
+        )
+        return jsonify({"ok": True, "sanitized": sanitized})
+    except Exception as e:
+        print(f"Admin sanitize feedback error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/admin/feedback/sanitize-text", methods=["POST"])
+@require_admin
+def admin_sanitize_text():
+    """Sanitize arbitrary user text to strip names/PII and generate clean product roadmap representation."""
+    data = request.get_json() or {}
+    raw_text = data.get("text", "").strip()
+    user_name = data.get("user_name", "").strip()
+    user_email = data.get("user_email", "").strip()
+    f_type = data.get("type", "feature").strip()
+    sanitized = pii_sanitizer.sanitize_and_synthesize_feedback(
+        raw_message=raw_text,
+        user_name=user_name,
+        user_email=user_email,
+        feedback_type=f_type
+    )
+    return jsonify({"ok": True, "sanitized": sanitized})
+
 @app.route("/api/admin/feedback/<int:fb_id>/triage", methods=["POST"])
 @require_admin
 def admin_triage_feedback(fb_id):
@@ -626,6 +667,16 @@ def admin_triage_feedback(fb_id):
     
     db = get_db()
     try:
+        current = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        u_name = current.get("user_name", "") if current else ""
+        u_email = current.get("user_email", "") if current else ""
+        
+        # Guardrail: clean PII from public title and description
+        clean_title = pii_sanitizer.clean_text_pii_rule_based(public_title, user_name=u_name, user_email=u_email)
+        clean_desc = pii_sanitizer.clean_text_pii_rule_based(public_description, user_name=u_name, user_email=u_email)
+        if not clean_title:
+            clean_title = public_title
+
         db.execute(
             """UPDATE app_feedback 
                SET is_public = TRUE, 
@@ -635,7 +686,7 @@ def admin_triage_feedback(fb_id):
                    status = %s, 
                    github_issue = %s
                WHERE id = %s""",
-            (public_title, public_description, public_type, status, github_issue, fb_id)
+            (clean_title, clean_desc, public_type, status, github_issue, fb_id)
         )
         db.commit()
         updated = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
@@ -686,8 +737,29 @@ def admin_resolve_feedback(fb_id):
         if not current:
             return jsonify({"error": "Feedback not found"}), 404
             
-        p_title = public_title or current.get("public_title") or (current.get("message", "")[:80])
-        p_desc = public_description or current.get("public_description") or current.get("message", "")
+        u_name = current.get("user_name", "")
+        u_email = current.get("user_email", "")
+
+        # If title/desc are missing, synthesize them via PII sanitizer instead of using raw message
+        p_title = public_title or current.get("public_title")
+        p_desc = public_description or current.get("public_description")
+        
+        if not p_title or not p_desc:
+            synthesized = pii_sanitizer.sanitize_and_synthesize_feedback(
+                raw_message=current.get("message", ""),
+                user_name=u_name,
+                user_email=u_email,
+                feedback_type=current.get("feedback_type", "feature")
+            )
+            if not p_title:
+                p_title = synthesized["public_title"]
+            if not p_desc:
+                p_desc = synthesized["public_description"]
+
+        # Ensure all fields are PII-scrubbed before saving
+        p_title = pii_sanitizer.clean_text_pii_rule_based(p_title, user_name=u_name, user_email=u_email)
+        p_desc = pii_sanitizer.clean_text_pii_rule_based(p_desc, user_name=u_name, user_email=u_email)
+        res_note_clean = pii_sanitizer.clean_text_pii_rule_based(resolution_note, user_name=u_name, user_email=u_email)
         
         db.execute(
             """UPDATE app_feedback 
@@ -699,7 +771,7 @@ def admin_resolve_feedback(fb_id):
                    public_description = %s, 
                    resolved_at = NOW() 
                WHERE id = %s""",
-            (build_number, resolution_note, p_title, p_desc, fb_id)
+            (build_number, res_note_clean, p_title, p_desc, fb_id)
         )
         db.commit()
         
@@ -716,7 +788,7 @@ def admin_resolve_feedback(fb_id):
                 feedback_title=p_title,
                 feedback_id=fb_id,
                 build_number=build_number,
-                resolution_note=resolution_note,
+                resolution_note=res_note_clean,
                 request_url=req_url
             )
             if email_sent:
