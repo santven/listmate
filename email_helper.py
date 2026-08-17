@@ -4,7 +4,7 @@ import os
 
 # Configuration
 # Prefer AWS_SES_FROM if set (e.g. "ListMate <hello@grocerlist.app>"), fallback to individual vars
-FROM_EMAIL = os.environ.get("AWS_SES_FROM", os.environ.get("SENDGRID_FROM", "hello@grocerlist.app"))
+FROM_EMAIL = os.environ.get("AWS_SES_FROM", "hello@grocerlist.app")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 def _send_ses_email(to_email: str, subject: str, body_text: str, body_html: str) -> bool:
