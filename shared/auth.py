@@ -476,18 +476,7 @@ def register_auth_routes(app):
             
             from google.oauth2 import id_token
             import google.auth.transport.requests as google_requests
-            info = None
-            try:
-                info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
-            except Exception:
-                pass
-            if not info:
-                try:
-                    info = id_token.verify_oauth2_token(c, google_requests.Request())
-                except Exception:
-                    pass
-            if not info:
-                info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
+            info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
             gid = info['sub']
             email = info.get("email", "")
             name = info.get("name") or (email.split("@")[0] if email else "User")
