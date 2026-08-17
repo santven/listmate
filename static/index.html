@@ -104,6 +104,84 @@
 
   @media (min-width: 768px) { .container { padding: 24px; } .store-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; } .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; } .header-meta .user { display: inline; } }
 
+  .refresh-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 6px 8px;
+    line-height: 1;
+    flex-shrink: 0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background-color 0.15s;
+    user-select: none;
+  }
+  .refresh-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+  .refresh-btn:active {
+    transform: scale(0.92);
+  }
+  .refresh-btn.spinning {
+    animation: spinRefresh 0.8s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes spinRefresh {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pull to Refresh Indicator */
+  .ptr-wrap {
+    width: 100%;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    height: 0;
+    transition: height 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+    pointer-events: none;
+    margin-bottom: 8px;
+  }
+  .ptr-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .ptr-icon {
+    font-size: 14px;
+    font-weight: 700;
+    transition: transform 0.2s ease;
+    display: inline-block;
+  }
+  .ptr-icon.flipped {
+    transform: rotate(180deg);
+  }
+  .ptr-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #e5e7eb;
+    border-top: 2px solid var(--green);
+    border-radius: 50%;
+    animation: ptrSpin 0.7s linear infinite;
+  }
+  @keyframes ptrSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
   .burger-btn { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
   .burger-dropdown { display: none; position: fixed; top: 52px; right: 12px; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); z-index: 9999; min-width: 160px; overflow: hidden; }
   .burger-dropdown.show { display: block; }
@@ -209,6 +287,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
+    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()" aria-label="Refresh" title="Refresh">🔄</button>
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
@@ -216,6 +295,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a href="#" onclick="showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
+      <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
       <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
@@ -225,6 +305,13 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 </div>
 <div class="container">
+  <div id="ptrIndicator" class="ptr-wrap">
+    <div class="ptr-pill">
+      <span class="ptr-icon" id="ptrIcon">↓</span>
+      <span class="ptr-spinner" id="ptrSpinner" style="display:none;"></span>
+      <span class="ptr-text" id="ptrText">Pull to refresh</span>
+    </div>
+  </div>
   <div id="screenHome">
     <div id="offlineBadge" class="offline-badge pro" style="display:none;"></div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -927,6 +1014,35 @@ async function syncOfflineQueue() {
 }
 
 let stores=[], list=[], currentStore=null, allStoreItems={}, recipes=[];
+let currentScreen = 'home';
+
+async function refreshData(showToast = true) {
+  const btn = document.getElementById('refreshBtn');
+  if (btn) btn.classList.add('spinning');
+  try {
+    if (navigator.onLine && typeof syncOfflineQueue === 'function') {
+      await syncOfflineQueue();
+    }
+    await loadData();
+    if (currentScreen === 'globalVisits' && typeof loadGlobalVisits === 'function') {
+      await loadGlobalVisits();
+    } else if (currentScreen === 'analytics' && typeof loadAnalytics === 'function') {
+      await loadAnalytics();
+    } else if (currentScreen === 'recipes' && typeof loadSavedRecipes === 'function') {
+      await loadSavedRecipes();
+      if (typeof loadRecipeUsage === 'function') await loadRecipeUsage();
+    }
+    if (showToast) {
+      toast('List updated');
+    }
+  } catch(e) {
+    console.error('Refresh error:', e);
+  } finally {
+    if (btn) {
+      setTimeout(() => btn.classList.remove('spinning'), 500);
+    }
+  }
+}
 async function loadData() {
   try {
     const cached = localStorage.getItem('listmate_cache');
@@ -1679,6 +1795,7 @@ function updateFabVisibility() {
 window.addEventListener('scroll', updateFabVisibility);
 
 function showScreen(name){
+  currentScreen = name;
   if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
   window.scrollTo(0, 0);
   document.body.scrollTop = 0;
@@ -4213,6 +4330,95 @@ async function submitFeedback() {
     btn.textContent = 'Submit';
   }
 }
+
+// ── Pull-to-Refresh Gesture Handling ──
+(function initPullToRefresh() {
+  let startY = 0;
+  let currentY = 0;
+  let isPulling = false;
+  let isRefreshing = false;
+  const ptrWrap = document.getElementById('ptrIndicator');
+  const ptrText = document.getElementById('ptrText');
+  const ptrIcon = document.getElementById('ptrIcon');
+  const ptrSpinner = document.getElementById('ptrSpinner');
+  if (!ptrWrap) return;
+
+  function isAtTop() {
+    return window.scrollY <= 0 && document.documentElement.scrollTop <= 0 && document.body.scrollTop <= 0;
+  }
+
+  function isModalActive() {
+    return !!document.querySelector('.modal-overlay.active') || document.body.classList.contains('has-modal-open');
+  }
+
+  document.addEventListener('touchstart', function(e) {
+    if (isRefreshing || isModalActive()) return;
+    if (isAtTop()) {
+      startY = e.touches[0].clientY;
+      currentY = startY;
+      isPulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!isPulling || isRefreshing || isModalActive()) return;
+    currentY = e.touches[0].clientY;
+    const diff = currentY - startY;
+
+    if (diff > 0 && isAtTop()) {
+      const pullDist = Math.min(Math.pow(diff, 0.85) * 1.2, 70);
+      ptrWrap.style.display = 'flex';
+      ptrWrap.style.height = pullDist + 'px';
+      
+      if (pullDist >= 45) {
+        ptrText.textContent = 'Release to refresh';
+        ptrIcon.classList.add('flipped');
+      } else {
+        ptrText.textContent = 'Pull to refresh';
+        ptrIcon.classList.remove('flipped');
+      }
+    } else {
+      ptrWrap.style.height = '0px';
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', async function(e) {
+    if (!isPulling || isRefreshing) return;
+    isPulling = false;
+    const diff = currentY - startY;
+    const pullDist = Math.min(Math.pow(Math.max(0, diff), 0.85) * 1.2, 70);
+
+    if (diff > 0 && pullDist >= 45 && isAtTop() && !isModalActive()) {
+      isRefreshing = true;
+      ptrWrap.style.height = '48px';
+      ptrText.textContent = 'Updating list...';
+      ptrIcon.style.display = 'none';
+      ptrSpinner.style.display = 'inline-block';
+      
+      try {
+        await refreshData(true);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setTimeout(function() {
+          ptrWrap.style.height = '0px';
+          setTimeout(function() {
+            ptrWrap.style.display = 'none';
+            ptrIcon.style.display = 'inline-block';
+            ptrSpinner.style.display = 'none';
+            ptrIcon.classList.remove('flipped');
+            isRefreshing = false;
+          }, 250);
+        }, 300);
+      }
+    } else {
+      ptrWrap.style.height = '0px';
+      setTimeout(function() {
+        if (!isRefreshing) ptrWrap.style.display = 'none';
+      }, 200);
+    }
+  }, { passive: true });
+})();
 </script>
 </body>
 </html>
