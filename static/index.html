@@ -838,6 +838,7 @@ async function checkAuth() {
     window.currentCfg = cfg;
     try { localStorage.setItem('listmate_cfg', JSON.stringify(cfg)); } catch(e){}
     if (!cfg.user) { window.location.href='/login'; return false; }
+    if (!cfg.household_id || cfg.household_id === 0 || cfg.needs_signup) { window.location.href='/login?needs_signup=1'; return false; }
     if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
     if (cfg.feature_flags && cfg.feature_flags.health_dashboard) {
       const healthLink = $('#healthNavLink');
