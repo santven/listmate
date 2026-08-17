@@ -518,10 +518,64 @@ def _serialize_feedback(row):
     if not row:
         return None
     d = dict(row)
-    for k in ["created_at", "resolved_at", "notified_at"]:
+    for k in ["created_at", "resolved_at", "notified_at", "acknowledged_at"]:
         if d.get(k) and hasattr(d[k], "isoformat"):
             d[k] = d[k].isoformat()
     return d
+
+@app.route("/api/feedback/unacknowledged-resolved", methods=["GET"])
+@require_user
+def get_unacknowledged_resolved_feedback():
+    """Get resolved feedback for current user that hasn't been acknowledged in-app yet."""
+    email = get_email()
+    hhid = _hh()
+    if not email and not hhid:
+        return jsonify({"notifications": []})
+        
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT id, public_title, public_description, public_type, status, 
+                      build_number, resolution_note, resolved_at, acknowledged_at
+               FROM app_feedback
+               WHERE (user_email = %s OR household_id = %s)
+                 AND status = 'resolved'
+                 AND acknowledged_at IS NULL
+               ORDER BY resolved_at DESC NULLS LAST
+               LIMIT 5""",
+            (email, hhid)
+        ).fetchall()
+        return jsonify({"notifications": [_serialize_feedback(r) for r in rows]})
+    except Exception as e:
+        print(f"Error fetching unacknowledged feedback: {e}")
+        return jsonify({"notifications": []}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/feedback/<int:fb_id>/acknowledge", methods=["POST"])
+@require_user
+def acknowledge_feedback_resolution(fb_id):
+    """Mark a resolved feedback notification as acknowledged by the user."""
+    email = get_email()
+    hhid = _hh()
+    is_adm = is_admin_user()
+    
+    db = get_db()
+    try:
+        if is_adm:
+            db.execute("UPDATE app_feedback SET acknowledged_at = NOW() WHERE id = %s", (fb_id,))
+        else:
+            db.execute(
+                "UPDATE app_feedback SET acknowledged_at = NOW() WHERE id = %s AND (user_email = %s OR household_id = %s)",
+                (fb_id, email, hhid)
+            )
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Error acknowledging feedback #{fb_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
 
 @app.route("/api/requests", methods=["GET"])
 def get_public_requests():
