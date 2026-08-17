@@ -38,6 +38,9 @@ When creating or generating release notes for ListMate:
 ## 5. Automated Feedback Resolution & Loop-Closure Procedure
 When the user states that a customer feedback/request is fixed and commands you to "do the automated process" or close the loop, you MUST execute the following pipeline in sequence:
 
+> **IMPORTANT - PRODUCTION TARGETING**: If the user asks to run this on **Production**, do NOT run it against the default development database. You must temporarily connect to the production database by accessing the `PROD_DATABASE_URL` environment variable configured in `.env`.
+> *(For security reasons, the raw production database URL is securely stored in `.env` and `.env.example` as a template, and MUST NOT be committed to git).*
+
 1. **Resolve Request & Dispatch Email**: Update the database `app_feedback` table (or use the `/api/admin/feedback/<id>/resolve` endpoint). Set `status = 'resolved'`, assign the `build_number`, and provide a `resolution_note`. This automatically triggers the SendGrid resolution email to the customer with a deep link to their request (`/requests/<id>`).
 2. **Public Board & In-App Modal Prep**: Ensure `is_public = True` so the item appears in the "Shipped" section of the public roadmap. Ensure `acknowledged_at = NULL` in the DB so the celebratory modal ("Your Request is Live!") triggers on their next in-app page load/refresh.
 3. **GitHub Issue & PR Closure**: Ensure the original GitHub issue is closed and the feature PR is merged into `staging`.
