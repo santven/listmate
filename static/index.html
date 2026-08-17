@@ -1076,6 +1076,7 @@ async function loadData() {
       }
       saveCache();
       checkVisitNotifications();
+      checkResolvedFeedbackNotifications();
     }
   } catch (err) {
     if (!navigator.onLine) return;
@@ -4249,7 +4250,83 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+<!-- Resolved Feedback Celebration Modal -->
+<div class="modal-overlay" id="resolvedFeedbackModal" style="z-index:9999;">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left; max-width:440px; margin:0 auto; box-shadow:0 -10px 25px rgba(0,0,0,0.15);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span id="resolvedBuildBadge" style="display:inline-block; background:#dcfce7; color:#166534; font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; border:1px solid #bbf7d0;">🎉 Shipped in Build</span>
+      <button onclick="dismissResolvedFeedbackModal()" style="background:none; border:none; font-size:20px; color:var(--muted); cursor:pointer; padding:0 4px;">✕</button>
+    </div>
+    <h3 style="margin:0 0 6px 0; font-size:20px; font-weight:800; color:var(--text);">Your Request is Live! 🚀</h3>
+    <p style="font-size:13px; color:var(--muted); margin:0 0 14px 0; line-height:1.4;">Thank you for helping improve ListMate! A feature or suggestion you submitted has just been shipped.</p>
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:16px;">
+      <div id="resolvedFeatureTitle" style="font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px;"></div>
+      <div id="resolvedResolutionNote" style="font-size:13px; color:#475569; line-height:1.5;"></div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <a id="btnResolvedViewPublic" href="/requests" target="_blank" style="display:block; text-align:center; background:var(--green); color:#fff; padding:12px; border-radius:12px; font-size:14px; font-weight:700; text-decoration:none;">View on Public Roadmap ↗</a>
+      <button onclick="dismissResolvedFeedbackModal()" style="width:100%; background:#f1f5f9; border:1px solid #e2e8f0; color:var(--text); padding:12px; border-radius:12px; font-size:14px; font-weight:600; cursor:pointer;">Awesome, Got It!</button>
+    </div>
+  </div>
+</div>
+
 <script>
+let currentResolvedFeedbackItem = null;
+
+async function checkResolvedFeedbackNotifications() {
+  try {
+    const res = await fetch('/api/feedback/unacknowledged-resolved');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.notifications && data.notifications.length > 0) {
+      const item = data.notifications[0];
+      currentResolvedFeedbackItem = item;
+      
+      const badge = document.getElementById('resolvedBuildBadge');
+      if (badge) {
+        badge.textContent = item.build_number ? `🎉 Shipped in Build #${item.build_number}` : '🎉 Shipped';
+      }
+      const titleEl = document.getElementById('resolvedFeatureTitle');
+      if (titleEl) {
+        titleEl.textContent = item.public_title || 'Feature Enhancement';
+      }
+      const noteEl = document.getElementById('resolvedResolutionNote');
+      if (noteEl) {
+        noteEl.textContent = item.resolution_note || item.public_description || 'This feature has been implemented and released.';
+      }
+      const linkEl = document.getElementById('btnResolvedViewPublic');
+      if (linkEl) {
+        linkEl.href = `/requests/${item.id}`;
+      }
+      
+      const modal = document.getElementById('resolvedFeedbackModal');
+      if (modal) {
+        modal.classList.add('active');
+      }
+    }
+  } catch (err) {
+    console.log('Resolved feedback check error:', err);
+  }
+}
+
+async function dismissResolvedFeedbackModal() {
+  const modal = document.getElementById('resolvedFeedbackModal');
+  if (modal) modal.classList.remove('active');
+  if (currentResolvedFeedbackItem && currentResolvedFeedbackItem.id) {
+    try {
+      await fetch(`/api/feedback/${currentResolvedFeedbackItem.id}/acknowledge`, { method: 'POST' });
+    } catch (e) {
+      console.log('Acknowledge error:', e);
+    }
+    currentResolvedFeedbackItem = null;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(checkResolvedFeedbackNotifications, 800);
+});
 function showFeedbackModal() {
   if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
   document.getElementById('feedbackModal').classList.add('active');

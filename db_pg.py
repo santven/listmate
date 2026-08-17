@@ -170,6 +170,8 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS notified_at TIMESTAMP")
         except Exception: pass
+        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMP")
+        except Exception: pass
         try: db.execute("CREATE INDEX IF NOT EXISTS idx_feedback_public ON app_feedback(is_public, status)")
         except Exception: pass
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
