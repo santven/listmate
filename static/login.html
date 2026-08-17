@@ -218,24 +218,63 @@ function processInviteThenRedirect() {
   }
 }
 
+function getGoogleClientId() {
+  return '822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com';
+}
+
+function redirectToGoogleOAuth() {
+  currentIntentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  var state = 'intent_' + currentIntentId;
+  var nonce = Math.random().toString(36).slice(2);
+  var params = new URLSearchParams({
+    client_id: getGoogleClientId(),
+    redirect_uri: location.origin + '/login',
+    response_type: 'id_token',
+    scope: 'openid email profile',
+    prompt: 'select_account',
+    nonce: nonce,
+    state: state
+  });
+  var url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    startPollingIntent(currentIntentId);
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+      window.Capacitor.Plugins.Browser.open({ url: url });
+    } else {
+      window.location.href = url;
+    }
+  } else {
+    window.location.href = url;
+  }
+}
+
 async function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
+  showError('');
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
     try {
+      if (!window.Capacitor.Plugins || !window.Capacitor.Plugins.FirebaseAuthentication) {
+        redirectToGoogleOAuth();
+        return;
+      }
       await window.Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();
       const tokenResult = await window.Capacitor.Plugins.FirebaseAuthentication.getIdToken();
       if (tokenResult && tokenResult.token) {
         handleCredential(tokenResult.token, false);
       } else {
-        showError('Google sign in failed (no token).');
+        redirectToGoogleOAuth();
       }
     } catch(e) {
-      showError('Google sign in error: ' + e.message);
+      console.warn('Native Google sign in unavailable or failed, falling back to Google OAuth:', e);
+      redirectToGoogleOAuth();
     }
   } else {
     try {
       console.log("Firebase Auth checking from origin:", window.location.origin);
-      if (!window._GoogleAuthProvider) throw new Error("Firebase SDK is still loading.");
+      if (!window._GoogleAuthProvider || !window._signInWithPopup || !window._firebaseAuth) {
+        redirectToGoogleOAuth();
+        return;
+      }
       const provider = new window._GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
@@ -244,26 +283,8 @@ async function _doSignIn() {
       const idToken = await result.user.getIdToken();
       handleCredential(idToken, false);
     } catch (error) {
-      console.error("Firebase Web Login Error:", error);
-      if (error.code === 'auth/unauthorized-domain') {
-        showError('Domain (' + window.location.hostname + ') is not authorized. Please check Firebase AND Google Cloud API Key restrictions. Falling back...');
-        setTimeout(function() {
-            var intentId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-            startPollingIntent(intentId);
-            var params = new URLSearchParams({
-              client_id: '822823530036-6iv0vumnlekal4u1kepre8fd2efbueqa.apps.googleusercontent.com',
-              redirect_uri: location.origin + '/login',
-              response_type: 'id_token',
-              scope: 'openid email profile',
-              prompt: 'select_account',
-              nonce: Math.random().toString(36).slice(2),
-              state: 'intent_' + intentId
-            });
-            window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
-        }, 3000);
-      } else {
-        showError('Web sign in error: ' + error.message);
-      }
+      console.warn("Firebase Web Login failed, falling back to Google OAuth:", error);
+      redirectToGoogleOAuth();
     }
   }
 }
