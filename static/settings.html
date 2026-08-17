@@ -159,6 +159,8 @@
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
+      <a href="#" onclick="focusAddMember(); if(typeof toggleBurger==='function') toggleBurger(); return false;">👥 Add / Invite Members</a>
+      <div class="divider"></div>
       <a href="/">📋 Grocery List</a>
       <a href="/?screen=globalVisits">🗓️ Store Visits</a>
       <a href="/?screen=analytics">📊 Analytics</a>
@@ -181,7 +183,7 @@
     </div>
   </div>
   <!-- Household & Members -->
-  <div class="card">
+  <div class="card" id="householdCard">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
       <h2 id="householdTitle" style="font-size:18px; font-weight:700; color:#1f2937; margin-bottom:0; display:flex; align-items:center; gap:6px;">🏡 Household</h2>
       <span id="householdDesc" style="font-size:12px; font-weight:700; color:var(--green-dark); background:#f0f7f2; border:1px solid #c8e6c9; padding:4px 10px; border-radius:12px; white-space:nowrap;"></span>
@@ -415,8 +417,38 @@ let householdData = null;
   const marketingCb = document.getElementById('marketingOptInSetting');
   if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
 
-  Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]);
+  Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
+    checkUrlActions();
+  });
 })();
+
+function focusAddMember() {
+  const card = document.getElementById('householdCard');
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.style.transition = 'box-shadow 0.3s ease, outline 0.3s ease';
+    card.style.boxShadow = '0 0 0 3px rgba(94, 190, 126, 0.4)';
+    card.style.outline = '2px solid var(--green)';
+    setTimeout(() => {
+      card.style.boxShadow = '';
+      card.style.outline = '';
+    }, 2500);
+  }
+  const input = document.getElementById('newMemberEmail');
+  if (input && !input.disabled) {
+    setTimeout(() => {
+      input.focus();
+    }, 350);
+  }
+}
+
+function checkUrlActions() {
+  const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+  if (params.get('action') === 'invite' || params.get('action') === 'add-member' || params.get('action') === 'add_member' || hash === '#add-member' || hash === '#householdCard' || hash === '#members') {
+    setTimeout(focusAddMember, 250);
+  }
+}
 
 
 async function saveMarketingOptIn() {
