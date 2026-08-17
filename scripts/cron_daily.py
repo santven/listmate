@@ -156,6 +156,14 @@ def run_cron():
     else:
         print("No emails to send today.")
 
+    # Auto-categorize any uncategorized items
+    try:
+        from categorize import backfill_uncategorized_items
+        stats = backfill_uncategorized_items()
+        print(f"Auto-categorization sweep complete: {stats}")
+    except Exception as exc:
+        print(f"Auto-categorization sweep failed: {exc}")
+
 if __name__ == "__main__":
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Starting daily cron jobs...")
     run_cron()
