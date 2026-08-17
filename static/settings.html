@@ -1537,7 +1537,38 @@ function copyFeedbackId(id) {
   }
 }
 
-function openAdminTriageModal(id) {
+async function autoAnonymizeCurrentTriage() {
+  const id = document.getElementById('triageFeedbackId').value;
+  if (!id) return;
+  const btn = document.getElementById('btnAutoAnonymize');
+  const icon = document.getElementById('autoAnonIcon');
+  const text = document.getElementById('autoAnonText');
+  
+  if (btn) btn.disabled = true;
+  if (icon) icon.textContent = '⏳';
+  if (text) text.textContent = 'Sanitizing PII...';
+  
+  try {
+    const res = await fetch(`/api/admin/feedback/${id}/sanitize`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.sanitized) {
+      const s = data.sanitized;
+      document.getElementById('triagePublicTitle').value = s.public_title || '';
+      document.getElementById('triagePublicDescription').value = s.public_description || '';
+      if (s.public_type) {
+        document.getElementById('triagePublicType').value = s.public_type;
+      }
+    }
+  } catch (e) {
+    console.error("Auto-anonymize error:", e);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (icon) icon.textContent = '✨';
+    if (text) text.textContent = 'Auto-Anonymize & Clean PII (AI)';
+  }
+}
+
+async function openAdminTriageModal(id) {
   const item = adminFeedbackData.find(f => f.id === id);
   if (!item) return;
 
@@ -1545,14 +1576,22 @@ function openAdminTriageModal(id) {
   document.getElementById('triageFeedbackIdBadge').textContent = '#' + item.id;
   document.getElementById('triageUserEmail').textContent = item.user_email || 'Anonymous';
   document.getElementById('triageOriginalMessage').textContent = item.message || '';
-  document.getElementById('triagePublicTitle').value = item.public_title || (item.message ? item.message.slice(0, 60) : '');
-  document.getElementById('triagePublicDescription').value = item.public_description || item.message || '';
   document.getElementById('triagePublicType').value = item.public_type || (item.feedback_type === 'bug' ? 'bug' : 'feature');
   document.getElementById('triageStatus').value = item.status || 'planned';
   document.getElementById('triageGithubIssue').value = item.github_issue || '';
   document.getElementById('triageError').style.display = 'none';
 
   document.getElementById('adminTriageModal').classList.add('active');
+
+  if (item.public_title) {
+    document.getElementById('triagePublicTitle').value = item.public_title;
+    document.getElementById('triagePublicDescription').value = item.public_description || '';
+  } else {
+    document.getElementById('triagePublicTitle').value = '';
+    document.getElementById('triagePublicDescription').value = '';
+    // Auto-trigger PII stripping and clean title extraction on open
+    await autoAnonymizeCurrentTriage();
+  }
 }
 
 function closeAdminTriageModal() {
@@ -1901,12 +1940,22 @@ async function refreshData(showToast = true) {
     </div>
     <input type="hidden" id="triageFeedbackId">
 
-    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:16px;">
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px;">
       <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Original User Message (<span id="triageUserEmail"></span>)</div>
       <div id="triageOriginalMessage" style="font-size:13px; color:#334155; margin-top:4px; font-style:italic;"></div>
     </div>
 
-    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Public Roadmap Title *</label>
+    <div id="triagePiiNotice" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:8px 12px; margin-bottom:14px; font-size:12px; color:#166534; display:flex; align-items:center; gap:8px;">
+      <span style="font-size:14px;">🔒</span>
+      <span><strong>PII Protection Active:</strong> Personal names (e.g. Preethi, Lavanya), emails, phone numbers, and conversational chatter are automatically stripped.</span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <label style="font-size:13px; font-weight:700; color:var(--text); margin:0;">Public Roadmap Title *</label>
+      <button type="button" onclick="autoAnonymizeCurrentTriage()" id="btnAutoAnonymize" style="background:#eaf8ef; border:1px solid #bbf7d0; color:var(--green-dark); padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+        <span id="autoAnonIcon">✨</span> <span id="autoAnonText">Auto-Anonymize & Clean PII (AI)</span>
+      </button>
+    </div>
     <input type="text" id="triagePublicTitle" placeholder="e.g. Add recipe ingredient scaling by servings" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:14px;">
 
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Public Description</label>
