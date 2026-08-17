@@ -144,6 +144,8 @@ def _ensure_schema():
         try:
             from db_pg import init_db as init_store_db
             init_store_db()
+            from categorize import backfill_uncategorized_items
+            backfill_uncategorized_items()
         except Exception:
             pass
     except Exception:
@@ -1929,7 +1931,17 @@ def add_recipe_to_list_endpoint():
             ).fetchone()
 
             if cat_row:
-                category = cat_row["category"] if isinstance(cat_row, dict) else cat_row[0]
+                category = ((cat_row["category"] if isinstance(cat_row, dict) else cat_row[0]) or "").strip()
+                if not category:
+                    category = categorize(name)
+                    if category:
+                        try:
+                            db.execute(
+                                "UPDATE store_items SET category = ? WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                                (category, store_id, hhid, name),
+                            )
+                        except Exception:
+                            pass
             else:
                 category = (item.get("category") or "").strip()
                 if not category:
@@ -2263,14 +2275,21 @@ def add_store_item(store_id):
             return jsonify({"error": "store not found"}), 404
 
         existing = db.execute(
-            "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+            "SELECT id, category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
             (store_id, _hh(), name),
         ).fetchone()
         if existing:
-            # Update category if provided
+            # Update category if provided or auto-categorize if missing
             if category:
                 db.execute("UPDATE store_items SET category = ? WHERE id = ?", (category, existing["id"]))
                 db.commit()
+            else:
+                existing_cat = (existing["category"] if isinstance(existing, dict) else existing[1]) or ""
+                if not str(existing_cat).strip():
+                    new_cat = categorize(name)
+                    if new_cat:
+                        db.execute("UPDATE store_items SET category = ? WHERE id = ?", (new_cat, existing["id"]))
+                        db.commit()
             return jsonify({"ok": True, "existing": True, "id": existing["id"]})
 
         # Auto-categorize if not provided
@@ -2481,19 +2500,26 @@ def add_to_list():
             "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
             (store_id, _hh(), name),
         ).fetchone()
-        existing_category = (cat_row["category"] if cat_row else "")
+        existing_category = ((cat_row["category"] if cat_row else "") or "").strip()
 
-        if not cat_row:
-            # Auto-categorize new item
-            cat = categorize(name)
-            try:
-                db.execute(
-                    "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-                    (_hh(), store_id, name, cat),
-                )
-            except Exception:
-                pass
-            existing_category = cat
+        if not existing_category:
+            existing_category = categorize(name)
+            if not cat_row:
+                try:
+                    db.execute(
+                        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                        (_hh(), store_id, name, existing_category),
+                    )
+                except Exception:
+                    pass
+            elif existing_category:
+                try:
+                    db.execute(
+                        "UPDATE store_items SET category = ? WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                        (existing_category, store_id, _hh(), name),
+                    )
+                except Exception:
+                    pass
 
         quantity = (data.get("quantity") or "").strip()
         db.execute(
@@ -2779,12 +2805,18 @@ def move_list_item(item_id):
                 )
 
         # Also ensure the item exists in the target store's catalog for autocomplete
-        exists = db.execute("SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", 
+        exists = db.execute("SELECT id, category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", 
                             (target_store_id, _hh(), item["name"])).fetchone()
+        item_cat = (item.get("category") or "").strip() or categorize(item["name"])
         if not exists:
             db.execute(
                 "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
-                (_hh(), target_store_id, item["name"], item.get("category", "")),
+                (_hh(), target_store_id, item["name"], item_cat),
+            )
+        elif item_cat and not (exists.get("category") if isinstance(exists, dict) else exists[1]):
+            db.execute(
+                "UPDATE store_items SET category = ? WHERE id = ?",
+                (item_cat, exists["id"] if isinstance(exists, dict) else exists[0]),
             )
         
         db.commit()
@@ -2852,7 +2884,15 @@ def sync_offline_actions():
                                 "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
                                 (store_id, hh_id, name)
                             ).fetchone()
-                            existing_category = cat_row["category"] if cat_row else categorize(name)
+                            existing_category = ((cat_row["category"] if cat_row else "") or "").strip() or categorize(name)
+                            if cat_row and not (cat_row["category"] or "").strip() and existing_category:
+                                try:
+                                    db.execute(
+                                        "UPDATE store_items SET category = ? WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                                        (existing_category, store_id, hh_id, name)
+                                    )
+                                except Exception:
+                                    pass
                             db.execute(
                                 "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
                                 (hh_id, store_id, name, existing_category, quantity, display_name)

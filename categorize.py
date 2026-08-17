@@ -24,23 +24,26 @@ CATEGORY_KEYWORDS = {
     ],
     # ── Health & Personal Care ──
     "Health & Personal Care": [
+        "psyllium", "psyllium husk", "optifiber", "fiber supplement", "dietary fiber",
+        "greens powder", "super greens powder", "supergreens powder", "supergreen powder",
         "vitamin", "multivitamin", "supplement", "creatine", "protein powder", "whey",
         "bcaa", "pre workout", "collagen", "biotin", "calcium", "magnesium", "probiotic",
         "omega 3", "fish oil", "zinc", "iron supplement", "one a day", "centrum",
         "nature made", "airborne", "emergen-c", "advil", "tylenol", "aspirin", "ibuprofen",
-        "band aid", "bandage", "first aid", "medicine", "pill", "cough drop",
-        "toothpaste", "toothbrush", "dental floss", "mouthwash", "shampoo", "conditioner",
-        "body wash", "soap", "deodorant", "lotion", "sunscreen", "razor", "shaving",
-        "tampon", "pad", "diaper", "baby wipes", "hand sanitizer",
+        "band aid", "bandaid", "bandage", "first aid", "medicine", "pill", "cough drop",
+        "cough syrup", "antacid", "tums", "pepto", "electrolyte powder",
     ],
     # ── Produce: Top-level for produce section ──
     "Produce": [
+        # Tofu / Plant proteins
+        "silken tofu", "firm tofu", "extra firm tofu", "tofu", "tempeh", "seitan",
         # Vegetables
         "onion", "tomato", "potato", "ginger", "garlic", "carrot", "cucumber",
         "spinach", "kale", "lettuce", "arugula", "chard", "collard", "bok choy",
         "broccoli", "cauliflower", "cabbage", "brussels sprout", "asparagus",
-        "celery", "bell pepper", "capsicum", "jalapeno", "serrano", "habanero",
-        "chili", "chilli", "green bean", "okra", "bhindi", "lady finger",
+        "celery", "bell pepper", "green pepper", "red pepper", "yellow pepper",
+        "sweet pepper", "chili pepper", "pepper", "capsicum", "jalapeno", "serrano", "habanero",
+        "poblano", "anaheim", "chili", "chilli", "green bean", "okra", "bhindi", "lady finger",
         "eggplant", "brinjal", "aubergine", "zucchini", "squash", "pumpkin",
         "sweet potato", "yam", "radish", "mooli", "daikon", "turnip",
         "beet", "beetroot", "corn", "maize", "peas", "mushroom",
@@ -52,26 +55,29 @@ CATEGORY_KEYWORDS = {
         "fennel bulb", "artichoke", "taro", "arbi", "colocasia",
         "water chestnut", "singhara", "lotus stem", "kamal kakdi",
         "jackfruit", "raw banana", "plantain", "vazhakkai",
+        "scallion", "green onion", "spring onion", "shallot",
+        "sprout", "bean sprout", "alfalfa", "microgreen", "supergreen", "supergreens", "spring mix",
         # Fresh herbs
-        "cilantro", "coriander leaf", "mint", "pudina", "basil", "tulsi",
-        "curry leaf", "kariveppilai", "dill", "parsley", "rosemary",
-        "thyme", "sage", "oregano", "chive", "lemongrass",
+        "cilantro", "coriander leaf", "coriander leaves", "mint", "pudina", "basil", "tulsi",
+        "curry leaf", "curry leaves", "kariveppilai", "dill", "parsley", "rosemary",
+        "thyme", "sage", "oregano", "chive", "lemongrass", "tarragon",
         # Fruit
         "apple", "banana", "orange", "grape", "mango", "pineapple",
         "watermelon", "cantaloupe", "honeydew", "melon", "papaya", "guava",
         "pomegranate", "anar", "kiwi", "peach", "plum", "nectarine",
         "apricot", "pear", "cherry", "strawberry", "blueberry", "raspberry",
-        "blackberry", "cranberry", "fig", "date", "lychee", "rambutan",
+        "blackberry", "cranberry", "berry", "gooseberry", "mulberry",
+        "fig", "date", "lychee", "rambutan",
         "dragon fruit", "star fruit", "custard apple", "sitaphal",
-        "sapota", "chikoo", "jackfruit", "tender coconut",
+        "sapota", "chikoo", "tender coconut",
         "lemon", "lime", "nimbu", "avocado", "coconut",
     ],
 
     # ── Dairy ──
     "Dairy": [
         "milk", "butter", "ghee", "yogurt", "curd", "dahi", "yoghurt",
-        "buttermilk", "chaas", "moru", "cream", "sour cream", "half and half",
-        "whipped cream", "heavy cream", "cream cheese", "creamcheese",
+        "buttermilk", "chaas", "moru", "ice cream", "whipped cream", "heavy cream", "sour cream", "half and half",
+        "cream cheese", "creamcheese",
         "cheese", "cheddar", "mozzarella", "parmesan", "swiss", "feta",
         "ricotta", "mascarpone", "brie", "gouda", "paneer",
         "cottage cheese", "cottagecheese", "queso", "monterey jack",
@@ -94,11 +100,14 @@ CATEGORY_KEYWORDS = {
         "danish", "donut", "doughnut", "pastry", "cake", "cupcake",
         "pie crust", "pie shell", "pizza dough", "pizza base",
         "breadcrumb", "bread crumb", "crouton", "stuffing",
-        "sandwich bread", "sandwich loaf", "rusk", "biscotti", "oatnut", "brownberry", "dave's killer", "nature's own", "arnold", "wonder bread",
+        "sandwich bread", "sandwich loaf", "rusk", "biscotti",
+        "oatnut", "brownberry", "dave's killer", "nature's own", "arnold", "wonder bread",
     ],
 
     # ── Legumes & Grains ──
     "Legumes & Grains": [
+        "cereal", "cereals", "cheerios", "kellogg", "kelloggs", "corn flakes",
+        "granola", "muesli", "rice krispies", "special k",
         "chickpea", "chana", "chole", "channa", "garbanzo",
         "dal", "dhal", "lentil", "toor", "tuvar", "arhar",
         "moong", "mung", "masoor", "urad", "urid", "udad",
@@ -123,30 +132,30 @@ CATEGORY_KEYWORDS = {
 
     # ── Spices & Seasonings ──
     "Spices & Seasonings": [
-        "turmeric", "haldi", "cumin", "jeera", "coriander powder",
+        "coriander seed", "coriander seeds", "cumin seed", "mustard seed",
+        "fenugreek seed", "fennel seed", "carom seed", "nigella seed", "sesame seed",
+        "poppy seed", "turmeric", "haldi", "cumin", "jeera", "coriander powder",
         "dhania", "chili powder", "red chili", "kashmiri chili",
         "garam masala", "sambar powder", "rasam powder", "curry powder",
-        "mustard seed", "rai", "sarson", "fenugreek seed", "methi seed",
+        "rai", "sarson", "methi seed",
         "asafoetida", "hing", "cardamom", "elaichi", "cinnamon", "dalchini",
         "clove", "laung", "black pepper", "kali mirch", "peppercorn",
         "nutmeg", "jaiphal", "mace", "javitri", "star anise",
-        "bay leaf", "tej patta", "fennel seed", "saunf",
-        "carom seed", "ajwain", "nigella seed", "kalonji",
-        "poppy seed", "khus khus", "sesame seed", "til",
-        "tamarind", "imli", "kokum", "amchur", "dry mango powder",
+        "bay leaf", "tej patta", "saunf", "ajwain", "kalonji",
+        "khus khus", "til", "tamarind", "imli", "kokum", "amchur", "dry mango powder",
         "chaat masala", "pav bhaji masala", "chole masala",
         "biryani masala", "tandoori masala", "kitchen king",
-        "salt", "pink salt", "black salt", "kala namak", "sea salt",
+        "salt", "pink salt", "black salt", "kala namak", "sea salt", "kosher salt",
         "vanilla extract", "vanilla essence", "baking powder",
         "baking soda", "yeast", "gelatin", "agar agar",
         "cocoa powder", "chocolate chip", "sprinkle",
-        "oregano", "italian seasoning", "paprika", "cayenne",
+        "italian seasoning", "paprika", "cayenne",
         "five spice", "szechuan", "soy sauce", "vinegar",
         "balsamic", "apple cider vinegar", "rice vinegar",
         "worcestershire", "fish sauce", "oyster sauce",
         "olive oil", "vegetable oil", "canola oil", "sunflower oil",
         "coconut oil", "sesame oil", "mustard oil", "peanut oil",
-        "cooking spray", "pam", "avocado oil", "grapeseed oil",
+        "cooking spray", "pam", "avocado oil", "grapeseed oil", "oil", "cooking oil",
     ],
 
     # ── Snacks & Sweets ──
@@ -155,11 +164,11 @@ CATEGORY_KEYWORDS = {
         "pretzel", "popcorn", "cracker", "rice cake", "granola bar",
         "protein bar", "energy bar", "candy", "chocolate", "gummy",
         "cookie", "biscuit", "wafer", "namkeen", "bhujia", "sev",
-        "mixture", "chakli", "murukku", "khakhra", "chivda",
+        "mixture", "chakli", "murukku", "khakhra",
         "samosa", "pakora", "vada", "khaman", "dhokla",
         "halwa", "laddu", "ladoo", "barfi", "burfi", "jalebi",
         "gulab jamun", "rasgulla", "peda", "kaju katli", "mysore pak",
-        "soan papdi", "petha", "sandesh", "kheer mix", "ice cream",
+        "soan papdi", "petha", "sandesh", "kheer mix",
         "gelato", "sorbet", "frozen yogurt", "popsicle", "kulfi",
         "falooda", "cake mix", "brownie mix", "pancake mix",
         "jam", "jelly", "marmalade", "preserve", "honey",
@@ -174,16 +183,15 @@ CATEGORY_KEYWORDS = {
         "water", "sparkling water", "soda", "seltzer", "club soda",
         "tonic", "juice", "orange juice", "apple juice", "cranberry juice",
         "lemonade", "smoothie", "milkshake", "protein shake",
-        "coconut water", "buttermilk", "lassi",
+        "coconut water",
         "soft drink", "coke", "pepsi", "sprite", "ginger ale",
         "kombucha", "beer", "wine", "liquor", "spirit",
-        "almond milk", "soy milk", "oat milk", "coconut milk",
         "electrolyte", "gatorade", "powerade", "pedia",
     ],
 
     # ── Frozen ──
     "Frozen": [
-        "frozen", "freezer", "ice cream", "frozen vegetable", "frozen fruit",
+        "frozen", "freezer", "frozen vegetable", "frozen fruit",
         "frozen pizza", "frozen dinner", "frozen meal", "frozen paratha",
         "frozen naan", "frozen roti", "frozen paneer", "frozen samosa",
         "frozen peas", "frozen corn", "frozen spinach", "frozen okra",
@@ -194,20 +202,20 @@ CATEGORY_KEYWORDS = {
 
     # ── Household ──
     "Household": [
-        "toothpaste", "toothbrush", "floss", "mouthwash", "mouth wash",
-        "shampoo", "conditioner", "body wash", "soap", "hand soap",
-        "dish soap", "dishwasher", "detergent", "laundry", "fabric softener",
-        "bleach", "cleaner", "cleaning", "wipe", "disinfectant",
-        "paper towel", "tissue", "toilet paper", "kleenex", "napkin",
-        "trash bag", "garbage bag", "ziploc", "foil", "aluminum foil",
-        "plastic wrap", "cling wrap", "parchment paper", "wax paper",
-        "sponge", "scrub", "broom", "mop", "duster", "glove",
-        "battery", "light bulb", "air freshener", "candle",
-        "hand sanitizer", "sanitizer", "lotion", "sunscreen", "sunscreen",
-        "deodorant", "razor", "shaving", "tampon", "pad", "diaper", "wipe",
-        "toothpaste", "toothbrush", "dental", "mouth wash", "mouthwash",
-        "cotton ball", "cotton swab", "q tip", "band aid", "bandaid",
-        "first aid", "medicine", "vitamin", "supplement", "pill",
+        "lizol", "oxiclean", "stain remover", "reusable cup", "paper cup", "plastic cup",
+        "paper plate", "plastic cutlery", "napkin", "paper towel", "tissue",
+        "toilet paper", "kleenex", "trash bag", "garbage bag", "ziploc",
+        "foil", "aluminum foil", "plastic wrap", "cling wrap", "parchment paper",
+        "wax paper", "sponge", "scrub", "scrubber", "broom", "mop", "duster",
+        "glove", "rubber gloves", "battery", "light bulb", "air freshener", "candle",
+        "dish soap", "dishwasher", "dishwasher pod", "detergent", "laundry",
+        "fabric softener", "bleach", "cleaner", "cleaning spray", "wipe",
+        "disinfectant", "lysol", "clorox", "windex", "tide", "dawn",
+        "toothpaste", "toothbrush", "dental floss", "floss", "mouthwash", "mouth wash",
+        "shampoo", "conditioner", "body wash", "soap", "hand soap", "bar soap",
+        "hand sanitizer", "sanitizer", "lotion", "body lotion", "sunscreen",
+        "deodorant", "razor", "shaving", "shaving cream", "shaving foam", "shaving gel",
+        "tampon", "pad", "diaper", "baby wipes", "cotton ball", "cotton swab", "q tip",
     ],
 
     # ── Dips & Spreads ──
@@ -229,11 +237,11 @@ CATEGORY_KEYWORDS = {
     "Canned & Jarred": [
         "canned", "can ", "tinned", "tin ", "canned tomato", "canned bean",
         "canned corn", "canned tuna", "canned soup", "canned fruit",
-        "coconut cream", "coconut milk", "jarred", "jar ",
+        "coconut cream", "jarred", "jar ",
         "pasta sauce", "marinara", "tomato sauce", "tomato paste",
         "artichoke heart", "olive", "caper", "sundried tomato",
-        "roasted red pepper", "pickle", "pickled", "gherkin",
-        "sauerkraut", "kimchi", "bamboo shoot", "water chestnut",
+        "roasted red pepper", "pickled", "gherkin",
+        "sauerkraut", "kimchi", "bamboo shoot",
         "baby corn", "curry paste", "thai paste", "red curry",
         "green curry", "miso", "doenjang", "gochujang",
     ],
@@ -241,10 +249,9 @@ CATEGORY_KEYWORDS = {
     # ── Nuts & Seeds ──
     "Nuts & Seeds": [
         "almond", "cashew", "walnut", "pecan", "pistachio", "macadamia",
-        "brazil nut", "hazelnut", "pine nut", "peanut", "mungfali",
+        "brazil nut", "hazelnut", "pine nut", "peanut", "jumbo peanut", "mungfali",
         "sunflower seed", "pumpkin seed", "chia seed", "flax seed",
-        "hemp seed", "hemp heart", "sesame seed", "til", "poppy seed",
-        "khus khus", "watermelon seed", "muskmelon seed",
+        "hemp seed", "hemp heart", "watermelon seed", "muskmelon seed",
         "trail mix", "mixed nut", "roasted chana", "bhuna chana",
         "fox nut", "makhana", "lotus seed", "phool makhana",
     ],
@@ -257,98 +264,200 @@ CATEGORY_KEYWORDS = {
         "bisi bele bath", "puliyogare", "lemon rice", "tamarind rice",
         "coconut rice", "curd rice", "thayir sadam", "bisibelebath",
         "sambar", "rasam", "kadhi", "moru curry", "avial",
-        "poriyal", "thoran", "kootu", "pachadi", "raita",
+        "poriyal", "thoran", "kootu", "pachadi",
         "papad", "appalam", "vadam", "vathal", "fryum",
         "moringa powder", "drumstick leaf powder", "sathu maavu",
         "health mix", "kanji", "porridge", "ragi malt",
         "pani puri", "golgappa", "sev puri", "bhel puri", "dahi puri",
-        "pani puri kit", "chaat kit", "chaat", "pani",
-        "ghee", "nei", "jaggery", "gud", "vellam",
-        "coconut", "nariyal", "thengai", "desiccated coconut",
+        "pani puri kit", "chaat kit", "chaat",
+        "jaggery", "gud", "vellam",
+        "nariyal", "thengai", "desiccated coconut",
         "kobbari", "copra", "grated coconut", "coconut milk powder",
-        "kolam", "jaggery", "sugar candy", "kalkandu", "palm sugar",
+        "kolam", "sugar candy", "kalkandu", "palm sugar",
         "vathakuzhambu", "kara kuzhambu", "puli kuzhambu",
         "molagai podi", "gunpowder", "idli podi", "milagai podi",
     ],
 }
+
+# ── Irregular plurals and stemming table ──
+IRREGULAR_PLURALS = {
+    'leaves': 'leaf', 'halves': 'half', 'loaves': 'loaf', 'knives': 'knife',
+    'tomatoes': 'tomato', 'potatoes': 'potato', 'mangoes': 'mango',
+    'berries': 'berry', 'cherries': 'cherry', 'strawberries': 'strawberry',
+    'blueberries': 'blueberry', 'raspberries': 'raspberry', 'blackberries': 'blackberry',
+    'cranberries': 'cranberry', 'radishes': 'radish', 'sausages': 'sausage',
+    'cheeses': 'cheese', 'cookies': 'cookie', 'pastries': 'pastry',
+    'jellies': 'jelly', 'candies': 'candy', 'batteries': 'battery',
+    'wipes': 'wipe', 'cloths': 'cloth', 'spices': 'spice', 'peppers': 'pepper',
+    'greens': 'green', 'chips': 'chip', 'crisps': 'crisp', 'eggs': 'egg',
+    'seeds': 'seed', 'cups': 'cup', 'plates': 'plate', 'bowls': 'bowl',
+    'bags': 'bag', 'rolls': 'roll', 'buns': 'bun', 'nuts': 'nut',
+    'peanuts': 'peanut', 'almonds': 'almond', 'cashews': 'cashew',
+    'walnuts': 'walnut', 'pistachios': 'pistachio', 'oats': 'oat',
+    'noodles': 'noodle', 'beans': 'bean', 'lentils': 'lentil',
+    'peas': 'pea', 'sprouts': 'sprout', 'grapes': 'grape',
+    'apples': 'apple', 'bananas': 'banana', 'oranges': 'orange',
+    'lemons': 'lemon', 'limes': 'lime', 'onions': 'onion',
+    'carrots': 'carrot', 'cucumbers': 'cucumber', 'mushrooms': 'mushroom',
+    'crackers': 'cracker', 'vitamins': 'vitamin', 'supplements': 'supplement',
+    'pills': 'pill', 'drops': 'drop', 'herbs': 'herb', 'cloves': 'clove'
+}
+
+def stem_word(w):
+    """Normalize English plurals and word inflections to singular root."""
+    w = w.lower().strip()
+    if not w:
+        return ""
+    if w in IRREGULAR_PLURALS:
+        return IRREGULAR_PLURALS[w]
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith("ves"):
+        return w[:-3] + "f"
+    if len(w) > 3 and w.endswith("oes"):
+        return w[:-2]
+    if len(w) > 4 and (w.endswith("shes") or w.endswith("ches") or w.endswith("xes") or w.endswith("zes") or w.endswith("sses")):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]
+    return w
+
+def stem_phrase(phrase):
+    """Stem each individual word token in a phrase."""
+    words = re.findall(r'[a-zA-Z0-9]+', phrase.lower())
+    return " ".join(stem_word(w) for w in words if w)
 
 # ── Compile matchers ──
 
 def _normalize(name):
     return name.lower().strip()
 
-_compiled = None
+_global_matchers = None
 
-def get_matchers():
-    """Return list of (category, pattern_list). Lazily compiled."""
-    global _compiled
-    if _compiled is None:
-        _compiled = []
+def get_global_matchers():
+    """Return flat list of (keyword, category, keyword_stemmed, is_multiword) sorted by length descending."""
+    global _global_matchers
+    if _global_matchers is None:
+        _global_matchers = []
         for cat, keywords in CATEGORY_KEYWORDS.items():
-            # Sort by length desc so "frozen yogurt" matches before "yogurt"
-            patterns = []
-            for kw in sorted(keywords, key=lambda x: -len(x)):
-                patterns.append(kw)  # keep as plain string
-            _compiled.append((cat, patterns))
-    return _compiled
+            for kw in keywords:
+                kw_clean = kw.lower().strip()
+                kw_stem = stem_phrase(kw_clean)
+                is_multi = (" " in kw_clean) or (" " in kw_stem)
+                _global_matchers.append((kw_clean, cat, kw_stem, is_multi))
+        # Sort so longest phrases match before substrings (e.g. 'shaving cream' before 'cream')
+        _global_matchers.sort(key=lambda item: (-len(item[0]), not item[3]))
+    return _global_matchers
+
+
+def _match_kw(kw, text):
+    """Check if keyword matches in text either as exact token or substring for longer terms."""
+    if len(kw) <= 4 or " " not in kw:
+        return bool(re.search(r'\b' + re.escape(kw) + r'\b', text))
+    return bool(re.search(r'\b' + re.escape(kw), text)) or (kw in text)
 
 
 def categorize(name):
     """Return category string or '' for unmatched."""
-    name = _normalize(name)
+    if not name or not name.strip():
+        return ""
 
-    # Strip common prefixes that don't help matching
-    name_stripped = re.sub(r'^organic\s+', '', name)
+    raw_norm = _normalize(name)
+    stemmed_norm = stem_phrase(name)
 
-    # ── Priority rules: check frozen/canned/beverage prefixes first ──
-    if any(w in name_stripped for w in ("frozen",)):
-        # Check if it's a frozen dessert (ice cream etc)
+    # ── Priority 1: Frozen ──
+    if "frozen" in raw_norm or "frozen" in stemmed_norm:
         for ice_w in ("ice cream", "gelato", "sorbet", "frozen yogurt", "kulfi", "popsicle"):
-            if ice_w in name_stripped:
-                return "Dairy" if ice_w in ("frozen yogurt", "kulfi") else "Snacks & Sweets"
+            if ice_w in raw_norm or ice_w in stemmed_norm:
+                return "Dairy" if ice_w in ("frozen yogurt", "kulfi", "ice cream") else "Snacks & Sweets"
         return "Frozen"
 
-    if any(w in name_stripped for w in ("canned", "canned ", "tin ", "tinned")):
-        # Check if canned fruit/veg → still Canned
+    # ── Priority 2: Canned & Jarred ──
+    if any(w in raw_norm for w in ("canned", "canned ", "tinned", "tin ")) or any(w in stemmed_norm for w in ("canned", "tinned")):
         return "Canned & Jarred"
 
-    # Beverage-specific keywords check before produce/juice confusion
-    # But NOT if it's a dairy/protein drink
-    is_dairy_drink = any(w in name_stripped for w in ("protein yogurt", "protein yoghurt", "yogurt drink",
-        "lassi", "buttermilk", "kefir", "skyr", "probiotic", "milk", "yoghurt drink"))
-    def _match_kw(kw, text):
-        if len(kw) <= 4:
-            return bool(re.search(r'\b' + re.escape(kw) + r'\b', text))
-        return kw in text
+    # ── Priority 3: Dips & Sauces ──
+    if "pasta sauce" in raw_norm or "marinara" in raw_norm or "tomato sauce" in raw_norm:
+        return "Canned & Jarred"
+    if any(w in raw_norm.split() or w in stemmed_norm.split() for w in ("pickle", "achar", "thokku", "chutney", "salsa", "pesto", "tapenade", "hummus", "guacamole", "tzatziki")):
+        return "Dips & Spreads"
 
-    if not is_dairy_drink and any(_match_kw(w, name_stripped) for w in ("juice", "soda", "coke", "pepsi", "sprite", "seltzer",
+    # ── Priority 4: Head-noun check (e.g. 'berry cereal' -> Cereal, 'apple cider vinegar' -> Vinegar, 'banana bread' -> Bakery) ──
+    last_word = stemmed_norm.split()[-1] if stemmed_norm else ""
+    if last_word in ("cereal", "cheerios", "granola", "muesli", "oatmeal"):
+        return "Legumes & Grains"
+    if last_word in ("bread", "bagel", "croissant", "muffin", "cake", "cupcake", "pastry", "pie", "roti", "naan", "tortilla", "bun", "roll"):
+        return "Bakery"
+    if last_word in ("chip", "crisp", "cracker", "popcorn", "cookie", "biscuit", "pretzel"):
+        return "Snacks & Sweets"
+    if last_word in ("juice", "soda", "lemonade", "smoothie", "tea", "coffee", "latte", "cappuccino", "kombucha", "cider"):
+        return "Beverages"
+    if last_word in ("vinegar", "oil", "salt", "sauce"):
+        if "pasta" in stemmed_norm or "marinara" in stemmed_norm or "tomato" in stemmed_norm:
+            return "Canned & Jarred"
+        return "Spices & Seasonings"
+
+    # ── Priority 5: Beverages vs Dairy Drinks ──
+    is_dairy_drink = any(w in raw_norm or w in stemmed_norm for w in (
+        "protein yogurt", "protein yoghurt", "yogurt drink", "lassi",
+        "buttermilk", "kefir", "skyr", "milk", "yoghurt drink"
+    ))
+    if not is_dairy_drink and any(_match_kw(w, raw_norm) or _match_kw(w, stemmed_norm) for w in (
+        "juice", "soda", "coke", "pepsi", "sprite", "seltzer",
         "lemonade", "smoothie", "beer", "wine", "liquor", "kombucha",
         "coffee", "tea", "chai", "espresso", "latte", "cappuccino",
         "water", "gatorade", "powerade", "tonic", "ginger ale",
-        "coconut water", "sambar", "protein shake",
-        "electrolyte", "soft drink", "cola", "pepsi", "coke", "dr pepper",
-        "mountain dew", "fanta", "sprite", "coca", "7up", "root beer")):
+        "coconut water", "soft drink", "cola", "dr pepper",
+        "mountain dew", "fanta", "coca", "7up", "root beer"
+    )):
         return "Beverages"
 
-    # Tortilla chips → Snacks (not bakery — tortilla alone is bakery)
-    if "tortilla chip" in name_stripped or "tortilla crisps" in name_stripped:
-        return "Snacks & Sweets"
+    # ── Global Sorted Keyword Matching (Multi-word & Longest first) ──
+    matchers = get_global_matchers()
+    for kw_clean, cat, kw_stem, is_multi in matchers:
+        if _match_kw(kw_clean, raw_norm) or _match_kw(kw_stem, stemmed_norm) or _match_kw(kw_clean, stemmed_norm):
+            return cat
 
-    # Pasta sauce → Canned (not legumes from "pasta")
-    if "pasta sauce" in name_stripped or "marinara" in name_stripped or "tomato sauce" in name_stripped:
-        return "Canned & Jarred"
-
-    # "pickle" / "achar" as in Indian pickles → Dips & Spreads (not produce)
-    if any(w in name_stripped for w in ("pickle", "achar", "thokku",
-        "chutney", "jam", "jelly", "marmalade", "preserve",
-        "salsa", "pesto", "tapenade")):
-        return "Dips & Spreads"
-
-    for cat, keywords in get_matchers():
-        for kw in keywords:
-            if _match_kw(kw, name_stripped):
+    # ── Fallback Token-Level Check ──
+    # Clean leading brand prefixes/noise words and test root words
+    noise_prefixes = r'^(organic|fresh|raw|pure|natural|all natural|whole|sliced|diced|chopped|shredded|crushed|ground|silken|firm|extra firm|soft|jumbo|large|small|medium|mini|baby|swad|deep|laxmi|patak|kellogg|kelloggs|quaker|nestle|heinz|kraft|trader joe|trader joes|kirkland|great value|365|simple truth|good & gather|v patel & sons inc)\s+'
+    cleaned_stemmed = re.sub(noise_prefixes, '', stemmed_norm).strip()
+    if cleaned_stemmed != stemmed_norm:
+        for kw_clean, cat, kw_stem, is_multi in matchers:
+            if _match_kw(kw_clean, cleaned_stemmed) or _match_kw(kw_stem, cleaned_stemmed):
                 return cat
+
     return ""
+
+
+def backfill_uncategorized_items():
+    """Auto-categorize any existing store_items and list_items in PostgreSQL that currently lack a category."""
+    updated_store = 0
+    updated_list = 0
+    try:
+        import db_pg
+        db = db_pg.get_db()
+
+        # 1. Update store_items
+        store_rows = db.execute("SELECT id, name FROM store_items WHERE category IS NULL OR TRIM(category) = ''").fetchall()
+        for r in store_rows:
+            cat = categorize(r["name"])
+            if cat:
+                db.execute("UPDATE store_items SET category = ? WHERE id = ?", (cat, r["id"]))
+                updated_store += 1
+
+        # 2. Update list_items
+        list_rows = db.execute("SELECT id, name FROM list_items WHERE category IS NULL OR TRIM(category) = ''").fetchall()
+        for r in list_rows:
+            cat = categorize(r["name"])
+            if cat:
+                db.execute("UPDATE list_items SET category = ? WHERE id = ?", (cat, r["id"]))
+                updated_list += 1
+
+        db.commit()
+    except Exception as e:
+        print(f"[categorize] Error running backfill_uncategorized_items: {e}")
+    return {"store_items_updated": updated_store, "list_items_updated": updated_list}
 
 
 # ── Tests ──
@@ -357,6 +466,7 @@ if __name__ == "__main__":
         ("Toothpaste", "Household"),
         ("A2 Milk", "Dairy"),
         ("Egg", "Dairy"),
+        ("Eggs", "Dairy"),
         ("Egg Whites", "Dairy"),
         ("Onion", "Produce"),
         ("Spinach", "Produce"),
@@ -369,6 +479,7 @@ if __name__ == "__main__":
         ("Turmeric Powder", "Spices & Seasonings"),
         ("Cumin", "Spices & Seasonings"),
         ("Olive Oil", "Spices & Seasonings"),
+        ("Oil", "Spices & Seasonings"),
         ("Frozen Peas", "Frozen"),
         ("Ice Cream", "Dairy"),  # ice cream is dairy before frozen
         ("Dish Soap", "Household"),
@@ -390,6 +501,7 @@ if __name__ == "__main__":
         ("Ghee", "Dairy"),
         ("Frozen Paratha", "Frozen"),
         ("Lays Chips", "Snacks & Sweets"),
+        ("Chips", "Snacks & Sweets"),
         ("Coca Cola", "Beverages"),
         ("Orange Juice", "Beverages"),
         ("Naan", "Bakery"),
@@ -402,6 +514,33 @@ if __name__ == "__main__":
         ("Cheddar Cheese", "Dairy"),
         ("Salsa", "Dips & Spreads"),
         ("Tortilla Chips", "Snacks & Sweets"),
+        ("Green pepper", "Produce"),
+        ("Green Peppers", "Produce"),
+        ("Tofu", "Produce"),
+        ("tofu", "Produce"),
+        ("Silken Tofu", "Produce"),
+        ("Psyllium Husk", "Health & Personal Care"),
+        ("Kelloggs Berries cereal", "Legumes & Grains"),
+        ("Cherries", "Produce"),
+        ("Fresh basil leaves", "Produce"),
+        ("Carrot", "Produce"),
+        ("Lizol", "Household"),
+        ("berries", "Produce"),
+        ("Berries", "Produce"),
+        ("Coriander seeds", "Spices & Seasonings"),
+        ("Optifiber", "Health & Personal Care"),
+        ("Oxiclean", "Household"),
+        ("Curry leaves", "Produce"),
+        ("Curry Leaves", "Produce"),
+        ("Zena Super Greens Powder", "Health & Personal Care"),
+        ("Stain remover", "Household"),
+        ("Reusable cups", "Household"),
+        ("Strawberries", "Produce"),
+        ("Blueberries", "Produce"),
+        ("V Patel & Sons Inc Swad, Jumbo Peanuts", "Nuts & Seeds"),
+        ("Shaving cream", "Household"),
+        ("PANEER", "Dairy"),
+        ("Test", ""),
         ("Unknown Gourmet Item", ""),
     ]
 
@@ -409,8 +548,8 @@ if __name__ == "__main__":
     ok = 0
     for name, expected in tests:
         result = categorize(name)
-        status = "✅" if result == expected else f"❌ (got '{result}')"
+        status = "✅" if result == expected else f"❌ (expected '{expected}', got '{result}')"
         if result == expected:
             ok += 1
-        print(f"  {status:20} {name:30} → {result}")
+        print(f"  {status:35} {name:38} → {result}")
     print(f"\n{ok}/{len(tests)} passed")
