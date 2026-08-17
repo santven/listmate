@@ -225,7 +225,8 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
-        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''"
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
+        "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')"
     ]:
         try:
             _run(stmt)
@@ -532,23 +533,40 @@ def register_auth_routes(app):
             _init_schema()
 
             user = None
-            if email:
-                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+            if apple_sub:
+                user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE apple_id = ?", (apple_sub,))
+            if not user and email:
+                user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
             if not user:
-                user = _one(f"SELECT id, google_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
+                user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
 
+            is_new_user = False
             if not user:
-                _run(f"INSERT INTO {_USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)",
-                     (gid_alias, email, name))
-                user = _one(f"SELECT id, email, name, household_id, google_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
+                is_new_user = True
+                _run(f"INSERT INTO {_USERS} (google_id, apple_id, email, name, household_id) VALUES (?,?,?,?,0)",
+                     (gid_alias, apple_sub, email, name))
+                user = _one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {_USERS} WHERE apple_id = ? OR google_id = ?", (apple_sub, gid_alias))
 
-            if user and not user.get("apple_id"):
+            if user and (not user.get("apple_id") or user.get("apple_id") == ""):
                 try:
                     _run(f"UPDATE {_USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
+                    user["apple_id"] = apple_sub
                 except Exception: pass
 
+            uid = user["id"]
             hh_id = user.get("household_id", 0) if user else 0
             hh_name = ""
+
+            if not is_new_user and hh_id == 0:
+                owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                if owned:
+                    hh_id = owned["household_id"]
+                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                else:
+                    mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                    if mem:
+                        hh_id = mem["household_id"]
+                        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
 
             if not hh_id:
                 hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
@@ -599,6 +617,27 @@ def register_auth_routes(app):
             resp["user"] = get_display_name().split(" ")[0].lower()
             uid = get_user_id()
             hh_id = get_household_id()
+            
+            # Auto-heal household_id if zero but user belongs to a household
+            if (not hh_id or hh_id == 0) and uid:
+                _init_schema()
+                owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                if owned:
+                    hh_id = owned["household_id"]
+                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                    hh_row = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+                    _set(uid, get_email(), get_display_name(), hh_id, hh_row.get("name", "") if hh_row else "")
+                else:
+                    mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                    if mem:
+                        hh_id = mem["household_id"]
+                        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                        hh_row = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+                        _set(uid, get_email(), get_display_name(), hh_id, hh_row.get("name", "") if hh_row else "")
+
+            resp["household_id"] = hh_id or 0
+            resp["household_name"] = get_household_name()
+            resp["needs_signup"] = bool(not hh_id or hh_id == 0)
             is_prem = False
             if hh_id:
                 _init_schema()
@@ -788,7 +827,9 @@ def register_auth_routes(app):
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
-        if not hname: return jsonify({"error": "household_name required"}), 400
+        if not hname:
+            user_name = (user.get("name") or "").strip() or (user.get("email", "").split("@")[0] if user.get("email") else "My")
+            hname = f"{user_name}'s Household" if not user_name.lower().endswith("household") else user_name
         
         import secrets
         code = secrets.token_hex(4).upper()
@@ -803,6 +844,7 @@ def register_auth_routes(app):
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
+        _seed_stores(hhid)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
 
 

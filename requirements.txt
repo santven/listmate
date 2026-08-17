@@ -10,3 +10,4 @@ PyJWT>=2.0.0
 Flask-Limiter
 firebase-admin
 python-dotenv
+boto3

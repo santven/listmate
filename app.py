@@ -237,18 +237,39 @@ def login_page():
                     
                     gid_alias = f"apple_{apple_sub}"
                     user = None
-                    if email:
-                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+                    if apple_sub:
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE apple_id = ?", (apple_sub,))
+                    if not user and email:
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
                     if not user:
-                        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                         
+                    is_new_user = False
                     if not user:
-                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid_alias, email, name))
-                        user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
+                        is_new_user = True
+                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, apple_id, email, name, household_id) VALUES (?,?,?,?,0)", (gid_alias, apple_sub, email, name))
+                        user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE apple_id = ? OR google_id = ?", (apple_sub, gid_alias))
+                    
+                    if user and (not user.get("apple_id") or user.get("apple_id") == ""):
+                        try:
+                            authmod._run(f"UPDATE {authmod._USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
+                            user["apple_id"] = apple_sub
+                        except Exception: pass
                     
                     if user:
-                        hh_id = user.get("household_id", 0)
+                        uid = user["id"]
+                        hh_id = user.get("household_id", 0) or 0
                         hh_name = ""
+                        if not is_new_user and hh_id == 0:
+                            owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                            if owned:
+                                hh_id = owned["household_id"]
+                                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                            else:
+                                mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                                if mem:
+                                    hh_id = mem["household_id"]
+                                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
                         if not hh_id:
                             hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
                             if hh_count and hh_count.get("cnt", 0) == 0:
@@ -323,24 +344,42 @@ def login_google_native():
         import google.auth.transport.requests as google_requests
         info = id_token.verify_firebase_token(c, google_requests.Request(), 'listmate-58e1a')
         gid = info['sub']
-        email = info.get("email", "")
+        email = (info.get("email") or "").strip().lower()
         name = info.get("name") or (email.split("@")[0] if email else "User")
         
         import shared.auth as authmod
         authmod._init_schema()
-        user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+        user = None
+        if email:
+            user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
         if not user:
-            user = authmod._one(f"SELECT id, google_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+            user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+        
+        is_new_user = False
         if not user:
+            is_new_user = True
             authmod._run(f"INSERT INTO {authmod._USERS} (google_id, email, name, household_id) VALUES (?,?,?,0)", (gid, email, name))
-            user = authmod._one(f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
+            user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE google_id = ?", (gid,))
             
         if user:
             if user.get("google_id") != gid:
                 authmod._run(f"UPDATE {authmod._USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
             
-            hh_id = user.get("household_id", 0)
+            uid = user["id"]
+            hh_id = user.get("household_id", 0) or 0
             hh_name = ""
+            
+            if not is_new_user and hh_id == 0:
+                owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                if owned:
+                    hh_id = owned["household_id"]
+                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                else:
+                    mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                    if mem:
+                        hh_id = mem["household_id"]
+                        authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+            
             if not hh_id:
                 hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
                 if hh_count and hh_count.get("cnt", 0) == 0:
@@ -352,24 +391,84 @@ def login_google_native():
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
                     authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                    authmod._seed_stores(hh_id)
             
             if hh_id and not hh_name:
                 hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
                 hh_name = hh.get("name", "") if hh else ""
             
-            authmod._set(user["id"], email, name, hh_id, hh_name)
+            authmod._set(user["id"], email, user.get("name") or name, hh_id, hh_name)
             if intent_id:
                 authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
                 
             if hh_id == 0:
-                return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
+                return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
                 
-            return '''<!DOCTYPE html><html><head></head><body><script>window.location.replace('/');</script></body></html>'''
+            return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/');</script></body></html>'''
             
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return f'''<!DOCTYPE html><html><head></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
+        return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>alert("Login failed"); window.location.replace('/login');</script></body></html>'''
+
+@app.route("/open")
+def open_deep_link():
+    url = request.args.get("url", "/")
+    if url.startswith("http"):
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path
+        if parsed.query:
+            path += "?" + parsed.query
+    else:
+        path = url
+    if not path.startswith("/"):
+        path = "/" + path
+
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Opening ListMate...</title>
+        <style>
+            body {{ font-family: -apple-system, sans-serif; text-align: center; padding-top: 60px; background: #f0f4ed; color: #2c5a2c; }}
+            .loader {{ border: 3px solid #eaf8ef; border-top: 3px solid #5ebe7e; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin: 24px auto; }}
+            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+            .btn {{ display: inline-block; background: #5ebe7e; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; margin-top: 24px; box-shadow: 0 2px 6px rgba(94,190,126,0.3); }}
+            p {{ color: #64748b; font-size: 14px; margin-top: 32px; }}
+        </style>
+    </head>
+    <body>
+        <h2 style="margin:0; font-size: 22px;">Opening ListMate...</h2>
+        <div class="loader"></div>
+        <p>If the app does not open automatically:</p>
+        <a href="https://grocerlist.app{path}" class="btn">Continue in Browser</a>
+        <script>
+            var path = "{path}";
+            var customSchemeUrl = "listmate:/" + path; // e.g. listmate://requests/1
+            var webUrl = "https://grocerlist.app" + path;
+            var intentUrl = "intent://grocerlist.app" + path + "#Intent;scheme=https;package=com.pvkslabs.listmate;S.browser_fallback_url=" + encodeURIComponent(webUrl) + ";end";
+            
+            var isAndroid = /Android/i.test(navigator.userAgent);
+            var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+            
+            setTimeout(function() {{
+                if (isAndroid) {{
+                    window.location.href = intentUrl;
+                }} else if (isIOS) {{
+                    window.location.href = customSchemeUrl;
+                    setTimeout(function() {{
+                        window.location.href = webUrl;
+                    }}, 2000);
+                }} else {{
+                    window.location.href = webUrl;
+                }}
+            }}, 100);
+        </script>
+    </body>
+    </html>
+    '''
 
 @app.route("/open")
 def open_deep_link():
