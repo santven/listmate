@@ -566,7 +566,7 @@ function handleCredential(credential, isIntentCallback) {
 }
 
 function showInviteBanner() {
-  fetch('/api/auth/invite/'+inviteToken).then(function(r){return r.json()}).then(function(d){
+  fetch('/api/auth/invite/'+inviteToken, {credentials: 'include'}).then(function(r){return r.json()}).then(function(d){
     if (d.valid) {
       document.getElementById('inviteBanner').style.display='block';
       document.getElementById('inviteHousehold').textContent=d.household_name;
@@ -584,7 +584,7 @@ function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g,
 
 function continueToHousehold(id) {
     showStep2Error('');
-    fetch('/api/auth/switch_household', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({household_id: id})})
+    fetch('/api/auth/switch_household', {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({household_id: id})})
     .then(function(r){return r.json()}).then(function(d){
         if(d.ok) location.replace('/?_='+Date.now());
         else showStep2Error(d.error||'Failed to switch');
@@ -598,7 +598,20 @@ function showSignupOrInvites() {
         document.getElementById('createSection').style.display='block';
         document.getElementById('btnAccept').style.display='none';
         
-        fetch('/api/auth/households_list').then(function(r){return r.json()}).then(function(d){
+        fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r){return r.json();}).then(function(c){
+            if (c && c.display_name) {
+                var nameInput = document.getElementById('householdName');
+                if (nameInput && !nameInput.value) {
+                    var defaultName = c.display_name.trim();
+                    if (!defaultName.toLowerCase().endsWith('household')) {
+                        defaultName += ' household';
+                    }
+                    nameInput.value = defaultName;
+                }
+            }
+        }).catch(function(){});
+
+        fetch('/api/auth/households_list', {credentials: 'include'}).then(function(r){return r.json()}).then(function(d){
             if (d.ok) {
                 var html = '';
                 if (d.households && d.households.length > 0) {
@@ -647,7 +660,7 @@ function showSignupOrInvites() {
 
 function acceptPendingInvite(token) {
     showStep2Error('');
-    fetch('/api/auth/invite/' + token + '/accept', {method:'POST', headers:{'Content-Type':'application/json'}})
+    fetch('/api/auth/invite/' + token + '/accept', {method:'POST', credentials: 'include', headers:{'Content-Type':'application/json'}})
     .then(function(r){return r.json()}).then(function(d){
         if(d.ok) location.replace('/?_='+Date.now());
         else showStep2Error(d.error||'Failed to accept');
@@ -679,7 +692,7 @@ function createHousehold() {
   if(!n){showStep2Error('Enter a household name');return;}
   var b=document.getElementById('btnCreate'); b.disabled=true; showStep2Error('');
   var optIn = document.getElementById('marketingOptIn'); optIn = optIn ? optIn.checked : true;
-  fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n, marketing_opt_in:optIn})})
+  fetch('/api/auth/signup',{method:'POST', credentials: 'include', headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n, marketing_opt_in:optIn})})
     .then(function(r){return r.json()}).then(function(d){
     if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
