@@ -454,6 +454,13 @@ def backfill_uncategorized_items():
                 db.execute("UPDATE list_items SET category = ? WHERE id = ?", (cat, r["id"]))
                 updated_list += 1
 
+        # 3. Update item_purchase_stats
+        stat_rows = db.execute("SELECT household_id, name FROM item_purchase_stats WHERE category IS NULL OR TRIM(category) = ''").fetchall()
+        for r in stat_rows:
+            cat = categorize(r["name"])
+            if cat:
+                db.execute("UPDATE item_purchase_stats SET category = ? WHERE household_id = ? AND name = ?", (cat, r["household_id"], r["name"]))
+
         db.commit()
     except Exception as e:
         print(f"[categorize] Error running backfill_uncategorized_items: {e}")
