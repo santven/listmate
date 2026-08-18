@@ -1,5 +1,5 @@
 
-// Dynamic SSO Button Ordering and Highlighting
+// Dynamic SSO Button Ordering, Highlighting, and Privacy Notice
 document.addEventListener("DOMContentLoaded", function() {
   var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   var isMac = /Mac/.test(navigator.platform);
@@ -10,15 +10,8 @@ document.addEventListener("DOMContentLoaded", function() {
   var btnApple = document.getElementById('btnApple');
   
   if (authContainer && btnGoogle && btnApple) {
-    // Create the message container
-    var platformNote = document.createElement('div');
-    platformNote.style.fontSize = '12px';
-    platformNote.style.color = '#666';
-    platformNote.style.marginTop = '8px';
-    platformNote.style.textAlign = 'center';
-    
     if (isApplePlatform) {
-      // Apple is preferred
+      // Apple is preferred on Apple devices
       btnApple.style.background = '#000';
       btnApple.style.color = '#fff';
       btnApple.style.border = 'none';
@@ -31,9 +24,6 @@ document.addEventListener("DOMContentLoaded", function() {
       
       authContainer.appendChild(btnApple);
       authContainer.appendChild(btnGoogle);
-      
-      platformNote.innerText = "Note: Google sign-in provides a browser-based experience.";
-      authContainer.appendChild(platformNote);
     } else {
       // Google is preferred
       btnGoogle.style.background = '#e8f0fe'; // Slight blue solid background
@@ -45,19 +35,31 @@ document.addEventListener("DOMContentLoaded", function() {
       btnApple.style.color = '#3c4043';
       btnApple.style.border = '1px solid #dadce0';
       btnApple.style.boxShadow = 'none';
-      // Change apple icon to black since background is white
+      
       var appleSvgPath = btnApple.querySelector('svg path');
       if (appleSvgPath) {
-         // The original has fill="#fff" on the svg or the paths, let's reset it
          var appleSvg = btnApple.querySelector('svg');
          appleSvg.style.fill = '#000';
       }
       
       authContainer.appendChild(btnGoogle);
       authContainer.appendChild(btnApple);
-      
-      platformNote.innerText = "Note: Apple sign-in provides a browser-based experience.";
-      authContainer.appendChild(platformNote);
     }
+
+    // High-trust one-way SSO privacy guarantee
+    var privacyNote = document.createElement('div');
+    privacyNote.style.fontSize = '12px';
+    privacyNote.style.color = '#4a5d4e';
+    privacyNote.style.background = '#f4f8f3';
+    privacyNote.style.border = '1px solid #dce8d9';
+    privacyNote.style.borderRadius = '10px';
+    privacyNote.style.padding = '8px 12px';
+    privacyNote.style.marginTop = '6px';
+    privacyNote.style.lineHeight = '1.4';
+    privacyNote.style.textAlign = 'center';
+    privacyNote.style.maxWidth = '300px';
+    privacyNote.innerHTML = '🔒 <strong>One-way sign in:</strong> We only receive your name &amp; email to log you in. Your grocery lists and household data are <strong>never</strong> shared with Google or Apple.';
+    
+    authContainer.appendChild(privacyNote);
   }
 });
