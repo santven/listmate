@@ -85,7 +85,7 @@ body { padding-bottom: 50px; }
       <label for="householdName">Household Name</label>
       <input type="text" id="householdName" placeholder="e.g. Raghav household" maxlength="60">
       <div id="geoOptInContainer" style="display:flex; align-items:center; gap:8px; margin-top:12px; margin-bottom:16px;">
-          <input type="checkbox" id="marketingOptIn" style="width:auto; margin:0;">
+          <input type="checkbox" id="marketingOptIn" checked style="width:auto; margin:0;">
           <label for="marketingOptIn" style="margin:0; font-weight:normal; font-size:13px; color:var(--text);">Send me tips, reminders, and updates (you can unsubscribe anytime).</label>
       </div>
       <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
@@ -286,6 +286,10 @@ async function _doSignIn() {
     fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r) {
       if (r.ok) {
         r.json().then(function(c) {
+          if (c && c.geo) {
+            var cb = document.getElementById('marketingOptIn');
+            if (cb) cb.checked = !c.geo.is_eu;
+          }
           if (c.user && c.household_id && c.household_id !== 0) {
             setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
           } else if (c.user && (!c.household_id || c.household_id === 0)) {
@@ -599,6 +603,10 @@ function showSignupOrInvites() {
         document.getElementById('btnAccept').style.display='none';
         
         fetch('/api/auth/config?_='+Date.now(), {credentials: 'include'}).then(function(r){return r.json();}).then(function(c){
+            if (c && c.geo) {
+                var cb = document.getElementById('marketingOptIn');
+                if (cb) cb.checked = !c.geo.is_eu;
+            }
             if (c && c.display_name) {
                 var nameInput = document.getElementById('householdName');
                 if (nameInput && !nameInput.value) {
@@ -704,6 +712,8 @@ function goToStep1() {
   document.getElementById('step2').classList.remove('active');
   document.getElementById('step1').classList.add('active');
   document.getElementById('householdName').value='';
+  var cb = document.getElementById('marketingOptIn');
+  if (cb) cb.checked = true;
   document.getElementById('step2Error').style.display='none';
   document.getElementById('inviteBanner').style.display='none';
   document.getElementById('createSection').style.display='block';
