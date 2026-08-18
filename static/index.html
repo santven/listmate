@@ -2260,6 +2260,21 @@ function isUnpurchased(i) {
   return !(i.purchased === true || i.purchased === 1 || i.purchased === '1' || i.purchased === 'true');
 }
 
+window.checkCompletionForStore = function(storeId, allItemsBefore, storeItemsBefore) {
+  if (!storeId || storeId === 'null') return;
+  const storeItemsAfter = list.filter(i => String(i.store_id) === String(storeId) && isUnpurchased(i));
+  const allItemsAfter = list.filter(i => isUnpurchased(i));
+
+  if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
+    fireCelebration(true);
+  } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
+    const hasPurchased = list.some(i => String(i.store_id) === String(storeId) && !isUnpurchased(i));
+    if (hasPurchased) {
+      fireCelebration(false);
+    }
+  }
+};
+
 function fireCelebration(isAllItems) {
   if (typeof toast === 'function') {
     toast(isAllItems ? '🎉 All items complete!' : '🎉 Store complete!');
@@ -2331,14 +2346,7 @@ async function toggleItem(id, showVisitPrompt = true) {
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
 
     if (!isUnpurchased(item)) {
-      const storeItemsAfter = list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i));
-      const allItemsAfter = list.filter(i => isUnpurchased(i));
-
-      if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
-        fireCelebration(true);
-      } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
-        fireCelebration(false);
-      }
+      window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
     }
   };
 
@@ -2442,6 +2450,11 @@ async function deleteItem(id) {
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
+  const item = list.find(i => String(i.id) === String(id));
+  const itemStoreId = item ? String(item.store_id) : null;
+  const storeItemsBefore = itemStoreId ? list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i)) : [];
+  const allItemsBefore = list.filter(i => isUnpurchased(i));
+
   if (!navigator.onLine) {
     list = list.filter(i => String(i.id) !== String(id));
     saveCache();
@@ -2449,6 +2462,7 @@ async function deleteItem(id) {
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
     enqueueOfflineAction({ type: 'delete', data: { id: id } });
     toast('⚡ Deleted offline');
+    if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
     return;
   }
 
@@ -2457,6 +2471,7 @@ async function deleteItem(id) {
   saveCache();
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
+  if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
 }
 
 let quickAddTimeout;
@@ -2617,8 +2632,12 @@ async function moveItem(targetStoreId) {
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return;
 
+  const item = list.find(i => String(i.id) === String(moveItemId));
+  const oldStoreId = item ? String(item.store_id) : null;
+  const storeItemsBefore = oldStoreId ? list.filter(i => String(i.store_id) === oldStoreId && isUnpurchased(i)) : [];
+  const allItemsBefore = list.filter(i => isUnpurchased(i));
+
   if (!navigator.onLine) {
-    const item = list.find(i => String(i.id) === String(moveItemId));
     if (item) {
       // Check if target store already has this exact item active (unpurchased)
       const existing = list.find(i => String(i.store_id) === String(targetStoreId) && i.name.toLowerCase().trim() === item.name.toLowerCase().trim() && !i.purchased);
@@ -2633,6 +2652,7 @@ async function moveItem(targetStoreId) {
       toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');
       renderHome();
       enqueueOfflineAction({ type: 'move', data: { id: moveItemId, store_id: targetStoreId } });
+      if (isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
     }
     return;
   }
@@ -2647,6 +2667,7 @@ async function moveItem(targetStoreId) {
   $('#moveModal').classList.remove('active');
   toast('✅ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name);
   renderHome();
+  if (item && isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));
@@ -2888,7 +2909,11 @@ function renderVisitFrequency(visits) {
   const max = Math.max(...entries.map(e => e[1]));
   
   container.innerHTML = entries.map(e => {
-    const monthName = new Date(e[0] + '-01').toLocaleDateString('en-US', {month:'short', year:'2-digit'});
+    // Append T12:00:00 to avoid timezone offset month-shifting
+    const dateObj = new Date(e[0] + '-01T12:00:00');
+    const monthStr = dateObj.toLocaleDateString('en-US', {month:'short'});
+    const yearStr = dateObj.toLocaleDateString('en-US', {year:'2-digit'});
+    const monthName = `${monthStr} '${yearStr}`;
     const pct = Math.max(5, (e[1] / max) * 100);
     return `
       <div style="display:flex; align-items:center; gap:12px;">
