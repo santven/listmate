@@ -379,12 +379,17 @@
     <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
       <div style="flex:1; padding-right:12px;">
         <div style="font-weight:600; font-size:14px; color:#1f2937;">Show Feature Discovery Spotlights</div>
-        <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Turn ON to reset and view interactive tips.</div>
+        <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Active spotlights will show on the grocery list.</div>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)">
         <span class="toggle-slider" id="discoveryToggleSlider"></span>
       </label>
+    </div>
+    <div id="discoveryReplayWrap" style="margin-top:10px; display:none;">
+      <button onclick="replayDiscoveryTips()" style="width:100%; padding:10px 14px; background:#fff; border:1px solid var(--border); color:var(--text); font-size:13px; font-weight:600; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>🔄</span> Replay All Guided Tips
+      </button>
     </div>
     <div class="success" id="discoverySuccess" style="margin-top:8px;"></div>
   </div>
@@ -515,6 +520,7 @@ let householdData = null;
 function initDiscoveryTipsUI() {
   const toggle = document.getElementById('discoveryTipsToggle');
   const statusText = document.getElementById('discoveryStatusText');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
   if (!toggle) return;
 
   const isDisabled = localStorage.getItem('listmate_discovery_tips_disabled') === 'true';
@@ -524,9 +530,16 @@ function initDiscoveryTipsUI() {
   toggle.checked = !isDisabled;
   if (statusText) {
     if (isDisabled) {
-      statusText.textContent = isCompleted ? 'All feature discovery tips completed! Toggle on to replay.' : 'Discovery spotlights paused.';
+      statusText.textContent = 'Discovery spotlights paused.';
+      if (replayWrap) replayWrap.style.display = 'none';
     } else {
-      statusText.textContent = 'Active spotlights will show on the grocery list.';
+      if (isCompleted) {
+        statusText.textContent = 'All current tips completed. Spotlights will appear when new features launch.';
+        if (replayWrap) replayWrap.style.display = 'block';
+      } else {
+        statusText.textContent = 'Active spotlights will show on the grocery list.';
+        if (replayWrap) replayWrap.style.display = ack.length > 0 ? 'block' : 'none';
+      }
     }
   }
 }
@@ -534,15 +547,21 @@ function initDiscoveryTipsUI() {
 function toggleDiscoveryTipsSetting(checked) {
   const statusText = document.getElementById('discoveryStatusText');
   const success = document.getElementById('discoverySuccess');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
   if (checked) {
     try {
       localStorage.removeItem('listmate_discovery_tips_disabled');
-      localStorage.removeItem('listmate_acknowledged_tips_v1');
-      localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
-    if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
+    const ack = JSON.parse(localStorage.getItem('listmate_acknowledged_tips_v1') || '[]');
+    const isCompleted = ack.includes('shopping_list_view') && ack.includes('move_items') && ack.includes('quick_add');
+    if (statusText) {
+      statusText.textContent = isCompleted ? 'All current tips completed. Spotlights will appear when new features launch.' : 'Active spotlights will show on the grocery list.';
+    }
+    if (replayWrap) {
+      replayWrap.style.display = (isCompleted || ack.length > 0) ? 'block' : 'none';
+    }
     if (success) {
-      success.textContent = '💡 Discovery tips reset and enabled!';
+      success.textContent = '💡 Discovery spotlights active!';
       success.style.display = 'block';
       setTimeout(() => { success.style.display = 'none'; }, 3000);
     }
@@ -551,11 +570,32 @@ function toggleDiscoveryTipsSetting(checked) {
       localStorage.setItem('listmate_discovery_tips_disabled', 'true');
     } catch(e) {}
     if (statusText) statusText.innerHTML = '<span style="color:#6b7280;">Discovery spotlights paused.</span>';
+    if (replayWrap) replayWrap.style.display = 'none';
     if (success) {
-      success.textContent = 'Discovery tips paused.';
+      success.textContent = 'Discovery spotlights paused.';
       success.style.display = 'block';
       setTimeout(() => { success.style.display = 'none'; }, 3000);
     }
+  }
+}
+
+function replayDiscoveryTips() {
+  const toggle = document.getElementById('discoveryTipsToggle');
+  const statusText = document.getElementById('discoveryStatusText');
+  const success = document.getElementById('discoverySuccess');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
+  try {
+    localStorage.removeItem('listmate_discovery_tips_disabled');
+    localStorage.removeItem('listmate_acknowledged_tips_v1');
+    localStorage.removeItem('listmate_discovery_tips_caught_up');
+  } catch(e) {}
+  if (toggle) toggle.checked = true;
+  if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
+  if (replayWrap) replayWrap.style.display = 'none';
+  if (success) {
+    success.textContent = '💡 Discovery tips reset! Spotlights will start from Step 1.';
+    success.style.display = 'block';
+    setTimeout(() => { success.style.display = 'none'; }, 3000);
   }
 }
 

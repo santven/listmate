@@ -4885,9 +4885,6 @@ window.featureDiscoveryEngine = (function() {
         ack.push(tipId);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(ack));
       }
-      if (isAllCompleted()) {
-        localStorage.setItem('listmate_discovery_tips_disabled', 'true');
-      }
     } catch(e) {}
   }
 
@@ -5046,11 +5043,6 @@ window.featureDiscoveryEngine = (function() {
 
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
-      clearHalos();
-      return;
-    }
-    if (isAllCompleted()) {
-      localStorage.setItem('listmate_discovery_tips_disabled', 'true');
       clearHalos();
       return;
     }
