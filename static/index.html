@@ -4839,7 +4839,7 @@ window.featureDiscoveryEngine = (function() {
       type: 'menu',
       menuTargetId: 'menuStoreVisitsLink',
       condition: function() {
-        return Array.isArray(stores) && stores.some(s => s.last_visited && s.last_visited !== 'None');
+        return Array.isArray(stores) && stores.some(s => s.name !== 'General List' && s.last_visited && s.last_visited !== 'None');
       }
     },
     switch_household: {
