@@ -209,148 +209,145 @@ body.is-read-only #btnDeleteStore,
 body.is-read-only .suggestion-chip { display: none !important; }
 body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !important; }
 
-/* ── Interactive Guided Halo Tour (Issue #310) ── */
+/* ── Interactive Feature Discovery Halos (Issue #310) ── */
 @keyframes listmateHaloPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(94, 190, 126, 0.85), 0 0 16px rgba(94, 190, 126, 0.6);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75), 0 0 12px rgba(16, 185, 129, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 14px rgba(94, 190, 126, 0), 0 0 30px rgba(94, 190, 126, 0.9);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0), 0 0 20px rgba(16, 185, 129, 0.7);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(94, 190, 126, 0), 0 0 16px rgba(94, 190, 126, 0);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0), 0 0 12px rgba(16, 185, 129, 0);
   }
 }
 
-.tour-halo-target {
-  position: relative !important;
-  z-index: 10001 !important;
+.discovery-halo {
   animation: listmateHaloPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
-  outline: 3px solid #10b981 !important;
-  outline-offset: 3px !important;
-  border-radius: 12px;
-  transition: all 0.25s ease;
+  outline: 2.5px solid #10b981 !important;
+  outline-offset: 2px !important;
+  cursor: pointer !important;
 }
 
-#tourBackdrop {
+.burger-btn.discovery-halo {
+  border-radius: 8px !important;
+}
+
+.burger-dropdown a.discovery-halo {
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+}
+
+/* Feature Tip Bottom Drawer */
+.feature-tip-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.48);
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 10005;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  align-items: flex-end;
+  justify-content: center;
   backdrop-filter: blur(1.5px);
   -webkit-backdrop-filter: blur(1.5px);
-  z-index: 10000;
-  transition: opacity 0.25s ease;
 }
-#tourBackdrop.active {
-  display: block;
-}
-
-.tour-card {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  width: calc(100% - 32px);
-  max-width: 440px;
-  background: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.06);
-  z-index: 10002;
-  padding: 20px 22px;
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
-  opacity: 0;
-  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  text-align: left;
-}
-.tour-card.active {
-  display: block;
+.feature-tip-overlay.show {
+  display: flex;
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
-.tour-badge {
-  display: inline-flex;
+.feature-tip-drawer {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 16px 20px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
+  transform: translateY(100%);
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+.feature-tip-overlay.show .feature-tip-drawer {
+  transform: translateY(0);
+}
+
+.tip-handle {
+  width: 38px;
+  height: 4px;
+  background: #cbd5e1;
+  border-radius: 2px;
+  margin: 0 auto 12px auto;
+}
+.tip-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  background: #ecfdf5;
-  color: #059669;
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 20px;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  border: 1px solid #a7f3d0;
+  margin-bottom: 6px;
 }
-.tour-close-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 2px 6px;
-  line-height: 1;
-  float: right;
-  border-radius: 6px;
-}
-.tour-close-btn:hover {
-  color: #374151;
-  background: #f3f4f6;
-}
-.tour-title {
-  margin: 12px 0 6px 0;
+.tip-title {
+  margin: 0;
   font-size: 17px;
   font-weight: 700;
-  color: #1f2937;
+  color: #1e293b;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.tour-body {
-  font-size: 14px;
-  color: #4b5563;
-  line-height: 1.5;
-  margin-bottom: 18px;
-}
-.tour-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.tour-btn-skip {
+.tip-close-btn {
   background: none;
   border: none;
-  color: #6b7280;
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: 18px;
+  color: #94a3b8;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 4px 6px;
+  line-height: 1;
+  border-radius: 6px;
 }
-.tour-btn-skip:hover {
-  color: #111827;
-  background: #f3f4f6;
+.tip-close-btn:hover {
+  color: #334155;
+  background: #f1f5f9;
 }
-.tour-btn-next {
-  background: linear-gradient(135deg, #10b981, #059669);
+.tip-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+  margin-bottom: 18px;
+}
+.tip-actions {
+  display: flex;
+  gap: 10px;
+}
+.tip-btn-primary {
+  flex: 1;
+  background: var(--green, #10b981);
   color: #ffffff;
   border: none;
-  padding: 10px 18px;
+  padding: 12px;
   border-radius: 12px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  text-align: center;
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  justify-content: center;
 }
-.tour-btn-next:active {
-  transform: scale(0.98);
+.tip-btn-dismiss {
+  flex: 1;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
 }
 
 </style>
@@ -455,16 +452,16 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="/settings?action=invite" onclick="if(typeof toggleBurger==='function') toggleBurger();">👥 Add / Invite Members</a>
+      <a id="menuInviteLink" href="/settings?action=invite" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuInviteLink', event)) return false; if(typeof toggleBurger==='function') toggleBurger();">👥 Add / Invite Members</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
       <a href="#" onclick="showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
       <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
-      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
+      <a id="menuSwitchHouseholdLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuSwitchHouseholdLink', event)) return false; showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
-      <a href="#" onclick="startGuidedTour(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 App Tour</a>
+      <a href="#" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.resetAndStart(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 Feature Discovery Tips</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
@@ -814,8 +811,13 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
 <script>
 function toggleBurger() {
-  document.getElementById("burgerMenu").classList.toggle("show");
-  document.getElementById("burgerOverlay").classList.toggle("show");
+  const menu = document.getElementById("burgerMenu");
+  const overlay = document.getElementById("burgerOverlay");
+  if (menu) menu.classList.toggle("show");
+  if (overlay) overlay.classList.toggle("show");
+  if (window.featureDiscoveryEngine && menu) {
+    window.featureDiscoveryEngine.onBurgerToggle(menu.classList.contains("show"));
+  }
 }
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
@@ -1280,8 +1282,8 @@ async function loadData() {
     } catch(e){}
   }
 
-  if (typeof window.tourEngine !== 'undefined') {
-    window.tourEngine.start(false);
+  if (window.featureDiscoveryEngine) {
+    window.featureDiscoveryEngine.checkAndApply();
   }
 }
 
@@ -4474,20 +4476,18 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
-<!-- Guided Halo Interactive Tour (Issue #310) -->
-<div id="tourBackdrop" onclick="if(window.tourEngine) window.tourEngine.onBackdropClick(event)"></div>
-<div id="tourCard" class="tour-card" role="dialog" aria-modal="true" aria-label="Feature Tour">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-    <span class="tour-badge" id="tourStepBadge">💡 Tip 1 of 4</span>
-    <button class="tour-close-btn" id="tourBtnClose" onclick="if(window.tourEngine) window.tourEngine.skipTour()" aria-label="Close tour">✕</button>
-  </div>
-  <div class="tour-title" id="tourStepTitle">👥 Add & Invite Members</div>
-  <div class="tour-body" id="tourStepBody">ListMate is built for real-time collaboration. Invite your partner or household members from the menu (☰) so everyone can add and check off items simultaneously!</div>
-  <div class="tour-actions">
-    <button class="tour-btn-skip" id="tourBtnSkip" onclick="if(window.tourEngine) window.tourEngine.skipTour()">Skip Tour</button>
-    <button class="tour-btn-next" id="tourBtnNext" onclick="if(window.tourEngine) window.tourEngine.nextStep()">
-      <span id="tourBtnNextText">Next Tip →</span>
-    </button>
+<!-- Interactive Feature Discovery Bottom Drawer (Issue #310) -->
+<div id="featureTipOverlay" class="feature-tip-overlay" onclick="closeFeatureTip(event)">
+  <div id="featureTipDrawer" class="feature-tip-drawer" onclick="event.stopPropagation()">
+    <div class="tip-handle"></div>
+    <div class="tip-header">
+      <h3 class="tip-title" id="featureTipTitle"></h3>
+      <button class="tip-close-btn" onclick="closeFeatureTip()" aria-label="Close">✕</button>
+    </div>
+    <div id="featureTipBody" class="tip-body"></div>
+    <div class="tip-actions" id="featureTipActions">
+      <button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>
+    </div>
   </div>
 </div>
 
@@ -4716,230 +4716,281 @@ async function submitFeedback() {
   }, { passive: true });
 })();
 
-// ── Guided Halo Interactive Tour Engine (Issue #310) ──
-window.tourEngine = (function() {
-  const STORAGE_KEY = 'listmate_guided_tour_v1';
+// ── Interactive Feature Discovery Halos (Issue #310) ──
+window.featureDiscoveryEngine = (function() {
+  const STORAGE_KEY = 'listmate_acknowledged_tips_v1';
 
-  const ALL_STEPS = [
-    {
+  const TIPS = {
+    invite: {
       id: 'invite',
-      title: '👥 Add & Invite Family Members',
-      body: 'ListMate is built for real-time collaboration. Invite your partner or household members from the menu (☰) so everyone can add and check off items simultaneously!',
-      targetSelector: '#burgerBtn',
-      fallbackSelector: '#header',
-      scrollSelector: '#burgerBtn',
-      isDynamic: false
+      title: '👥 Add & Invite Members',
+      body: 'ListMate is built for real-time collaboration. Invite your partner or family members so everyone can add and check off items simultaneously!',
+      actionText: 'Go to Invite Settings ↗',
+      actionUrl: '/settings?action=invite',
+      type: 'menu',
+      menuTargetId: 'menuInviteLink'
     },
-    {
+    stores_vs_general: {
       id: 'stores_vs_general',
       title: '🏬 Store Lists vs. General List',
       body: 'Tap any store tile (like Costco or Trader Joe\'s) to shop aisle-by-aisle. Not sure where you want to buy an item yet? Leave it in General List and assign a store later!',
+      type: 'element',
       targetSelector: '#storeGrid',
-      fallbackSelector: '#screenHome',
-      scrollSelector: '#storeGrid',
-      isDynamic: false
+      fallbackSelector: '#screenHome'
     },
-    {
+    move_items: {
       id: 'move_items',
       title: '⇄ Move Items Between Stores',
       body: 'Need to change where you buy an item? Tap the ⇄ button on any item to instantly move it to another store or back to the General List.',
+      type: 'element',
       targetSelector: '.btn-move',
-      fallbackSelector: '#listView',
-      scrollSelector: '#listView',
-      isDynamic: false
+      fallbackSelector: '#listView'
     },
-    {
+    quick_add: {
       id: 'quick_add',
-      title: '⚡ Quick Add & Smart Store Routing',
-      body: 'Type an item here to add it in seconds. ListMate automatically suggests the store where you frequently buy it, or routes new items to General List with one tap!',
-      targetSelector: '#quickAddInput',
-      fallbackSelector: '.quick-add-wrap',
-      scrollSelector: '#quickAddInput',
-      isDynamic: false
+      title: '⚡ Quick Add & Smart Suggestions',
+      body: 'Type an item here to add it in seconds. ListMate automatically remembers and suggests the store where you frequently buy it, or routes new items to General List with one tap!',
+      type: 'element',
+      targetSelector: '#quickAddInput'
     },
-    {
+    switch_household: {
       id: 'switch_household',
-      title: '🏠 Switch Households',
+      title: '🏠 Switch Between Households',
       body: 'You belong to multiple households! Open the menu (☰) anytime to switch between your family list, vacation home, or roommates.',
-      targetSelector: '#burgerBtn',
-      fallbackSelector: '#header',
-      scrollSelector: '#burgerBtn',
-      isDynamic: true,
+      type: 'menu',
+      menuTargetId: 'menuSwitchHouseholdLink',
       condition: function() {
         return (window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
                (window.currentCfg && window.currentCfg.households_count > 1);
       }
     }
-  ];
+  };
 
-  let activeSteps = [];
-  let currentIndex = 0;
-  let currentTargetEl = null;
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'move_items', 'quick_add', 'switch_household'];
 
-  function getActiveSteps() {
-    return ALL_STEPS.filter(step => !step.isDynamic || (typeof step.condition === 'function' && step.condition()));
-  }
+  let currentActiveTip = null;
+  let boundElements = [];
 
-  function getStoredState() {
+  function getAcknowledged() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : null;
+      return data ? JSON.parse(data) : [];
     } catch(e) {
-      return null;
+      return [];
     }
   }
 
-  function saveState(state) {
+  function markAcknowledged(tipId) {
+    if (!tipId) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const ack = getAcknowledged();
+      if (!ack.includes(tipId)) {
+        ack.push(tipId);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(ack));
+      }
     } catch(e) {}
   }
 
-  function clearHalo() {
-    if (currentTargetEl) {
-      currentTargetEl.classList.remove('tour-halo-target');
-      try {
-        currentTargetEl.removeEventListener('click', onTargetClick);
-      } catch(e) {}
-      currentTargetEl = null;
-    }
-    document.querySelectorAll('.tour-halo-target').forEach(el => {
-      el.classList.remove('tour-halo-target');
-    });
-  }
-
-  function onTargetClick() {
-    // When user directly taps the highlighted element, advance step smoothly
-    setTimeout(() => {
-      nextStep();
-    }, 450);
-  }
-
-  function showStep(index) {
-    activeSteps = getActiveSteps();
-    if (index >= activeSteps.length) {
-      completeTour();
-      return;
-    }
-
-    currentIndex = index;
-    const step = activeSteps[index];
-
-    // Ensure we are on home screen so target elements are visible
-    if (typeof showScreen === 'function') {
-      const homeScreen = document.getElementById('screenHome');
-      if (homeScreen && (homeScreen.style.display === 'none' || !homeScreen.classList.contains('active'))) {
-        showScreen('home');
-      }
-    }
-
-    clearHalo();
-
-    let target = document.querySelector(step.targetSelector);
-    if (!target && step.fallbackSelector) {
-      target = document.querySelector(step.fallbackSelector);
-    }
-
-    if (target) {
-      currentTargetEl = target;
-      target.classList.add('tour-halo-target');
-      target.addEventListener('click', onTargetClick, { once: true });
-
-      // Scroll into view if not comfortably visible
-      try {
-        const rect = target.getBoundingClientRect();
-        if (rect.top < 60 || rect.bottom > (window.innerHeight - 200)) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  function getNextTip() {
+    const ack = getAcknowledged();
+    for (const key of TIP_ORDER) {
+      if (!ack.includes(key)) {
+        const tip = TIPS[key];
+        if (tip) {
+          if (typeof tip.condition === 'function') {
+            if (tip.condition()) return tip;
+          } else {
+            return tip;
+          }
         }
-      } catch(e) {}
-    }
-
-    const backdrop = document.getElementById('tourBackdrop');
-    const card = document.getElementById('tourCard');
-    const badge = document.getElementById('tourStepBadge');
-    const title = document.getElementById('tourStepTitle');
-    const body = document.getElementById('tourStepBody');
-    const nextBtnText = document.getElementById('tourBtnNextText');
-
-    if (badge) badge.textContent = `💡 Tip ${index + 1} of ${activeSteps.length}`;
-    if (title) title.textContent = step.title;
-    if (body) body.textContent = step.body;
-
-    const isLast = (index === activeSteps.length - 1);
-    if (nextBtnText) {
-      nextBtnText.textContent = isLast ? 'Got it! 🎉' : 'Next Tip →';
-    }
-
-    if (backdrop) backdrop.classList.add('active');
-    if (card) card.classList.add('active');
-  }
-
-  function nextStep() {
-    showStep(currentIndex + 1);
-  }
-
-  function skipTour() {
-    saveState({ completed: true, dismissed: true, completedAt: new Date().toISOString() });
-    cleanupUI();
-  }
-
-  function completeTour() {
-    saveState({ completed: true, dismissed: false, completedAt: new Date().toISOString() });
-    cleanupUI();
-    if (typeof toast === 'function') {
-      toast('🎉 Tour completed! You\'re all set.');
-    }
-  }
-
-  function cleanupUI() {
-    clearHalo();
-    const backdrop = document.getElementById('tourBackdrop');
-    const card = document.getElementById('tourCard');
-    if (backdrop) backdrop.classList.remove('active');
-    if (card) card.classList.remove('active');
-  }
-
-  function onBackdropClick() {
-    nextStep();
-  }
-
-  function start(force = false) {
-    if (!force) {
-      const state = getStoredState();
-      if (state && (state.completed || state.dismissed)) {
-        return; // Already completed or dismissed
       }
     }
+    return null;
+  }
+
+  function clearHalos() {
+    document.querySelectorAll('.discovery-halo').forEach(el => {
+      el.classList.remove('discovery-halo');
+    });
+    boundElements.forEach(item => {
+      try { item.el.removeEventListener(item.event, item.handler, item.options); } catch(e) {}
+    });
+    boundElements = [];
+  }
+
+  function showTipDrawer(tip) {
+    if (!tip) return;
+    currentActiveTip = tip;
+
+    const overlay = document.getElementById('featureTipOverlay');
+    const titleEl = document.getElementById('featureTipTitle');
+    const bodyEl = document.getElementById('featureTipBody');
+    const actionsEl = document.getElementById('featureTipActions');
+    if (!overlay || !titleEl || !bodyEl || !actionsEl) return;
+
+    titleEl.textContent = tip.title;
+    bodyEl.textContent = tip.body;
+
+    let actionsHtml = '';
+    if (tip.actionText && tip.actionUrl) {
+      actionsHtml += `<a href="${tip.actionUrl}" class="tip-btn-primary" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onActionClick('${tip.id}')">${tip.actionText}</a>`;
+      actionsHtml += `<button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>`;
+    } else {
+      actionsHtml += `<button class="tip-btn-primary" onclick="closeFeatureTip()">Got it</button>`;
+    }
+    actionsEl.innerHTML = actionsHtml;
+
+    overlay.classList.add('show');
+  }
+
+  function closeTipDrawer() {
+    const overlay = document.getElementById('featureTipOverlay');
+    if (overlay) {
+      overlay.classList.remove('show');
+    }
+    if (currentActiveTip) {
+      markAcknowledged(currentActiveTip.id);
+      currentActiveTip = null;
+    }
+    clearHalos();
     setTimeout(() => {
-      showStep(0);
-    }, 700);
+      checkAndApply();
+    }, 500);
+  }
+
+  function applyHalo(tip) {
+    clearHalos();
+    if (!tip) return;
+    currentActiveTip = tip;
+
+    if (tip.type === 'menu') {
+      const burgerBtn = document.getElementById('burgerBtn');
+      const burgerMenu = document.getElementById('burgerMenu');
+      const menuTarget = document.getElementById(tip.menuTargetId);
+
+      const isMenuOpen = burgerMenu && burgerMenu.classList.contains('show');
+      if (!isMenuOpen) {
+        if (burgerBtn) {
+          burgerBtn.classList.add('discovery-halo');
+        }
+      } else {
+        if (menuTarget) {
+          menuTarget.classList.add('discovery-halo');
+        }
+      }
+    } else {
+      let target = document.querySelector(tip.targetSelector);
+      if (!target && tip.fallbackSelector) {
+        target = document.querySelector(tip.fallbackSelector);
+      }
+      if (target) {
+        target.classList.add('discovery-halo');
+        const handler = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          showTipDrawer(tip);
+        };
+        target.addEventListener('click', handler, { once: true });
+        boundElements.push({ el: target, event: 'click', handler: handler });
+      }
+    }
+  }
+
+  function onBurgerToggle(isOpen) {
+    const nextTip = getNextTip();
+    if (!nextTip || nextTip.type !== 'menu') return;
+
+    const burgerBtn = document.getElementById('burgerBtn');
+    const menuTarget = document.getElementById(nextTip.menuTargetId);
+
+    if (isOpen) {
+      if (burgerBtn) burgerBtn.classList.remove('discovery-halo');
+      if (menuTarget) {
+        menuTarget.classList.add('discovery-halo');
+      }
+    } else {
+      if (menuTarget) menuTarget.classList.remove('discovery-halo');
+      if (burgerBtn) burgerBtn.classList.add('discovery-halo');
+    }
+  }
+
+  function onMenuItemClick(menuId, e) {
+    const nextTip = getNextTip();
+    if (nextTip && nextTip.type === 'menu' && nextTip.menuTargetId === menuId) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (typeof toggleBurger === 'function') {
+        const burgerMenu = document.getElementById('burgerMenu');
+        if (burgerMenu && burgerMenu.classList.contains('show')) {
+          toggleBurger();
+        }
+      }
+      showTipDrawer(nextTip);
+      return true;
+    }
+    return false;
+  }
+
+  function checkAndApply() {
+    const tip = getNextTip();
+    if (tip) {
+      applyHalo(tip);
+    }
+  }
+
+  function resetAndStart() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch(e) {}
+    clearHalos();
+    setTimeout(() => {
+      checkAndApply();
+      if (typeof toast === 'function') {
+        toast('💡 Feature discovery tips active');
+      }
+    }, 250);
   }
 
   return {
-    start: start,
-    nextStep: nextStep,
-    skipTour: skipTour,
-    onBackdropClick: onBackdropClick
+    checkAndApply: checkAndApply,
+    onBurgerToggle: onBurgerToggle,
+    onMenuItemClick: onMenuItemClick,
+    showTipDrawer: showTipDrawer,
+    dismissCurrentTip: closeTipDrawer,
+    onActionClick: function(tipId) {
+      markAcknowledged(tipId);
+      currentActiveTip = null;
+      clearHalos();
+    },
+    resetAndStart: resetAndStart
   };
 })();
 
-window.startGuidedTour = function() {
-  if (window.tourEngine) {
-    window.tourEngine.start(true);
+window.closeFeatureTip = function(event) {
+  if (event && event.target && event.target.id !== 'featureTipOverlay') {
+    return;
+  }
+  if (window.featureDiscoveryEngine) {
+    window.featureDiscoveryEngine.dismissCurrentTip();
   }
 };
 
-// Check URL query parameter for forced tour replay
-(function checkTourUrlParam() {
+// Check URL query parameter for reset / force tips
+(function checkTipsUrlParam() {
   try {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('start_tour') === '1') {
+    if (urlParams.get('start_tour') === '1' || urlParams.get('reset_tips') === '1') {
       urlParams.delete('start_tour');
+      urlParams.delete('reset_tips');
       const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
       window.history.replaceState({}, document.title, cleanUrl);
       setTimeout(() => {
-        window.startGuidedTour();
-      }, 900);
+        if (window.featureDiscoveryEngine) {
+          window.featureDiscoveryEngine.resetAndStart();
+        }
+      }, 600);
     }
   } catch(e) {}
 })();
