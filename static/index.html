@@ -1690,6 +1690,10 @@ function renderHome() {
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
+
+  if (window.featureDiscoveryEngine) {
+    window.featureDiscoveryEngine.checkAndApply();
+  }
 }
 
 
@@ -4782,26 +4786,27 @@ window.featureDiscoveryEngine = (function() {
       targetSelector: '#storeCardGeneral',
       fallbackSelector: '#storeGrid'
     },
-    store_specific: {
-      id: 'store_specific',
-      getTargetSelector: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        return hasCustomStore ? '#storeGrid .store-btn:not(.store-btn-general)' : '#newStoreInput';
-      },
+    add_store: {
+      id: 'add_store',
+      title: '🏪 Add Your Stores',
+      body: 'Add stores you shop at—frequently or occasionally. While the General List is your catch-all, dedicated store lists keep your shopping organized by aisle.',
+      type: 'element',
+      targetSelector: '#newStoreInput',
       fallbackSelector: '.new-store-wrap',
-      getTitle: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        return hasCustomStore ? '🏪 Store-Specific Master Lists' : '🏪 Add Your Stores';
-      },
-      getBody: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        if (hasCustomStore) {
-          return 'This is your store-specific master list. It contains a complete catalog of everything you buy here so you can easily pull items into your shopping list.';
-        } else {
-          return 'Add stores you shop at—frequently or occasionally. While the General List is your catch-all, dedicated store lists keep your shopping organized by aisle.';
-        }
-      },
-      type: 'element'
+      condition: function() {
+        return !Array.isArray(stores) || !stores.some(s => s.name !== 'General List');
+      }
+    },
+    store_catalog: {
+      id: 'store_catalog',
+      title: '🏪 Store-Specific Master Lists',
+      body: 'This is your store-specific master list. It contains a complete catalog of everything you buy here so you can easily pull items into your shopping list.',
+      type: 'element',
+      targetSelector: '#storeGrid .store-btn:not(.store-btn-general)',
+      fallbackSelector: '#storeGrid',
+      condition: function() {
+        return Array.isArray(stores) && stores.some(s => s.name !== 'General List');
+      }
     },
     quick_add: {
       id: 'quick_add',
@@ -4815,18 +4820,19 @@ window.featureDiscoveryEngine = (function() {
       title: '🛒 In-Store Shopping Mode',
       body: 'Focus on this view while in the grocery aisles and check items off into your cart. If an item isn\'t in stock, tap ⇄ to move it to another store or ✕ to clear it.',
       type: 'element',
-      targetSelector: '#listView',
-      fallbackSelector: '#screenHome'
+      targetSelector: '#listView .store-group:not(.purchased-section)',
+      condition: function() {
+        return Array.isArray(list) && list.some(i => !i.purchased);
+      }
     },
     move_items: {
       id: 'move_items',
       title: '⇄ Move Items Between Stores',
       body: 'Need to change where you buy an item? Tap the ⇄ button on any item to instantly move it to another store or back to the General List.',
       type: 'element',
-      targetSelector: '.btn-move',
-      fallbackSelector: '#listView',
+      targetSelector: '#listView .store-group:not(.purchased-section) .btn-move',
       condition: function() {
-        return document.querySelector('.btn-move') !== null || (Array.isArray(list) && list.length > 0);
+        return Array.isArray(list) && list.some(i => !i.purchased) && document.querySelector('#listView .store-group:not(.purchased-section) .btn-move') !== null;
       }
     },
     switch_household: {
@@ -4842,7 +4848,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'store_specific', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
@@ -4850,10 +4856,25 @@ window.featureDiscoveryEngine = (function() {
   function getAcknowledged() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const ack = data ? JSON.parse(data) : [];
+      if (ack.includes('store_specific') && !ack.includes('add_store')) {
+        ack.push('add_store');
+      }
+      return ack;
     } catch(e) {
       return [];
     }
+  }
+
+  function isAllCompleted() {
+    const ack = getAcknowledged();
+    const isMulti = (window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
+                    (window.currentCfg && window.currentCfg.households_count > 1);
+    const applicableTips = TIP_ORDER.filter(key => {
+      if (key === 'switch_household' && !isMulti) return false;
+      return true;
+    });
+    return applicableTips.every(key => ack.includes(key));
   }
 
   function markAcknowledged(tipId) {
@@ -4922,13 +4943,6 @@ window.featureDiscoveryEngine = (function() {
     overlay.classList.add('show');
   }
 
-  function finalizeAllCaughtUp() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(TIP_ORDER));
-      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
-    } catch(e) {}
-  }
-
   function closeTipDrawer() {
     const overlay = document.getElementById('featureTipOverlay');
     if (overlay) {
@@ -4944,11 +4958,6 @@ window.featureDiscoveryEngine = (function() {
       const next = getNextTip();
       if (next) {
         applyHalo(next);
-      } else if (hadTip) {
-        finalizeAllCaughtUp();
-        if (typeof toast === 'function') {
-          toast("🎉 You're all caught up on all ListMate feature tips!");
-        }
       }
     }, 450);
   }
@@ -4978,6 +4987,9 @@ window.featureDiscoveryEngine = (function() {
       let target = selector ? document.querySelector(selector) : null;
       if (!target && tip.fallbackSelector) {
         target = document.querySelector(tip.fallbackSelector);
+      }
+      if (target && (target.classList.contains('purchased-section') || target.closest('.purchased-section'))) {
+        target = null;
       }
       if (target) {
         target.classList.add('discovery-halo');
@@ -5030,18 +5042,22 @@ window.featureDiscoveryEngine = (function() {
   }
 
   function checkAndApply() {
-    if (localStorage.getItem('listmate_discovery_tips_caught_up') === 'true') {
+    if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
+      clearHalos();
       return;
     }
     const tip = getNextTip();
     if (tip) {
       applyHalo(tip);
+    } else {
+      clearHalos();
     }
   }
 
   function resetAndStart() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('listmate_discovery_tips_disabled');
       localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
     clearHalos();
@@ -5064,8 +5080,8 @@ window.featureDiscoveryEngine = (function() {
       currentActiveTip = null;
       clearHalos();
       const next = getNextTip();
-      if (!next) {
-        finalizeAllCaughtUp();
+      if (next) {
+        applyHalo(next);
       }
     },
     resetAndStart: resetAndStart

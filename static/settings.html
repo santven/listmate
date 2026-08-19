@@ -143,8 +143,49 @@
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .modal-sheet h3 { font-size: 16px; margin-bottom: 4px; }
 
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    transition: .3s;
+    border-radius: 24px;
+  }
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+  }
+  .toggle-switch input:checked + .toggle-slider,
   #discoveryTipsToggle:checked + #discoveryToggleSlider {
     background-color: var(--green);
+  }
+  .toggle-switch input:checked + .toggle-slider:before,
+  #discoveryTipsToggle:checked + #discoveryToggleSlider:before {
+    transform: translateX(20px);
   }
   #discoveryToggleSlider:before {
     position: absolute;
@@ -156,9 +197,6 @@
     background-color: white;
     transition: .3s;
     border-radius: 50%;
-  }
-  #discoveryTipsToggle:checked + #discoveryToggleSlider:before {
-    transform: translateX(20px);
   }
 </style>
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png">
@@ -341,12 +379,17 @@
     <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
       <div style="flex:1; padding-right:12px;">
         <div style="font-weight:600; font-size:14px; color:#1f2937;">Show Feature Discovery Spotlights</div>
-        <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Turn ON to reset and view interactive tips.</div>
+        <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Active spotlights will show on the grocery list.</div>
       </div>
-      <label style="position:relative; display:inline-block; width:44px; height:24px; margin:0; cursor:pointer; flex-shrink:0;">
-        <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)" style="opacity:0; width:0; height:0;">
-        <span id="discoveryToggleSlider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:24px;"></span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)">
+        <span class="toggle-slider" id="discoveryToggleSlider"></span>
       </label>
+    </div>
+    <div id="discoveryReplayWrap" style="margin-top:10px; display:none;">
+      <button onclick="replayDiscoveryTips()" style="width:100%; padding:10px 14px; background:#fff; border:1px solid var(--border); color:var(--text); font-size:13px; font-weight:600; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>🔄</span> Replay All Guided Tips
+      </button>
     </div>
     <div class="success" id="discoverySuccess" style="margin-top:8px;"></div>
   </div>
@@ -403,9 +446,16 @@
   <!-- Marketing Emails -->
   <div class="card">
     <h2>📧 Marketing Emails</h2>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-      <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()" style="width:auto; margin:0;">
-      <label for="marketingOptInSetting" style="margin:0; font-size:14px; color:var(--text);">Send me tips, reminders, and updates.</label>
+    <p class="note" style="margin-bottom:12px;">Receive occasional product updates, helpful tips, and smart grocery reminders.</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <div style="flex:1; padding-right:12px;">
+        <div style="font-weight:600; font-size:14px; color:#1f2937;">Send tips, reminders, and updates</div>
+        <div id="marketingStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Subscribed to tips, reminders, and updates.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()">
+        <span class="toggle-slider"></span>
+      </label>
     </div>
     <div class="success" id="marketingSuccess" style="margin-top:8px;"></div>
   </div>
@@ -451,7 +501,14 @@ let householdData = null;
 
   // Load household data
   const marketingCb = document.getElementById('marketingOptInSetting');
-  if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
+  const marketingStatus = document.getElementById('marketingStatusText');
+  if (marketingCb && window.currentCfg && window.currentCfg.user_info) {
+    const isOptedIn = window.currentCfg.user_info.marketing_opt_in !== false;
+    marketingCb.checked = isOptedIn;
+    if (marketingStatus) {
+      marketingStatus.textContent = isOptedIn ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+    }
+  }
 
   initDiscoveryTipsUI();
 
@@ -463,59 +520,82 @@ let householdData = null;
 function initDiscoveryTipsUI() {
   const toggle = document.getElementById('discoveryTipsToggle');
   const statusText = document.getElementById('discoveryStatusText');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
   if (!toggle) return;
 
-  let ack = [];
-  try {
-    const d = localStorage.getItem('listmate_acknowledged_tips_v1');
-    ack = d ? JSON.parse(d) : [];
-  } catch(e) { ack = []; }
+  const isDisabled = localStorage.getItem('listmate_discovery_tips_disabled') === 'true';
+  const ack = JSON.parse(localStorage.getItem('listmate_acknowledged_tips_v1') || '[]');
+  const isCompleted = ack.includes('shopping_list_view') && ack.includes('move_items') && ack.includes('quick_add');
 
-  const caughtUpFlag = localStorage.getItem('listmate_discovery_tips_caught_up') === 'true';
-  const allKeys = ['invite', 'stores_vs_general', 'store_specific', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
-  const baseKeys = ['invite', 'stores_vs_general', 'store_specific', 'quick_add', 'shopping_list_view', 'move_items'];
-  const hasCompletedBase = baseKeys.every(k => ack.includes(k));
-  const isCaughtUp = caughtUpFlag || allKeys.every(k => ack.includes(k)) || hasCompletedBase;
-
-  if (isCaughtUp) {
-    toggle.checked = false;
-    if (statusText) statusText.innerHTML = '<span style="color:#059669; font-weight:600;">🎉 You are all caught up on all tips!</span>';
-    try {
-      localStorage.setItem('listmate_acknowledged_tips_v1', JSON.stringify(allKeys));
-      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
-    } catch(e) {}
-  } else {
-    toggle.checked = true;
-    if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
+  toggle.checked = !isDisabled;
+  if (statusText) {
+    if (isDisabled) {
+      statusText.textContent = 'Discovery spotlights paused.';
+      if (replayWrap) replayWrap.style.display = 'none';
+    } else {
+      if (isCompleted) {
+        statusText.textContent = 'All current tips completed. Spotlights will appear when new features launch.';
+        if (replayWrap) replayWrap.style.display = 'block';
+      } else {
+        statusText.textContent = 'Active spotlights will show on the grocery list.';
+        if (replayWrap) replayWrap.style.display = ack.length > 0 ? 'block' : 'none';
+      }
+    }
   }
 }
 
 function toggleDiscoveryTipsSetting(checked) {
   const statusText = document.getElementById('discoveryStatusText');
   const success = document.getElementById('discoverySuccess');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
   if (checked) {
     try {
-      localStorage.removeItem('listmate_acknowledged_tips_v1');
-      localStorage.removeItem('listmate_discovery_tips_caught_up');
+      localStorage.removeItem('listmate_discovery_tips_disabled');
     } catch(e) {}
-    if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
+    const ack = JSON.parse(localStorage.getItem('listmate_acknowledged_tips_v1') || '[]');
+    const isCompleted = ack.includes('shopping_list_view') && ack.includes('move_items') && ack.includes('quick_add');
+    if (statusText) {
+      statusText.textContent = isCompleted ? 'All current tips completed. Spotlights will appear when new features launch.' : 'Active spotlights will show on the grocery list.';
+    }
+    if (replayWrap) {
+      replayWrap.style.display = (isCompleted || ack.length > 0) ? 'block' : 'none';
+    }
     if (success) {
-      success.textContent = '💡 Discovery tips reset and enabled!';
+      success.textContent = '💡 Discovery spotlights active!';
       success.style.display = 'block';
       setTimeout(() => { success.style.display = 'none'; }, 3000);
     }
   } else {
     try {
-      const allKeys = ['invite', 'stores_vs_general', 'store_specific', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
-      localStorage.setItem('listmate_acknowledged_tips_v1', JSON.stringify(allKeys));
-      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
+      localStorage.setItem('listmate_discovery_tips_disabled', 'true');
     } catch(e) {}
     if (statusText) statusText.innerHTML = '<span style="color:#6b7280;">Discovery spotlights paused.</span>';
+    if (replayWrap) replayWrap.style.display = 'none';
     if (success) {
-      success.textContent = 'Discovery tips paused.';
+      success.textContent = 'Discovery spotlights paused.';
       success.style.display = 'block';
       setTimeout(() => { success.style.display = 'none'; }, 3000);
     }
+  }
+}
+
+function replayDiscoveryTips() {
+  const toggle = document.getElementById('discoveryTipsToggle');
+  const statusText = document.getElementById('discoveryStatusText');
+  const success = document.getElementById('discoverySuccess');
+  const replayWrap = document.getElementById('discoveryReplayWrap');
+  try {
+    localStorage.removeItem('listmate_discovery_tips_disabled');
+    localStorage.removeItem('listmate_acknowledged_tips_v1');
+    localStorage.removeItem('listmate_discovery_tips_caught_up');
+  } catch(e) {}
+  if (toggle) toggle.checked = true;
+  if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
+  if (replayWrap) replayWrap.style.display = 'none';
+  if (success) {
+    success.textContent = '💡 Discovery tips reset! Spotlights will start from Step 1.';
+    success.style.display = 'block';
+    setTimeout(() => { success.style.display = 'none'; }, 3000);
   }
 }
 
@@ -551,8 +631,12 @@ function checkUrlActions() {
 async function saveMarketingOptIn() {
   const cb = document.getElementById('marketingOptInSetting');
   const msg = document.getElementById('marketingSuccess');
+  const statusText = document.getElementById('marketingStatusText');
   if (!cb) return;
   msg.style.display = 'none';
+  if (statusText) {
+    statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+  }
   try {
     const res = await fetch('/api/auth/marketing', {
       method: 'POST',
@@ -570,10 +654,16 @@ async function saveMarketingOptIn() {
       const data = await res.json();
       alert(data.error || 'Failed to save settings');
       cb.checked = !cb.checked;
+      if (statusText) {
+        statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+      }
     }
   } catch(e) {
     alert('Network error');
     cb.checked = !cb.checked;
+    if (statusText) {
+      statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+    }
   }
 }
 
