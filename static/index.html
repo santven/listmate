@@ -695,7 +695,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <button onclick="showScreen('globalVisits')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0; white-space:nowrap; flex-shrink:0; margin-top:1px;">← Back</button>
         <div id="visitDetailTitle" style="font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.5px; line-height:1.4; margin-top:2px;">Visit Details</div>
       </div>
-      <button onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; flex-shrink:0; white-space:nowrap;">+ Add to List</button>
+      <button id="btnReplanSelectedItems" onclick="replanSelectedItems()" type="button" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; flex-shrink:0; white-space:nowrap;">+ Add to List</button>
     </div>
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
        <div id="visitDetailPlanDisplay" style="font-size:14px; font-weight:600; color:var(--green-dark);"></div>
@@ -2288,6 +2288,7 @@ async function loadGlobalVisits() {
            });
         }
         $('#globalVisitsList').innerHTML = html;
+        if (window.featureDiscoveryEngine) setTimeout(() => window.featureDiscoveryEngine.checkAndApply(), 100);
       }
     }
   } catch(e) {
@@ -4773,7 +4774,8 @@ window.featureDiscoveryEngine = (function() {
       actionText: 'Go to Invite Settings ↗',
       actionUrl: '/settings?action=invite',
       type: 'menu',
-      menuTargetId: 'menuInviteLink'
+      menuTargetId: 'menuInviteLink',
+      condition: function() { return currentScreen === 'home'; }
     },
     stores_vs_general: {
       id: 'stores_vs_general',
@@ -4781,7 +4783,8 @@ window.featureDiscoveryEngine = (function() {
       body: 'Think of the General List as your catch-all list! Use it to jot down whatever you want when you\'re not sure where to buy an item yet. When you\'re ready, items can be moved to a specific store later with a single tap.',
       type: 'element',
       targetSelector: '#storeCardGeneral',
-      fallbackSelector: '#storeGrid'
+      fallbackSelector: '#storeGrid',
+      condition: function() { return currentScreen === 'home'; }
     },
     add_store: {
       id: 'add_store',
@@ -4791,7 +4794,7 @@ window.featureDiscoveryEngine = (function() {
       targetSelector: '#newStoreInput',
       fallbackSelector: '.new-store-wrap',
       condition: function() {
-        return !Array.isArray(stores) || !stores.some(s => s.name !== 'General List');
+        return currentScreen === 'home' && (!Array.isArray(stores) || !stores.some(s => s.name !== 'General List'));
       }
     },
     store_catalog: {
@@ -4802,7 +4805,7 @@ window.featureDiscoveryEngine = (function() {
       targetSelector: '#storeGrid .store-btn:not(.store-btn-general)',
       fallbackSelector: '#storeGrid',
       condition: function() {
-        return Array.isArray(stores) && stores.some(s => s.name !== 'General List');
+        return currentScreen === 'home' && (Array.isArray(stores) && stores.some(s => s.name !== 'General List'));
       }
     },
     quick_add: {
@@ -4810,7 +4813,8 @@ window.featureDiscoveryEngine = (function() {
       title: '⚡ Quick Add & Smart Routing',
       body: 'Type an item here to add it in seconds. ListMate automatically remembers and suggests the store where you frequently buy it, or routes new items to General List with one tap!',
       type: 'element',
-      targetSelector: '#quickAddInput'
+      targetSelector: '#quickAddInput',
+      condition: function() { return currentScreen === 'home'; }
     },
     shopping_list_view: {
       id: 'shopping_list_view',
@@ -4819,7 +4823,7 @@ window.featureDiscoveryEngine = (function() {
       type: 'element',
       targetSelector: '#listView .store-group:not(.purchased-section)',
       condition: function() {
-        return Array.isArray(list) && list.some(i => !i.purchased);
+        return currentScreen === 'home' && (Array.isArray(list) && list.some(i => !i.purchased));
       }
     },
     move_items: {
@@ -4829,17 +4833,38 @@ window.featureDiscoveryEngine = (function() {
       type: 'element',
       targetSelector: '#listView .store-group:not(.purchased-section) .btn-move',
       condition: function() {
-        return Array.isArray(list) && list.some(i => !i.purchased) && document.querySelector('#listView .store-group:not(.purchased-section) .btn-move') !== null;
+        return currentScreen === 'home' && (Array.isArray(list) && list.some(i => !i.purchased) && document.querySelector('#listView .store-group:not(.purchased-section) .btn-move') !== null);
       }
     },
-    reuse_visit: {
-      id: 'reuse_visit',
+    reuse_visit_menu: {
+      id: 'reuse_visit_menu',
       title: '🗓️ Reuse Past Trips',
-      body: 'Did you know you can easily re-add items from previous grocery trips? Tap here to view your Store Visits, select a past trip, and add those items back to your active list.',
+      body: 'Did you know you can easily re-add items from previous grocery trips? Tap here to view your Store Visits.',
       type: 'menu',
       menuTargetId: 'menuStoreVisitsLink',
       condition: function() {
-        return Array.isArray(stores) && stores.some(s => s.name !== 'General List' && s.last_visited && s.last_visited !== 'None');
+        return currentScreen === 'home' && Array.isArray(stores) && stores.some(s => s.name !== 'General List' && s.last_visited && s.last_visited !== 'None');
+      }
+    },
+    reuse_visit_card: {
+      id: 'reuse_visit_card',
+      title: '🗓️ Select a Past Trip',
+      body: 'Here are your recent trips! Tap on any of these past store visits to see what you bought.',
+      type: 'element',
+      targetSelector: '#globalVisitsList .store-visit-card',
+      condition: function() {
+        return currentScreen === 'globalVisits' && document.querySelector('#globalVisitsList .store-visit-card') !== null;
+      }
+    },
+    reuse_visit_add: {
+      id: 'reuse_visit_add',
+      title: '➕ Re-add Items',
+      body: 'You can select the items you need again, or just tap "+ Add to List" to instantly re-plan this entire trip!',
+      type: 'element',
+      targetSelector: '#btnReplanSelectedItems',
+      fallbackSelector: "button[onclick='replanSelectedItems()']",
+      condition: function() {
+        return currentScreen === 'visitDetail';
       }
     },
     switch_household: {
@@ -4849,13 +4874,13 @@ window.featureDiscoveryEngine = (function() {
       type: 'menu',
       menuTargetId: 'menuSwitchHouseholdLink',
       condition: function() {
-        return (window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
-               (window.currentCfg && window.currentCfg.households_count > 1);
+        return currentScreen === 'home' && ((window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
+               (window.currentCfg && window.currentCfg.households_count > 1));
       }
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
