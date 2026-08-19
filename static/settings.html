@@ -143,8 +143,49 @@
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .modal-sheet h3 { font-size: 16px; margin-bottom: 4px; }
 
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    transition: .3s;
+    border-radius: 24px;
+  }
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+  }
+  .toggle-switch input:checked + .toggle-slider,
   #discoveryTipsToggle:checked + #discoveryToggleSlider {
     background-color: var(--green);
+  }
+  .toggle-switch input:checked + .toggle-slider:before,
+  #discoveryTipsToggle:checked + #discoveryToggleSlider:before {
+    transform: translateX(20px);
   }
   #discoveryToggleSlider:before {
     position: absolute;
@@ -156,9 +197,6 @@
     background-color: white;
     transition: .3s;
     border-radius: 50%;
-  }
-  #discoveryTipsToggle:checked + #discoveryToggleSlider:before {
-    transform: translateX(20px);
   }
 </style>
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png">
@@ -343,9 +381,9 @@
         <div style="font-weight:600; font-size:14px; color:#1f2937;">Show Feature Discovery Spotlights</div>
         <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Turn ON to reset and view interactive tips.</div>
       </div>
-      <label style="position:relative; display:inline-block; width:44px; height:24px; margin:0; cursor:pointer; flex-shrink:0;">
-        <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)" style="opacity:0; width:0; height:0;">
-        <span id="discoveryToggleSlider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:24px;"></span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)">
+        <span class="toggle-slider" id="discoveryToggleSlider"></span>
       </label>
     </div>
     <div class="success" id="discoverySuccess" style="margin-top:8px;"></div>
@@ -403,9 +441,16 @@
   <!-- Marketing Emails -->
   <div class="card">
     <h2>📧 Marketing Emails</h2>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-      <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()" style="width:auto; margin:0;">
-      <label for="marketingOptInSetting" style="margin:0; font-size:14px; color:var(--text);">Send me tips, reminders, and updates.</label>
+    <p class="note" style="margin-bottom:12px;">Receive occasional product updates, helpful tips, and smart grocery reminders.</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <div style="flex:1; padding-right:12px;">
+        <div style="font-weight:600; font-size:14px; color:#1f2937;">Send tips, reminders, and updates</div>
+        <div id="marketingStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Subscribed to tips, reminders, and updates.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()">
+        <span class="toggle-slider"></span>
+      </label>
     </div>
     <div class="success" id="marketingSuccess" style="margin-top:8px;"></div>
   </div>
@@ -451,7 +496,14 @@ let householdData = null;
 
   // Load household data
   const marketingCb = document.getElementById('marketingOptInSetting');
-  if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
+  const marketingStatus = document.getElementById('marketingStatusText');
+  if (marketingCb && window.currentCfg && window.currentCfg.user_info) {
+    const isOptedIn = window.currentCfg.user_info.marketing_opt_in !== false;
+    marketingCb.checked = isOptedIn;
+    if (marketingStatus) {
+      marketingStatus.textContent = isOptedIn ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+    }
+  }
 
   initDiscoveryTipsUI();
 
@@ -539,8 +591,12 @@ function checkUrlActions() {
 async function saveMarketingOptIn() {
   const cb = document.getElementById('marketingOptInSetting');
   const msg = document.getElementById('marketingSuccess');
+  const statusText = document.getElementById('marketingStatusText');
   if (!cb) return;
   msg.style.display = 'none';
+  if (statusText) {
+    statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+  }
   try {
     const res = await fetch('/api/auth/marketing', {
       method: 'POST',
@@ -558,10 +614,16 @@ async function saveMarketingOptIn() {
       const data = await res.json();
       alert(data.error || 'Failed to save settings');
       cb.checked = !cb.checked;
+      if (statusText) {
+        statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+      }
     }
   } catch(e) {
     alert('Network error');
     cb.checked = !cb.checked;
+    if (statusText) {
+      statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
+    }
   }
 }
 
