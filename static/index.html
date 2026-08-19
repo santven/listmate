@@ -1690,6 +1690,10 @@ function renderHome() {
   }));
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
+
+  if (window.featureDiscoveryEngine) {
+    window.featureDiscoveryEngine.checkAndApply();
+  }
 }
 
 
@@ -4782,26 +4786,27 @@ window.featureDiscoveryEngine = (function() {
       targetSelector: '#storeCardGeneral',
       fallbackSelector: '#storeGrid'
     },
-    store_specific: {
-      id: 'store_specific',
-      getTargetSelector: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        return hasCustomStore ? '#storeGrid .store-btn:not(.store-btn-general)' : '#newStoreInput';
-      },
+    add_store: {
+      id: 'add_store',
+      title: '🏪 Add Your Stores',
+      body: 'Add stores you shop at—frequently or occasionally. While the General List is your catch-all, dedicated store lists keep your shopping organized by aisle.',
+      type: 'element',
+      targetSelector: '#newStoreInput',
       fallbackSelector: '.new-store-wrap',
-      getTitle: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        return hasCustomStore ? '🏪 Store-Specific Master Lists' : '🏪 Add Your Stores';
-      },
-      getBody: function() {
-        const hasCustomStore = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        if (hasCustomStore) {
-          return 'This is your store-specific master list. It contains a complete catalog of everything you buy here so you can easily pull items into your shopping list.';
-        } else {
-          return 'Add stores you shop at—frequently or occasionally. While the General List is your catch-all, dedicated store lists keep your shopping organized by aisle.';
-        }
-      },
-      type: 'element'
+      condition: function() {
+        return !Array.isArray(stores) || !stores.some(s => s.name !== 'General List');
+      }
+    },
+    store_catalog: {
+      id: 'store_catalog',
+      title: '🏪 Store-Specific Master Lists',
+      body: 'This is your store-specific master list. It contains a complete catalog of everything you buy here so you can easily pull items into your shopping list.',
+      type: 'element',
+      targetSelector: '#storeGrid .store-btn:not(.store-btn-general)',
+      fallbackSelector: '#storeGrid',
+      condition: function() {
+        return Array.isArray(stores) && stores.some(s => s.name !== 'General List');
+      }
     },
     quick_add: {
       id: 'quick_add',
@@ -4843,7 +4848,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'store_specific', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
@@ -4851,7 +4856,11 @@ window.featureDiscoveryEngine = (function() {
   function getAcknowledged() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const ack = data ? JSON.parse(data) : [];
+      if (ack.includes('store_specific') && !ack.includes('add_store')) {
+        ack.push('add_store');
+      }
+      return ack;
     } catch(e) {
       return [];
     }
