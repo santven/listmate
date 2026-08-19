@@ -499,7 +499,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a id="menuInviteLink" href="/settings?action=invite" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuInviteLink', event)) return false; if(typeof toggleBurger==='function') toggleBurger();">👥 Add / Invite Members</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
-      <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
+      <a id="menuStoreVisitsLink" href="#" onclick="showScreen('globalVisits'); if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
       <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
@@ -4839,7 +4839,7 @@ window.featureDiscoveryEngine = (function() {
       type: 'menu',
       menuTargetId: 'menuStoreVisitsLink',
       condition: function() {
-        return Array.isArray(stores) && stores.some(s => s.last_visited != null);
+        return Array.isArray(stores) && stores.some(s => s.last_visited && s.last_visited !== 'None');
       }
     },
     switch_household: {
