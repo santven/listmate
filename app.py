@@ -393,7 +393,6 @@ def login_google_native():
                     hh_id = hh["id"] if hh else 1
                     hh_name = hh["name"] if hh else "Root Household"
                     authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-                    authmod._seed_stores(hh_id)
             
             if hh_id and not hh_name:
                 hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))

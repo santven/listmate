@@ -258,10 +258,6 @@ def _init_schema():
 
 # ── Session ─────────────────────────────────────────────────
 
-def _seed_stores(household_id):
-    """Create default stores for a new household (idempotent)."""
-    pass
-
 def install(app, cookie_name="listmate_session", cookie_secure=False):
     global COOKIE_NAME
     COOKIE_NAME = cookie_name
@@ -840,7 +836,6 @@ def register_auth_routes(app):
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
-        _seed_stores(hhid)
         return jsonify({"ok": True, "household_id": hhid, "household_name": hname, "invite_code": code})
 
 
