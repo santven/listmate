@@ -33,6 +33,9 @@
   .header-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .header-meta .user { font-size: 11px; opacity: 0.8; display: none; }
   .btn-back { background: rgba(255,255,255,0.15); border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 4px 10px; border-radius: 8px; display: none; }
+  #cartIcon { cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; user-select: none; -webkit-user-drag: none; }
+  #cartIcon:hover { transform: scale(1.05); opacity: 0.95; }
+  #cartIcon:active { transform: scale(0.92); }
 
   .container { max-width: 600px; margin: 0 auto; padding: 16px; }
 
@@ -484,7 +487,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
 <div class="header">
   <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
-    <img src="/icon-192.png" id="cartIcon" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;" alt="Logo">
+  <img src="/icon-192.png" id="cartIcon" onclick="showScreen('home')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
   <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
   <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
