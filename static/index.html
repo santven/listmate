@@ -4815,18 +4815,19 @@ window.featureDiscoveryEngine = (function() {
       title: '🛒 In-Store Shopping Mode',
       body: 'Focus on this view while in the grocery aisles and check items off into your cart. If an item isn\'t in stock, tap ⇄ to move it to another store or ✕ to clear it.',
       type: 'element',
-      targetSelector: '#listView',
-      fallbackSelector: '#screenHome'
+      targetSelector: '#listView .store-group:not(.purchased-section)',
+      condition: function() {
+        return Array.isArray(list) && list.some(i => !i.purchased);
+      }
     },
     move_items: {
       id: 'move_items',
       title: '⇄ Move Items Between Stores',
       body: 'Need to change where you buy an item? Tap the ⇄ button on any item to instantly move it to another store or back to the General List.',
       type: 'element',
-      targetSelector: '.btn-move',
-      fallbackSelector: '#listView',
+      targetSelector: '#listView .store-group:not(.purchased-section) .btn-move',
       condition: function() {
-        return document.querySelector('.btn-move') !== null || (Array.isArray(list) && list.length > 0);
+        return Array.isArray(list) && list.some(i => !i.purchased) && document.querySelector('#listView .store-group:not(.purchased-section) .btn-move') !== null;
       }
     },
     switch_household: {
@@ -4922,13 +4923,6 @@ window.featureDiscoveryEngine = (function() {
     overlay.classList.add('show');
   }
 
-  function finalizeAllCaughtUp() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(TIP_ORDER));
-      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
-    } catch(e) {}
-  }
-
   function closeTipDrawer() {
     const overlay = document.getElementById('featureTipOverlay');
     if (overlay) {
@@ -4944,11 +4938,6 @@ window.featureDiscoveryEngine = (function() {
       const next = getNextTip();
       if (next) {
         applyHalo(next);
-      } else if (hadTip) {
-        finalizeAllCaughtUp();
-        if (typeof toast === 'function') {
-          toast("🎉 You're all caught up on all ListMate feature tips!");
-        }
       }
     }, 450);
   }
@@ -4978,6 +4967,9 @@ window.featureDiscoveryEngine = (function() {
       let target = selector ? document.querySelector(selector) : null;
       if (!target && tip.fallbackSelector) {
         target = document.querySelector(tip.fallbackSelector);
+      }
+      if (target && (target.classList.contains('purchased-section') || target.closest('.purchased-section'))) {
+        target = null;
       }
       if (target) {
         target.classList.add('discovery-halo');
@@ -5030,18 +5022,22 @@ window.featureDiscoveryEngine = (function() {
   }
 
   function checkAndApply() {
-    if (localStorage.getItem('listmate_discovery_tips_caught_up') === 'true') {
+    if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
+      clearHalos();
       return;
     }
     const tip = getNextTip();
     if (tip) {
       applyHalo(tip);
+    } else {
+      clearHalos();
     }
   }
 
   function resetAndStart() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('listmate_discovery_tips_disabled');
       localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
     clearHalos();
@@ -5064,8 +5060,8 @@ window.featureDiscoveryEngine = (function() {
       currentActiveTip = null;
       clearHalos();
       const next = getNextTip();
-      if (!next) {
-        finalizeAllCaughtUp();
+      if (next) {
+        applyHalo(next);
       }
     },
     resetAndStart: resetAndStart
