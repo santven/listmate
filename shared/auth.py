@@ -260,11 +260,7 @@ def _init_schema():
 
 def _seed_stores(household_id):
     """Create default stores for a new household (idempotent)."""
-    stores = _run(f"SELECT id FROM stores WHERE household_id = ?", (household_id,))
-    if stores: return  # Already seeded
-    defaults = ["Costco","Whole Foods","Valli","Patel / IndiaCo","Jewel","Amazon"]
-    for name in defaults:
-        _run(f"INSERT INTO stores (household_id, name) VALUES (?,?)", (household_id, name))
+    pass
 
 def install(app, cookie_name="listmate_session", cookie_secure=False):
     global COOKIE_NAME
