@@ -471,15 +471,22 @@ function initDiscoveryTipsUI() {
     ack = d ? JSON.parse(d) : [];
   } catch(e) { ack = []; }
 
+  const caughtUpFlag = localStorage.getItem('listmate_discovery_tips_caught_up') === 'true';
   const allKeys = ['invite', 'stores_vs_general', 'quick_add', 'move_items', 'switch_household'];
-  const isCaughtUp = allKeys.every(k => ack.includes(k));
+  const baseKeys = ['invite', 'stores_vs_general', 'quick_add', 'move_items'];
+  const hasCompletedBase = baseKeys.every(k => ack.includes(k));
+  const isCaughtUp = caughtUpFlag || allKeys.every(k => ack.includes(k)) || hasCompletedBase;
 
   if (isCaughtUp) {
     toggle.checked = false;
     if (statusText) statusText.innerHTML = '<span style="color:#059669; font-weight:600;">🎉 You are all caught up on all tips!</span>';
+    try {
+      localStorage.setItem('listmate_acknowledged_tips_v1', JSON.stringify(allKeys));
+      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
+    } catch(e) {}
   } else {
     toggle.checked = true;
-    if (statusText) statusText.textContent = `${ack.length} of ${allKeys.length} tips completed. Active spotlights will show on grocery list.`;
+    if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
   }
 }
 
@@ -489,8 +496,9 @@ function toggleDiscoveryTipsSetting(checked) {
   if (checked) {
     try {
       localStorage.removeItem('listmate_acknowledged_tips_v1');
+      localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
-    if (statusText) statusText.textContent = 'Tips active! Spotlights will appear on the grocery list.';
+    if (statusText) statusText.textContent = 'Active spotlights will show on the grocery list.';
     if (success) {
       success.textContent = '💡 Discovery tips reset and enabled!';
       success.style.display = 'block';
@@ -500,6 +508,7 @@ function toggleDiscoveryTipsSetting(checked) {
     try {
       const allKeys = ['invite', 'stores_vs_general', 'quick_add', 'move_items', 'switch_household'];
       localStorage.setItem('listmate_acknowledged_tips_v1', JSON.stringify(allKeys));
+      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
     } catch(e) {}
     if (statusText) statusText.innerHTML = '<span style="color:#6b7280;">Discovery spotlights paused.</span>';
     if (success) {
