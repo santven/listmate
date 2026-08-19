@@ -2101,13 +2101,25 @@ def init_data():
             if d.get("planned_visit_date"): d["planned_visit_date"] = str(d["planned_visit_date"])
             if d.get("last_visited"): d["last_visited"] = str(d["last_visited"])
             stores_list.append(d)
+
+        hh_count = 1
+        uid = authmod.get_user_id()
+        if uid:
+            try:
+                hh_row = authmod._one("SELECT COUNT(*) as c FROM auth_household_members WHERE user_id = ?", (uid,))
+                if hh_row and hh_row.get("c"):
+                    hh_count = int(hh_row["c"])
+            except Exception:
+                pass
+
         return jsonify({
             "stores": stores_list,
             "list": [dict(r) for r in list_items],
             "recipes": recipes,
             "is_read_only": is_read_only,
             "user_email": authmod._get().get("email") if authmod._get() else "",
-            "user_name": authmod._get().get("name", "Someone").split()[0] if authmod._get() else "Someone"
+            "user_name": authmod._get().get("name", "Someone").split()[0] if authmod._get() else "Someone",
+            "households_count": hh_count
         })
     except Exception as e:
         import traceback; traceback.print_exc()

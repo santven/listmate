@@ -209,6 +209,150 @@ body.is-read-only #btnDeleteStore,
 body.is-read-only .suggestion-chip { display: none !important; }
 body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !important; }
 
+/* ── Interactive Guided Halo Tour (Issue #310) ── */
+@keyframes listmateHaloPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(94, 190, 126, 0.85), 0 0 16px rgba(94, 190, 126, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(94, 190, 126, 0), 0 0 30px rgba(94, 190, 126, 0.9);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(94, 190, 126, 0), 0 0 16px rgba(94, 190, 126, 0);
+  }
+}
+
+.tour-halo-target {
+  position: relative !important;
+  z-index: 10001 !important;
+  animation: listmateHaloPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  outline: 3px solid #10b981 !important;
+  outline-offset: 3px !important;
+  border-radius: 12px;
+  transition: all 0.25s ease;
+}
+
+#tourBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  z-index: 10000;
+  transition: opacity 0.25s ease;
+}
+#tourBackdrop.active {
+  display: block;
+}
+
+.tour-card {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  width: calc(100% - 32px);
+  max-width: 440px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  z-index: 10002;
+  padding: 20px 22px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+.tour-card.active {
+  display: block;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.tour-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  border: 1px solid #a7f3d0;
+}
+.tour-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  float: right;
+  border-radius: 6px;
+}
+.tour-close-btn:hover {
+  color: #374151;
+  background: #f3f4f6;
+}
+.tour-title {
+  margin: 12px 0 6px 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tour-body {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tour-btn-skip {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.tour-btn-skip:hover {
+  color: #111827;
+  background: #f3f4f6;
+}
+.tour-btn-next {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tour-btn-next:active {
+  transform: scale(0.98);
+}
+
 </style>
 
 <style>
@@ -320,6 +464,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
       <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
+      <a href="#" onclick="startGuidedTour(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 App Tour</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
@@ -1097,6 +1242,9 @@ async function loadData() {
       if (initData.user_name) {
         window.userName = initData.user_name;
       }
+      if (typeof initData.households_count !== 'undefined') {
+        window.userHouseholdsCount = initData.households_count;
+      }
       saveCache();
       checkVisitNotifications();
       checkResolvedFeedbackNotifications();
@@ -1130,6 +1278,10 @@ async function loadData() {
       const searchEl = document.querySelector("#catalogSearch");
       renderCatalog(searchEl ? searchEl.value.trim() : '');
     } catch(e){}
+  }
+
+  if (typeof window.tourEngine !== 'undefined') {
+    window.tourEngine.start(false);
   }
 }
 
@@ -4322,6 +4474,23 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+<!-- Guided Halo Interactive Tour (Issue #310) -->
+<div id="tourBackdrop" onclick="if(window.tourEngine) window.tourEngine.onBackdropClick(event)"></div>
+<div id="tourCard" class="tour-card" role="dialog" aria-modal="true" aria-label="Feature Tour">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+    <span class="tour-badge" id="tourStepBadge">💡 Tip 1 of 4</span>
+    <button class="tour-close-btn" id="tourBtnClose" onclick="if(window.tourEngine) window.tourEngine.skipTour()" aria-label="Close tour">✕</button>
+  </div>
+  <div class="tour-title" id="tourStepTitle">👥 Add & Invite Members</div>
+  <div class="tour-body" id="tourStepBody">ListMate is built for real-time collaboration. Invite your partner or household members from the menu (☰) so everyone can add and check off items simultaneously!</div>
+  <div class="tour-actions">
+    <button class="tour-btn-skip" id="tourBtnSkip" onclick="if(window.tourEngine) window.tourEngine.skipTour()">Skip Tour</button>
+    <button class="tour-btn-next" id="tourBtnNext" onclick="if(window.tourEngine) window.tourEngine.nextStep()">
+      <span id="tourBtnNextText">Next Tip →</span>
+    </button>
+  </div>
+</div>
+
 <script>
 let currentResolvedFeedbackItem = null;
 
@@ -4545,6 +4714,234 @@ async function submitFeedback() {
       }, 200);
     }
   }, { passive: true });
+})();
+
+// ── Guided Halo Interactive Tour Engine (Issue #310) ──
+window.tourEngine = (function() {
+  const STORAGE_KEY = 'listmate_guided_tour_v1';
+
+  const ALL_STEPS = [
+    {
+      id: 'invite',
+      title: '👥 Add & Invite Family Members',
+      body: 'ListMate is built for real-time collaboration. Invite your partner or household members from the menu (☰) so everyone can add and check off items simultaneously!',
+      targetSelector: '#burgerBtn',
+      fallbackSelector: '#header',
+      scrollSelector: '#burgerBtn',
+      isDynamic: false
+    },
+    {
+      id: 'stores_vs_general',
+      title: '🏬 Store Lists vs. General List',
+      body: 'Tap any store tile (like Costco or Trader Joe\'s) to shop aisle-by-aisle. Not sure where you want to buy an item yet? Leave it in General List and assign a store later!',
+      targetSelector: '#storeGrid',
+      fallbackSelector: '#screenHome',
+      scrollSelector: '#storeGrid',
+      isDynamic: false
+    },
+    {
+      id: 'move_items',
+      title: '⇄ Move Items Between Stores',
+      body: 'Need to change where you buy an item? Tap the ⇄ button on any item to instantly move it to another store or back to the General List.',
+      targetSelector: '.btn-move',
+      fallbackSelector: '#listView',
+      scrollSelector: '#listView',
+      isDynamic: false
+    },
+    {
+      id: 'quick_add',
+      title: '⚡ Quick Add & Smart Store Routing',
+      body: 'Type an item here to add it in seconds. ListMate automatically suggests the store where you frequently buy it, or routes new items to General List with one tap!',
+      targetSelector: '#quickAddInput',
+      fallbackSelector: '.quick-add-wrap',
+      scrollSelector: '#quickAddInput',
+      isDynamic: false
+    },
+    {
+      id: 'switch_household',
+      title: '🏠 Switch Households',
+      body: 'You belong to multiple households! Open the menu (☰) anytime to switch between your family list, vacation home, or roommates.',
+      targetSelector: '#burgerBtn',
+      fallbackSelector: '#header',
+      scrollSelector: '#burgerBtn',
+      isDynamic: true,
+      condition: function() {
+        return (window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
+               (window.currentCfg && window.currentCfg.households_count > 1);
+      }
+    }
+  ];
+
+  let activeSteps = [];
+  let currentIndex = 0;
+  let currentTargetEl = null;
+
+  function getActiveSteps() {
+    return ALL_STEPS.filter(step => !step.isDynamic || (typeof step.condition === 'function' && step.condition()));
+  }
+
+  function getStoredState() {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? JSON.parse(data) : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function saveState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch(e) {}
+  }
+
+  function clearHalo() {
+    if (currentTargetEl) {
+      currentTargetEl.classList.remove('tour-halo-target');
+      try {
+        currentTargetEl.removeEventListener('click', onTargetClick);
+      } catch(e) {}
+      currentTargetEl = null;
+    }
+    document.querySelectorAll('.tour-halo-target').forEach(el => {
+      el.classList.remove('tour-halo-target');
+    });
+  }
+
+  function onTargetClick() {
+    // When user directly taps the highlighted element, advance step smoothly
+    setTimeout(() => {
+      nextStep();
+    }, 450);
+  }
+
+  function showStep(index) {
+    activeSteps = getActiveSteps();
+    if (index >= activeSteps.length) {
+      completeTour();
+      return;
+    }
+
+    currentIndex = index;
+    const step = activeSteps[index];
+
+    // Ensure we are on home screen so target elements are visible
+    if (typeof showScreen === 'function') {
+      const homeScreen = document.getElementById('screenHome');
+      if (homeScreen && (homeScreen.style.display === 'none' || !homeScreen.classList.contains('active'))) {
+        showScreen('home');
+      }
+    }
+
+    clearHalo();
+
+    let target = document.querySelector(step.targetSelector);
+    if (!target && step.fallbackSelector) {
+      target = document.querySelector(step.fallbackSelector);
+    }
+
+    if (target) {
+      currentTargetEl = target;
+      target.classList.add('tour-halo-target');
+      target.addEventListener('click', onTargetClick, { once: true });
+
+      // Scroll into view if not comfortably visible
+      try {
+        const rect = target.getBoundingClientRect();
+        if (rect.top < 60 || rect.bottom > (window.innerHeight - 200)) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch(e) {}
+    }
+
+    const backdrop = document.getElementById('tourBackdrop');
+    const card = document.getElementById('tourCard');
+    const badge = document.getElementById('tourStepBadge');
+    const title = document.getElementById('tourStepTitle');
+    const body = document.getElementById('tourStepBody');
+    const nextBtnText = document.getElementById('tourBtnNextText');
+
+    if (badge) badge.textContent = `💡 Tip ${index + 1} of ${activeSteps.length}`;
+    if (title) title.textContent = step.title;
+    if (body) body.textContent = step.body;
+
+    const isLast = (index === activeSteps.length - 1);
+    if (nextBtnText) {
+      nextBtnText.textContent = isLast ? 'Got it! 🎉' : 'Next Tip →';
+    }
+
+    if (backdrop) backdrop.classList.add('active');
+    if (card) card.classList.add('active');
+  }
+
+  function nextStep() {
+    showStep(currentIndex + 1);
+  }
+
+  function skipTour() {
+    saveState({ completed: true, dismissed: true, completedAt: new Date().toISOString() });
+    cleanupUI();
+  }
+
+  function completeTour() {
+    saveState({ completed: true, dismissed: false, completedAt: new Date().toISOString() });
+    cleanupUI();
+    if (typeof toast === 'function') {
+      toast('🎉 Tour completed! You\'re all set.');
+    }
+  }
+
+  function cleanupUI() {
+    clearHalo();
+    const backdrop = document.getElementById('tourBackdrop');
+    const card = document.getElementById('tourCard');
+    if (backdrop) backdrop.classList.remove('active');
+    if (card) card.classList.remove('active');
+  }
+
+  function onBackdropClick() {
+    nextStep();
+  }
+
+  function start(force = false) {
+    if (!force) {
+      const state = getStoredState();
+      if (state && (state.completed || state.dismissed)) {
+        return; // Already completed or dismissed
+      }
+    }
+    setTimeout(() => {
+      showStep(0);
+    }, 700);
+  }
+
+  return {
+    start: start,
+    nextStep: nextStep,
+    skipTour: skipTour,
+    onBackdropClick: onBackdropClick
+  };
+})();
+
+window.startGuidedTour = function() {
+  if (window.tourEngine) {
+    window.tourEngine.start(true);
+  }
+};
+
+// Check URL query parameter for forced tour replay
+(function checkTourUrlParam() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('start_tour') === '1') {
+      urlParams.delete('start_tour');
+      const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+      window.history.replaceState({}, document.title, cleanUrl);
+      setTimeout(() => {
+        window.startGuidedTour();
+      }, 900);
+    }
+  } catch(e) {}
 })();
 </script>
 </body>
