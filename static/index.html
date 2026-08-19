@@ -4903,6 +4903,13 @@ window.featureDiscoveryEngine = (function() {
     overlay.classList.add('show');
   }
 
+  function finalizeAllCaughtUp() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(TIP_ORDER));
+      localStorage.setItem('listmate_discovery_tips_caught_up', 'true');
+    } catch(e) {}
+  }
+
   function closeTipDrawer() {
     const overlay = document.getElementById('featureTipOverlay');
     if (overlay) {
@@ -4919,6 +4926,7 @@ window.featureDiscoveryEngine = (function() {
       if (next) {
         applyHalo(next);
       } else if (hadTip) {
+        finalizeAllCaughtUp();
         if (typeof toast === 'function') {
           toast("🎉 You're all caught up on all ListMate feature tips!");
         }
@@ -5002,6 +5010,9 @@ window.featureDiscoveryEngine = (function() {
   }
 
   function checkAndApply() {
+    if (localStorage.getItem('listmate_discovery_tips_caught_up') === 'true') {
+      return;
+    }
     const tip = getNextTip();
     if (tip) {
       applyHalo(tip);
@@ -5011,6 +5022,7 @@ window.featureDiscoveryEngine = (function() {
   function resetAndStart() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
     clearHalos();
     setTimeout(() => {
@@ -5031,6 +5043,10 @@ window.featureDiscoveryEngine = (function() {
       markAcknowledged(tipId);
       currentActiveTip = null;
       clearHalos();
+      const next = getNextTip();
+      if (!next) {
+        finalizeAllCaughtUp();
+      }
     },
     resetAndStart: resetAndStart
   };
