@@ -486,7 +486,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <body>
 
 <div class="header">
-  <button class="btn-back" id="btnBack" onclick="showScreen('home')">←</button>
   <img src="/icon-192.png" id="cartIcon" onclick="showScreen('home')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
   <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
   <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
@@ -1777,7 +1776,7 @@ async function openStore(sid) {
   if (!currentStore) return;
   $('#headerTitle').textContent='Add to ' + currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
-  $('#btnBack').style.display='inline'; $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
+  $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   if (navigator.onLine) {
     try {
@@ -2033,7 +2032,6 @@ function showScreen(name){
     document.querySelector('.header').classList.remove('hide-badges');
     currentStore=null;
     $('#headerTitle').textContent='Grocery List';
-    $('#btnBack').style.display='none';
     $('#screenHome').style.display='block';
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
@@ -2058,7 +2056,6 @@ function showScreen(name){
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Store Visits';
-    $('#btnBack').style.display='block';
     loadGlobalVisits();
   } else if(name==='visitDetail'){
     document.querySelector('.header').classList.add('hide-badges');
@@ -2069,7 +2066,6 @@ function showScreen(name){
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     $('#headerTitle').textContent='Visit Details';
-    $('#btnBack').style.display='none';
 
   } else if(name==='analytics'){
     if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
@@ -2081,7 +2077,6 @@ function showScreen(name){
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
     $('#headerTitle').textContent='Analytics';
-    $('#btnBack').style.display='block';
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
@@ -2098,7 +2093,6 @@ function showScreen(name){
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
-    $('#btnBack').style.display='block';
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
