@@ -466,9 +466,16 @@ function initDiscoveryTipsUI() {
   if (!toggle) return;
 
   const isDisabled = localStorage.getItem('listmate_discovery_tips_disabled') === 'true';
+  const ack = JSON.parse(localStorage.getItem('listmate_acknowledged_tips_v1') || '[]');
+  const isCompleted = ack.includes('shopping_list_view') && ack.includes('move_items') && ack.includes('quick_add');
+
   toggle.checked = !isDisabled;
   if (statusText) {
-    statusText.textContent = !isDisabled ? 'Active spotlights will show on the grocery list.' : 'Discovery spotlights paused.';
+    if (isDisabled) {
+      statusText.textContent = isCompleted ? 'All feature discovery tips completed! Toggle on to replay.' : 'Discovery spotlights paused.';
+    } else {
+      statusText.textContent = 'Active spotlights will show on the grocery list.';
+    }
   }
 }
 

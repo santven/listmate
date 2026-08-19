@@ -4866,6 +4866,17 @@ window.featureDiscoveryEngine = (function() {
     }
   }
 
+  function isAllCompleted() {
+    const ack = getAcknowledged();
+    const isMulti = (window.userHouseholdsCount && window.userHouseholdsCount > 1) ||
+                    (window.currentCfg && window.currentCfg.households_count > 1);
+    const applicableTips = TIP_ORDER.filter(key => {
+      if (key === 'switch_household' && !isMulti) return false;
+      return true;
+    });
+    return applicableTips.every(key => ack.includes(key));
+  }
+
   function markAcknowledged(tipId) {
     if (!tipId) return;
     try {
@@ -4873,6 +4884,9 @@ window.featureDiscoveryEngine = (function() {
       if (!ack.includes(tipId)) {
         ack.push(tipId);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(ack));
+      }
+      if (isAllCompleted()) {
+        localStorage.setItem('listmate_discovery_tips_disabled', 'true');
       }
     } catch(e) {}
   }
@@ -5032,6 +5046,11 @@ window.featureDiscoveryEngine = (function() {
 
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
+      clearHalos();
+      return;
+    }
+    if (isAllCompleted()) {
+      localStorage.setItem('listmate_discovery_tips_disabled', 'true');
       clearHalos();
       return;
     }
