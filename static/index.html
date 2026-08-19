@@ -4776,18 +4776,8 @@ window.featureDiscoveryEngine = (function() {
     },
     stores_vs_general: {
       id: 'stores_vs_general',
-      getTitle: function() {
-        const hasCustomStores = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        return hasCustomStores ? '📋 General List vs. Store Lists' : '📋 General List & Custom Stores';
-      },
-      getBody: function() {
-        const hasCustomStores = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
-        if (hasCustomStores) {
-          return 'Tap any store tile to shop aisle-by-aisle. Not sure where you want to buy an item yet? Leave it in General List and assign a store later with one tap!';
-        } else {
-          return 'Everything starts here in your General List! When you\'re ready, tap "+ Add Store" to create dedicated aisle-sorted lists for stores like Costco, Trader Joe\'s, or local supermarkets.';
-        }
-      },
+      title: '📋 General List: Your Catch-All List',
+      body: 'Think of the General List as your catch-all list! Use it to jot down whatever you want when you\'re not sure where to buy an item yet. When you\'re ready, items can be moved to a specific store later with a single tap.',
       type: 'element',
       targetSelector: '#storeCardGeneral',
       fallbackSelector: '#storeGrid'
