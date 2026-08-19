@@ -142,6 +142,24 @@
   .modal-sheet { background: #fff; width: 100%; max-width: 600px; border-radius: 18px 18px 0 0; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important; animation: slideUp .2s ease; position: relative; z-index: 10001; }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .modal-sheet h3 { font-size: 16px; margin-bottom: 4px; }
+
+  #discoveryTipsToggle:checked + #discoveryToggleSlider {
+    background-color: var(--green);
+  }
+  #discoveryToggleSlider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+  }
+  #discoveryTipsToggle:checked + #discoveryToggleSlider:before {
+    transform: translateX(20px);
+  }
 </style>
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -316,6 +334,23 @@
     </div>
   </div>
 
+  <!-- Feature Discovery Tips -->
+  <div class="card">
+    <h2>💡 Feature Discovery Tips</h2>
+    <p class="note" style="margin-bottom:12px;">Interactive animated spotlights highlight key features like household collaboration, store lists, and quick adding.</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <div style="flex:1; padding-right:12px;">
+        <div style="font-weight:600; font-size:14px; color:#1f2937;">Show Feature Discovery Spotlights</div>
+        <div id="discoveryStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Turn ON to reset and view interactive tips.</div>
+      </div>
+      <label style="position:relative; display:inline-block; width:44px; height:24px; margin:0; cursor:pointer; flex-shrink:0;">
+        <input type="checkbox" id="discoveryTipsToggle" onchange="toggleDiscoveryTipsSetting(this.checked)" style="opacity:0; width:0; height:0;">
+        <span id="discoveryToggleSlider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:24px;"></span>
+      </label>
+    </div>
+    <div class="success" id="discoverySuccess" style="margin-top:8px;"></div>
+  </div>
+
   <!-- Support & Feedback -->
   <div class="card">
     <h2>💬 Support & Feedback</h2>
@@ -323,9 +358,6 @@
     <button onclick="document.getElementById('feedbackModal').classList.add('active')" style="width:100%; padding:12px; background:var(--green); border:none; color:#fff; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">
       Send Feedback
     </button>
-    <a href="/?reset_tips=1" style="display:block; text-align:center; width:100%; box-sizing:border-box; padding:12px; background:#f0fdf4; border:1.5px solid var(--green); color:var(--green-dark); font-weight:600; border-radius:10px; font-size:14px; text-decoration:none; margin-top:10px;">
-      💡 Feature Discovery Tips
-    </a>
   </div>
 
   <!-- Admin Feedback & Roadmap Management (Strictly venragh@gmail.com) -->
@@ -421,10 +453,62 @@ let householdData = null;
   const marketingCb = document.getElementById('marketingOptInSetting');
   if (marketingCb && window.currentCfg && window.currentCfg.user_info) marketingCb.checked = window.currentCfg.user_info.marketing_opt_in !== false;
 
+  initDiscoveryTipsUI();
+
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
     checkUrlActions();
   });
 })();
+
+function initDiscoveryTipsUI() {
+  const toggle = document.getElementById('discoveryTipsToggle');
+  const statusText = document.getElementById('discoveryStatusText');
+  if (!toggle) return;
+
+  let ack = [];
+  try {
+    const d = localStorage.getItem('listmate_acknowledged_tips_v1');
+    ack = d ? JSON.parse(d) : [];
+  } catch(e) { ack = []; }
+
+  const allKeys = ['invite', 'stores_vs_general', 'quick_add', 'move_items', 'switch_household'];
+  const isCaughtUp = allKeys.every(k => ack.includes(k));
+
+  if (isCaughtUp) {
+    toggle.checked = false;
+    if (statusText) statusText.innerHTML = '<span style="color:#059669; font-weight:600;">🎉 You are all caught up on all tips!</span>';
+  } else {
+    toggle.checked = true;
+    if (statusText) statusText.textContent = `${ack.length} of ${allKeys.length} tips completed. Active spotlights will show on grocery list.`;
+  }
+}
+
+function toggleDiscoveryTipsSetting(checked) {
+  const statusText = document.getElementById('discoveryStatusText');
+  const success = document.getElementById('discoverySuccess');
+  if (checked) {
+    try {
+      localStorage.removeItem('listmate_acknowledged_tips_v1');
+    } catch(e) {}
+    if (statusText) statusText.textContent = 'Tips active! Spotlights will appear on the grocery list.';
+    if (success) {
+      success.textContent = '💡 Discovery tips reset and enabled!';
+      success.style.display = 'block';
+      setTimeout(() => { success.style.display = 'none'; }, 3000);
+    }
+  } else {
+    try {
+      const allKeys = ['invite', 'stores_vs_general', 'quick_add', 'move_items', 'switch_household'];
+      localStorage.setItem('listmate_acknowledged_tips_v1', JSON.stringify(allKeys));
+    } catch(e) {}
+    if (statusText) statusText.innerHTML = '<span style="color:#6b7280;">Discovery spotlights paused.</span>';
+    if (success) {
+      success.textContent = 'Discovery tips paused.';
+      success.style.display = 'block';
+      setTimeout(() => { success.style.display = 'none'; }, 3000);
+    }
+  }
+}
 
 function focusAddMember() {
   const card = document.getElementById('householdCard');

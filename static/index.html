@@ -210,34 +210,76 @@ body.is-read-only .suggestion-chip { display: none !important; }
 body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !important; }
 
 /* ── Interactive Feature Discovery Halos (Issue #310) ── */
-@keyframes listmateHaloPulse {
+@keyframes listmateAmberPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75), 0 0 12px rgba(16, 185, 129, 0.45);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.9), 0 0 12px rgba(251, 191, 36, 0.7);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0), 0 0 20px rgba(16, 185, 129, 0.7);
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0), 0 0 24px rgba(251, 191, 36, 0.95);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0), 0 0 12px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0), 0 0 12px rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes beaconPipPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.85;
   }
 }
 
 .discovery-halo {
-  animation: listmateHaloPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
-  outline: 2.5px solid #10b981 !important;
+  position: relative !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
+  border-radius: inherit;
   cursor: pointer !important;
+  transition: transform 0.2s ease;
 }
 
 .burger-btn.discovery-halo {
+  background: rgba(255, 255, 255, 0.35) !important;
+  outline: 3px solid #fbbf24 !important;
+  outline-offset: 2px !important;
   border-radius: 8px !important;
 }
 
+.burger-btn.discovery-halo::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  background: #f59e0b;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.9);
+  animation: beaconPipPulse 1.2s infinite ease-in-out;
+  pointer-events: none;
+}
+
 .burger-dropdown a.discovery-halo {
-  background: #ecfdf5 !important;
-  color: #065f46 !important;
+  background: #fef3c7 !important;
+  color: #92400e !important;
   font-weight: 700 !important;
   border-radius: 8px !important;
+  outline: 2.5px solid #f59e0b !important;
+  outline-offset: -2px !important;
+}
+
+.btn-move.discovery-halo {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  outline: 2.5px solid #f59e0b !important;
+  outline-offset: 2px !important;
+  border-radius: 6px !important;
 }
 
 /* Feature Tip Bottom Drawer */
@@ -1422,7 +1464,9 @@ function renderHome() {
   const counts={}; filteredList.filter(i=>!i.purchased).forEach(i=>{counts[i.store_id]=(counts[i.store_id]||0)+1;});
   $('#storeGrid').innerHTML=stores.map(s=>{
     const vLabel = getVisitLabel(s);
-    return '<div class="store-btn" data-id="'+s.id+'">'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span>' + (vLabel ? '<span style="display:block; font-size:10px; color:#888; margin-top:2px; font-weight:normal;">' + escapeHtml(vLabel) + '</span>' : '') + '</div>';
+    const isGeneral = (s.name === 'General List');
+    const storeIdAttr = isGeneral ? 'id="storeCardGeneral"' : ('id="storeCard_' + s.id + '"');
+    return '<div class="store-btn' + (isGeneral ? ' store-btn-general' : '') + '" data-id="'+s.id+'" ' + storeIdAttr + '>'+escapeHtml(s.name)+'<span class="count">'+(counts[s.id]||0)+' items</span>' + (vLabel ? '<span style="display:block; font-size:10px; color:#888; margin-top:2px; font-weight:normal;">' + escapeHtml(vLabel) + '</span>' : '') + '</div>';
   }).join('');
   $$('#storeGrid .store-btn').forEach(b=>b.addEventListener('click',()=>{openStore(parseInt(b.dataset.id));}));
   
@@ -4723,8 +4767,8 @@ window.featureDiscoveryEngine = (function() {
   const TIPS = {
     invite: {
       id: 'invite',
-      title: '👥 Add & Invite Members',
-      body: 'ListMate is built for real-time collaboration. Invite your partner or family members so everyone can add and check off items simultaneously!',
+      title: '👥 Add & Invite Household Members',
+      body: 'ListMate is built for real-time collaboration. Invite your partner, spouses, roommates, housemates, or family members so everyone can add and check off items simultaneously!',
       actionText: 'Go to Invite Settings ↗',
       actionUrl: '/settings?action=invite',
       type: 'menu',
@@ -4732,11 +4776,28 @@ window.featureDiscoveryEngine = (function() {
     },
     stores_vs_general: {
       id: 'stores_vs_general',
-      title: '🏬 Store Lists vs. General List',
-      body: 'Tap any store tile (like Costco or Trader Joe\'s) to shop aisle-by-aisle. Not sure where you want to buy an item yet? Leave it in General List and assign a store later!',
+      getTitle: function() {
+        const hasCustomStores = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
+        return hasCustomStores ? '📋 General List vs. Store Lists' : '📋 General List & Custom Stores';
+      },
+      getBody: function() {
+        const hasCustomStores = Array.isArray(stores) && stores.some(s => s.name !== 'General List');
+        if (hasCustomStores) {
+          return 'Tap any store tile to shop aisle-by-aisle. Not sure where you want to buy an item yet? Leave it in General List and assign a store later with one tap!';
+        } else {
+          return 'Everything starts here in your General List! When you\'re ready, tap "+ Add Store" to create dedicated aisle-sorted lists for stores like Costco, Trader Joe\'s, or local supermarkets.';
+        }
+      },
       type: 'element',
-      targetSelector: '#storeGrid',
-      fallbackSelector: '#screenHome'
+      targetSelector: '#storeCardGeneral',
+      fallbackSelector: '#storeGrid'
+    },
+    quick_add: {
+      id: 'quick_add',
+      title: '⚡ Quick Add & Smart Routing',
+      body: 'Type an item here to add it in seconds. ListMate automatically remembers and suggests the store where you frequently buy it, or routes new items to General List with one tap!',
+      type: 'element',
+      targetSelector: '#quickAddInput'
     },
     move_items: {
       id: 'move_items',
@@ -4744,14 +4805,10 @@ window.featureDiscoveryEngine = (function() {
       body: 'Need to change where you buy an item? Tap the ⇄ button on any item to instantly move it to another store or back to the General List.',
       type: 'element',
       targetSelector: '.btn-move',
-      fallbackSelector: '#listView'
-    },
-    quick_add: {
-      id: 'quick_add',
-      title: '⚡ Quick Add & Smart Suggestions',
-      body: 'Type an item here to add it in seconds. ListMate automatically remembers and suggests the store where you frequently buy it, or routes new items to General List with one tap!',
-      type: 'element',
-      targetSelector: '#quickAddInput'
+      fallbackSelector: '#listView',
+      condition: function() {
+        return document.querySelector('.btn-move') !== null || (Array.isArray(list) && list.length > 0);
+      }
     },
     switch_household: {
       id: 'switch_household',
@@ -4766,7 +4823,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'move_items', 'quick_add', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'quick_add', 'move_items', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
@@ -4828,8 +4885,11 @@ window.featureDiscoveryEngine = (function() {
     const actionsEl = document.getElementById('featureTipActions');
     if (!overlay || !titleEl || !bodyEl || !actionsEl) return;
 
-    titleEl.textContent = tip.title;
-    bodyEl.textContent = tip.body;
+    const titleText = typeof tip.getTitle === 'function' ? tip.getTitle() : tip.title;
+    const bodyText = typeof tip.getBody === 'function' ? tip.getBody() : tip.body;
+
+    titleEl.textContent = titleText;
+    bodyEl.textContent = bodyText;
 
     let actionsHtml = '';
     if (tip.actionText && tip.actionUrl) {
@@ -4848,14 +4908,22 @@ window.featureDiscoveryEngine = (function() {
     if (overlay) {
       overlay.classList.remove('show');
     }
-    if (currentActiveTip) {
-      markAcknowledged(currentActiveTip.id);
+    const hadTip = currentActiveTip;
+    if (hadTip) {
+      markAcknowledged(hadTip.id);
       currentActiveTip = null;
     }
     clearHalos();
     setTimeout(() => {
-      checkAndApply();
-    }, 500);
+      const next = getNextTip();
+      if (next) {
+        applyHalo(next);
+      } else if (hadTip) {
+        if (typeof toast === 'function') {
+          toast("🎉 You're all caught up on all ListMate feature tips!");
+        }
+      }
+    }, 450);
   }
 
   function applyHalo(tip) {
