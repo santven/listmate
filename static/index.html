@@ -499,7 +499,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a id="menuInviteLink" href="/settings?action=invite" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuInviteLink', event)) return false; if(typeof toggleBurger==='function') toggleBurger();">👥 Add / Invite Members</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
-      <a id="menuStoreVisitsLink" href="#" onclick="showScreen('globalVisits'); if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event); return false;">🗓️ Store Visits</a>
+      <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
       <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
@@ -2141,6 +2141,7 @@ async function openVisitDetail(storeId, storeName, visitDate, displayDateStr) {
         $('#btnSelectAllVisitItems').style.display = 'block';
         $('#btnSelectAllVisitItems').textContent = 'Select All';
       }
+      if (window.featureDiscoveryEngine) setTimeout(() => window.featureDiscoveryEngine.checkAndApply(), 100);
     }
   } catch(e) {
     console.error(e);
