@@ -985,6 +985,8 @@ def register_auth_routes(app):
         is_prem = status["is_premium"]
         sub_status = status["subscription_status"]
         trial_ends_at = hh.get("trial_ends_at")
+        if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
+            trial_ends_at = trial_ends_at.isoformat()
         subscription_ends_at = hh.get("subscription_ends_at")
         if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
             subscription_ends_at = subscription_ends_at.isoformat()
