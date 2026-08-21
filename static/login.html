@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#5ebe7e">
 <title>ListMate</title>
@@ -28,7 +28,12 @@
 <script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; position: relative; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { font-family: -apple-system, Roboto, sans-serif; background: #f0f4ed; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  input, select, textarea { font-size: 16px; }
+  @media screen and (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
   .card { background: #fff; border-radius: 20px; padding: 40px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; max-width: 380px; width: 90%; }
   #subtitle { font-size: 14px; color: #888; margin-bottom: 28px; }
   .step { display: none; } .step.active { display: block; }

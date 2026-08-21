@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Grocery">
@@ -24,7 +24,12 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; position: relative; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
+  input, select, textarea { font-size: 16px; }
+  @media screen and (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
   .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
   .header h1 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sandbox-badge { display: none; font-size: 11px; font-weight: 700; background: #f59e0b; color: #fff; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-left: 4px; }
@@ -541,10 +546,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-      <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+      <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
         <option value="">All Stores</option>
       </select>
-      <select id="recipeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+      <select id="recipeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
         <option value="">All Recipes</option>
       </select>
       <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share</button>
@@ -571,7 +576,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <div class="catalog-search" style="display:flex; gap:8px;">
       <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off" style="flex:2;">
-      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
+      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
     </div>
     <div class="catalog-grid" id="catalogItems"></div>
     <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
@@ -660,7 +665,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         </div>
 
         <div style="display:flex; flex-direction:column; gap:10px;">
-          <input type="text" id="recipePromptInput" placeholder="e.g. Creamy Paneer Butter Masala for 4, Quick Gluten-Free Pasta..." autocomplete="off" style="width:100%; padding:14px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
+          <input type="text" id="recipePromptInput" placeholder="e.g. Creamy Paneer Butter Masala for 4, Quick Gluten-Free Pasta..." autocomplete="off" style="width:100%; padding:14px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
           <button id="btnGenerateRecipe" onclick="generateRecipe()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-weight:600; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
             ✨ Generate Recipe (1 Credit)
           </button>
@@ -700,7 +705,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
        <div id="visitDetailPlanDisplay" style="font-size:14px; font-weight:600; color:var(--green-dark);"></div>
        <div style="display:flex; align-items:center; gap:8px;">
-           <input type="date" id="visitDetailPlanInput" style="display:none; padding:8px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:14px; background:#f9fafb;" onchange="updateVisitDetailPlanDate(this.value)">
+           <input type="date" id="visitDetailPlanInput" style="display:none; padding:8px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:16px; background:#f9fafb;" onchange="updateVisitDetailPlanDate(this.value)">
            <button onclick="toggleVisitDetailPlanInput()" id="btnVisitDetailPlanToggle" style="background:none; border:none; font-size:18px; cursor:pointer; padding:4px;" title="Set Plan Date">🗓️</button>
        </div>
     </div>
@@ -734,7 +739,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <!-- Bulk Assign Bar -->
     <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:12px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span style="font-size:13px; font-weight:600; color:#166534;">Set store for all:</span>
-      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:13px; outline:none; background:#fff; min-width:140px;"></select>
+      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:16px; outline:none; background:#fff; min-width:140px;"></select>
       <button onclick="applyBulkStore()" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Apply All</button>
     </div>
 
@@ -759,11 +764,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">Plan a Visit</h3>
     <div style="margin-bottom:16px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Store</label>
-      <select id="globalPlanStoreSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;"></select>
+      <select id="globalPlanStoreSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;"></select>
     </div>
     <div style="margin-bottom:20px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Date</label>
-      <input type="date" id="globalPlanDateInput" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;">
+      <input type="date" id="globalPlanDateInput" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
     </div>
     <div style="display:flex; gap:10px;">
       <button id="btnGlobalPlanSave" style="flex:1; background:var(--green); color:#fff; border:none; padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Save & Go to Store</button>
@@ -2875,6 +2880,10 @@ if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()
 window.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
     if (e.target.id === 'readOnlyModal') return;
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
     e.target.classList.remove('active');
   }
 });
@@ -4104,7 +4113,7 @@ function openRecipeStoreModal(recipe = null) {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
-          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
+          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:16px; background:#fff; outline:none;">
             ${options}
           </select>
         </div>
@@ -4478,7 +4487,7 @@ async function deleteSavedRecipe(id) {
     </p>
     <div style="text-align:left; margin-bottom:16px;">
         <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">New Household Name</label>
-        <input type="text" id="spinOffName" placeholder="My Personal Household" style="width:100%; padding:14px; border:1px solid var(--border); border-radius:12px; font-size:15px; outline:none; transition:border 0.2s;" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="text" id="spinOffName" placeholder="My Personal Household" style="width:100%; padding:14px; border:1px solid var(--border); border-radius:12px; font-size:16px; outline:none; transition:border 0.2s;" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <button id="btnExecuteSpinOff" onclick="executeSpinOff()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
@@ -4516,7 +4525,7 @@ async function deleteSavedRecipe(id) {
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">What's on your mind? We read every submission.</p>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Type</label>
-    <select id="feedbackType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:16px;">
+    <select id="feedbackType" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:16px; background:#fff;">
       <option value="feedback">General Feedback</option>
       <option value="feature">Feature Request</option>
       <option value="bug">Report a Bug</option>
@@ -4528,14 +4537,14 @@ async function deleteSavedRecipe(id) {
     </div>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Message</label>
-    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:14px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
+    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
     
     <div id="feedbackError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
     <div id="feedbackSuccess" style="color:var(--green-dark); font-size:13px; margin-bottom:10px; display:none;"></div>
     
     <div style="display:flex; gap:10px;">
-      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Submit</button>
-      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Submit</button>
+      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -4659,6 +4668,10 @@ document.addEventListener('DOMContentLoaded', initFeedbackStars);
 initFeedbackStars();
 
 function closeFeedbackModal() {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   document.getElementById('feedbackModal').classList.remove('active');
   document.getElementById('feedbackMessage').value = '';
   document.getElementById('feedbackError').style.display = 'none';
@@ -4681,6 +4694,11 @@ async function submitFeedback() {
     errEl.style.display = 'block';
     return;
   }
+  
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   
   errEl.style.display = 'none';
   succEl.style.display = 'none';
