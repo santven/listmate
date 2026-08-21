@@ -24,6 +24,52 @@
   window._firebaseAuth = auth;
   window._GoogleAuthProvider = GoogleAuthProvider;
   window._signInWithPopup = signInWithPopup;
+
+let cleanupCallback = null;
+function showCleanupModal(currentName, targetName, cb) {
+    const desc = document.getElementById('cleanupModalDesc');
+    if (desc) {
+        desc.innerHTML = 'You have an empty initial list (<b>' + escapeHtml(currentName) + '</b>).<br><br>Would you like to delete it now that you are joining <b>' + escapeHtml(targetName) + '</b>?';
+    }
+    cleanupCallback = cb;
+    const m = document.getElementById('cleanupModal');
+    if (m) m.classList.add('active');
+}
+if (document.getElementById('btnCleanupDelete')) {
+    document.getElementById('btnCleanupDelete').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(true);
+    });
+}
+if (document.getElementById('btnCleanupKeep')) {
+    document.getElementById('btnCleanupKeep').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(false);
+    });
+}
+
+let actionConfirmCb = null;
+function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
+    document.getElementById('actionConfirmTitle').innerHTML = title;
+    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const btn = document.getElementById('btnActionConfirm');
+    btn.innerHTML = confirmText;
+    btn.style.background = confirmColor;
+    actionConfirmCb = cb;
+    document.getElementById('actionConfirmModal').classList.add('active');
+}
+if (document.getElementById('btnActionConfirm')) {
+    document.getElementById('btnActionConfirm').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(true);
+    });
+}
+if (document.getElementById('btnActionCancel')) {
+    document.getElementById('btnActionCancel').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(false);
+    });
+}
 </script>
 <script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
@@ -214,37 +260,29 @@ function startPollingIntent(intentId) {
 function processInviteThenRedirect() {
   if (inviteToken) {
     fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
-      .then(function(r) { return r.json(); })
-      .then(function(inv) {
-        var deleteEmpty = false;
+      .then(r => r.json())
+      .then(inv => {
         if (inv.current_is_disposable && inv.current_household_name) {
-          deleteEmpty = confirm('You have an empty initial list ("' + inv.current_household_name + '").\n\nClick OK to DELETE your empty list and join "' + inv.household_name + '" (Recommended).\nClick Cancel to keep both.');
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doProcessInviteThenRedirect(inviteToken, deleteEmpty);
+            });
+        } else {
+            doProcessInviteThenRedirect(inviteToken, false);
         }
-        var url = '/api/auth/invite/' + inviteToken + '/accept';
-        fetch(url, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ delete_current_empty: deleteEmpty })
-        }).then(function(res) { return res.json(); }).then(function(d) {
-          if (d.ok) {
-            setTimeout(function() { location.replace('/?_=' + Date.now()); }, 200);
-          } else {
-            alert(d.error || 'Failed to accept invite');
-            setTimeout(function() { location.replace('/?_=' + Date.now()); }, 200);
-          }
-        }).catch(function() { setTimeout(function() { location.replace('/?_=' + Date.now()); }, 200); });
-      })
-      .catch(function() {
-        var url = '/api/auth/invite/' + inviteToken + '/accept';
-        fetch(url, { method: 'POST', credentials: 'include' }).then(function() {
-          setTimeout(function() { location.replace('/?_=' + Date.now()); }, 200);
-        });
-      });
+      }).catch(() => doProcessInviteThenRedirect(inviteToken, false));
   } else {
-    setTimeout(function() { location.replace('/?_=' + Date.now()); }, 200);
+    setTimeout(() => location.replace('/?_=' + Date.now()), 200);
   }
 }
+function doProcessInviteThenRedirect(token, deleteEmpty) {
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+    }).catch(() => setTimeout(() => location.replace('/?_=' + Date.now()), 200));
+}
+
 
 async function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
@@ -688,84 +726,68 @@ function showSignupOrInvites() {
 }
 
 function deleteEmptyHousehold(id, name) {
-    if (confirm('Delete empty household "' + name + '"?\nThis cannot be undone.')) {
-        fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include' })
-            .then(function(r) { return r.json(); })
-            .then(function(res) {
+    showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include' })
+            .then(r => r.json())
+            .then(res => {
                 if (res.ok) showSignupOrInvites();
                 else alert(res.error || 'Failed to delete');
             })
-            .catch(function() { alert('Network error'); });
-    }
+            .catch(() => alert('Network error'));
+        }
+    });
 }
+
 
 function acceptPendingInvite(token) {
     showStep2Error('');
     fetch('/api/auth/invite/' + token, { credentials: 'include' })
-    .then(function(r){ return r.json(); })
-    .then(function(inv){
-        var deleteEmpty = false;
+    .then(r => r.json())
+    .then(inv => {
         if (inv.current_is_disposable && inv.current_household_name) {
-            deleteEmpty = confirm('You have an empty initial list ("' + inv.current_household_name + '").\n\nClick OK to DELETE your empty list and join "' + inv.household_name + '" (Recommended).\nClick Cancel to keep both.');
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptPending(token, deleteEmpty);
+            });
+        } else {
+            doAcceptPending(token, false);
         }
-        fetch('/api/auth/invite/' + token + '/accept', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ delete_current_empty: deleteEmpty })
-        })
-        .then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) location.replace('/?_=' + Date.now());
-            else showStep2Error(d.error || 'Failed to accept');
-        }).catch(function(){ showStep2Error('Network error.'); });
     })
-    .catch(function(){
-        fetch('/api/auth/invite/' + token + '/accept', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' }
-        })
-        .then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) location.replace('/?_=' + Date.now());
-            else showStep2Error(d.error || 'Failed to accept');
-        }).catch(function(){ showStep2Error('Network error.'); });
-    });
+    .catch(() => doAcceptPending(token, false));
+}
+function doAcceptPending(token, deleteEmpty) {
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) location.replace('/?_=' + Date.now());
+        else showStep2Error(d.error || 'Failed to accept');
+    }).catch(() => showStep2Error('Network error.'));
 }
 
 function acceptInvite(force) {
-  var b = document.getElementById('btnAccept'); b.disabled = true; showStep2Error('');
-  fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
-    .then(function(r){ return r.json(); })
-    .then(function(inv){
-        var deleteEmpty = false;
+    var b = document.getElementById('btnAccept'); b.disabled = true; showStep2Error('');
+    fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
         if (inv.current_is_disposable && inv.current_household_name) {
-            deleteEmpty = confirm('You have an empty initial list ("' + inv.current_household_name + '").\n\nClick OK to DELETE your empty list and join "' + inv.household_name + '" (Recommended).\nClick Cancel to keep both.');
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptInviteLogin(inviteToken, force, deleteEmpty, b);
+            });
+        } else {
+            doAcceptInviteLogin(inviteToken, force, false, b);
         }
-        var url = '/api/auth/invite/' + inviteToken + '/accept';
-        if (force) url += '?force=1';
-        fetch(url, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ delete_current_empty: deleteEmpty })
-        }).then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) {
-                setTimeout(function(){ location.replace('/?_=' + Date.now()); }, 200);
-            } else {
-                showStep2Error(d.error || 'Failed');
-                b.disabled = false;
-            }
-        }).catch(function(){ showStep2Error('Network error.'); b.disabled = false; });
-    })
-    .catch(function(){
-        var url = '/api/auth/invite/' + inviteToken + '/accept';
-        if (force) url += '?force=1';
-        fetch(url, { method: 'POST', credentials: 'include' })
-            .then(function(r){ return r.json(); }).then(function(d){
-                if (d.ok) setTimeout(function(){ location.replace('/?_=' + Date.now()); }, 200);
-                else { showStep2Error(d.error || 'Failed'); b.disabled = false; }
-            }).catch(function(){ showStep2Error('Network error.'); b.disabled = false; });
-    });
+    }).catch(() => doAcceptInviteLogin(inviteToken, force, false, b));
+}
+function doAcceptInviteLogin(token, force, deleteEmpty, b) {
+    var url = '/api/auth/invite/' + token + '/accept' + (force ? '?force=1' : '');
+    fetch(url, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+        else { showStep2Error(d.error || 'Failed'); b.disabled = false; }
+    }).catch(() => { showStep2Error('Network error.'); b.disabled = false; });
 }
 
 function createHousehold() {
@@ -802,6 +824,30 @@ function showStep2Error(m){var e=document.getElementById('step2Error');e.textCon
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</div>
+
+<!-- Cleanup Modal -->
+<div class="modal-overlay" id="cleanupModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;">🗑️ Clean Up Empty List?</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="cleanupModalDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnCleanupDelete" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Delete Empty List & Join</button>
+        <button id="btnCleanupKeep" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Keep Both & Join</button>
+    </div>
+  </div>
+</div>
+
+<!-- Action Confirm Modal -->
+<div class="modal-overlay" id="actionConfirmModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnActionConfirm" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Confirm</button>
+        <button id="btnActionCancel" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
 </div>
 </body>
 </html>
