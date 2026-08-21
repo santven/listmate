@@ -1608,15 +1608,7 @@ async function submitFeedback() {
 
 // ── Admin Feedback & Roadmap Manager (Strictly venragh@gmail.com) ──
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+
 
 let adminFeedbackData = [];
 let adminFeedbackFilter = 'all';
@@ -2052,7 +2044,6 @@ function doAcceptInvite(token, deleteEmpty) {
         else { alert(d.error || 'Failed to join'); window.location.reload(); }
     }).catch(() => window.location.reload());
 }
-);
 
 function toast(msg) {
   let t = document.getElementById('toast');
