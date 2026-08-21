@@ -366,6 +366,9 @@ def _is_disposable_empty_household(hhid, uid):
     4. Exactly 1 member in the household (the user).
     5. Household is NOT an active paid subscription (free tier or expired).
     6. Household has 0 list items in list_items.
+    7. Household has NO custom stores (only "General List" or none).
+    8. Household has NO saved recipes.
+    9. Household has < 5 store/catalog items.
     """
     if not hhid or int(hhid) <= 0:
         return False
@@ -386,6 +389,22 @@ def _is_disposable_empty_household(hhid, uid):
     item_cnt = item_cnt_row.get("cnt", 0) if item_cnt_row else 0
     if item_cnt > 0:
         return False
+        
+    # Check custom stores
+    store_cnt_row = _one("SELECT COUNT(*) as cnt FROM stores WHERE household_id = ? AND name != 'General List'", (hhid,))
+    if store_cnt_row and store_cnt_row.get("cnt", 0) > 0:
+        return False
+        
+    # Check recipes
+    recipe_cnt_row = _one("SELECT COUNT(*) as cnt FROM recipes WHERE household_id = ?", (hhid,))
+    if recipe_cnt_row and recipe_cnt_row.get("cnt", 0) > 0:
+        return False
+        
+    # Check catalog items
+    catalog_cnt_row = _one("SELECT COUNT(*) as cnt FROM store_items WHERE household_id = ?", (hhid,))
+    if catalog_cnt_row and catalog_cnt_row.get("cnt", 0) >= 5:
+        return False
+        
     return True
 
 def _purge_household(hhid):
@@ -912,11 +931,7 @@ def register_auth_routes(app):
             h["member_count"] = mem_cnt.get("c", 0) if mem_cnt else 1
             h["items_count"] = item_cnt.get("c", 0) if item_cnt else 0
             
-            is_owner = (h.get("role") == "owner") or (h.get("owner_id") == uid)
-            is_paid = bool(h.get("is_premium") and h.get("subscription_status") in ["active", "premium"])
-            
-            # Can delete if owner, solo member, 0 items, and not active paid
-            h["can_delete"] = bool(is_owner and h["member_count"] <= 1 and h["items_count"] == 0 and not is_paid)
+            h["can_delete"] = _is_disposable_empty_household(hh_id, uid)
             h["is_disposable"] = h["can_delete"]
 
         current_is_disposable = False
