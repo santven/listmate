@@ -703,7 +703,7 @@ async function loadHousehold() {
     const list = document.getElementById('memberList');
     list.innerHTML = members.map(m => `
       <div class="member-row">
-        <div class="member-avatar">${escapeHtml((m.display_name || m.user_id)[0].toUpperCase())}</div>
+        <div class="member-avatar">${escapeHtml((String(m.display_name || m.user_id))[0].toUpperCase())}</div>
         <div class="member-info">
           <div class="member-name">${escapeHtml(m.display_name)}${m.user_id === householdData.current_user_id ? '<span class="you-badge">you</span>' : ''}</div>
           <div class="member-email">${escapeHtml(m.email)}</div>
