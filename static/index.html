@@ -3242,20 +3242,26 @@ function showHouseholdSwitcher() {
                 const isActive = h.id === res.active_id;
                 const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
                 
-                // Add a Leave button if it's not the only one? Or just always add it.
-                // We'll put it in a flex container
+                let deleteOrLeaveHtml = '';
+                if (h.can_delete) {
+                    deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
+                } else if (!isActive) {
+                    deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
+                }
                 
                 html += `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; margin-bottom:8px;">
                         <div style="cursor:${isActive ? 'default' : 'pointer'}; flex-grow:1;" onclick="${isActive ? '' : `switchHousehold(${h.id})`}">
                             <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
+                            <div style="font-size:12px; color:var(--muted); margin-top:2px;">${counts}</div>
                         </div>
-                        <div style="display:flex; gap:12px; align-items:center;">
+                        <div style="display:flex; gap:10px; align-items:center;">
                             ${actionHtml}
-                            <button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px;" title="Leave Household">🚪</button>
+                            ${deleteOrLeaveHtml}
                         </div>
                     </div>
                 `;
@@ -3280,6 +3286,19 @@ function showHouseholdSwitcher() {
         }
         document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
     });
+}
+
+function confirmDeleteHousehold(id, name) {
+    if (confirm(`Delete empty household "${name}"?\nThis cannot be undone.`)) {
+        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
+        fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) window.location.reload();
+            else { alert(res.error || 'Failed to delete'); showHouseholdSwitcher(); }
+        })
+        .catch(() => { alert('Network error'); showHouseholdSwitcher(); });
+    }
 }
 
 function confirmLeaveHousehold(id, name) {
@@ -3322,12 +3341,32 @@ function switchHousehold(id) {
     }).then(() => window.location.reload());
 }
 function acceptInvite(token) {
-    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
-    fetch(`/api/auth/invite/${token}/accept`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-    }).then(() => window.location.reload());
+    fetch('/api/auth/invite/' + token, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
+        let deleteEmpty = false;
+        if (inv.current_is_disposable && inv.current_household_name) {
+            deleteEmpty = confirm(`You have an empty initial list ("${inv.current_household_name}").\n\nClick OK to DELETE your empty list and join "${inv.household_name}" (Recommended).\nClick Cancel to keep both.`);
+        }
+        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+        fetch(`/api/auth/invite/${token}/accept`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ delete_current_empty: deleteEmpty })
+        }).then(r => r.json()).then(d => {
+            if (d.ok) window.location.reload();
+            else { alert(d.error || 'Failed to join'); window.location.reload(); }
+        }).catch(() => window.location.reload());
+    })
+    .catch(() => {
+        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+        fetch(`/api/auth/invite/${token}/accept`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+        }).then(() => window.location.reload());
+    });
 }
 window.addEventListener('click', e => {
   if (e.target.id === 'switcherModal') closeHouseholdSwitcher();

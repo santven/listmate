@@ -357,6 +357,63 @@ def require_user(fn):
         return fn(*a, **kw)
     return w
 
+def _is_disposable_empty_household(hhid, uid):
+    """
+    Checks if a household is safe to delete/clean up automatically:
+    1. Valid ID > 0.
+    2. Household exists.
+    3. User is owner or sole member.
+    4. Exactly 1 member in the household (the user).
+    5. Household is NOT an active paid subscription (free tier or expired).
+    6. Household has 0 list items in list_items.
+    """
+    if not hhid or int(hhid) <= 0:
+        return False
+    hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
+    if not hh:
+        return False
+    is_prem = bool(hh.get("is_premium", False))
+    sub_status = hh.get("subscription_status") or "free"
+    if is_prem and sub_status in ["active", "premium"]:
+        return False
+    mem_cnt_row = _one("SELECT COUNT(*) as cnt FROM auth_household_members WHERE household_id = ?", (hhid,))
+    mem_cnt = mem_cnt_row.get("cnt", 0) if mem_cnt_row else 0
+    user_cnt_row = _one(f"SELECT COUNT(*) as cnt FROM {_USERS} WHERE household_id = ? AND id != ?", (hhid, uid))
+    other_users = user_cnt_row.get("cnt", 0) if user_cnt_row else 0
+    if mem_cnt > 1 or other_users > 0:
+        return False
+    item_cnt_row = _one("SELECT COUNT(*) as cnt FROM list_items WHERE household_id = ?", (hhid,))
+    item_cnt = item_cnt_row.get("cnt", 0) if item_cnt_row else 0
+    if item_cnt > 0:
+        return False
+    return True
+
+def _purge_household(hhid):
+    """Transactionally purges all records belonging to a household and deletes the household."""
+    if not hhid or int(hhid) <= 0:
+        return
+    stmts = [
+        "DELETE FROM store_visits WHERE household_id = ?",
+        "DELETE FROM store_enrich_queue WHERE household_id = ?",
+        "DELETE FROM item_purchase_stats WHERE household_id = ?",
+        "DELETE FROM list_items WHERE household_id = ?",
+        "DELETE FROM store_items WHERE household_id = ?",
+        "DELETE FROM stores WHERE household_id = ?",
+        "DELETE FROM invites WHERE household_id = ?",
+        "DELETE FROM household_subscription_history WHERE household_id = ?",
+        "DELETE FROM household_barcodes WHERE household_id = ?",
+        "DELETE FROM recipes WHERE household_id = ?",
+        "DELETE FROM recipe_generations WHERE household_id = ?",
+        "DELETE FROM ai_insights_cache WHERE household_id = ?",
+        "DELETE FROM auth_household_members WHERE household_id = ?",
+        f"DELETE FROM {_HH} WHERE id = ?",
+    ]
+    for sql in stmts:
+        try:
+            _exec(sql, (hhid,))
+        except Exception as e:
+            print(f"[_purge_household] Notice for {sql}: {e}", flush=True)
+
 # ── Routes ──────────────────────────────────────────────────
 
 def register_auth_routes(app):
@@ -767,17 +824,7 @@ def register_auth_routes(app):
 
         # 4. If last member, purge household data
         if hhid and is_last_member:
-            for stmt in [
-                "DELETE FROM store_enrich_queue WHERE household_id = ?",
-                "DELETE FROM store_visits WHERE household_id = ?",
-                "DELETE FROM list_items WHERE household_id = ?",
-                "DELETE FROM store_items WHERE household_id = ?",
-                "DELETE FROM stores WHERE household_id = ?",
-                "DELETE FROM invites WHERE household_id = ?",
-                f"DELETE FROM {_HH} WHERE id = ?",
-            ]:
-                try: _run(stmt, (hhid,))
-                except Exception: pass
+            _purge_household(hhid)
 
         _clear()
         return jsonify({"ok": True, "message": "Account deleted successfully"})
@@ -795,6 +842,7 @@ def register_auth_routes(app):
         data = request.get_json(silent=True) or {}
         hname = (data.get("household_name") or "").strip()
         opt_in = data.get("marketing_opt_in")
+        delete_current = bool(data.get("delete_current_empty", False))
         if opt_in is None:
             country = request.headers.get('CF-IPCountry') or request.headers.get('X-Appengine-Country') or request.headers.get('X-Country') or 'US'
             eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
@@ -809,15 +857,22 @@ def register_auth_routes(app):
             user['marketing_opt_in'] = bool(mem['marketing_opt_in']) if mem and mem.get('marketing_opt_in') is not None else True
 
         if not user: return jsonify({"error": "User not found"}), 404
-        if user["household_id"] != 0: return jsonify({"error": "Already in household"}), 400
 
         if invite:
             hh = _one(f"SELECT * FROM {_HH} WHERE invite_code = ?", (invite,))
             if not hh: return jsonify({"error": "Invalid invite code"}), 404
+
+            old_hhid = user.get("household_id")
+            if old_hhid and old_hhid != 0 and old_hhid != hh["id"]:
+                if delete_current and _is_disposable_empty_household(old_hhid, uid):
+                    _purge_household(old_hhid)
+
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh["id"], uid))
             _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', (SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1)) ON CONFLICT DO NOTHING", (uid, hh["id"], hh["id"]))
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
+
+        if user["household_id"] != 0: return jsonify({"error": "Already in household"}), 400
 
         if not hname:
             user_name = (user.get("name") or "").strip() or (user.get("email", "").split("@")[0] if user.get("email") else "My")
@@ -848,13 +903,41 @@ def register_auth_routes(app):
         active_hhid = get_household_id()
         
         # Get all households they belong to
-        hhs = _run("SELECT h.id, h.name, h.subscription_status, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
+        hhs = _run("SELECT h.id, h.name, h.subscription_status, h.is_premium, h.owner_id, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
+        
+        for h in hhs:
+            hh_id = h["id"]
+            mem_cnt = _one("SELECT COUNT(*) as c FROM auth_household_members WHERE household_id = ?", (hh_id,))
+            item_cnt = _one("SELECT COUNT(*) as c FROM list_items WHERE household_id = ?", (hh_id,))
+            h["member_count"] = mem_cnt.get("c", 0) if mem_cnt else 1
+            h["items_count"] = item_cnt.get("c", 0) if item_cnt else 0
+            
+            is_owner = (h.get("role") == "owner") or (h.get("owner_id") == uid)
+            is_paid = bool(h.get("is_premium") and h.get("subscription_status") in ["active", "premium"])
+            
+            # Can delete if owner, solo member, 0 items, and not active paid
+            h["can_delete"] = bool(is_owner and h["member_count"] <= 1 and h["items_count"] == 0 and not is_paid)
+            h["is_disposable"] = h["can_delete"]
+
+        current_is_disposable = False
+        current_hh_name = ""
+        if active_hhid:
+            current_is_disposable = _is_disposable_empty_household(active_hhid, uid)
+            current_hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (active_hhid,))
+            current_hh_name = current_hh.get("name", "") if current_hh else ""
         
         # Get open invites for their email
         email = get_email()
         invites = _run("SELECT i.id, i.token, h.name as household_name FROM invites i JOIN auth_households h ON i.household_id = h.id WHERE LOWER(i.email) = LOWER(?) AND i.used_by IS NULL", (email,))
         
-        return jsonify({"ok": True, "active_id": active_hhid, "households": hhs, "invites": invites})
+        return jsonify({
+            "ok": True,
+            "active_id": active_hhid,
+            "households": hhs,
+            "invites": invites,
+            "current_is_disposable": current_is_disposable,
+            "current_household_name": current_hh_name
+        })
 
     @app.route("/api/auth/switch_household", methods=["POST"])
     @require_user
@@ -984,7 +1067,7 @@ def register_auth_routes(app):
     def auth_check_invite(token):
         _init_schema()
         invite = _one(
-            """SELECT i.id, h.name as household_name, i.email, i.expires_at, i.used_by
+            """SELECT i.id, h.name as household_name, i.household_id, i.email, i.expires_at, i.used_by
                FROM invites i JOIN auth_households h ON h.id = i.household_id
                WHERE i.token = ?""",
             (token,))
@@ -992,12 +1075,27 @@ def register_auth_routes(app):
             return jsonify({"valid": False, "error": "Invalid invite link"}), 404
         if invite.get("used_by"):
             return jsonify({"valid": False, "error": "Invite already used"}), 410
-        return jsonify({"valid": True, "household_name": invite["household_name"],
-                        "email": invite.get("email")})
+
+        uid = get_user_id()
+        current_is_disposable = False
+        current_hh_name = ""
+        current_hhid = get_household_id()
+        if uid and current_hhid and current_hhid != invite["household_id"]:
+            current_is_disposable = _is_disposable_empty_household(current_hhid, uid)
+            cur_hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (current_hhid,))
+            current_hh_name = cur_hh.get("name", "") if cur_hh else ""
+
+        return jsonify({
+            "valid": True,
+            "household_name": invite["household_name"],
+            "household_id": invite["household_id"],
+            "email": invite.get("email"),
+            "current_is_disposable": current_is_disposable,
+            "current_household_name": current_hh_name
+        })
 
     @app.route("/api/auth/invite/<token>/accept", methods=["POST"])
     @require_user
-
     def auth_accept_invite(token):
         from flask import request
         _init_schema()
@@ -1007,13 +1105,19 @@ def register_auth_routes(app):
 
         uid = get_user_id()
         user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
         if user:
             mem = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, user['household_id']))
             user['marketing_opt_in'] = bool(mem['marketing_opt_in']) if mem and mem.get('marketing_opt_in') is not None else True
 
-
         if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
             return jsonify({"error": "This invite is for a different email address"}), 403
+
+        data = request.get_json(silent=True) or {}
+        delete_current = data.get("delete_current_empty") or request.args.get("delete_current_empty") in ["1", "true", "True"]
+        old_hhid = user.get("household_id")
 
         # Add to junction table
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, invite["household_id"], invite["household_id"]))
@@ -1023,6 +1127,11 @@ def register_auth_routes(app):
         
         _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
         
+        # Clean up disposable empty household if requested
+        if delete_current and old_hhid and old_hhid != invite["household_id"]:
+            if _is_disposable_empty_household(old_hhid, uid):
+                _purge_household(old_hhid)
+
         hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (invite["household_id"],))
         hh_name = hh.get("name", "") if hh else ""
         _set(uid, user["email"], user["name"], invite["household_id"], hh_name)
@@ -1061,16 +1170,67 @@ def register_auth_routes(app):
                 
         _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
         
-        user = _one(f"SELECT household_id FROM {_USERS} WHERE id = ?", (uid,))
+        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
         if user and user.get("household_id") == hh_id:
-            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY household_id ASC LIMIT 1", (uid,))
             if other:
                 new_id = other["household_id"]
                 _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_id, uid))
+                other_hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (new_id,))
+                hh_name = other_hh.get("name", "") if other_hh else ""
+                _set(uid, user["email"], user["name"], new_id, hh_name)
             else:
                 _run(f"UPDATE {_USERS} SET household_id = 0 WHERE id = ?", (uid,))
+                _set(uid, user["email"], user["name"], 0, "")
         
         return jsonify({"ok": True})
+
+    @app.route("/api/auth/household/<int:hh_id>", methods=["DELETE"])
+    @app.route("/api/auth/household/<int:hh_id>/delete", methods=["POST", "DELETE"])
+    @require_user
+    def auth_delete_household(hh_id):
+        _init_schema()
+        uid = get_user_id()
+        if not uid:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hh_id,))
+        if not hh:
+            return jsonify({"error": "Household not found"}), 404
+
+        mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
+        is_owner = (mem and mem.get("role") == "owner") or (hh.get("owner_id") == uid)
+        if not is_owner:
+            return jsonify({"error": "Only the household owner can delete the household."}), 403
+
+        is_prem = bool(hh.get("is_premium"))
+        sub_status = hh.get("subscription_status") or "free"
+        if is_prem and sub_status in ["active", "premium"]:
+            return jsonify({"error": "Cannot delete a household with an active Premium subscription. Please cancel your subscription first."}), 400
+
+        mem_cnt_row = _one("SELECT COUNT(*) as cnt FROM auth_household_members WHERE household_id = ?", (hh_id,))
+        mem_cnt = mem_cnt_row.get("cnt", 0) if mem_cnt_row else 0
+        if mem_cnt > 1:
+            return jsonify({"error": "Cannot delete household with other active members. Remove members first or transfer ownership."}), 400
+
+        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+        switched_to = None
+        if user and user.get("household_id") == hh_id:
+            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND household_id != ? ORDER BY household_id ASC LIMIT 1", (uid, hh_id))
+            if other:
+                new_hhid = other["household_id"]
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
+                other_hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (new_hhid,))
+                hh_name = other_hh.get("name", "") if other_hh else ""
+                _set(uid, user["email"], user["name"], new_hhid, hh_name)
+                switched_to = new_hhid
+            else:
+                _run(f"UPDATE {_USERS} SET household_id = 0 WHERE id = ?", (uid,))
+                _set(uid, user["email"], user["name"], 0, "")
+                switched_to = 0
+
+        _purge_household(hh_id)
+        return jsonify({"ok": True, "deleted_household_id": hh_id, "switched_to": switched_to})
 
 
     @app.route("/api/auth/household/spinoff", methods=["POST"])
