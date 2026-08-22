@@ -1828,6 +1828,7 @@ async function savePlanDate(storeId, dateStr) {
 }
 
 async function openStore(sid) {
+  currentScreen = 'catalog';
   window.scrollTo(0, 0);
   currentStore=stores.find(s=>s.id===sid);
   if (!currentStore) return;
@@ -5051,7 +5052,7 @@ window.featureDiscoveryEngine = (function() {
     }
     const hadTip = currentActiveTip;
     if (hadTip) {
-      if (hadTip.id === 'logo_home' && typeof showScreen === 'function' && currentScreen !== 'home') {
+      if (hadTip.id === 'logo_home' && typeof showScreen === 'function') {
         showScreen('home');
       }
       markAcknowledged(hadTip.id);
@@ -5198,7 +5199,7 @@ window.featureDiscoveryEngine = (function() {
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
-      if (tipId === 'logo_home' && typeof showScreen === 'function' && currentScreen !== 'home') {
+      if (tipId === 'logo_home' && typeof showScreen === 'function') {
         showScreen('home');
       }
       markAcknowledged(tipId);
