@@ -297,6 +297,12 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
   transition: transform 0.2s ease;
 }
 
+#cartIcon.discovery-halo {
+  outline: 3px solid #fbbf24 !important;
+  outline-offset: 2px !important;
+  border-radius: 10px !important;
+}
+
 .burger-btn.discovery-halo {
   background: rgba(255, 255, 255, 0.35) !important;
   outline: 3px solid #fbbf24 !important;
@@ -4841,6 +4847,14 @@ window.featureDiscoveryEngine = (function() {
       fallbackSelector: '#storeGrid',
       condition: function() { return currentScreen === 'home'; }
     },
+    logo_home: {
+      id: 'logo_home',
+      title: '🌱 Return Home Anytime',
+      body: 'Tap the ListMate logo in the top-left header anytime to quickly return to your main Grocery List dashboard from anywhere in the app.',
+      type: 'element',
+      targetSelector: '#cartIcon',
+      condition: function() { return true; }
+    },
     add_store: {
       id: 'add_store',
       title: '🏪 Add Your Stores',
@@ -4935,7 +4949,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
@@ -5037,6 +5051,9 @@ window.featureDiscoveryEngine = (function() {
     }
     const hadTip = currentActiveTip;
     if (hadTip) {
+      if (hadTip.id === 'logo_home' && typeof showScreen === 'function') {
+        showScreen('home');
+      }
       markAcknowledged(hadTip.id);
       currentActiveTip = null;
     }
@@ -5083,6 +5100,9 @@ window.featureDiscoveryEngine = (function() {
         const handler = function(e) {
           e.preventDefault();
           e.stopPropagation();
+          if (tip.id === 'logo_home' && typeof showScreen === 'function') {
+            showScreen('home');
+          }
           showTipDrawer(tip);
         };
         target.addEventListener('click', handler, { once: true });
@@ -5163,6 +5183,9 @@ window.featureDiscoveryEngine = (function() {
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
+      if (tipId === 'logo_home' && typeof showScreen === 'function') {
+        showScreen('home');
+      }
       markAcknowledged(tipId);
       currentActiveTip = null;
       clearHalos();
