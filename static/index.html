@@ -4953,6 +4953,7 @@ window.featureDiscoveryEngine = (function() {
   const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
 
   let currentActiveTip = null;
+  let currentActiveTarget = null;
   let boundElements = [];
 
   function getAcknowledged() {
@@ -5051,12 +5052,25 @@ window.featureDiscoveryEngine = (function() {
       overlay.classList.remove('show');
     }
     const hadTip = currentActiveTip;
+    const targetToClick = currentActiveTarget;
     if (hadTip) {
       if (hadTip.id === 'logo_home' && typeof showScreen === 'function') {
         showScreen('home');
+      } else if (hadTip.id === 'reuse_visit_menu' && typeof showScreen === 'function') {
+        showScreen('globalVisits');
+      } else if (hadTip.id === 'reuse_visit_card') {
+        const cardEl = targetToClick || document.querySelector('#globalVisitsList .store-visit-card');
+        if (cardEl && typeof cardEl.click === 'function') {
+          setTimeout(() => {
+            try { cardEl.click(); } catch(e) {}
+          }, 50);
+        }
+      } else if (hadTip.id === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
+        showHouseholdSwitcher();
       }
       markAcknowledged(hadTip.id);
       currentActiveTip = null;
+      currentActiveTarget = null;
     }
     clearHalos();
     setTimeout(() => {
@@ -5101,6 +5115,7 @@ window.featureDiscoveryEngine = (function() {
         const handler = function(e) {
           e.preventDefault();
           e.stopPropagation();
+          currentActiveTarget = target;
           showTipDrawer(tip);
         };
         target.addEventListener('click', handler, { once: true });
@@ -5201,9 +5216,21 @@ window.featureDiscoveryEngine = (function() {
     onActionClick: function(tipId) {
       if (tipId === 'logo_home' && typeof showScreen === 'function') {
         showScreen('home');
+      } else if (tipId === 'reuse_visit_menu' && typeof showScreen === 'function') {
+        showScreen('globalVisits');
+      } else if (tipId === 'reuse_visit_card') {
+        const cardEl = currentActiveTarget || document.querySelector('#globalVisitsList .store-visit-card');
+        if (cardEl && typeof cardEl.click === 'function') {
+          setTimeout(() => {
+            try { cardEl.click(); } catch(e) {}
+          }, 50);
+        }
+      } else if (tipId === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
+        showHouseholdSwitcher();
       }
       markAcknowledged(tipId);
       currentActiveTip = null;
+      currentActiveTarget = null;
       clearHalos();
       const next = getNextTip();
       if (next) {
