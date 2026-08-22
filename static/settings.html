@@ -630,6 +630,12 @@ function checkUrlActions() {
   const hash = window.location.hash;
   if (params.get('action') === 'invite' || params.get('action') === 'add-member' || params.get('action') === 'add_member' || hash === '#add-member' || hash === '#householdCard' || hash === '#members') {
     setTimeout(focusAddMember, 250);
+  } else if (params.get('action') === 'upgrade' || params.get('action') === 'paywall' || hash === '#upgrade' || hash === '#paywall') {
+    setTimeout(() => {
+      if (typeof showPaywall === 'function') {
+        showPaywall();
+      }
+    }, 300);
   }
 }
 

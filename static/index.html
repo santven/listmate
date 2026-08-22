@@ -527,7 +527,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     }
 
     const screenParam = urlParams.get('screen');
-    if (screenParam === 'globalVisits') {
+    const actionParam = urlParams.get('action');
+    if (actionParam === 'upgrade' || actionParam === 'paywall' || screenParam === 'upgrade') {
+      setTimeout(() => { if (typeof showPaywall === 'function') showPaywall(); }, 400);
+    } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
       setTimeout(() => { showAnalyticsScreen(); }, 400);

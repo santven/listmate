@@ -84,7 +84,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         subject = f"Your ListMate {term} ends in {days_left} days"
         urgency_text = f"expires in {days_left} days"
 
-    upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
+    upgrade_link = "https://grocerlist.app/open?url=/settings?action=upgrade&source=email_reminder"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -221,7 +221,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         return False
 
     app_link = "https://grocerlist.app/open?url=/?source=email_combined"
-    upgrade_link = "https://listmate.app/upgrade?source=email_reminder"
+    upgrade_link = "https://grocerlist.app/open?url=/settings?action=upgrade&source=email_reminder"
 
     # Build dynamic subject and content based on events
     html_sections = []
