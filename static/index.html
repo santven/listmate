@@ -543,7 +543,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <body>
 
 <div class="header">
-  <img src="/icon-192.png" id="cartIcon" onclick="showScreen('home')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
+  <img src="/icon-192.png" id="cartIcon" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
   <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
   <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
@@ -5051,7 +5051,7 @@ window.featureDiscoveryEngine = (function() {
     }
     const hadTip = currentActiveTip;
     if (hadTip) {
-      if (hadTip.id === 'logo_home' && typeof showScreen === 'function') {
+      if (hadTip.id === 'logo_home' && typeof showScreen === 'function' && currentScreen !== 'home') {
         showScreen('home');
       }
       markAcknowledged(hadTip.id);
@@ -5100,9 +5100,6 @@ window.featureDiscoveryEngine = (function() {
         const handler = function(e) {
           e.preventDefault();
           e.stopPropagation();
-          if (tip.id === 'logo_home' && typeof showScreen === 'function') {
-            showScreen('home');
-          }
           showTipDrawer(tip);
         };
         target.addEventListener('click', handler, { once: true });
@@ -5148,9 +5145,26 @@ window.featureDiscoveryEngine = (function() {
     return false;
   }
 
+  function onLogoClick(e) {
+    const nextTip = getNextTip();
+    if (nextTip && nextTip.id === 'logo_home') {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      showTipDrawer(nextTip);
+      return true;
+    }
+    return false;
+  }
+
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
       clearHalos();
+      return;
+    }
+    const overlay = document.getElementById('featureTipOverlay');
+    if (overlay && overlay.classList.contains('show')) {
       return;
     }
     const tip = getNextTip();
@@ -5180,10 +5194,11 @@ window.featureDiscoveryEngine = (function() {
     checkAndApply: checkAndApply,
     onBurgerToggle: onBurgerToggle,
     onMenuItemClick: onMenuItemClick,
+    onLogoClick: onLogoClick,
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
-      if (tipId === 'logo_home' && typeof showScreen === 'function') {
+      if (tipId === 'logo_home' && typeof showScreen === 'function' && currentScreen !== 'home') {
         showScreen('home');
       }
       markAcknowledged(tipId);
