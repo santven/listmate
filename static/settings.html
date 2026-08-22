@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#5ebe7e">
@@ -10,7 +10,12 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; position: relative; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; }
+  input, select, textarea { font-size: 16px; }
+  @media screen and (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
   .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; min-height: 56px; }
   .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
   
@@ -31,7 +36,7 @@
   .member-role { font-size: 11px; color: var(--muted); background: #f0f4ed; padding: 2px 8px; border-radius: 6px; }
 
   .add-member { display: flex; gap: 8px; margin-top: 12px; }
-  .add-member input { flex: 1; padding: 10px 12px; font-size: 14px; border: 1.5px solid var(--border); border-radius: 8px; outline: none; }
+  .add-member input { flex: 1; padding: 10px 12px; font-size: 16px; border: 1.5px solid var(--border); border-radius: 8px; outline: none; }
   .add-member input:focus { border-color: var(--green); }
   .add-member button { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .add-member button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -207,7 +212,7 @@
 
 <div class="header">
   <a href="/" style="text-decoration:none;display:inline-flex;align-items:center;" aria-label="Go to Grocery List" title="Go to Grocery List">
-    <div style="width:38px;height:38px;min-width:38px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.12);margin-left:4px;cursor:pointer;">⚙️</div>
+    <img src="/icon-192.png" id="cartIcon" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo">
   </a>
   <h1 style="margin-left:6px;font-size:18px;font-weight:700;flex:1;">Settings</h1>
   <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:8px;border:1px solid rgba(255,255,255,0.4);flex-shrink:0;white-space:nowrap;" onclick="showPaywall()">Free</span>
@@ -286,11 +291,11 @@
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
       <div>
         <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">ZIP / Postal Code</label>
-        <input type="text" id="locZip" placeholder="e.g. 60601" onchange="saveLocation()" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid var(--border);border-radius:8px;outline:none">
+        <input type="text" id="locZip" placeholder="e.g. 60601" onchange="saveLocation()" style="width:100%;padding:10px 12px;font-size:16px;border:1.5px solid var(--border);border-radius:8px;outline:none">
       </div>
       <div>
         <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">Country</label>
-        <input type="text" id="locCountry" placeholder="e.g. USA" onchange="saveLocation()" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid var(--border);border-radius:8px;outline:none">
+        <input type="text" id="locCountry" placeholder="e.g. USA" onchange="saveLocation()" style="width:100%;padding:10px 12px;font-size:16px;border:1.5px solid var(--border);border-radius:8px;outline:none">
       </div>
     </div>
     <div class="success" id="locSuccess" style="margin-top:8px;"></div>
@@ -435,7 +440,7 @@
 
     <!-- Search / Filter input -->
     <div style="margin-bottom:14px;">
-      <input type="text" id="adminFeedbackSearch" placeholder="Search feedback message, user, or ID..." oninput="renderAdminFeedbackList()" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); font-size:13px; outline:none; background:#fff;">
+      <input type="text" id="adminFeedbackSearch" placeholder="Search feedback message, user, or ID..." oninput="renderAdminFeedbackList()" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); font-size:16px; outline:none; background:#fff;">
     </div>
 
     <!-- Feedback List Items Container -->
@@ -1464,17 +1469,26 @@ function showHouseholdSwitcher() {
                 const isActive = h.id === res.active_id;
                 const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
+                
+                let deleteOrLeaveHtml = '';
+                if (h.can_delete) {
+                    deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
+                } else if (!isActive) {
+                    deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
+                }
                 
                 html += `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; margin-bottom:8px;">
                         <div style="cursor:${isActive ? 'default' : 'pointer'}; flex-grow:1;" onclick="${isActive ? '' : `switchHousehold(${h.id})`}">
                             <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
+                            <div style="font-size:12px; color:var(--muted); margin-top:2px;">${counts}</div>
                         </div>
-                        <div style="display:flex; gap:12px; align-items:center;">
+                        <div style="display:flex; gap:10px; align-items:center;">
                             ${actionHtml}
-                            <button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px;" title="Leave Household">🚪</button>
+                            ${deleteOrLeaveHtml}
                         </div>
                     </div>
                 `;
@@ -1529,6 +1543,10 @@ document.addEventListener('DOMContentLoaded', initFeedbackStars);
 initFeedbackStars();
 
 function closeFeedbackModal() {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   document.getElementById('feedbackModal').classList.remove('active');
   document.getElementById('feedbackMessage').value = '';
   document.getElementById('feedbackError').style.display = 'none';
@@ -1551,6 +1569,11 @@ async function submitFeedback() {
     errEl.style.display = 'block';
     return;
   }
+  
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   
   errEl.style.display = 'none';
   succEl.style.display = 'none';
@@ -1807,6 +1830,10 @@ async function openAdminTriageModal(id) {
 }
 
 function closeAdminTriageModal() {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   document.getElementById('adminTriageModal').classList.remove('active');
 }
 
@@ -1877,6 +1904,10 @@ function openAdminResolveModal(id) {
 }
 
 function closeAdminResolveModal() {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   document.getElementById('adminResolveModal').classList.remove('active');
 }
 
@@ -1931,33 +1962,53 @@ async function submitAdminResolve() {
   }
 }
 
-function confirmLeaveHousehold(id, name) {
-    if (confirm('Are you sure you want to leave "' + name + '"?')) {
-        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
-        fetch('/api/auth/household/' + id + '/leave', { method: 'POST', headers: {'Content-Type':'application/json'} })
-        .then(r => r.json())
-        .then(res => {
-            if (res.ok) window.location.reload();
-            else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
-        })
-        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
-    }
+function confirmDeleteHousehold(id, name) {
+    showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
+            fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to delete'); showHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); showHouseholdSwitcher(); });
+        }
+    });
 }
+
+
+function confirmLeaveHousehold(id, name) {
+    showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave "<b>' + escapeHtml(name) + '</b>"?', 'Leave', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
+            fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+        }
+    });
+}
+
 
 function confirmDeclineInvite(token, name) {
-    if (confirm('Are you sure you want to decline the invite for "' + name + '"?')) {
-        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
-        fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', headers: {'Content-Type':'application/json'} })
-        .then(r => r.json())
-        .then(res => {
-            if (res.ok) window.location.reload();
-            else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
-        })
-        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
-    }
+    showActionConfirm('❌ Decline Invite', 'Are you sure you want to decline the invite for "<b>' + escapeHtml(name) + '</b>"?', 'Decline', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
+            fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+        }
+    });
 }
 
+
 function closeHouseholdSwitcher() {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
     const m = document.getElementById('switcherModal');
     if (m) m.classList.remove('active');
 }
@@ -1970,15 +2021,29 @@ function switchHousehold(id) {
     }).then(() => window.location.reload());
 }
 function acceptInvite(token) {
-    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
-    fetch(`/api/auth/invite/${token}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    }).then(() => window.location.reload());
+    fetch('/api/auth/invite/' + token, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
+        if (inv.current_is_disposable && inv.current_household_name) {
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptInvite(token, deleteEmpty);
+            });
+        } else {
+            doAcceptInvite(token, false);
+        }
+    })
+    .catch(() => doAcceptInvite(token, false));
 }
-window.addEventListener('click', e => {
-  if (e.target.id === 'switcherModal') closeHouseholdSwitcher();
-});
+function doAcceptInvite(token, deleteEmpty) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) window.location.reload();
+        else { alert(d.error || 'Failed to join'); window.location.reload(); }
+    }).catch(() => window.location.reload());
+}
 
 function toast(msg) {
   let t = document.getElementById('toast');
@@ -2099,6 +2164,52 @@ async function refreshData(showToast = true) {
     }
   }, { passive: true });
 })();
+
+let cleanupCallback = null;
+function showCleanupModal(currentName, targetName, cb) {
+    const desc = document.getElementById('cleanupModalDesc');
+    if (desc) {
+        desc.innerHTML = 'You have an empty initial list (<b>' + escapeHtml(currentName) + '</b>).<br><br>Would you like to delete it now that you are joining <b>' + escapeHtml(targetName) + '</b>?';
+    }
+    cleanupCallback = cb;
+    const m = document.getElementById('cleanupModal');
+    if (m) m.classList.add('active');
+}
+if (document.getElementById('btnCleanupDelete')) {
+    document.getElementById('btnCleanupDelete').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(true);
+    });
+}
+if (document.getElementById('btnCleanupKeep')) {
+    document.getElementById('btnCleanupKeep').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(false);
+    });
+}
+
+let actionConfirmCb = null;
+function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
+    document.getElementById('actionConfirmTitle').innerHTML = title;
+    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const btn = document.getElementById('btnActionConfirm');
+    btn.innerHTML = confirmText;
+    btn.style.background = confirmColor;
+    actionConfirmCb = cb;
+    document.getElementById('actionConfirmModal').classList.add('active');
+}
+if (document.getElementById('btnActionConfirm')) {
+    document.getElementById('btnActionConfirm').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(true);
+    });
+}
+if (document.getElementById('btnActionCancel')) {
+    document.getElementById('btnActionCancel').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(false);
+    });
+}
 </script>
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
@@ -2119,7 +2230,7 @@ async function refreshData(showToast = true) {
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">What's on your mind? We read every submission.</p>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Type</label>
-    <select id="feedbackType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:16px;">
+    <select id="feedbackType" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:16px; background:#fff;">
       <option value="feedback">General Feedback</option>
       <option value="feature">Feature Request</option>
       <option value="bug">Report a Bug</option>
@@ -2131,14 +2242,14 @@ async function refreshData(showToast = true) {
     </div>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Message</label>
-    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:14px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
+    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
     
     <div id="feedbackError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
     <div id="feedbackSuccess" style="color:var(--green-dark); font-size:13px; margin-bottom:10px; display:none;"></div>
     
     <div style="display:flex; gap:10px;">
-      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Submit</button>
-      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Submit</button>
+      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -2168,15 +2279,15 @@ async function refreshData(showToast = true) {
         <span id="autoAnonIcon">✨</span> <span id="autoAnonText">Auto-Anonymize & Clean PII (AI)</span>
       </button>
     </div>
-    <input type="text" id="triagePublicTitle" placeholder="e.g. Add recipe ingredient scaling by servings" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:14px;">
+    <input type="text" id="triagePublicTitle" placeholder="e.g. Add recipe ingredient scaling by servings" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:14px;">
 
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Public Description</label>
-    <textarea id="triagePublicDescription" rows="3" placeholder="Clean, customer-facing description of what will be built or fixed..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:13.5px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
+    <textarea id="triagePublicDescription" rows="3" placeholder="Clean, customer-facing description of what will be built or fixed..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
 
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:14px;">
       <div>
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Type</label>
-        <select id="triagePublicType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px;">
+        <select id="triagePublicType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:16px;">
           <option value="feature">Feature Request</option>
           <option value="bug">Bug Report</option>
           <option value="enhancement">Enhancement</option>
@@ -2184,7 +2295,7 @@ async function refreshData(showToast = true) {
       </div>
       <div>
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Roadmap Status</label>
-        <select id="triageStatus" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px;">
+        <select id="triageStatus" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:16px;">
           <option value="planned">📌 Planned</option>
           <option value="in_progress">⚙️ In Progress</option>
           <option value="resolved">🎉 Resolved</option>
@@ -2195,13 +2306,13 @@ async function refreshData(showToast = true) {
     </div>
 
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">GitHub Issue # (Optional)</label>
-    <input type="number" id="triageGithubIssue" placeholder="e.g. 287" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:16px;">
+    <input type="number" id="triageGithubIssue" placeholder="e.g. 287" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:16px;">
 
     <div id="triageError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
 
     <div style="display:flex; gap:10px;">
-      <button onclick="submitAdminTriage()" id="btnSubmitTriage" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">Save & Publish to Roadmap</button>
-      <button onclick="closeAdminTriageModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button onclick="submitAdminTriage()" id="btnSubmitTriage" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer;">Save & Publish to Roadmap</button>
+      <button onclick="closeAdminTriageModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -2222,10 +2333,10 @@ async function refreshData(showToast = true) {
     </div>
 
     <label style="display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--text);">Build Number * (e.g. 24, 105)</label>
-    <input type="text" id="resolveBuildNumber" placeholder="e.g. 24" style="width:100%; padding:12px; border-radius:10px; border:2px solid #5ebe7e; font-size:15px; font-weight:700; margin-bottom:14px; outline:none;">
+    <input type="text" id="resolveBuildNumber" placeholder="e.g. 24" style="width:100%; padding:12px; border-radius:10px; border:2px solid #5ebe7e; font-size:16px; font-weight:700; margin-bottom:14px; outline:none;">
 
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Resolution Note for Customer</label>
-    <textarea id="resolveNote" rows="4" placeholder="Explain what was built or fixed in friendly, non-technical terms (e.g. We have added quick quantity steppers to the grocery list!)..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:13.5px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
+    <textarea id="resolveNote" rows="4" placeholder="Explain what was built or fixed in friendly, non-technical terms (e.g. We have added quick quantity steppers to the grocery list!)..." style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
 
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; background:#f8fafc; padding:10px 12px; border-radius:8px;">
       <input type="checkbox" id="resolveSendEmail" checked style="width:auto; margin:0;">
@@ -2238,8 +2349,8 @@ async function refreshData(showToast = true) {
     <div id="resolveSuccess" style="color:var(--green-dark); font-size:13px; margin-bottom:10px; display:none;"></div>
 
     <div style="display:flex; gap:10px;">
-      <button onclick="submitAdminResolve()" id="btnSubmitResolve" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">Mark Resolved & Send</button>
-      <button onclick="closeAdminResolveModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button onclick="submitAdminResolve()" id="btnSubmitResolve" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer;">Mark Resolved & Send</button>
+      <button onclick="closeAdminResolveModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -2306,5 +2417,29 @@ async function refreshData(showToast = true) {
   </div>
 </div>
 
+
+<!-- Cleanup Modal -->
+<div class="modal-overlay" id="cleanupModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;">🗑️ Clean Up Empty List?</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="cleanupModalDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnCleanupDelete" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Delete Empty List & Join</button>
+        <button id="btnCleanupKeep" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Keep Both & Join</button>
+    </div>
+  </div>
+</div>
+
+<!-- Action Confirm Modal -->
+<div class="modal-overlay" id="actionConfirmModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnActionConfirm" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Confirm</button>
+        <button id="btnActionCancel" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

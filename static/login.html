@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#5ebe7e">
 <title>ListMate</title>
@@ -24,6 +24,52 @@
   window._firebaseAuth = auth;
   window._GoogleAuthProvider = GoogleAuthProvider;
   window._signInWithPopup = signInWithPopup;
+
+let cleanupCallback = null;
+function showCleanupModal(currentName, targetName, cb) {
+    const desc = document.getElementById('cleanupModalDesc');
+    if (desc) {
+        desc.innerHTML = 'You have an empty initial list (<b>' + escapeHtml(currentName) + '</b>).<br><br>Would you like to delete it now that you are joining <b>' + escapeHtml(targetName) + '</b>?';
+    }
+    cleanupCallback = cb;
+    const m = document.getElementById('cleanupModal');
+    if (m) m.classList.add('active');
+}
+if (document.getElementById('btnCleanupDelete')) {
+    document.getElementById('btnCleanupDelete').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(true);
+    });
+}
+if (document.getElementById('btnCleanupKeep')) {
+    document.getElementById('btnCleanupKeep').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(false);
+    });
+}
+
+let actionConfirmCb = null;
+function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
+    document.getElementById('actionConfirmTitle').innerHTML = title;
+    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const btn = document.getElementById('btnActionConfirm');
+    btn.innerHTML = confirmText;
+    btn.style.background = confirmColor;
+    actionConfirmCb = cb;
+    document.getElementById('actionConfirmModal').classList.add('active');
+}
+if (document.getElementById('btnActionConfirm')) {
+    document.getElementById('btnActionConfirm').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(true);
+    });
+}
+if (document.getElementById('btnActionCancel')) {
+    document.getElementById('btnActionCancel').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(false);
+    });
+}
 </script>
 <script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>
 <style>
@@ -33,7 +79,12 @@
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; position: relative; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { font-family: -apple-system, Roboto, sans-serif; background: #f0f4ed; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  input, select, textarea { font-size: 16px; }
+  @media screen and (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
   .card { background: #fff; border-radius: 20px; padding: 40px 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; max-width: 380px; width: 90%; }
   #subtitle { font-size: 14px; color: #888; margin-bottom: 28px; }
   .step { display: none; } .step.active { display: block; }
@@ -213,27 +264,30 @@ function startPollingIntent(intentId) {
 
 function processInviteThenRedirect() {
   if (inviteToken) {
-    var url = '/api/auth/invite/'+inviteToken+'/accept';
-    fetch(url,{method:'POST', credentials:'include'}).then(function(res){return res.json()}).then(function(d){
-      if (d.ok) {
-        setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
-      } else if (d.requires_confirmation) {
-        if (confirm(d.warning)) {
-          fetch(url+'?force=1',{method:'POST', credentials:'include'}).then(function(){
-            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
-          });
+    fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
+      .then(r => r.json())
+      .then(inv => {
+        if (inv.current_is_disposable && inv.current_household_name) {
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doProcessInviteThenRedirect(inviteToken, deleteEmpty);
+            });
         } else {
-          setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+            doProcessInviteThenRedirect(inviteToken, false);
         }
-      } else {
-        alert(d.error || 'Failed to accept invite');
-        setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
-      }
-    }).catch(function(){ setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); });
+      }).catch(() => doProcessInviteThenRedirect(inviteToken, false));
   } else {
-    setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+    setTimeout(() => location.replace('/?_=' + Date.now()), 200);
   }
 }
+function doProcessInviteThenRedirect(token, deleteEmpty) {
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+    }).catch(() => setTimeout(() => location.replace('/?_=' + Date.now()), 200));
+}
+
 
 async function _doSignIn() {
   if (inviteToken) { sessionStorage.setItem('listmate_invite', inviteToken); }
@@ -631,11 +685,17 @@ function showSignupOrInvites() {
                     html += '<div style="margin-top:24px; text-align:left;">';
                     html += '<div style="font-size:14px; font-weight:700; color:#555; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">Your Households</div>';
                     d.households.forEach(function(hh) {
+                        var counts = (hh.member_count || 1) + ' member' + ((hh.member_count || 1) === 1 ? '' : 's') + ' · ' + (hh.items_count || 0) + ' item' + ((hh.items_count || 0) === 1 ? '' : 's');
+                        var delBtn = hh.can_delete ? '<button onclick="deleteEmptyHousehold(' + hh.id + ', \'' + escapeHtml(hh.name) + '\')" style="background:transparent; border:none; color:#ef4444; font-size:16px; cursor:pointer; padding:4px;" title="Delete Empty Household">🗑️</button>' : '';
                         html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;">' +
                             '<div>' +
                                 '<div style="font-weight:600; color:#111; font-size:15px;">' + escapeHtml(hh.name) + '</div>' +
+                                '<div style="font-size:12px; color:#6b7280; margin-top:2px;">' + counts + '</div>' +
                             '</div>' +
-                            '<button onclick="continueToHousehold(' + hh.id + ')" style="background:#2563eb; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Continue</button>' +
+                            '<div style="display:flex; gap:8px; align-items:center;">' +
+                                delBtn +
+                                '<button onclick="continueToHousehold(' + hh.id + ')" style="background:#2563eb; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Continue</button>' +
+                            '</div>' +
                         '</div>';
                     });
                     html += '</div>';
@@ -670,34 +730,69 @@ function showSignupOrInvites() {
     }
 }
 
+function deleteEmptyHousehold(id, name) {
+    showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.ok) showSignupOrInvites();
+                else alert(res.error || 'Failed to delete');
+            })
+            .catch(() => alert('Network error'));
+        }
+    });
+}
+
 
 function acceptPendingInvite(token) {
     showStep2Error('');
-    fetch('/api/auth/invite/' + token + '/accept', {method:'POST', credentials: 'include', headers:{'Content-Type':'application/json'}})
-    .then(function(r){return r.json()}).then(function(d){
-        if(d.ok) location.replace('/?_='+Date.now());
-        else showStep2Error(d.error||'Failed to accept');
-    }).catch(function(){showStep2Error('Network error.');});
+    fetch('/api/auth/invite/' + token, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
+        if (inv.current_is_disposable && inv.current_household_name) {
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptPending(token, deleteEmpty);
+            });
+        } else {
+            doAcceptPending(token, false);
+        }
+    })
+    .catch(() => doAcceptPending(token, false));
+}
+function doAcceptPending(token, deleteEmpty) {
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) location.replace('/?_=' + Date.now());
+        else showStep2Error(d.error || 'Failed to accept');
+    }).catch(() => showStep2Error('Network error.'));
 }
 
 function acceptInvite(force) {
-  var b=document.getElementById('btnAccept'); b.disabled=true; showStep2Error('');
-  var url = '/api/auth/invite/'+inviteToken+'/accept';
-  if (force) url += '?force=1';
-  fetch(url,{method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
-    if(d.ok) {
-      setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
-    } else if (d.requires_confirmation) {
-      if (confirm(d.warning)) {
-        acceptInvite(true);
-      } else {
-        b.disabled=false;
-      }
-    } else {
-      showStep2Error(d.error||'Failed');
-      b.disabled=false;
-    }
-  }).catch(function(){ showStep2Error('Network error.'); b.disabled=false; });
+    var b = document.getElementById('btnAccept'); b.disabled = true; showStep2Error('');
+    fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
+        if (inv.current_is_disposable && inv.current_household_name) {
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptInviteLogin(inviteToken, force, deleteEmpty, b);
+            });
+        } else {
+            doAcceptInviteLogin(inviteToken, force, false, b);
+        }
+    }).catch(() => doAcceptInviteLogin(inviteToken, force, false, b));
+}
+function doAcceptInviteLogin(token, force, deleteEmpty, b) {
+    var url = '/api/auth/invite/' + token + '/accept' + (force ? '?force=1' : '');
+    fetch(url, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+        else { showStep2Error(d.error || 'Failed'); b.disabled = false; }
+    }).catch(() => { showStep2Error('Network error.'); b.disabled = false; });
 }
 
 function createHousehold() {
@@ -734,6 +829,30 @@ function showStep2Error(m){var e=document.getElementById('step2Error');e.textCon
 <div class="ad-banner-bottom">
   <ins class="adsbygoogle" style="display:inline-block;width:100%;height:50px;" data-ad-client="ca-pub-8608054862395616" data-ad-slot="3057098665"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</div>
+
+<!-- Cleanup Modal -->
+<div class="modal-overlay" id="cleanupModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;">🗑️ Clean Up Empty List?</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="cleanupModalDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnCleanupDelete" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Delete Empty List & Join</button>
+        <button id="btnCleanupKeep" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Keep Both & Join</button>
+    </div>
+  </div>
+</div>
+
+<!-- Action Confirm Modal -->
+<div class="modal-overlay" id="actionConfirmModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnActionConfirm" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Confirm</button>
+        <button id="btnActionCancel" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
 </div>
 </body>
 </html>

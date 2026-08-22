@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Grocery">
@@ -20,11 +20,62 @@
  * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
  */
 !function(t,e){!function t(e,n,a,i){var o=!!(e.Worker&&e.Blob&&e.Promise&&e.OffscreenCanvas&&e.OffscreenCanvasRenderingContext2D&&e.HTMLCanvasElement&&e.HTMLCanvasElement.prototype.transferControlToOffscreen&&e.URL&&e.URL.createObjectURL);function r(){}function l(t){var a=n.exports.Promise,i=void 0!==a?a:e.Promise;return"function"==typeof i?new i(t):(t(r,r),null)}var c,s,u,h,f,d,m,g,b,v=(u=Math.floor(1e3/60),h={},f=0,"function"==typeof requestAnimationFrame&&"function"==typeof cancelAnimationFrame?(c=function(t){var e=Math.random();return h[e]=requestAnimationFrame((function n(a){f===a||f+u-1<a?(f=a,delete h[e],t()):h[e]=requestAnimationFrame(n)})),e},s=function(t){h[t]&&cancelAnimationFrame(h[t])}):(c=function(t){return setTimeout(t,u)},s=function(t){return clearTimeout(t)}),{frame:c,cancel:s}),M=(g={},function(){if(d)return d;if(!a&&o){var e=["var CONFETTI, SIZE = {}, module = {};","("+t.toString()+")(this, module, true, SIZE);","onmessage = function(msg) {","  if (msg.data.options) {","    CONFETTI(msg.data.options).then(function () {","      if (msg.data.callback) {","        postMessage({ callback: msg.data.callback });","      }","    });","  } else if (msg.data.reset) {","    CONFETTI && CONFETTI.reset();","  } else if (msg.data.resize) {","    SIZE.width = msg.data.resize.width;","    SIZE.height = msg.data.resize.height;","  } else if (msg.data.canvas) {","    SIZE.width = msg.data.canvas.width;","    SIZE.height = msg.data.canvas.height;","    CONFETTI = module.exports.create(msg.data.canvas);","  }","}"].join("\n");try{d=new Worker(URL.createObjectURL(new Blob([e])))}catch(t){return void 0!==typeof console&&"function"==typeof console.warn&&console.warn("🎊 Could not load worker",t),null}!function(t){function e(e,n){t.postMessage({options:e||{},callback:n})}t.init=function(e){var n=e.transferControlToOffscreen();t.postMessage({canvas:n},[n])},t.fire=function(n,a,i){if(m)return e(n,null),m;var o=Math.random().toString(36).slice(2);return m=l((function(a){function r(e){e.data.callback===o&&(delete g[o],t.removeEventListener("message",r),m=null,i(),a())}t.addEventListener("message",r),e(n,o),g[o]=r.bind(null,{data:{callback:o}})}))},t.reset=function(){for(var e in t.postMessage({reset:!0}),g)g[e](),delete g[e]}}(d)}return d}),p={particleCount:50,angle:90,spread:45,startVelocity:45,decay:.9,gravity:1,drift:0,ticks:200,x:.5,y:.5,shapes:["square","circle"],zIndex:100,colors:["#26ccff","#a25afd","#ff5e7e","#88ff5a","#fcff42","#ffa62d","#ff36ff"],disableForReducedMotion:!1,scalar:1};function y(t,e,n){return function(t,e){return e?e(t):t}(t&&null!=t[e]?t[e]:p[e],n)}function w(t){return t<0?0:Math.floor(t)}function x(t){return parseInt(t,16)}function C(t){return t.map(T)}function T(t){var e=String(t).replace(/[^0-9a-f]/gi,"");return e.length<6&&(e=e[0]+e[0]+e[1]+e[1]+e[2]+e[2]),{r:x(e.substring(0,2)),g:x(e.substring(2,4)),b:x(e.substring(4,6))}}function I(t){t.width=document.documentElement.clientWidth,t.height=document.documentElement.clientHeight}function k(t){var e=t.getBoundingClientRect();t.width=e.width,t.height=e.height}function E(t,e,n,o,r){var c,s,u=e.slice(),h=t.getContext("2d"),f=l((function(e){function l(){c=s=null,h.clearRect(0,0,o.width,o.height),r(),e()}c=v.frame((function e(){!a||o.width===i.width&&o.height===i.height||(o.width=t.width=i.width,o.height=t.height=i.height),o.width||o.height||(n(t),o.width=t.width,o.height=t.height),h.clearRect(0,0,o.width,o.height),u=u.filter((function(t){return function(t,e){e.x+=Math.cos(e.angle2D)*e.velocity+e.drift,e.y+=Math.sin(e.angle2D)*e.velocity+e.gravity,e.wobble+=e.wobbleSpeed,e.velocity*=e.decay,e.tiltAngle+=.1,e.tiltSin=Math.sin(e.tiltAngle),e.tiltCos=Math.cos(e.tiltAngle),e.random=Math.random()+2,e.wobbleX=e.x+10*e.scalar*Math.cos(e.wobble),e.wobbleY=e.y+10*e.scalar*Math.sin(e.wobble);var n=e.tick++/e.totalTicks,a=e.x+e.random*e.tiltCos,i=e.y+e.random*e.tiltSin,o=e.wobbleX+e.random*e.tiltCos,r=e.wobbleY+e.random*e.tiltSin;if(t.fillStyle="rgba("+e.color.r+", "+e.color.g+", "+e.color.b+", "+(1-n)+")",t.beginPath(),"circle"===e.shape)t.ellipse?t.ellipse(e.x,e.y,Math.abs(o-a)*e.ovalScalar,Math.abs(r-i)*e.ovalScalar,Math.PI/10*e.wobble,0,2*Math.PI):function(t,e,n,a,i,o,r,l,c){t.save(),t.translate(e,n),t.rotate(o),t.scale(a,i),t.arc(0,0,1,r,l,c),t.restore()}(t,e.x,e.y,Math.abs(o-a)*e.ovalScalar,Math.abs(r-i)*e.ovalScalar,Math.PI/10*e.wobble,0,2*Math.PI);else if("star"===e.shape)for(var l=Math.PI/2*3,c=4*e.scalar,s=8*e.scalar,u=e.x,h=e.y,f=5,d=Math.PI/f;f--;)u=e.x+Math.cos(l)*s,h=e.y+Math.sin(l)*s,t.lineTo(u,h),l+=d,u=e.x+Math.cos(l)*c,h=e.y+Math.sin(l)*c,t.lineTo(u,h),l+=d;else t.moveTo(Math.floor(e.x),Math.floor(e.y)),t.lineTo(Math.floor(e.wobbleX),Math.floor(i)),t.lineTo(Math.floor(o),Math.floor(r)),t.lineTo(Math.floor(a),Math.floor(e.wobbleY));return t.closePath(),t.fill(),e.tick<e.totalTicks}(h,t)})),u.length?c=v.frame(e):l()})),s=l}));return{addFettis:function(t){return u=u.concat(t),f},canvas:t,promise:f,reset:function(){c&&v.cancel(c),s&&s()}}}function S(t,n){var a,i=!t,r=!!y(n||{},"resize"),c=y(n,"disableForReducedMotion",Boolean),s=o&&!!y(n||{},"useWorker")?M():null,u=i?I:k,h=!(!t||!s)&&!!t.__confetti_initialized,f="function"==typeof matchMedia&&matchMedia("(prefers-reduced-motion)").matches;function d(e,n,i){for(var o,r,l,c,s,h=y(e,"particleCount",w),f=y(e,"angle",Number),d=y(e,"spread",Number),m=y(e,"startVelocity",Number),g=y(e,"decay",Number),b=y(e,"gravity",Number),v=y(e,"drift",Number),M=y(e,"colors",C),p=y(e,"ticks",Number),x=y(e,"shapes"),T=y(e,"scalar"),I=function(t){var e=y(t,"origin",Object);return e.x=y(e,"x",Number),e.y=y(e,"y",Number),e}(e),k=h,S=[],F=t.width*I.x,N=t.height*I.y;k--;)S.push((o={x:F,y:N,angle:f,spread:d,startVelocity:m,color:M[k%M.length],shape:x[(c=0,s=x.length,Math.floor(Math.random()*(s-c))+c)],ticks:p,decay:g,gravity:b,drift:v,scalar:T},r=void 0,l=void 0,r=o.angle*(Math.PI/180),l=o.spread*(Math.PI/180),{x:o.x,y:o.y,wobble:10*Math.random(),wobbleSpeed:Math.min(.11,.1*Math.random()+.05),velocity:.5*o.startVelocity+Math.random()*o.startVelocity,angle2D:-r+(.5*l-Math.random()*l),tiltAngle:(.5*Math.random()+.25)*Math.PI,color:o.color,shape:o.shape,tick:0,totalTicks:o.ticks,decay:o.decay,drift:o.drift,random:Math.random()+2,tiltSin:0,tiltCos:0,wobbleX:0,wobbleY:0,gravity:3*o.gravity,ovalScalar:.6,scalar:o.scalar}));return a?a.addFettis(S):(a=E(t,S,u,n,i)).promise}function m(n){var o=c||y(n,"disableForReducedMotion",Boolean),m=y(n,"zIndex",Number);if(o&&f)return l((function(t){t()}));i&&a?t=a.canvas:i&&!t&&(t=function(t){var e=document.createElement("canvas");return e.style.position="fixed",e.style.top="0px",e.style.left="0px",e.style.pointerEvents="none",e.style.zIndex=t,e}(m),document.body.appendChild(t)),r&&!h&&u(t);var g={width:t.width,height:t.height};function b(){if(s){var e={getBoundingClientRect:function(){if(!i)return t.getBoundingClientRect()}};return u(e),void s.postMessage({resize:{width:e.width,height:e.height}})}g.width=g.height=null}function v(){a=null,r&&e.removeEventListener("resize",b),i&&t&&(document.body.removeChild(t),t=null,h=!1)}return s&&!h&&s.init(t),h=!0,s&&(t.__confetti_initialized=!0),r&&e.addEventListener("resize",b,!1),s?s.fire(n,g,v):d(n,g,v)}return m.reset=function(){s&&s.reset(),a&&a.reset()},m}function F(){return b||(b=S(null,{useWorker:!0,resize:!0})),b}n.exports=function(){return F().apply(this,arguments)},n.exports.reset=function(){F().reset()},n.exports.create=S}(function(){return void 0!==t?t:"undefined"!=typeof self?self:this||{}}(),e,!1),t.confetti=e.exports}(window,{});
-//# sourceMappingURL=/sm/6de00f2697a1683b235e589897df757a94e6809643432a9e3ad259420752442d.map</script>
+//# sourceMappingURL=/sm/6de00f2697a1683b235e589897df757a94e6809643432a9e3ad259420752442d.map
+let cleanupCallback = null;
+function showCleanupModal(currentName, targetName, cb) {
+    const desc = document.getElementById('cleanupModalDesc');
+    if (desc) {
+        desc.innerHTML = 'You have an empty initial list (<b>' + escapeHtml(currentName) + '</b>).<br><br>Would you like to delete it now that you are joining <b>' + escapeHtml(targetName) + '</b>?';
+    }
+    cleanupCallback = cb;
+    const m = document.getElementById('cleanupModal');
+    if (m) m.classList.add('active');
+}
+if (document.getElementById('btnCleanupDelete')) {
+    document.getElementById('btnCleanupDelete').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(true);
+    });
+}
+if (document.getElementById('btnCleanupKeep')) {
+    document.getElementById('btnCleanupKeep').addEventListener('click', () => {
+        document.getElementById('cleanupModal').classList.remove('active');
+        if (cleanupCallback) cleanupCallback(false);
+    });
+}
+
+let actionConfirmCb = null;
+function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
+    document.getElementById('actionConfirmTitle').innerHTML = title;
+    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const btn = document.getElementById('btnActionConfirm');
+    btn.innerHTML = confirmText;
+    btn.style.background = confirmColor;
+    actionConfirmCb = cb;
+    document.getElementById('actionConfirmModal').classList.add('active');
+}
+if (document.getElementById('btnActionConfirm')) {
+    document.getElementById('btnActionConfirm').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(true);
+    });
+}
+if (document.getElementById('btnActionCancel')) {
+    document.getElementById('btnActionCancel').addEventListener('click', () => {
+        document.getElementById('actionConfirmModal').classList.remove('active');
+        if (actionConfirmCb) actionConfirmCb(false);
+    });
+}
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --green: #5ebe7e; --green-dark: #3a7a4a; --bg: #f0f4ed; --card: #fff; --text: #2c2c2c; --muted: #888; --border: #d8e0d0; --radius: 14px; }
+  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; position: relative; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
+  input, select, textarea { font-size: 16px; }
+  @media screen and (max-width: 768px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
   .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
   .header h1 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sandbox-badge { display: none; font-size: 11px; font-weight: 700; background: #f59e0b; color: #fff; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-left: 4px; }
@@ -244,6 +295,12 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
   border-radius: inherit;
   cursor: pointer !important;
   transition: transform 0.2s ease;
+}
+
+#cartIcon.discovery-halo {
+  outline: 3px solid #fbbf24 !important;
+  outline-offset: 2px !important;
+  border-radius: 10px !important;
 }
 
 .burger-btn.discovery-halo {
@@ -486,7 +543,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <body>
 
 <div class="header">
-  <img src="/icon-192.png" id="cartIcon" onclick="showScreen('home')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
+  <img src="/icon-192.png" id="cartIcon" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
   <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
   <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
@@ -541,10 +598,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-      <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+      <select id="storeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
         <option value="">All Stores</option>
       </select>
-      <select id="recipeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; outline:none;">
+      <select id="recipeFilter" onchange="renderHome()" style="flex:1; min-width:120px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
         <option value="">All Recipes</option>
       </select>
       <button onclick="shareAllLists()" style="background:var(--card); border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; cursor:pointer;">📤 Share</button>
@@ -571,7 +628,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
     <div class="catalog-search" style="display:flex; gap:8px;">
       <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off" style="flex:2;">
-      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
+      <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
     </div>
     <div class="catalog-grid" id="catalogItems"></div>
     <button class="btn-danger" id="btnBackHome" style="margin-top:20px">← Back to list</button>
@@ -660,7 +717,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         </div>
 
         <div style="display:flex; flex-direction:column; gap:10px;">
-          <input type="text" id="recipePromptInput" placeholder="e.g. Creamy Paneer Butter Masala for 4, Quick Gluten-Free Pasta..." autocomplete="off" style="width:100%; padding:14px; font-size:15px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
+          <input type="text" id="recipePromptInput" placeholder="e.g. Creamy Paneer Butter Masala for 4, Quick Gluten-Free Pasta..." autocomplete="off" style="width:100%; padding:14px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
           <button id="btnGenerateRecipe" onclick="generateRecipe()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-weight:600; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
             ✨ Generate Recipe (1 Credit)
           </button>
@@ -700,7 +757,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
        <div id="visitDetailPlanDisplay" style="font-size:14px; font-weight:600; color:var(--green-dark);"></div>
        <div style="display:flex; align-items:center; gap:8px;">
-           <input type="date" id="visitDetailPlanInput" style="display:none; padding:8px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:14px; background:#f9fafb;" onchange="updateVisitDetailPlanDate(this.value)">
+           <input type="date" id="visitDetailPlanInput" style="display:none; padding:8px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:16px; background:#f9fafb;" onchange="updateVisitDetailPlanDate(this.value)">
            <button onclick="toggleVisitDetailPlanInput()" id="btnVisitDetailPlanToggle" style="background:none; border:none; font-size:18px; cursor:pointer; padding:4px;" title="Set Plan Date">🗓️</button>
        </div>
     </div>
@@ -734,7 +791,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <!-- Bulk Assign Bar -->
     <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:12px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span style="font-size:13px; font-weight:600; color:#166534;">Set store for all:</span>
-      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:13px; outline:none; background:#fff; min-width:140px;"></select>
+      <select id="bulkStoreSelect" onchange="handleBulkStoreChange(this)" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #86efac; font-size:16px; outline:none; background:#fff; min-width:140px;"></select>
       <button onclick="applyBulkStore()" style="background:#16a34a; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Apply All</button>
     </div>
 
@@ -759,11 +816,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">Plan a Visit</h3>
     <div style="margin-bottom:16px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Store</label>
-      <select id="globalPlanStoreSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;"></select>
+      <select id="globalPlanStoreSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;"></select>
     </div>
     <div style="margin-bottom:20px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Select Date</label>
-      <input type="date" id="globalPlanDateInput" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:15px; outline:none;">
+      <input type="date" id="globalPlanDateInput" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:16px; outline:none;">
     </div>
     <div style="display:flex; gap:10px;">
       <button id="btnGlobalPlanSave" style="flex:1; background:var(--green); color:#fff; border:none; padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Save & Go to Store</button>
@@ -1771,6 +1828,7 @@ async function savePlanDate(storeId, dateStr) {
 }
 
 async function openStore(sid) {
+  currentScreen = 'catalog';
   window.scrollTo(0, 0);
   currentStore=stores.find(s=>s.id===sid);
   if (!currentStore) return;
@@ -2875,6 +2933,10 @@ if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()
 window.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
     if (e.target.id === 'readOnlyModal') return;
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
     e.target.classList.remove('active');
   }
 });
@@ -3242,20 +3304,26 @@ function showHouseholdSwitcher() {
                 const isActive = h.id === res.active_id;
                 const badge = h.subscription_status === 'premium' ? '<span style="background:#fef3c7; color:#92400e; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:6px;">PRO</span>' : '';
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
+                const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
                 
-                // Add a Leave button if it's not the only one? Or just always add it.
-                // We'll put it in a flex container
+                let deleteOrLeaveHtml = '';
+                if (h.can_delete) {
+                    deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
+                } else if (!isActive) {
+                    deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
+                }
                 
                 html += `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:${isActive ? '#f0fdf4' : 'var(--card)'}; border:1px solid ${isActive ? '#bbf7d0' : 'var(--border)'}; border-radius:12px; margin-bottom:8px;">
                         <div style="cursor:${isActive ? 'default' : 'pointer'}; flex-grow:1;" onclick="${isActive ? '' : `switchHousehold(${h.id})`}">
                             <div style="font-weight:600; color:var(--text);">${escapeHtml(h.name)} ${badge} ${roleBadge}</div>
+                            <div style="font-size:12px; color:var(--muted); margin-top:2px;">${counts}</div>
                         </div>
-                        <div style="display:flex; gap:12px; align-items:center;">
+                        <div style="display:flex; gap:10px; align-items:center;">
                             ${actionHtml}
-                            <button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px;" title="Leave Household">🚪</button>
+                            ${deleteOrLeaveHtml}
                         </div>
                     </div>
                 `;
@@ -3282,31 +3350,47 @@ function showHouseholdSwitcher() {
     });
 }
 
-function confirmLeaveHousehold(id, name) {
-    if (confirm('Are you sure you want to leave "' + name + '"?')) {
-        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
-        fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
-        .then(r => r.json())
-        .then(res => {
-            if (res.ok) window.location.reload();
-            else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
-        })
-        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
-    }
+function confirmDeleteHousehold(id, name) {
+    showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
+            fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to delete'); showHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); showHouseholdSwitcher(); });
+        }
+    });
 }
 
-function confirmDeclineInvite(token, name) {
-    if (confirm('Are you sure you want to decline the invite for "' + name + '"?')) {
-        document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
-        fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
-        .then(r => r.json())
-        .then(res => {
-            if (res.ok) window.location.reload();
-            else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
-        })
-        .catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
-    }
+
+function confirmLeaveHousehold(id, name) {
+    showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave "<b>' + escapeHtml(name) + '</b>"?', 'Leave', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
+            fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+        }
+    });
 }
+
+
+function confirmDeclineInvite(token, name) {
+    showActionConfirm('❌ Decline Invite', 'Are you sure you want to decline the invite for "<b>' + escapeHtml(name) + '</b>"?', 'Decline', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
+            fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
+            .then(r => r.json()).then(res => {
+                if (res.ok) window.location.reload();
+                else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+        }
+    });
+}
+
 
 function closeHouseholdSwitcher() {
     const m = document.getElementById('switcherModal');
@@ -3322,62 +3406,30 @@ function switchHousehold(id) {
     }).then(() => window.location.reload());
 }
 function acceptInvite(token) {
-    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
-    fetch(`/api/auth/invite/${token}/accept`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-    }).then(() => window.location.reload());
-}
-window.addEventListener('click', e => {
-  if (e.target.id === 'switcherModal') closeHouseholdSwitcher();
-});
-
-function closePremiumModal() {
-  const pModal = $('#premiumModal');
-  if (pModal) pModal.classList.remove('active');
-}
-
-let revenueCatOfferings = null;
-
-
-async function restorePurchases() {
-    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Purchases) return;
-    try {
-        const rcKey = getRevenueCatKey();
-        const platform = (window.Capacitor && window.Capacitor.getPlatform) ? window.Capacitor.getPlatform() : 'web';
-        if (platform === 'ios' && (!rcKey || !rcKey.startsWith('appl_'))) {
-            const msg = "iOS purchases require setting REVENUECAT_APPLE_KEY (appl_...) in Render environment variables.";
-            if (typeof toast !== 'undefined') toast(msg); else alert(msg);
-            return;
-        }
-        await window.Capacitor.Plugins.Purchases.configure({ apiKey: rcKey });
-            if (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.id) {
-                await window.Capacitor.Plugins.Purchases.logIn({ appUserID: String(window.currentCfg.user_info.id) });
-            }
-        
-        if (typeof toast !== "undefined") toast('Restoring purchases...');
-        const { customerInfo } = await window.Capacitor.Plugins.Purchases.restorePurchases();
-        
-        if (customerInfo && customerInfo.entitlements && customerInfo.entitlements.active['premium']) {
-            await fetch('/api/settings/premium', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_premium: true })
+    fetch('/api/auth/invite/' + token, { credentials: 'include' })
+    .then(r => r.json())
+    .then(inv => {
+        if (inv.current_is_disposable && inv.current_household_name) {
+            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
+                doAcceptInvite(token, deleteEmpty);
             });
-            if (typeof toast !== "undefined") toast('⭐ Purchases restored! Welcome to Premium!');
-            else alert('⭐ Purchases restored! Welcome to Premium!');
-            setTimeout(() => window.location.reload(), 1500);
         } else {
-            if (typeof toast !== "undefined") toast('No active premium subscription found.');
-            else alert('No active premium subscription found.');
+            doAcceptInvite(token, false);
         }
-    } catch (e) {
-        if (typeof toast !== "undefined") toast('Error restoring purchases.');
-        else alert('Error restoring purchases.');
-        console.error(e);
-    }
+    })
+    .catch(() => doAcceptInvite(token, false));
 }
+function doAcceptInvite(token, deleteEmpty) {
+    document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
+    fetch('/api/auth/invite/' + token + '/accept', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_current_empty: deleteEmpty })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) window.location.reload();
+        else { alert(d.error || 'Failed to join'); window.location.reload(); }
+    }).catch(() => window.location.reload());
+}
+
 async function purchasePackage(index) {
     if (!revenueCatOfferings || !revenueCatOfferings[index]) return;
     const packageToBuy = revenueCatOfferings[index];
@@ -4065,7 +4117,7 @@ function openRecipeStoreModal(recipe = null) {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <label style="font-size:12px; color:var(--muted); font-weight:500;">Store:</label>
-          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff; outline:none;">
+          <select class="ing-store-select" onchange="handleItemStoreChange(this, ${idx})" data-ing-name="${escapeHtml(ing.name)}" data-ing-amount="${escapeHtml(ing.amount || '')}" data-ing-cat="${escapeHtml(ing.category || 'General')}" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); font-size:16px; background:#fff; outline:none;">
             ${options}
           </select>
         </div>
@@ -4439,7 +4491,7 @@ async function deleteSavedRecipe(id) {
     </p>
     <div style="text-align:left; margin-bottom:16px;">
         <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">New Household Name</label>
-        <input type="text" id="spinOffName" placeholder="My Personal Household" style="width:100%; padding:14px; border:1px solid var(--border); border-radius:12px; font-size:15px; outline:none; transition:border 0.2s;" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="text" id="spinOffName" placeholder="My Personal Household" style="width:100%; padding:14px; border:1px solid var(--border); border-radius:12px; font-size:16px; outline:none; transition:border 0.2s;" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <button id="btnExecuteSpinOff" onclick="executeSpinOff()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
@@ -4477,7 +4529,7 @@ async function deleteSavedRecipe(id) {
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">What's on your mind? We read every submission.</p>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Type</label>
-    <select id="feedbackType" style="width:100%; padding:10px; border-radius:10px; border:1px solid var(--border); font-size:14px; margin-bottom:16px;">
+    <select id="feedbackType" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; margin-bottom:16px; background:#fff;">
       <option value="feedback">General Feedback</option>
       <option value="feature">Feature Request</option>
       <option value="bug">Report a Bug</option>
@@ -4489,14 +4541,14 @@ async function deleteSavedRecipe(id) {
     </div>
     
     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Message</label>
-    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:14px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
+    <textarea id="feedbackMessage" rows="5" placeholder="Tell us how we can improve..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
     
     <div id="feedbackError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
     <div id="feedbackSuccess" style="color:var(--green-dark); font-size:13px; margin-bottom:10px; display:none;"></div>
     
     <div style="display:flex; gap:10px;">
-      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Submit</button>
-      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button onclick="submitFeedback()" id="btnSubmitFeedback" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Submit</button>
+      <button onclick="closeFeedbackModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -4620,6 +4672,10 @@ document.addEventListener('DOMContentLoaded', initFeedbackStars);
 initFeedbackStars();
 
 function closeFeedbackModal() {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   document.getElementById('feedbackModal').classList.remove('active');
   document.getElementById('feedbackMessage').value = '';
   document.getElementById('feedbackError').style.display = 'none';
@@ -4642,6 +4698,11 @@ async function submitFeedback() {
     errEl.style.display = 'block';
     return;
   }
+  
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  window.scrollTo({ left: 0, top: window.scrollY || window.pageYOffset || 0, behavior: 'instant' });
   
   errEl.style.display = 'none';
   succEl.style.display = 'none';
@@ -4787,6 +4848,14 @@ window.featureDiscoveryEngine = (function() {
       fallbackSelector: '#storeGrid',
       condition: function() { return currentScreen === 'home'; }
     },
+    logo_home: {
+      id: 'logo_home',
+      title: '🌱 Return Home Anytime',
+      body: 'Tap the ListMate logo in the top-left header anytime to quickly return to your main Grocery List dashboard from anywhere in the app.',
+      type: 'element',
+      targetSelector: '#cartIcon',
+      condition: function() { return true; }
+    },
     add_store: {
       id: 'add_store',
       title: '🏪 Add Your Stores',
@@ -4881,7 +4950,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
 
   let currentActiveTip = null;
   let boundElements = [];
@@ -4983,6 +5052,9 @@ window.featureDiscoveryEngine = (function() {
     }
     const hadTip = currentActiveTip;
     if (hadTip) {
+      if (hadTip.id === 'logo_home' && typeof showScreen === 'function') {
+        showScreen('home');
+      }
       markAcknowledged(hadTip.id);
       currentActiveTip = null;
     }
@@ -5074,9 +5146,26 @@ window.featureDiscoveryEngine = (function() {
     return false;
   }
 
+  function onLogoClick(e) {
+    const nextTip = getNextTip();
+    if (nextTip && nextTip.id === 'logo_home') {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      showTipDrawer(nextTip);
+      return true;
+    }
+    return false;
+  }
+
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
       clearHalos();
+      return;
+    }
+    const overlay = document.getElementById('featureTipOverlay');
+    if (overlay && overlay.classList.contains('show')) {
       return;
     }
     const tip = getNextTip();
@@ -5106,9 +5195,13 @@ window.featureDiscoveryEngine = (function() {
     checkAndApply: checkAndApply,
     onBurgerToggle: onBurgerToggle,
     onMenuItemClick: onMenuItemClick,
+    onLogoClick: onLogoClick,
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
+      if (tipId === 'logo_home' && typeof showScreen === 'function') {
+        showScreen('home');
+      }
       markAcknowledged(tipId);
       currentActiveTip = null;
       clearHalos();
@@ -5148,5 +5241,29 @@ window.closeFeatureTip = function(event) {
   } catch(e) {}
 })();
 </script>
+
+<!-- Cleanup Modal -->
+<div class="modal-overlay" id="cleanupModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;">🗑️ Clean Up Empty List?</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="cleanupModalDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnCleanupDelete" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Delete Empty List & Join</button>
+        <button id="btnCleanupKeep" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Keep Both & Join</button>
+    </div>
+  </div>
+</div>
+
+<!-- Action Confirm Modal -->
+<div class="modal-overlay" id="actionConfirmModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="btnActionConfirm" style="width:100%; background:#ef4444; color:#fff; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Confirm</button>
+        <button id="btnActionCancel" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
