@@ -483,9 +483,20 @@ def terms_page():
 
 
 @app.route("/settings")
-@require_user
 def settings_page():
+    if not is_logged_in():
+        next_url = request.full_path if request.query_string else request.path
+        return redirect("/login?next=" + quote(next_url))
     return send_from_directory("static", "settings.html")
+
+
+@app.route("/upgrade")
+def upgrade_page():
+    source = request.args.get("source", "direct")
+    target_path = f"/settings?action=upgrade&source={source}"
+    if not is_logged_in():
+        return redirect("/login?next=" + quote(target_path))
+    return redirect(target_path)
 
 
 @app.route("/requests")

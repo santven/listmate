@@ -164,6 +164,14 @@ body { padding-bottom: 50px; }
 var CLIENT_ID = '526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com';
 var urlParams = new URLSearchParams(window.location.search);
 
+function getRedirectTarget() {
+  var nextParam = urlParams.get('next');
+  if (nextParam && nextParam.startsWith('/')) {
+    return nextParam;
+  }
+  return '/?_=' + Date.now();
+}
+
 fetch('/api/version').then(r=>r.json()).then(d=>{
   var el = document.getElementById('versionDisplay');
   if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
@@ -192,7 +200,7 @@ function checkSessionAndProceed(proceedFn) {
             if (cb) cb.checked = !c.geo.is_eu;
         }
         if (c.user && c.household_id && c.household_id !== 0) {
-          setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+          setTimeout(function(){location.replace(getRedirectTarget());}, 200);
         } else if (c.user && (!c.household_id || c.household_id === 0)) {
           document.getElementById('loadingState').style.display = 'none';
           document.getElementById('authButtonsContainer').style.display = 'none';
@@ -276,7 +284,7 @@ function processInviteThenRedirect() {
         }
       }).catch(() => doProcessInviteThenRedirect(inviteToken, false));
   } else {
-    setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+    setTimeout(() => location.replace(getRedirectTarget()), 200);
   }
 }
 function doProcessInviteThenRedirect(token, deleteEmpty) {
@@ -284,8 +292,8 @@ function doProcessInviteThenRedirect(token, deleteEmpty) {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete_current_empty: deleteEmpty })
     }).then(r => r.json()).then(d => {
-        setTimeout(() => location.replace('/?_=' + Date.now()), 200);
-    }).catch(() => setTimeout(() => location.replace('/?_=' + Date.now()), 200));
+        setTimeout(() => location.replace(getRedirectTarget()), 200);
+    }).catch(() => setTimeout(() => location.replace(getRedirectTarget()), 200));
 }
 
 
@@ -350,7 +358,7 @@ async function _doSignIn() {
             if (cb) cb.checked = !c.geo.is_eu;
           }
           if (c.user && c.household_id && c.household_id !== 0) {
-            setTimeout(function(){location.replace('/?_=' + Date.now());}, 200);
+            setTimeout(function(){location.replace(getRedirectTarget());}, 200);
           } else if (c.user && (!c.household_id || c.household_id === 0)) {
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('authButtonsContainer').style.display = 'none';
@@ -649,7 +657,7 @@ function continueToHousehold(id) {
     showStep2Error('');
     fetch('/api/auth/switch_household', {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({household_id: id})})
     .then(function(r){return r.json()}).then(function(d){
-        if(d.ok) location.replace('/?_='+Date.now());
+        if(d.ok) location.replace(getRedirectTarget());
         else showStep2Error(d.error||'Failed to switch');
     }).catch(function(){showStep2Error('Network error.');});
 }
@@ -765,7 +773,7 @@ function doAcceptPending(token, deleteEmpty) {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete_current_empty: deleteEmpty })
     }).then(r => r.json()).then(d => {
-        if (d.ok) location.replace('/?_=' + Date.now());
+        if (d.ok) location.replace(getRedirectTarget());
         else showStep2Error(d.error || 'Failed to accept');
     }).catch(() => showStep2Error('Network error.'));
 }
@@ -790,7 +798,7 @@ function doAcceptInviteLogin(token, force, deleteEmpty, b) {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete_current_empty: deleteEmpty })
     }).then(r => r.json()).then(d => {
-        if (d.ok) setTimeout(() => location.replace('/?_=' + Date.now()), 200);
+        if (d.ok) setTimeout(() => location.replace(getRedirectTarget()), 200);
         else { showStep2Error(d.error || 'Failed'); b.disabled = false; }
     }).catch(() => { showStep2Error('Network error.'); b.disabled = false; });
 }
@@ -802,7 +810,7 @@ function createHousehold() {
   var optIn = document.getElementById('marketingOptIn'); optIn = optIn ? optIn.checked : true;
   fetch('/api/auth/signup',{method:'POST', credentials: 'include', headers:{'Content-Type':'application/json'},body:JSON.stringify({household_name:n, marketing_opt_in:optIn})})
     .then(function(r){return r.json()}).then(function(d){
-    if(d.ok) setTimeout(function(){location.replace('/?_=' + Date.now());}, 200); else showStep2Error(d.error||'Failed');
+    if(d.ok) setTimeout(function(){location.replace(getRedirectTarget());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
 }
