@@ -1143,15 +1143,70 @@ def stripe_webhook():
     return jsonify({"ok": True})
 
 
+def _verify_sendgrid_signature(raw_payload: bytes, signature: str, timestamp: str, public_key_b64: str) -> bool:
+    """Verify SendGrid Signed Event Webhook ECDSA signature."""
+    if not signature or not timestamp or not public_key_b64:
+        return False
+
+    # 1. Try SendGrid official SDK
+    try:
+        from sendgrid.helpers.eventwebhook import EventWebhook
+        ew = EventWebhook()
+        key = ew.convert_public_key_to_ecdsa(public_key_b64.strip())
+        payload_str = raw_payload.decode("utf-8", errors="replace")
+        if ew.verify_signature(payload_str, signature.strip(), timestamp.strip(), key):
+            return True
+    except Exception:
+        pass
+
+    # 2. Try standard cryptography library
+    try:
+        import base64
+        from cryptography.hazmat.primitives.serialization import load_der_public_key
+        from cryptography.hazmat.primitives.asymmetric import ec, utils
+        from cryptography.hazmat.primitives import hashes
+
+        pub_der = base64.b64decode(public_key_b64.strip())
+        pub_key = load_der_public_key(pub_der)
+        sig_bytes = base64.b64decode(signature.strip())
+        data_to_verify = timestamp.strip().encode("utf-8") + raw_payload
+
+        try:
+            pub_key.verify(sig_bytes, data_to_verify, ec.ECDSA(hashes.SHA256()))
+            return True
+        except Exception:
+            if len(sig_bytes) == 64:
+                r = int.from_bytes(sig_bytes[:32], byteorder="big")
+                s = int.from_bytes(sig_bytes[32:], byteorder="big")
+                der_sig = utils.encode_dss_signature(r, s)
+                pub_key.verify(der_sig, data_to_verify, ec.ECDSA(hashes.SHA256()))
+                return True
+    except Exception as e:
+        print(f"[SendGrid Webhook] ECDSA signature check exception: {e}")
+
+    return False
+
+
 @app.route("/api/webhooks/sendgrid", methods=["POST"])
 def sendgrid_webhook():
     """Handle SendGrid Event Webhook for real-time delivery, open, click, bounce, etc."""
-    expected_token = os.environ.get("SENDGRID_WEBHOOK_SECRET")
-    if expected_token:
-        auth_header = request.headers.get("Authorization", "")
-        token_param = request.args.get("token", "")
-        if auth_header not in [expected_token, f"Bearer {expected_token}"] and token_param != expected_token:
-            return jsonify({"error": "Unauthorized"}), 401
+    # 1. Cryptographic Signature Verification (SendGrid Signed Event Webhooks)
+    verification_key = os.environ.get("SENDGRID_WEBHOOK_VERIFICATION_KEY")
+    if verification_key:
+        signature = request.headers.get("X-Twilio-Email-Event-Webhook-Signature") or request.headers.get("X-Sendgrid-Event-Webhook-Signature", "")
+        timestamp = request.headers.get("X-Twilio-Email-Event-Webhook-Timestamp") or request.headers.get("X-Sendgrid-Event-Webhook-Timestamp", "")
+        raw_body = request.get_data()
+        if not signature or not timestamp or not _verify_sendgrid_signature(raw_body, signature, timestamp, verification_key):
+            print("[SendGrid Webhook] Signature verification failed or missing signature/timestamp headers.")
+            return jsonify({"error": "Invalid webhook signature"}), 401
+    else:
+        # 2. Secret Token / Bearer fallback (if configured)
+        expected_token = os.environ.get("SENDGRID_WEBHOOK_SECRET")
+        if expected_token:
+            auth_header = request.headers.get("Authorization", "")
+            token_param = request.args.get("token", "")
+            if auth_header not in [expected_token, f"Bearer {expected_token}"] and token_param != expected_token:
+                return jsonify({"error": "Unauthorized"}), 401
 
     events = request.get_json(silent=True)
     if not events:
