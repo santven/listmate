@@ -7,11 +7,30 @@ The script aggregates notifications per user. If a user qualifies for multiple e
 
 Every automated reminder is tracked with explicit database timestamp fields on `auth_households` to prevent repeated or duplicate sends.
 
+## Email Classification & Compliance
+
+Our system strictly delineates between **Marketing** (lifecycle, engagement, promotional) and **Transactional** (essential account notices) emails to comply with CAN-SPAM and GDPR regulations.
+
+| Email Type | Classification | Tracking Column | Condition / Target Audience |
+| :--- | :--- | :--- | :--- |
+| **Solo Owner Nudge (Day 3)** | 📢 **Marketing** | `email_solo_nudge_sent_at` | Encourages single-member households to invite family/roommates. |
+| **Trial Week 1 Check-in (Day 7)** | 📢 **Marketing** | `email_trial_week1_sent_at` | Promotes early upgrades ($1.99/mo or $9.99/yr) and shares discovery tips. |
+| **Trial Week 3 Check-in (Day 21)** | 📢 **Marketing** | `email_trial_week3_sent_at` | Reminds users to lock in an upgrade before the trial ends in ~9 days. |
+| **Activation (Day 3)** | 📢 **Marketing** | `email_activation_sent_at` | Sent to users with 0 list items after 3 days. |
+| **Re-engagement (Day 14)** | 📢 **Marketing** | `email_reengagement_sent_at` | Sent to dormant users who haven't added items in 14+ days. |
+| **Trial Expirations (Day 3 / Day 0)** | ⚖️ **Transactional** | `email_trial_exp_...` | Essential service/account status notices (imminent access changes). |
+| **Sub Expirations (Day 3 / Day 0)** | ⚖️ **Transactional** | `email_sub_exp_...` | Essential payment renewal/lapsing notices. |
+
+### Legal Safeguards
+1. **`marketing_opt_in` Enforcement**: All marketing emails are guarded by `AND ahm.marketing_opt_in = TRUE` in their SQL queries. Users who disable marketing communications in their Settings will never be queried or sent these emails.
+2. **Universal Unsubscribe Link**: Every marketing email includes a tokenized unsubscribe link in both plaintext and HTML formats (via `_get_unsub_link(user_id)`).
+
 ---
 
 ## Scenarios Evaluated
 
 ### 1. Expirations (Trial & Paid Subscription Ending Notices)
+- **Classification**: ⚖️ **Transactional** (Sent regardless of marketing opt-in).
 - **Trial 3 Days Left**: `h.subscription_status = 'trial'` and `trial_ends_at` is in 3 days. Tracked via `email_trial_exp_3days_sent_at`.
 - **Trial Ends Today (Day 0)**: `h.subscription_status = 'trial'` and `trial_ends_at` is today. Tracked via `email_trial_exp_today_sent_at`.
 - **Paid Subscription 3 Days Left**: `h.subscription_status IN ('premium', 'active')` and `subscription_ends_at` is in 3 days. Tracked via `email_sub_exp_3days_sent_at`.
@@ -23,6 +42,7 @@ Every automated reminder is tracked with explicit database timestamp fields on `
 ---
 
 ### 2. Solo Household Owner Nudge (Day 3 Solo Household)
+- **Classification**: 📢 **Marketing**
 - **Trigger Condition**: Household was created 3 or more days ago (`DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'`).
 - **Target Audience**: Household has only 1 member (`auth_household_members` count = 1).
 - **Tracking Column**: `email_solo_nudge_sent_at` (must be `NULL` to trigger; updated with timestamp upon sending).
@@ -37,6 +57,7 @@ Every automated reminder is tracked with explicit database timestamp fields on `
 ---
 
 ### 3. Trial Week 1 Check-in (Day 7)
+- **Classification**: 📢 **Marketing**
 - **Trigger Condition**: Household on `'trial'` status created 7 or more days ago (`DATE(h.created_at) <= CURRENT_DATE - INTERVAL '7 days'`).
 - **Tracking Column**: `email_trial_week1_sent_at` (must be `NULL` to trigger; updated with timestamp upon sending).
 - **Content & Purpose**:
@@ -50,6 +71,7 @@ Every automated reminder is tracked with explicit database timestamp fields on `
 ---
 
 ### 4. Trial Week 3 Check-in (Day 21)
+- **Classification**: 📢 **Marketing**
 - **Trigger Condition**: Household on `'trial'` status created 21 or more days ago (`DATE(h.created_at) <= CURRENT_DATE - INTERVAL '21 days'`).
 - **Tracking Column**: `email_trial_week3_sent_at` (must be `NULL` to trigger; updated with timestamp upon sending).
 - **Content & Purpose**:
@@ -63,6 +85,7 @@ Every automated reminder is tracked with explicit database timestamp fields on `
 ---
 
 ### 5. Activations (Day 3+ Inactive, 0 Items)
+- **Classification**: 📢 **Marketing**
 - **Trigger Condition**: Household created 3+ days ago with 0 items in `list_items`.
 - **Tracking Column**: `email_activation_sent_at`.
 - **Buttons**:
@@ -72,6 +95,7 @@ Every automated reminder is tracked with explicit database timestamp fields on `
 ---
 
 ### 6. Re-engagement (Day 14+ Inactive)
+- **Classification**: 📢 **Marketing**
 - **Trigger Condition**: Most recent item added was 14+ days ago.
 - **Tracking Column**: `email_reengagement_sent_at` (sent only if `NULL` or previous send was 30+ days ago).
 - **Buttons**:
@@ -101,4 +125,3 @@ To run the script manually:
 ```bash
 python scripts/cron_daily.py
 ```
-
