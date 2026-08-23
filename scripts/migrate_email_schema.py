@@ -1,6 +1,12 @@
 import os
 import sys
 
+# Support PROD_DATABASE_URL fallback if DATABASE_URL is not explicitly set
+if os.environ.get("PROD_DATABASE_URL") and not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["PROD_DATABASE_URL"]
+if os.environ.get("PROD_DB_URL") and not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["PROD_DB_URL"]
+
 # Add parent directory to path to import shared modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.auth import _run
