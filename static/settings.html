@@ -516,6 +516,28 @@ let householdData = null;
     }
   }
 
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('appUrlOpen', function(data) {
+      if (data.url) {
+        try {
+          const urlObj = new URL(data.url);
+          let targetPath = '/';
+          if (urlObj.protocol === 'listmate:') {
+             targetPath = '/' + urlObj.host + urlObj.pathname + urlObj.search;
+             if (targetPath === '/sso_callback') return;
+          } else {
+             targetPath = urlObj.pathname + urlObj.search;
+          }
+          if (targetPath && (targetPath.includes('action=upgrade') || targetPath.includes('action=paywall'))) {
+            showPaywall();
+          } else if (targetPath && targetPath !== '' && targetPath !== '/settings') {
+            window.location.href = targetPath;
+          }
+        } catch(e) { console.error('Deep link error:', e); }
+      }
+    });
+  }
+
   initDiscoveryTipsUI();
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
