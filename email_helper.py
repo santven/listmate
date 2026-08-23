@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SendGrid email helper — shared by grocery and ListMate apps."""
 import os
+from urllib.parse import quote
 
 FROM_EMAIL = os.environ.get("SENDGRID_FROM", "hello@grocerlist.app")
 FROM_NAME = os.environ.get("SENDGRID_FROM_NAME", "ListMate")
@@ -85,8 +86,8 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         subject = f"Your ListMate {term} ends in {days_left} days"
         urgency_text = f"expires in {days_left} days"
 
-    upgrade_link = f"{BASE_URL}/open?url=/settings?action=upgrade&source=email_reminder"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_reminder"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_reminder')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reminder')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -139,8 +140,8 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0) -> b
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_solo_nudge"
-    upgrade_link = f"{BASE_URL}/open?url=/settings?action=upgrade&source=email_solo_nudge"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_solo_nudge')}"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_solo_nudge')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -206,9 +207,9 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0) ->
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    upgrade_link = f"{BASE_URL}/open?url=/settings?action=upgrade&source=email_trial_week1"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_trial_week1"
-    app_link = f"{BASE_URL}/open?url=/?source=email_trial_week1"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_week1')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week1')}"
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week1')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -275,9 +276,9 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0) ->
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    upgrade_link = f"{BASE_URL}/open?url=/settings?action=upgrade&source=email_trial_week3"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_trial_week3"
-    app_link = f"{BASE_URL}/open?url=/?source=email_trial_week3"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_week3')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week3')}"
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week3')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -339,8 +340,8 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = f"{BASE_URL}/open?url=/?source=email_activation"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_activation"
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_activation')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_activation')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -394,8 +395,8 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = f"{BASE_URL}/open?url=/?source=email_reengagement"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_reengagement"
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_reengagement')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reengagement')}"
 
     unsub_link = _get_unsub_link(user_id) if user_id else ""
     unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
@@ -448,9 +449,9 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
-    app_link = f"{BASE_URL}/open?url=/?source=email_combined"
-    upgrade_link = f"{BASE_URL}/open?url=/settings?action=upgrade&source=email_combined"
-    add_member_link = f"{BASE_URL}/open?url=/settings?action=add-member&source=email_combined"
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_combined')}"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_combined')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_combined')}"
 
     # Build dynamic subject and content based on events
     html_sections = []
@@ -587,7 +588,7 @@ def send_feedback_resolved_email(
     clean_title = (feedback_title or "Your feedback").strip()
     build_label = f"Build #{build_number}" if build_number and not str(build_number).lower().startswith("build") else (build_number or "latest build")
     if not request_url:
-        request_url = f"{BASE_URL}/open?url=/requests/{feedback_id}"
+        request_url = f"{BASE_URL}/open?url={quote('/requests/{feedback_id}')}"
 
     subject = f"Your ListMate feedback has been resolved in {build_label}! 🎉"
 
