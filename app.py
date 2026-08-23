@@ -746,6 +746,59 @@ def get_public_request_detail(req_id):
     finally:
         close_db(db)
 
+@app.route("/api/testimonials", methods=["GET"])
+def get_public_testimonials():
+    """Get curated positive testimonials/feedback to display on login page or marketing surfaces."""
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT id, user_name, rating, message, testimonial_quote, testimonial_author, display_order, created_at
+               FROM app_feedback
+               WHERE show_on_login = TRUE
+               ORDER BY display_order ASC, rating DESC NULLS LAST, id DESC"""
+        ).fetchall()
+        
+        testimonials = []
+        for r in rows:
+            d = dict(r)
+            quote = (d.get("testimonial_quote") or "").strip()
+            if not quote:
+                quote = (d.get("message") or "").strip()
+                
+            author = (d.get("testimonial_author") or "").strip()
+            if not author:
+                raw_name = (d.get("user_name") or "").strip()
+                if raw_name:
+                    parts = raw_name.split()
+                    if len(parts) > 1:
+                        author = f"{parts[0]} {parts[1][0]}."
+                    else:
+                        author = parts[0]
+                else:
+                    author = "Verified Household"
+            
+            rating = d.get("rating")
+            try:
+                rating = int(rating) if rating is not None else 5
+                if rating < 1 or rating > 5:
+                    rating = 5
+            except (ValueError, TypeError):
+                rating = 5
+                
+            testimonials.append({
+                "id": d["id"],
+                "quote": quote,
+                "author": author,
+                "rating": rating
+            })
+            
+        return jsonify({"testimonials": testimonials})
+    except Exception as e:
+        print(f"Error fetching testimonials: {e}")
+        return jsonify({"testimonials": []}), 500
+    finally:
+        close_db(db)
+
 # ── Admin Feedback Management (venragh@gmail.com only) ──────
 
 @app.route("/api/admin/feedback", methods=["GET"])
@@ -758,6 +811,7 @@ def admin_get_feedback():
             """SELECT id, household_id, user_email, user_name, feedback_type, rating, 
                       message, status, is_public, public_title, public_description, 
                       public_type, build_number, resolution_note, github_issue, 
+                      show_on_login, testimonial_quote, testimonial_author, display_order,
                       created_at, resolved_at, notified_at
                FROM app_feedback
                ORDER BY created_at DESC"""
@@ -969,6 +1023,40 @@ def admin_resolve_feedback(fb_id):
     except Exception as e:
         print(f"Admin resolve feedback error: {e}")
         import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        close_db(db)
+
+@app.route("/api/admin/feedback/<int:fb_id>/testimonial", methods=["POST"])
+@require_admin
+def admin_update_feedback_testimonial(fb_id):
+    """Toggle or update testimonial representation for login carousel."""
+    data = request.get_json() or {}
+    show_on_login = bool(data.get("show_on_login", False))
+    testimonial_quote = str(data.get("testimonial_quote", "")).strip()
+    testimonial_author = str(data.get("testimonial_author", "")).strip()
+    display_order = data.get("display_order", 0)
+    try:
+        display_order = int(display_order)
+    except (ValueError, TypeError):
+        display_order = 0
+        
+    db = get_db()
+    try:
+        db.execute(
+            """UPDATE app_feedback
+               SET show_on_login = %s,
+                   testimonial_quote = %s,
+                   testimonial_author = %s,
+                   display_order = %s
+               WHERE id = %s""",
+            (show_on_login, testimonial_quote, testimonial_author, display_order, fb_id)
+        )
+        db.commit()
+        updated = db.execute("SELECT * FROM app_feedback WHERE id = %s", (fb_id,)).fetchone()
+        return jsonify({"ok": True, "feedback": _serialize_feedback(updated)})
+    except Exception as e:
+        print(f"Admin testimonial update error: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
         close_db(db)

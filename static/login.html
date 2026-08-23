@@ -99,8 +99,13 @@ if (document.getElementById('btnActionCancel')) {
   .invite-banner { background: #e8f5e9; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
   .invite-banner .household { font-weight: 700; color: #2c5a2c; font-size: 16px; margin-bottom: 4px; }
   .invite-banner .desc { font-size: 13px; color: #555; }
-  .privacy-note { font-size: 12px; color: #aaa; margin-top: 20px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 16px; }
+  .privacy-note { font-size: 12px; color: #aaa; margin-top: 18px; line-height: 1.5; border-top: 1px solid #eee; padding-top: 14px; }
   .signin-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 280px; padding: 10px 16px; border: 1px solid #dadce0; border-radius: 8px; background: #fff; text-decoration: none; font-size: 14px; font-weight: 500; color: #3c4043; box-shadow: 0 1px 2px rgba(0,0,0,0.08); cursor: pointer; }
+
+  .testimonial-nav-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #d4dec9; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #4a5568; font-size: 14px; padding: 0; line-height: 1; transition: all 0.15s ease; user-select: none; }
+  .testimonial-nav-btn:hover { background: #edf5ea; border-color: #5ebe7e; color: #2c5a2c; }
+  .testimonial-dot { width: 6px; height: 6px; border-radius: 3px; background: #cbd5e1; cursor: pointer; transition: all 0.25s ease; display: inline-block; }
+  .testimonial-dot.active { width: 16px; background: #5ebe7e; }
 
 .ad-banner-bottom { position: fixed; bottom: 0; left: 0; right: 0; height: 50px !important; background: #f3f4f6; z-index: 1000; overflow: hidden; }
 body { padding-bottom: 50px; }
@@ -150,6 +155,31 @@ body { padding-bottom: 50px; }
     <div class="error" id="step2Error"></div>
     <div class="back-link"><a href="#" onclick="goToStep1()">← Start over</a></div>
   </div>
+
+  <!-- Testimonials Carousel -->
+  <div id="testimonialCarouselContainer" style="display:none; margin-top:20px; text-align:left; border-top:1px solid #edf2eb; padding-top:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#3b7a57; display:flex; align-items:center; gap:5px;">
+        <span>💚</span> Trusted by households
+      </div>
+      <div id="testimonialNavBtns" style="display:flex; gap:4px; align-items:center;">
+        <button type="button" class="testimonial-nav-btn" onclick="prevTestimonial()" aria-label="Previous review">‹</button>
+        <button type="button" class="testimonial-nav-btn" onclick="nextTestimonial()" aria-label="Next review">›</button>
+      </div>
+    </div>
+
+    <div id="testimonialCard" style="background:#f7fbf8; border:1px solid #e1ecdf; border-radius:12px; padding:12px 14px; position:relative; min-height:80px; transition:opacity 0.2s ease, transform 0.2s ease;">
+      <div id="testimonialRating" style="color:#f59e0b; font-size:11px; margin-bottom:4px; letter-spacing:1px;">★★★★★</div>
+      <div id="testimonialQuote" style="font-size:12.5px; color:#2d3748; line-height:1.4; font-style:italic; margin-bottom:8px;"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+        <span id="testimonialAuthor" style="font-size:11.5px; font-weight:700; color:#2c5a2c;"></span>
+        <span style="font-size:9.5px; color:#15803d; background:#dcfce7; padding:1px 6px; border-radius:10px; font-weight:600; display:inline-flex; align-items:center; gap:2px;">✓ Verified</span>
+      </div>
+    </div>
+
+    <div id="testimonialDots" style="display:flex; justify-content:center; align-items:center; gap:5px; margin-top:8px;"></div>
+  </div>
+
   <div class="privacy-note">🔒 Only members of your household can see your list.</div>
   <div style="margin-top: 20px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
     <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 6px;">
@@ -831,6 +861,170 @@ function goToStep1() {
 
 function showError(m){var e=document.getElementById('error');e.textContent=m;e.style.display=m?'block':'none';}
 function showStep2Error(m){var e=document.getElementById('step2Error');e.textContent=m;e.style.display=m?'block':'none';}
+
+// ── Testimonials Carousel ──
+var testimonialsList = [];
+var currentTestimonialIndex = 0;
+var testimonialAutoTimer = null;
+
+function initTestimonialsCarousel() {
+  fetch('/api/testimonials')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && Array.isArray(data.testimonials) && data.testimonials.length > 0) {
+        testimonialsList = data.testimonials;
+        currentTestimonialIndex = 0;
+        renderTestimonialDots();
+        showTestimonial(0, false);
+        var container = document.getElementById('testimonialCarouselContainer');
+        if (container) container.style.display = 'block';
+
+        if (testimonialsList.length > 1) {
+          startTestimonialTimer();
+          setupTestimonialInteractions();
+        } else {
+          var nav = document.getElementById('testimonialNavBtns');
+          if (nav) nav.style.display = 'none';
+          var dots = document.getElementById('testimonialDots');
+          if (dots) dots.style.display = 'none';
+        }
+      }
+    })
+    .catch(function(err) {
+      console.warn('Testimonials load skipped:', err);
+    });
+}
+
+function renderTestimonialDots() {
+  var dotsContainer = document.getElementById('testimonialDots');
+  if (!dotsContainer) return;
+  if (testimonialsList.length <= 1) {
+    dotsContainer.innerHTML = '';
+    return;
+  }
+  dotsContainer.innerHTML = testimonialsList.map(function(_, idx) {
+    return '<span class="testimonial-dot' + (idx === 0 ? ' active' : '') + '" onclick="goToTestimonial(' + idx + ')"></span>';
+  }).join('');
+}
+
+function showTestimonial(index, animate) {
+  if (!testimonialsList.length) return;
+  var item = testimonialsList[index];
+  if (!item) return;
+
+  var card = document.getElementById('testimonialCard');
+  var quoteEl = document.getElementById('testimonialQuote');
+  var authorEl = document.getElementById('testimonialAuthor');
+  var ratingEl = document.getElementById('testimonialRating');
+
+  function applyContent() {
+    if (quoteEl) quoteEl.textContent = '“' + (item.quote || '') + '”';
+    if (authorEl) authorEl.textContent = item.author || 'Verified Household';
+    if (ratingEl) {
+      var r = item.rating || 5;
+      ratingEl.textContent = '★'.repeat(r) + '☆'.repeat(Math.max(0, 5 - r));
+    }
+  }
+
+  if (animate && card) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(2px)';
+    setTimeout(function() {
+      applyContent();
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 150);
+  } else {
+    applyContent();
+  }
+
+  var dots = document.querySelectorAll('.testimonial-dot');
+  dots.forEach(function(dot, idx) {
+    if (idx === index) {
+      dot.classList.add('active');
+    } else {
+      dot.classList.remove('active');
+    }
+  });
+}
+
+function nextTestimonial() {
+  if (!testimonialsList.length) return;
+  currentTestimonialIndex = (currentTestimonialIndex + 1) % testimonialsList.length;
+  showTestimonial(currentTestimonialIndex, true);
+  restartTestimonialTimer();
+}
+
+function prevTestimonial() {
+  if (!testimonialsList.length) return;
+  currentTestimonialIndex = (currentTestimonialIndex - 1 + testimonialsList.length) % testimonialsList.length;
+  showTestimonial(currentTestimonialIndex, true);
+  restartTestimonialTimer();
+}
+
+function goToTestimonial(index) {
+  if (index >= 0 && index < testimonialsList.length) {
+    currentTestimonialIndex = index;
+    showTestimonial(currentTestimonialIndex, true);
+    restartTestimonialTimer();
+  }
+}
+
+function startTestimonialTimer() {
+  stopTestimonialTimer();
+  testimonialAutoTimer = setInterval(function() {
+    if (testimonialsList.length > 1) {
+      currentTestimonialIndex = (currentTestimonialIndex + 1) % testimonialsList.length;
+      showTestimonial(currentTestimonialIndex, true);
+    }
+  }, 5000);
+}
+
+function stopTestimonialTimer() {
+  if (testimonialAutoTimer) {
+    clearInterval(testimonialAutoTimer);
+    testimonialAutoTimer = null;
+  }
+}
+
+function restartTestimonialTimer() {
+  stopTestimonialTimer();
+  startTestimonialTimer();
+}
+
+function setupTestimonialInteractions() {
+  var container = document.getElementById('testimonialCarouselContainer');
+  if (!container) return;
+
+  container.addEventListener('mouseenter', stopTestimonialTimer);
+  container.addEventListener('mouseleave', startTestimonialTimer);
+
+  var touchStartX = 0;
+  var touchEndX = 0;
+  container.addEventListener('touchstart', function(e) {
+    stopTestimonialTimer();
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      touchStartX = e.changedTouches[0].screenX;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', function(e) {
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      touchEndX = e.changedTouches[0].screenX;
+      var diff = touchStartX - touchEndX;
+      if (Math.abs(diff) > 40) {
+        if (diff > 0) {
+          nextTestimonial();
+        } else {
+          prevTestimonial();
+        }
+      }
+    }
+    startTestimonialTimer();
+  }, { passive: true });
+}
+
+initTestimonialsCarousel();
 </script>
 <script src="/static/auth-ui.js"></script>
 

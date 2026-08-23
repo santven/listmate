@@ -436,6 +436,7 @@
       <button class="tab-btn" onclick="setAdminFeedbackFilter('open')" id="af-tab-open" style="padding:6px 12px; font-size:12px;">Open / Needs Triage <span class="count" id="af-cnt-open">0</span></button>
       <button class="tab-btn" onclick="setAdminFeedbackFilter('public')" id="af-tab-public" style="padding:6px 12px; font-size:12px;">Roadmap / Public <span class="count" id="af-cnt-public">0</span></button>
       <button class="tab-btn" onclick="setAdminFeedbackFilter('resolved')" id="af-tab-resolved" style="padding:6px 12px; font-size:12px;">Shipped / Resolved <span class="count" id="af-cnt-resolved">0</span></button>
+      <button class="tab-btn" onclick="setAdminFeedbackFilter('featured')" id="af-tab-featured" style="padding:6px 12px; font-size:12px;">⭐ Featured on Login <span class="count" id="af-cnt-featured">0</span></button>
     </div>
 
     <!-- Search / Filter input -->
@@ -1676,11 +1677,13 @@ function updateAdminFeedbackCounts() {
   const openCount = adminFeedbackData.filter(f => !f.is_public && f.status !== 'resolved' && f.status !== 'dismissed').length;
   const publicCount = adminFeedbackData.filter(f => f.is_public && f.status !== 'resolved').length;
   const resolvedCount = adminFeedbackData.filter(f => f.status === 'resolved').length;
+  const featuredCount = adminFeedbackData.filter(f => Boolean(f.show_on_login)).length;
 
   const cAll = document.getElementById('af-cnt-all'); if (cAll) cAll.textContent = total;
   const cOpen = document.getElementById('af-cnt-open'); if (cOpen) cOpen.textContent = openCount;
   const cPub = document.getElementById('af-cnt-public'); if (cPub) cPub.textContent = publicCount;
   const cRes = document.getElementById('af-cnt-resolved'); if (cRes) cRes.textContent = resolvedCount;
+  const cFeat = document.getElementById('af-cnt-featured'); if (cFeat) cFeat.textContent = featuredCount;
 }
 
 function renderAdminFeedbackList() {
@@ -1692,6 +1695,7 @@ function renderAdminFeedbackList() {
     if (adminFeedbackFilter === 'open' && (item.is_public || item.status === 'resolved' || item.status === 'dismissed')) return false;
     if (adminFeedbackFilter === 'public' && (!item.is_public || item.status === 'resolved')) return false;
     if (adminFeedbackFilter === 'resolved' && item.status !== 'resolved') return false;
+    if (adminFeedbackFilter === 'featured' && !item.show_on_login) return false;
 
     if (query) {
       const matchMsg = (item.message || '').toLowerCase().includes(query);
@@ -1713,12 +1717,13 @@ function renderAdminFeedbackList() {
   container.innerHTML = filtered.map(item => {
     const isPub = Boolean(item.is_public);
     const isResolved = item.status === 'resolved';
+    const isFeatured = Boolean(item.show_on_login);
     const stars = item.rating ? '★'.repeat(item.rating) : '';
     const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
     const resDateStr = item.resolved_at ? new Date(item.resolved_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
     return `
-      <div style="background:#ffffff; border-radius:12px; padding:14px 16px; border:1px solid ${isResolved ? '#bbf7d0' : isPub ? '#bfdbfe' : '#e2e8f0'}; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+      <div style="background:#ffffff; border-radius:12px; padding:14px 16px; border:1px solid ${isResolved ? '#bbf7d0' : isFeatured ? '#fde68a' : isPub ? '#bfdbfe' : '#e2e8f0'}; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <span style="background:#f1f5f9; color:#475569; font-weight:700; font-size:12px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="copyFeedbackId(${item.id})" title="Click to copy ID for AI build prompt">
@@ -1729,6 +1734,7 @@ function renderAdminFeedbackList() {
           </div>
           <div style="display:flex; align-items:center; gap:6px;">
             ${item.rating ? `<span style="color:#f59e0b; font-size:12px; font-weight:700;">${stars}</span>` : ''}
+            ${isFeatured ? `<span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; background:#fef3c7; color:#92400e;">⭐ Login Featured</span>` : ''}
             <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; ${isResolved ? 'background:#dcfce7; color:#166534;' : item.status === 'in_progress' ? 'background:#dbeafe; color:#1e40af;' : item.status === 'planned' ? 'background:#fef3c7; color:#92400e;' : 'background:#f1f5f9; color:#64748b;'}">
               ${isResolved ? '🎉 Shipped' : item.status === 'in_progress' ? '⚙️ In Progress' : item.status === 'planned' ? '📌 Planned' : 'Open'}
             </span>
@@ -1736,6 +1742,22 @@ function renderAdminFeedbackList() {
         </div>
 
         <div style="font-size:13.5px; color:#1e293b; margin-bottom:10px; line-height:1.45; white-space:pre-wrap; background:#f8fafc; padding:10px 12px; border-radius:8px; border:1px solid #f1f5f9;">${escapeHtml(item.message || '(No message)')}</div>
+
+        ${isFeatured ? `
+          <div style="background:#fffbeb; border:1px solid #fde68a; padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:12px; color:#92400e; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <div>
+              <div style="font-weight:700; color:#b45309; display:flex; align-items:center; gap:4px;">
+                <span>⭐ Displayed on Login Carousel</span>
+                ${item.display_order ? `<span style="font-size:10px; background:#fef3c7; padding:1px 5px; border-radius:4px;">Order: ${item.display_order}</span>` : ''}
+              </div>
+              ${item.testimonial_quote ? `<div style="font-style:italic; margin-top:3px; color:#78350f;">"${escapeHtml(item.testimonial_quote)}"</div>` : `<div style="color:#a16207; font-size:11px; margin-top:2px;">(Using original feedback text)</div>`}
+              ${item.testimonial_author ? `<div style="font-size:11px; color:#92400e; margin-top:2px;">— ${escapeHtml(item.testimonial_author)}</div>` : ''}
+            </div>
+            <button onclick="openEditTestimonialPrompt(${item.id})" style="background:#fff; border:1px solid #fcd34d; font-size:11px; padding:4px 8px; border-radius:6px; cursor:pointer; color:#78350f; font-weight:600; white-space:nowrap;">
+              Custom Quote ✏️
+            </button>
+          </div>
+        ` : ''}
 
         ${isPub ? `
           <div style="background:#f0fdf4; border-left:3px solid var(--green); padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:12.5px;">
@@ -1758,6 +1780,10 @@ function renderAdminFeedbackList() {
         ` : ''}
 
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+          <button onclick="toggleAdminTestimonial(${item.id}, ${!isFeatured})" style="background:${isFeatured ? '#fef3c7' : '#fff'}; border:1px solid ${isFeatured ? '#f59e0b' : 'var(--border)'}; color:${isFeatured ? '#92400e' : 'var(--text)'}; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+            ${isFeatured ? '⭐ Featured on Login' : '☆ Feature on Login'}
+          </button>
+
           ${!isPub ? `
             <button onclick="openAdminTriageModal(${item.id})" style="background:var(--green); color:#fff; border:none; padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer;">
               ➕ Promote to Roadmap (Feature / Bug)
@@ -1786,6 +1812,74 @@ function renderAdminFeedbackList() {
       </div>
     `;
   }).join('');
+}
+
+async function toggleAdminTestimonial(id, show) {
+  const item = adminFeedbackData.find(f => f.id === id);
+  try {
+    const res = await fetch(`/api/admin/feedback/${id}/testimonial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        show_on_login: show,
+        testimonial_quote: item?.testimonial_quote || '',
+        testimonial_author: item?.testimonial_author || '',
+        display_order: item?.display_order || 0
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      const idx = adminFeedbackData.findIndex(f => f.id === id);
+      if (idx !== -1) {
+        adminFeedbackData[idx] = data.feedback;
+        updateAdminFeedbackCounts();
+        renderAdminFeedbackList();
+      }
+    } else {
+      alert('Failed to update testimonial setting: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.error('Error updating testimonial:', e);
+    alert('Error updating testimonial: ' + e.message);
+  }
+}
+
+async function openEditTestimonialPrompt(id) {
+  const item = adminFeedbackData.find(f => f.id === id);
+  if (!item) return;
+  const currentQuote = item.testimonial_quote || item.message || '';
+  const currentAuthor = item.testimonial_author || item.user_name || '';
+  
+  const newQuote = prompt('Custom Testimonial Quote (leave empty to use original feedback message):', currentQuote);
+  if (newQuote === null) return;
+  const newAuthor = prompt('Custom Author / Attribution (leave empty to use user name):', currentAuthor);
+  if (newAuthor === null) return;
+  
+  try {
+    const res = await fetch(`/api/admin/feedback/${id}/testimonial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        show_on_login: true,
+        testimonial_quote: newQuote.trim(),
+        testimonial_author: newAuthor.trim(),
+        display_order: item.display_order || 0
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      const idx = adminFeedbackData.findIndex(f => f.id === id);
+      if (idx !== -1) {
+        adminFeedbackData[idx] = data.feedback;
+        updateAdminFeedbackCounts();
+        renderAdminFeedbackList();
+      }
+    } else {
+      alert('Failed to update testimonial: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Error updating testimonial: ' + e.message);
+  }
 }
 
 function copyFeedbackId(id) {
