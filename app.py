@@ -1249,7 +1249,7 @@ def sendgrid_webhook():
 
         if not user_id or not household_id:
             try:
-                user_row = authmod._one("SELECT id, household_id FROM auth_users WHERE email = ? LIMIT 1", (email,))
+                user_row = authmod._one("SELECT id, household_id FROM auth_users WHERE email = %s LIMIT 1", (email,))
                 if user_row:
                     if not user_id:
                         user_id = user_row.get("id")
@@ -1279,9 +1279,9 @@ def sendgrid_webhook():
                 target_url, user_agent, ip_address, sg_event_id, sg_message_id,
                 reason, event_timestamp, created_at
             ) VALUES (
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, COALESCE(?, NOW()), NOW()
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, COALESCE(%s, NOW()), NOW()
             )
             ON CONFLICT (sg_event_id) DO NOTHING
         """
@@ -2038,7 +2038,7 @@ def recipes_endpoint():
 
         cur = db.execute(
             "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            "VALUES (%s, %s, %s, %s, %s, ?, ?, ?, ?, ?) RETURNING id",
             (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
         )
         recipe_id = cur.fetchall()[0]["id"]
@@ -2150,7 +2150,7 @@ def add_recipe_to_list_endpoint():
             else:
                 db.execute(
                     "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, ?, ?)",
                     (store_id, name, category, user_name, quantity, hhid, recipe_title)
                 )
                 added_count += 1
@@ -2701,7 +2701,7 @@ def add_to_list():
 
         quantity = (data.get("quantity") or "").strip()
         db.execute(
-            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
             (_hh(), store_id, name, existing_category, quantity, get_display_name()),
         )
         db.commit()
@@ -3072,7 +3072,7 @@ def sync_offline_actions():
                                 except Exception:
                                     pass
                             db.execute(
-                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
                                 (hh_id, store_id, name, existing_category, quantity, display_name)
                             )
                             applied_count += 1
