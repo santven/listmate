@@ -23,68 +23,62 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
         return False
 
     sent = False
+    campaign_names = []
+
     # If there is only one event, use the specific email template
     if len(events) == 1:
         if 'expiration' in events:
             is_trial = events['expiration']['is_trial']
             days_left = events['expiration']['days_left']
-            print(f"[{email}] Sending specific expiration notice ({days_left} days).")
-            sent = send_subscription_notice(email, user_name, is_trial, days_left, user_id)
+            campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}"
+            campaign_names.append(campaign)
+            print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}).")
+            sent = send_subscription_notice(email, user_name, is_trial, days_left, user_id, household_id)
         elif 'solo_nudge' in events:
+            campaign_names.append('solo_nudge')
             print(f"[{email}] Sending specific solo owner nudge notice.")
-            sent = send_solo_nudge_notice(email, user_name, user_id)
+            sent = send_solo_nudge_notice(email, user_name, user_id, household_id)
         elif 'trial_week1' in events:
+            campaign_names.append('trial_week1')
             print(f"[{email}] Sending specific trial week 1 check-in.")
-            sent = send_trial_week1_checkin(email, user_name, user_id)
+            sent = send_trial_week1_checkin(email, user_name, user_id, household_id)
         elif 'trial_week3' in events:
+            campaign_names.append('trial_week3')
             print(f"[{email}] Sending specific trial week 3 check-in.")
-            sent = send_trial_week3_checkin(email, user_name, user_id)
+            sent = send_trial_week3_checkin(email, user_name, user_id, household_id)
         elif 'activation' in events:
+            campaign_names.append('activation')
             print(f"[{email}] Sending specific activation notice.")
-            sent = send_activation_notice(email, user_name, user_id)
+            sent = send_activation_notice(email, user_name, user_id, household_id)
         elif 'reengagement' in events:
+            campaign_names.append('reengagement')
             print(f"[{email}] Sending specific re-engagement notice.")
-            sent = send_reengagement_notice(email, user_name, user_id)
+            sent = send_reengagement_notice(email, user_name, user_id, household_id)
     else:
         # If there are multiple events, send the combined template
         print(f"[{email}] Sending COMBINED notice for multiple events: {list(events.keys())}")
-        sent = send_combined_notice(email, user_name, events, user_id)
-
-    # Record email sent timestamp in the database for tracking
-    if sent and household_id:
-        updates = []
-        if 'expiration' in events:
-            days_left = events['expiration']['days_left']
-            is_trial = events['expiration']['is_trial']
-            if is_trial:
-                if days_left == 0:
-                    updates.append("email_trial_exp_today_sent_at = NOW()")
-                elif days_left == 3:
-                    updates.append("email_trial_exp_3days_sent_at = NOW()")
+        sent = send_combined_notice(email, user_name, events, user_id, household_id)
+        for ev_key, ev_val in events.items():
+            if ev_key == 'expiration':
+                is_trial = ev_val.get('is_trial', False)
+                days_left = ev_val.get('days_left', 0)
+                campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
             else:
-                if days_left == 0:
-                    updates.append("email_sub_exp_today_sent_at = NOW()")
-                elif days_left == 3:
-                    updates.append("email_sub_exp_3days_sent_at = NOW()")
+                campaign_names.append(ev_key)
 
-        if 'solo_nudge' in events:
-            updates.append("email_solo_nudge_sent_at = NOW()")
-        if 'trial_week1' in events:
-            updates.append("email_trial_week1_sent_at = NOW()")
-        if 'trial_week3' in events:
-            updates.append("email_trial_week3_sent_at = NOW()")
-        if 'activation' in events:
-            updates.append("email_activation_sent_at = NOW()")
-        if 'reengagement' in events:
-            updates.append("email_reengagement_sent_at = NOW()")
-
-        if updates:
+    # Record email sent timestamp in the email_events table for tracking
+    if sent:
+        for cname in campaign_names:
             try:
-                update_sql = f"UPDATE auth_households SET {', '.join(updates)} WHERE id = %s"
-                _run(update_sql, (household_id,))
-                print(f"[{email}] Updated tracking timestamps for household {household_id}: {updates}")
+                insert_sql = """
+                    INSERT INTO email_events (
+                        email, event_type, campaign, user_id, household_id, event_timestamp, created_at
+                    ) VALUES (%s, 'sent', %s, %s, %s, NOW(), NOW())
+                """
+                _run(insert_sql, (email, cname, user_id or None, household_id or None))
+                print(f"[{email}] Logged sent email event in email_events: campaign='{cname}', user_id={user_id}, household_id={household_id}")
             except Exception as e:
-                print(f"[{email}] Error updating tracking timestamps for household {household_id}: {e}")
+                print(f"[{email}] Error logging sent event for campaign '{cname}': {e}")
 
     return sent
 
@@ -125,26 +119,30 @@ def run_cron():
         u.name as user_name, 
         h.subscription_status,
         h.trial_ends_at,
-        h.subscription_ends_at,
-        h.email_trial_exp_3days_sent_at,
-        h.email_trial_exp_today_sent_at,
-        h.email_sub_exp_3days_sent_at,
-        h.email_sub_exp_today_sent_at
+        h.subscription_ends_at
     FROM auth_households h
     JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE 
         (
             (h.subscription_status = 'trial' AND (
-                (DATE(h.trial_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND h.email_trial_exp_3days_sent_at IS NULL)
+                (DATE(h.trial_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
+                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_exp_3days' AND ee.event_type = 'sent'
+                ))
                 OR
-                (DATE(h.trial_ends_at) = CURRENT_DATE AND h.email_trial_exp_today_sent_at IS NULL)
+                (DATE(h.trial_ends_at) = CURRENT_DATE AND NOT EXISTS (
+                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_exp_today' AND ee.event_type = 'sent'
+                ))
             ))
             OR
             (h.subscription_status IN ('premium', 'active') AND h.subscription_ends_at IS NOT NULL AND (
-                (DATE(h.subscription_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND h.email_sub_exp_3days_sent_at IS NULL)
+                (DATE(h.subscription_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
+                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'sub_exp_3days' AND ee.event_type = 'sent'
+                ))
                 OR
-                (DATE(h.subscription_ends_at) = CURRENT_DATE AND h.email_sub_exp_today_sent_at IS NULL)
+                (DATE(h.subscription_ends_at) = CURRENT_DATE AND NOT EXISTS (
+                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'sub_exp_today' AND ee.event_type = 'sent'
+                ))
             ))
         )
     ORDER BY h.id, u.created_at ASC
@@ -203,7 +201,9 @@ def run_cron():
     JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
-      AND h.email_solo_nudge_sent_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'solo_nudge' AND ee.event_type = 'sent'
+      )
       AND ahm.marketing_opt_in = TRUE
       AND (SELECT COUNT(*) FROM auth_household_members WHERE household_id = h.id) = 1
     ORDER BY h.id, u.created_at ASC
@@ -232,7 +232,9 @@ def run_cron():
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE h.subscription_status = 'trial'
       AND DATE(h.created_at) <= CURRENT_DATE - INTERVAL '7 days'
-      AND h.email_trial_week1_sent_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week1' AND ee.event_type = 'sent'
+      )
       AND ahm.marketing_opt_in = TRUE
     ORDER BY h.id, u.created_at ASC
     """
@@ -260,7 +262,9 @@ def run_cron():
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE h.subscription_status = 'trial'
       AND DATE(h.created_at) <= CURRENT_DATE - INTERVAL '21 days'
-      AND h.email_trial_week3_sent_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week3' AND ee.event_type = 'sent'
+      )
       AND ahm.marketing_opt_in = TRUE
     ORDER BY h.id, u.created_at ASC
     """
@@ -288,7 +292,9 @@ def run_cron():
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     LEFT JOIN list_items l ON h.id = l.household_id
     WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
-      AND h.email_activation_sent_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'activation' AND ee.event_type = 'sent'
+      )
       AND ahm.marketing_opt_in = TRUE
     GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING COUNT(l.id) = 0
@@ -319,7 +325,13 @@ def run_cron():
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     JOIN list_items l ON h.id = l.household_id
     WHERE ahm.marketing_opt_in = TRUE
-      AND (h.email_reengagement_sent_at IS NULL OR DATE(h.email_reengagement_sent_at) <= CURRENT_DATE - INTERVAL '30 days')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE ee.household_id = h.id 
+            AND ee.campaign = 'reengagement' 
+            AND ee.event_type = 'sent' 
+            AND ee.event_timestamp >= CURRENT_DATE - INTERVAL '30 days'
+      )
     GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING DATE(MAX(l.added_at)) <= CURRENT_DATE - INTERVAL '14 days'
     ORDER BY h.id, u.created_at ASC
