@@ -444,12 +444,13 @@ def open_deep_link():
         <h2 style="margin:0; font-size: 22px;">Opening ListMate...</h2>
         <div class="loader"></div>
         <p>If the app does not open automatically:</p>
-        <a href="https://grocerlist.app{path}" class="btn">Continue in Browser</a>
+        <a href="{path}" class="btn">Continue in Browser</a>
         <script>
             var path = "{path}";
             var customSchemeUrl = "listmate:/" + path; // e.g. listmate://requests/1
-            var webUrl = "https://grocerlist.app" + path;
-            var intentUrl = "intent://grocerlist.app" + path + "#Intent;scheme=https;package=com.pvkslabs.listmate;S.browser_fallback_url=" + encodeURIComponent(webUrl) + ";end";
+            var webUrl = window.location.origin + path;
+            var host = window.location.host;
+            var intentUrl = "intent://" + host + path + "#Intent;scheme=https;package=com.pvkslabs.listmate;S.browser_fallback_url=" + encodeURIComponent(webUrl) + ";end";
             
             var isAndroid = /Android/i.test(navigator.userAgent);
             var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
