@@ -58,8 +58,8 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -126,8 +126,8 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -193,8 +193,8 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0) -> b
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -262,8 +262,8 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -326,8 +326,8 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -381,8 +381,8 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -435,8 +435,8 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -561,8 +561,8 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             {"type": "text/html", "value": html_body.replace("</div>", unsub_html + "</div>")},
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -644,8 +644,8 @@ def send_feedback_resolved_email(
             {"type": "text/html", "value": html_body + (unsub_html if unsub_link else "")},
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
