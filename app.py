@@ -1143,6 +1143,106 @@ def stripe_webhook():
     return jsonify({"ok": True})
 
 
+@app.route("/api/webhooks/sendgrid", methods=["POST"])
+def sendgrid_webhook():
+    """Handle SendGrid Event Webhook for real-time delivery, open, click, bounce, etc."""
+    expected_token = os.environ.get("SENDGRID_WEBHOOK_SECRET")
+    if expected_token:
+        auth_header = request.headers.get("Authorization", "")
+        token_param = request.args.get("token", "")
+        if auth_header not in [expected_token, f"Bearer {expected_token}"] and token_param != expected_token:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    events = request.get_json(silent=True)
+    if not events:
+        return jsonify({"ok": True, "processed": 0})
+
+    if isinstance(events, dict):
+        events = [events]
+
+    processed_count = 0
+    import datetime
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+
+        email = ev.get("email")
+        event_type = ev.get("event")
+        if not email or not event_type:
+            continue
+
+        campaign = ev.get("campaign")
+        if not campaign:
+            cat = ev.get("category")
+            if isinstance(cat, list) and cat:
+                campaign = cat[0]
+            elif isinstance(cat, str):
+                campaign = cat
+
+        user_id = ev.get("user_id")
+        household_id = ev.get("household_id")
+
+        try:
+            user_id = int(user_id) if user_id is not None and str(user_id).isdigit() else None
+        except (ValueError, TypeError):
+            user_id = None
+
+        try:
+            household_id = int(household_id) if household_id is not None and str(household_id).isdigit() else None
+        except (ValueError, TypeError):
+            household_id = None
+
+        if not user_id or not household_id:
+            try:
+                user_row = authmod._one("SELECT id, household_id FROM auth_users WHERE email = ? LIMIT 1", (email,))
+                if user_row:
+                    if not user_id:
+                        user_id = user_row.get("id")
+                    if not household_id:
+                        household_id = user_row.get("household_id")
+            except Exception:
+                pass
+
+        target_url = ev.get("url")
+        user_agent = ev.get("useragent")
+        ip_address = ev.get("ip")
+        sg_event_id = ev.get("sg_event_id")
+        sg_message_id = ev.get("sg_message_id")
+        reason = ev.get("reason") or ev.get("response") or ev.get("status")
+        
+        ts_val = ev.get("timestamp")
+        event_timestamp = None
+        if ts_val:
+            try:
+                event_timestamp = datetime.datetime.fromtimestamp(int(ts_val), tz=datetime.timezone.utc)
+            except Exception:
+                event_timestamp = None
+
+        insert_sql = """
+            INSERT INTO email_events (
+                email, event_type, campaign, user_id, household_id,
+                target_url, user_agent, ip_address, sg_event_id, sg_message_id,
+                reason, event_timestamp, created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, COALESCE(?, NOW()), NOW()
+            )
+            ON CONFLICT (sg_event_id) DO NOTHING
+        """
+        try:
+            authmod._run(insert_sql, (
+                email, event_type, campaign, user_id, household_id,
+                target_url, user_agent, ip_address, sg_event_id, sg_message_id,
+                reason, event_timestamp
+            ))
+            processed_count += 1
+        except Exception as e:
+            print(f"[SendGrid Webhook] Error inserting event {sg_event_id}: {e}")
+
+    return jsonify({"ok": True, "processed": processed_count})
+
+
 
 def _fetch_stripe_plans():
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
