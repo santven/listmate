@@ -78,7 +78,22 @@ def run_prune():
     total_free = prune_items("Free Tier (14-day retention)", free_query_template)
     total_premium = prune_items("Premium Tier & Grace Period (60-day retention)", premium_query_template)
     
-    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Pruning job complete. Grand total deleted: {total_free + total_premium}")
+    # 3. Email Telemetry Events (Open, Click, Delivered, etc. - 90-day retention)
+    # Note: We preserve 'sent' records so lifecycle cadences and one-time emails are not re-triggered
+    email_events_query_template = """
+    DELETE FROM email_events 
+    WHERE id IN (
+        SELECT id FROM email_events
+        WHERE event_type != 'sent'
+          AND event_timestamp < CURRENT_DATE - INTERVAL '90 days'
+        LIMIT {batch_size}
+    )
+    RETURNING id
+    """
+    total_email_events = prune_items("Email Telemetry Events (90-day retention)", email_events_query_template)
+
+    grand_total = total_free + total_premium + total_email_events
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Pruning job complete. Grand total deleted: {grand_total}")
 
 if __name__ == "__main__":
     run_prune()

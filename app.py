@@ -1143,6 +1143,161 @@ def stripe_webhook():
     return jsonify({"ok": True})
 
 
+def _verify_sendgrid_signature(raw_payload: bytes, signature: str, timestamp: str, public_key_b64: str) -> bool:
+    """Verify SendGrid Signed Event Webhook ECDSA signature."""
+    if not signature or not timestamp or not public_key_b64:
+        return False
+
+    # 1. Try SendGrid official SDK
+    try:
+        from sendgrid.helpers.eventwebhook import EventWebhook
+        ew = EventWebhook()
+        key = ew.convert_public_key_to_ecdsa(public_key_b64.strip())
+        payload_str = raw_payload.decode("utf-8", errors="replace")
+        if ew.verify_signature(payload_str, signature.strip(), timestamp.strip(), key):
+            return True
+    except Exception:
+        pass
+
+    # 2. Try standard cryptography library
+    try:
+        import base64
+        from cryptography.hazmat.primitives.serialization import load_der_public_key
+        from cryptography.hazmat.primitives.asymmetric import ec, utils
+        from cryptography.hazmat.primitives import hashes
+
+        pub_der = base64.b64decode(public_key_b64.strip())
+        pub_key = load_der_public_key(pub_der)
+        sig_bytes = base64.b64decode(signature.strip())
+        data_to_verify = timestamp.strip().encode("utf-8") + raw_payload
+
+        try:
+            pub_key.verify(sig_bytes, data_to_verify, ec.ECDSA(hashes.SHA256()))
+            return True
+        except Exception:
+            if len(sig_bytes) == 64:
+                r = int.from_bytes(sig_bytes[:32], byteorder="big")
+                s = int.from_bytes(sig_bytes[32:], byteorder="big")
+                der_sig = utils.encode_dss_signature(r, s)
+                pub_key.verify(der_sig, data_to_verify, ec.ECDSA(hashes.SHA256()))
+                return True
+    except Exception as e:
+        print(f"[SendGrid Webhook] ECDSA signature check exception: {e}")
+
+    return False
+
+
+@app.route("/api/webhooks/sendgrid", methods=["POST"])
+def sendgrid_webhook():
+    """Handle SendGrid Event Webhook for real-time delivery, open, click, bounce, etc."""
+    # 1. Cryptographic Signature Verification (SendGrid Signed Event Webhooks)
+    verification_key = os.environ.get("SENDGRID_WEBHOOK_VERIFICATION_KEY")
+    if verification_key:
+        signature = request.headers.get("X-Twilio-Email-Event-Webhook-Signature") or request.headers.get("X-Sendgrid-Event-Webhook-Signature", "")
+        timestamp = request.headers.get("X-Twilio-Email-Event-Webhook-Timestamp") or request.headers.get("X-Sendgrid-Event-Webhook-Timestamp", "")
+        raw_body = request.get_data()
+        if not signature or not timestamp or not _verify_sendgrid_signature(raw_body, signature, timestamp, verification_key):
+            print("[SendGrid Webhook] Signature verification failed or missing signature/timestamp headers.")
+            return jsonify({"error": "Invalid webhook signature"}), 401
+    else:
+        # 2. Secret Token / Bearer fallback (if configured)
+        expected_token = os.environ.get("SENDGRID_WEBHOOK_SECRET")
+        if expected_token:
+            auth_header = request.headers.get("Authorization", "")
+            token_param = request.args.get("token", "")
+            if auth_header not in [expected_token, f"Bearer {expected_token}"] and token_param != expected_token:
+                return jsonify({"error": "Unauthorized"}), 401
+
+    events = request.get_json(silent=True)
+    if not events:
+        return jsonify({"ok": True, "processed": 0})
+
+    if isinstance(events, dict):
+        events = [events]
+
+    processed_count = 0
+    import datetime
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+
+        email = ev.get("email")
+        event_type = ev.get("event")
+        if not email or not event_type:
+            continue
+
+        campaign = ev.get("campaign")
+        if not campaign:
+            cat = ev.get("category")
+            if isinstance(cat, list) and cat:
+                campaign = cat[0]
+            elif isinstance(cat, str):
+                campaign = cat
+
+        user_id = ev.get("user_id")
+        household_id = ev.get("household_id")
+
+        try:
+            user_id = int(user_id) if user_id is not None and str(user_id).isdigit() else None
+        except (ValueError, TypeError):
+            user_id = None
+
+        try:
+            household_id = int(household_id) if household_id is not None and str(household_id).isdigit() else None
+        except (ValueError, TypeError):
+            household_id = None
+
+        if not user_id or not household_id:
+            try:
+                user_row = authmod._one("SELECT id, household_id FROM auth_users WHERE email = %s LIMIT 1", (email,))
+                if user_row:
+                    if not user_id:
+                        user_id = user_row.get("id")
+                    if not household_id:
+                        household_id = user_row.get("household_id")
+            except Exception:
+                pass
+
+        target_url = ev.get("url")
+        user_agent = ev.get("useragent")
+        ip_address = ev.get("ip")
+        sg_event_id = ev.get("sg_event_id")
+        sg_message_id = ev.get("sg_message_id")
+        reason = ev.get("reason") or ev.get("response") or ev.get("status")
+        
+        ts_val = ev.get("timestamp")
+        event_timestamp = None
+        if ts_val:
+            try:
+                event_timestamp = datetime.datetime.fromtimestamp(int(ts_val), tz=datetime.timezone.utc)
+            except Exception:
+                event_timestamp = None
+
+        insert_sql = """
+            INSERT INTO email_events (
+                email, event_type, campaign, user_id, household_id,
+                target_url, user_agent, ip_address, sg_event_id, sg_message_id,
+                reason, event_timestamp, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, COALESCE(%s, NOW()), NOW()
+            )
+            ON CONFLICT (sg_event_id) DO NOTHING
+        """
+        try:
+            authmod._run(insert_sql, (
+                email, event_type, campaign, user_id, household_id,
+                target_url, user_agent, ip_address, sg_event_id, sg_message_id,
+                reason, event_timestamp
+            ))
+            processed_count += 1
+        except Exception as e:
+            print(f"[SendGrid Webhook] Error inserting event {sg_event_id}: {e}")
+
+    return jsonify({"ok": True, "processed": processed_count})
+
+
 
 def _fetch_stripe_plans():
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
@@ -1883,7 +2038,7 @@ def recipes_endpoint():
 
         cur = db.execute(
             "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            "VALUES (%s, %s, %s, %s, %s, ?, ?, ?, ?, ?) RETURNING id",
             (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
         )
         recipe_id = cur.fetchall()[0]["id"]
@@ -1995,7 +2150,7 @@ def add_recipe_to_list_endpoint():
             else:
                 db.execute(
                     "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, ?, ?)",
                     (store_id, name, category, user_name, quantity, hhid, recipe_title)
                 )
                 added_count += 1
@@ -2546,7 +2701,7 @@ def add_to_list():
 
         quantity = (data.get("quantity") or "").strip()
         db.execute(
-            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
             (_hh(), store_id, name, existing_category, quantity, get_display_name()),
         )
         db.commit()
@@ -2917,7 +3072,7 @@ def sync_offline_actions():
                                 except Exception:
                                     pass
                             db.execute(
-                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (?, ?, ?, ?, ?, ?)",
+                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
                                 (hh_id, store_id, name, existing_category, quantity, display_name)
                             )
                             applied_count += 1

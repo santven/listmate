@@ -31,13 +31,14 @@ def _send_via_api(api_key: str, payload: dict) -> bool:
         return False
 
 
-def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", marketing_opt_in: bool = False) -> bool:
+def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", marketing_opt_in: bool = False, user_id: int = 0, household_id: int = 0) -> bool:
     """Send a household invite email. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "invite"
     marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
     marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
 
@@ -45,7 +46,18 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
             "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
         }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": f"{inviter_name} invited you to join {household_name} on ListMate",
         "content": [
             {
@@ -58,8 +70,8 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -71,7 +83,7 @@ def _get_unsub_link(user_id: int) -> str:
     token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
     return f"{BASE_URL}/api/unsubscribe?token={token}"
 
-def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int, user_id: int = 0) -> bool:
+def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int, user_id: int = 0, household_id: int = 0) -> bool:
     """Send subscription ending notice. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -79,6 +91,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         return False
 
     term = "trial" if is_trial else "subscription"
+    campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else '3days'}"
     if days_left == 0:
         subject = f"Your ListMate {term} ends today"
         urgency_text = "expires today"
@@ -94,7 +107,20 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
     unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": subject,
         "content": [
             {
@@ -126,20 +152,21 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0) -> bool:
+def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 3 nudge to solo household owners to invite their family/roommates."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "solo_nudge"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_solo_nudge')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_solo_nudge')}"
 
@@ -149,7 +176,20 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0) -> b
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": "Get the most out of ListMate: Invite your household 🛒",
         "content": [
             {
@@ -193,20 +233,21 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0) -> b
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0) -> bool:
+def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 7 (Week 1) check-in email asking for feedback and highlighting discovery tips & upgrade options."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "trial_week1"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_week1')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week1')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week1')}"
@@ -217,7 +258,20 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0) ->
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": "How's your first week with ListMate? 🛒",
         "content": [
             {
@@ -262,20 +316,21 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0) -> bool:
+def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 21 (Week 3) check-in email with ~9 days left of trial."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "trial_week3"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_week3')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week3')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week3')}"
@@ -286,7 +341,20 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0) ->
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": "3 weeks with ListMate — how is grocery shopping going? 🛒",
         "content": [
             {
@@ -326,20 +394,21 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> bool:
+def send_activation_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 3 onboarding/activation notice to inactive users."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "activation"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_activation')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_activation')}"
 
@@ -348,7 +417,20 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
     unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": "Simplify your grocery runs with ListMate 🛒",
         "content": [
             {
@@ -381,20 +463,21 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0) -> b
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) -> bool:
+def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 14 re-engagement notice to dormant users."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "reengagement"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_reengagement')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reengagement')}"
 
@@ -403,7 +486,20 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
     unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": "It's been a while! Streamline your next grocery trip 🛒",
         "content": [
             {
@@ -435,20 +531,21 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0) ->
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
 
 
-def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: int = 0) -> bool:
+def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: int = 0, household_id: int = 0) -> bool:
     """Send a combined notice when multiple daily events occur for the same user."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "combined"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_combined')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_combined')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_combined')}"
@@ -554,15 +651,28 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": text_body + unsub_txt},
             {"type": "text/html", "value": html_body.replace("</div>", unsub_html + "</div>")},
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -576,7 +686,8 @@ def send_feedback_resolved_email(
     build_number: str,
     resolution_note: str = "",
     request_url: str = "",
-    user_id: int = 0
+    user_id: int = 0,
+    household_id: int = 0
 ) -> bool:
     """Send a celebratory notification to the user when their feedback/feature request has been addressed in a specific build."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
@@ -584,11 +695,12 @@ def send_feedback_resolved_email(
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    campaign = "feedback_resolved"
     name_str = (user_name or "there").split(" ")[0].capitalize()
     clean_title = (feedback_title or "Your feedback").strip()
     build_label = f"Build #{build_number}" if build_number and not str(build_number).lower().startswith("build") else (build_number or "latest build")
     if not request_url:
-        request_url = f"{BASE_URL}/open?url={quote('/requests/{feedback_id}')}"
+        request_url = f"{BASE_URL}/open?url={quote(f'/requests/{feedback_id}')}"
 
     subject = f"Your ListMate feedback has been resolved in {build_label}! 🎉"
 
@@ -637,15 +749,30 @@ def send_feedback_resolved_email(
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
-        "personalizations": [{"to": [{"email": to_email}]}],
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+                "feedback_id": str(feedback_id),
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+            "feedback_id": str(feedback_id),
+        },
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": text_body + unsub_txt},
             {"type": "text/html", "value": html_body + (unsub_html if unsub_link else "")},
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
