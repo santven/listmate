@@ -49,7 +49,7 @@ def run_cron():
             users_to_notify[email] = {'user_name': name, 'events': {}, 'user_id': user_id}
         users_to_notify[email]['events'][event_name] = event_data
 
-    # --- 1. Expirations ---
+    # --- 1. Expirations (Transactional: Sent to all expiring households) ---
     print("Fetching Expirations...")
     query_expirations = """
     SELECT DISTINCT ON (h.id) 
@@ -59,19 +59,24 @@ def run_cron():
         u.email, 
         u.name as user_name, 
         h.subscription_status,
-        h.trial_ends_at
+        h.trial_ends_at,
+        h.subscription_ends_at
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE 
-        (h.subscription_status = 'trial' AND DATE(h.trial_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
-        AND ahm.marketing_opt_in = TRUE
+        (
+            (h.subscription_status = 'trial' AND DATE(h.trial_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
+            OR
+            (h.subscription_status IN ('premium', 'active') AND h.subscription_ends_at IS NOT NULL AND DATE(h.subscription_ends_at) IN (CURRENT_DATE, CURRENT_DATE + INTERVAL '3 days'))
+        )
     ORDER BY h.id, u.created_at ASC
     """
     households_expiring = _run(query_expirations)
     for hh in households_expiring:
         status = hh.get("subscription_status")
         trial_ends_at = hh.get("trial_ends_at")
+        sub_ends_at = hh.get("subscription_ends_at")
         target_date = None
         is_trial = False
         
@@ -83,6 +88,14 @@ def run_cron():
                 except ValueError:
                     target_date = datetime.datetime.strptime(target_date, '%Y-%m-%d %H:%M:%S').date()
             is_trial = True
+        elif status in ('premium', 'active') and sub_ends_at:
+            target_date = sub_ends_at.date() if hasattr(sub_ends_at, 'date') else sub_ends_at
+            if isinstance(target_date, str):
+                try:
+                    target_date = datetime.datetime.fromisoformat(target_date.replace('Z', '+00:00')).date()
+                except ValueError:
+                    target_date = datetime.datetime.strptime(target_date, '%Y-%m-%d %H:%M:%S').date()
+            is_trial = False
             
         if target_date:
             days_left = None
