@@ -32,11 +32,15 @@ def _send_via_api(api_key: str, payload: dict) -> bool:
 
 
 def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", invite_code: str = "", marketing_opt_in: bool = False, user_id: int = 0, household_id: int = 0) -> bool:
-    """Send a household invite email with plain-text invite code and click tracking disabled. Returns True on success."""
+    """Send a household invite email with plain-text invite code, direct links, and anti-spam deliverability headers."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
+
+    # Guarantee HTTPS link for email clients to prevent phishing/insecure flags
+    if invite_link and invite_link.startswith("http://") and "localhost" not in invite_link and "127.0.0.1" not in invite_link:
+        invite_link = invite_link.replace("http://", "https://")
 
     display_code = (invite_code or "").strip()
     if not display_code and "token=" in invite_link:
@@ -47,33 +51,97 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
             display_code = qs["token"][0]
 
     campaign = "invite"
-    marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
-    marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
 
-    code_section_txt = f"\nYour Household Invite Code:\n{display_code}\n\nHow to join:\n1. Open ListMate on your mobile device (or install it from the app store)\n2. Sign in with your Google or Apple account\n3. Under 'Have a Household Invite code?', enter: {display_code}\n\nOr accept directly in your browser:\n{invite_link}\n" if display_code else f"\nTo accept this invitation, click the link below:\n{invite_link}\n"
+    clean_inviter = (inviter_name or "").strip()
+    has_inviter = clean_inviter and clean_inviter.lower() not in ("someone", "unknown", "a user", "none", "")
+
+    if has_inviter:
+        subject = f"{clean_inviter} invited you to join {household_name} on ListMate"
+        invitation_intro_html = f"{clean_inviter} invited you to join <strong>{household_name}</strong> on ListMate."
+        text_intro = f"{clean_inviter} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household."
+    else:
+        subject = f"You were invited to join {household_name} on ListMate"
+        invitation_intro_html = f"You have been invited to join <strong>{household_name}</strong> on ListMate."
+        text_intro = f"You have been invited to join \"{household_name}\" on ListMate — a shared grocery list app for your household."
+
+    code_section_txt = (
+        f"\nYour Household Invite Code:\n{display_code}\n\n"
+        f"How to join:\n"
+        f"1. Open ListMate on your mobile device (or install it from the app store)\n"
+        f"2. Sign in with your Google or Apple account\n"
+        f"3. Under 'Have a Household Invite code?', enter: {display_code}\n\n"
+        f"Or accept directly in your browser:\n{invite_link}\n"
+    ) if display_code else f"\nTo accept this invitation, click the link below:\n{invite_link}\n"
 
     code_box_html = f'''
-      <div style="background:#f0fdf4;border:2px dashed #86efac;border-radius:10px;padding:16px;text-align:center;margin:20px 0;">
+      <div style="background-color:#f0fdf4;border:2px dashed #86efac;border-radius:10px;padding:16px;text-align:center;margin:20px 0;">
         <div style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Your Household Invite Code</div>
-        <div style="font-family:monospace,Consolas,Courier,sans-serif;font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;">{display_code}</div>
+        <div style="font-family:Consolas,Monaco,Courier,monospace;font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;">{display_code}</div>
       </div>
       <div style="font-size:14px;color:#374151;line-height:1.6;margin-bottom:20px;">
         <strong>How to join on mobile:</strong><br>
         1. Open or install <strong>ListMate</strong> on your device.<br>
         2. Sign in with your Google or Apple account.<br>
-        3. Enter your invite code <span style="font-family:monospace;font-weight:700;background:#f3f4f6;padding:2px 6px;border-radius:4px;">{display_code}</span> when prompted.
+        3. Enter your invite code <span style="font-family:Consolas,Monaco,Courier,monospace;font-weight:700;background-color:#f1f5f9;padding:2px 6px;border-radius:4px;">{display_code}</span> when prompted.
       </div>
       <div style="text-align:center;margin:24px 0;">
-        <a href="{invite_link}" style="background:#10b981;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">Accept in Browser</a>
+        <a href="{invite_link}" style="background-color:#10b981;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">Accept in Browser</a>
       </div>
     ''' if display_code else f'''
       <div style="margin:24px 0;text-align:center;">
-        <a href="{invite_link}" style="background:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold;display:inline-block;">Accept Invitation</a>
+        <a href="{invite_link}" style="background-color:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold;display:inline-block;">Accept Invitation</a>
       </div>
     '''
 
+    plain_text = (
+        f"Hi,\n\n"
+        f"{text_intro}\n"
+        f"{code_section_txt}\n"
+        f"This single-use invite code expires in 7 days.\n\n"
+        f"— The ListMate Team"
+    )
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation to join {household_name} on ListMate</title>
+</head>
+<body style="margin:0;padding:24px 0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#334155;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center" style="padding:0 16px;">
+        <table role="presentation" style="max-width:520px;width:100%;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px 24px;box-sizing:border-box;text-align:left;" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td>
+              <h2 style="font-size:20px;font-weight:700;color:#0f172a;margin-top:0;margin-bottom:12px;line-height:1.3;">You're invited to join {household_name}</h2>
+              <p style="font-size:15px;color:#334155;line-height:1.5;margin-top:0;margin-bottom:16px;">
+                {invitation_intro_html}
+              </p>
+              <p style="font-size:14px;color:#64748b;line-height:1.5;margin-top:0;margin-bottom:24px;">
+                ListMate helps your household keep shared grocery lists organized by store, syncing in real time across all members.
+              </p>
+              {code_box_html}
+              <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin-top:24px;margin-bottom:0;text-align:center;">
+                Sign in with your Google or Apple account to join. This invite code expires in 7 days.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "headers": {
+            "Auto-Submitted": "auto-generated",
+            "X-Auto-Response-Suppress": "All",
+        },
         "personalizations": [{
             "to": [{"email": to_email}],
             "custom_args": {
@@ -88,20 +156,20 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
             "household_id": str(household_id) if household_id else "",
             "campaign": campaign,
         },
-        "subject": f"{inviter_name} invited you to join {household_name} on ListMate",
+        "subject": subject,
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n" + code_section_txt + "\nThis single-use invite code expires in 7 days.\n\n— The ListMate Team" + marketing_txt,
+                "value": plain_text,
             },
             {
                 "type": "text/html",
-                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;"><h2 style="color:#15803d;margin-top:0;">🛒 You\'re invited!</h2><p style="font-size:16px;color:#1f2937;">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p style="color:#4b5563;font-size:14px;">ListMate helps your household keep shared grocery lists, organized by store.</p>' + code_box_html + '<p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:24px;">Sign in with your Google or Apple account to join. This single-use code expires in 7 days.</p>' + marketing_html + '</div>',
+                "value": html_body,
             },
         ],
         "tracking_settings": {
             "click_tracking": {"enable": False, "enable_text": False},
-            "open_tracking": {"enable": True},
+            "open_tracking": {"enable": False},
         },
     }
     return _send_via_api(api_key, payload)
