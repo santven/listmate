@@ -138,7 +138,7 @@ def _ensure_schema():
         except Exception as e:
             pass
             
-        try: authmod._run("ALTER TABLE stores ADD COLUMN planned_visit_date DATE")
+        try: authmod._run("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_date DATE")
         except Exception: pass
 
         try:
