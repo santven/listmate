@@ -31,16 +31,46 @@ def _send_via_api(api_key: str, payload: dict) -> bool:
         return False
 
 
-def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", marketing_opt_in: bool = False, user_id: int = 0, household_id: int = 0) -> bool:
-    """Send a household invite email. Returns True on success."""
+def send_invite(to_email: str, invite_link: str, household_name: str, inviter_name: str = "someone", invite_code: str = "", marketing_opt_in: bool = False, user_id: int = 0, household_id: int = 0) -> bool:
+    """Send a household invite email with plain-text invite code and click tracking disabled. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
+    display_code = (invite_code or "").strip()
+    if not display_code and "token=" in invite_link:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(invite_link)
+        qs = urllib.parse.parse_qs(parsed.query)
+        if "token" in qs and qs["token"]:
+            display_code = qs["token"][0]
+
     campaign = "invite"
     marketing_txt = '\n\nThe household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.' if marketing_opt_in else ''
     marketing_html = '<p style="font-size: 11px; color: #888; margin-top: 20px;">The household owner has opted in to marketing emails. You will default to the same setting for this household, but you can change it in your settings.</p>' if marketing_opt_in else ''
+
+    code_section_txt = f"\nYour Household Invite Code:\n{display_code}\n\nHow to join:\n1. Open ListMate on your mobile device (or install it from the app store)\n2. Sign in with your Google or Apple account\n3. Under 'Have a Household Invite code?', enter: {display_code}\n\nOr accept directly in your browser:\n{invite_link}\n" if display_code else f"\nTo accept this invitation, click the link below:\n{invite_link}\n"
+
+    code_box_html = f'''
+      <div style="background:#f0fdf4;border:2px dashed #86efac;border-radius:10px;padding:16px;text-align:center;margin:20px 0;">
+        <div style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Your Household Invite Code</div>
+        <div style="font-family:monospace,Consolas,Courier,sans-serif;font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;">{display_code}</div>
+      </div>
+      <div style="font-size:14px;color:#374151;line-height:1.6;margin-bottom:20px;">
+        <strong>How to join on mobile:</strong><br>
+        1. Open or install <strong>ListMate</strong> on your device.<br>
+        2. Sign in with your Google or Apple account.<br>
+        3. Enter your invite code <span style="font-family:monospace;font-weight:700;background:#f3f4f6;padding:2px 6px;border-radius:4px;">{display_code}</span> when prompted.
+      </div>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{invite_link}" style="background:#10b981;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">Accept in Browser</a>
+      </div>
+    ''' if display_code else f'''
+      <div style="margin:24px 0;text-align:center;">
+        <a href="{invite_link}" style="background:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold;display:inline-block;">Accept Invitation</a>
+      </div>
+    '''
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -62,15 +92,15 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
         "content": [
             {
                 "type": "text/plain",
-                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n\nTo accept this invitation, click the secure link below and sign in with your Google or Apple account:\n\n{invite_link}\n\nThis single-use invitation link expires in 7 days.\n\n— The ListMate Team" + marketing_txt,
+                "value": f"Hi!\n\n{inviter_name} invited you to join \"{household_name}\" on ListMate — a shared grocery list app for your household.\n" + code_section_txt + "\nThis single-use invite code expires in 7 days.\n\n— The ListMate Team" + marketing_txt,
             },
             {
                 "type": "text/html",
-                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#2c5a2c">🛒 You\'re invited!</h2><p style="font-size:16px">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p>ListMate helps your household keep shared grocery lists, organized by store.</p><p style="margin:24px 0"><a href="{invite_link}" style="background:#5ebe7e;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold">Accept Invitation</a></p><p style="font-size:12px;color:#888">Sign in with your Google or Apple account to join. This single-use link expires in 7 days.</p>' + marketing_html + '</div>',
+                "value": f'<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;"><h2 style="color:#15803d;margin-top:0;">🛒 You\'re invited!</h2><p style="font-size:16px;color:#1f2937;">{inviter_name} invited you to join <strong>{household_name}</strong> on ListMate.</p><p style="color:#4b5563;font-size:14px;">ListMate helps your household keep shared grocery lists, organized by store.</p>' + code_box_html + '<p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:24px;">Sign in with your Google or Apple account to join. This single-use code expires in 7 days.</p>' + marketing_html + '</div>',
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": True, "enable_text": False},
+            "click_tracking": {"enable": False, "enable_text": False},
             "open_tracking": {"enable": True},
         },
     }
