@@ -13,6 +13,7 @@ from email_helper import (
     send_solo_nudge_notice,
     send_trial_week1_checkin,
     send_trial_week3_checkin,
+    send_store_nudge_notice,
     send_activation_notice,
     send_reengagement_notice,
     send_combined_notice,
@@ -46,6 +47,10 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
             campaign_names.append('trial_week3')
             print(f"[{email}] Sending specific trial week 3 check-in.")
             sent = send_trial_week3_checkin(email, user_name, user_id, household_id)
+        elif 'store_nudge' in events:
+            campaign_names.append('store_nudge')
+            print(f"[{email}] Sending specific store nudge notice.")
+            sent = send_store_nudge_notice(email, user_name, user_id, household_id)
         elif 'activation' in events:
             campaign_names.append('activation')
             print(f"[{email}] Sending specific activation notice.")
@@ -342,6 +347,41 @@ def run_cron():
             hh.get("email"),
             hh.get("user_name"),
             'reengagement',
+            True,
+            hh.get("user_id"),
+            hh.get("household_id"),
+        )
+
+    # --- 7. Store Nudge (Day 3+, 0 custom stores, has items) ---
+    print("Fetching Store Nudges...")
+    query_store_nudge = """
+    SELECT DISTINCT ON (h.id) 
+        h.id as household_id, 
+        u.id as user_id,
+        u.email, 
+        u.name as user_name
+    FROM auth_households h
+    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
+    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN list_items l ON h.id = l.household_id
+    WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
+      AND ahm.marketing_opt_in = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'store_nudge' AND ee.event_type = 'sent'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM stores s WHERE s.household_id = h.id AND s.name != 'General List'
+      )
+    GROUP BY h.id, u.id, u.email, u.name, u.created_at
+    HAVING COUNT(l.id) > 0
+    ORDER BY h.id, u.created_at ASC
+    """
+    households_store_nudge = _run(query_store_nudge)
+    for hh in households_store_nudge:
+        add_user_event(
+            hh.get("email"),
+            hh.get("user_name"),
+            'store_nudge',
             True,
             hh.get("user_id"),
             hh.get("household_id"),

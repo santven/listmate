@@ -359,7 +359,8 @@ def get_household_status():
         "is_read_only": is_read_only,
         "over_limit": over_limit,
         "downgraded_at": hh.get("downgraded_at"),
-        "owner_id": hh.get("owner_id")
+        "owner_id": hh.get("owner_id"),
+        "created_at": str(hh.get("created_at")) if hh.get("created_at") else None
     }
 
 def is_logged_in(): 
