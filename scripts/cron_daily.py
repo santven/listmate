@@ -119,15 +119,20 @@ def run_cron():
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
         h.name as household_name, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name, 
         h.subscription_status,
         h.trial_ends_at,
         h.subscription_ends_at
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE 
         (
             (h.subscription_status = 'trial' AND (
@@ -153,6 +158,7 @@ def run_cron():
     ORDER BY h.id, u.created_at ASC
     """
     households_expiring = _run(query_expirations)
+    print(f"  -> Found {len(households_expiring)} household(s) eligible for expiration notice.")
     for hh in households_expiring:
         status = hh.get("subscription_status")
         trial_ends_at = hh.get("trial_ends_at")
@@ -199,21 +205,27 @@ def run_cron():
     query_solo_nudge = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'solo_nudge' AND ee.event_type = 'sent'
       )
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
-      AND (SELECT COUNT(*) FROM auth_household_members WHERE household_id = h.id) = 1
+      AND COALESCE((SELECT COUNT(*) FROM auth_household_members WHERE household_id = h.id), 1) <= 1
     ORDER BY h.id, u.created_at ASC
     """
     households_solo = _run(query_solo_nudge)
+    print(f"  -> Found {len(households_solo)} household(s) eligible for solo nudge.")
     for hh in households_solo:
         add_user_event(
             hh.get("email"),
@@ -229,14 +241,19 @@ def run_cron():
     query_week1 = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE h.subscription_status = 'trial'
-      AND DATE(h.created_at) <= CURRENT_DATE - INTERVAL '7 days'
+      AND (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '7 days' OR h.created_at <= NOW() - INTERVAL '7 days')
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week1' AND ee.event_type = 'sent'
       )
@@ -244,6 +261,7 @@ def run_cron():
     ORDER BY h.id, u.created_at ASC
     """
     households_week1 = _run(query_week1)
+    print(f"  -> Found {len(households_week1)} household(s) eligible for trial week 1 check-in.")
     for hh in households_week1:
         add_user_event(
             hh.get("email"),
@@ -259,14 +277,19 @@ def run_cron():
     query_week3 = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE h.subscription_status = 'trial'
-      AND DATE(h.created_at) <= CURRENT_DATE - INTERVAL '21 days'
+      AND (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '21 days' OR h.created_at <= NOW() - INTERVAL '21 days')
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week3' AND ee.event_type = 'sent'
       )
@@ -274,6 +297,7 @@ def run_cron():
     ORDER BY h.id, u.created_at ASC
     """
     households_week3 = _run(query_week3)
+    print(f"  -> Found {len(households_week3)} household(s) eligible for trial week 3 check-in.")
     for hh in households_week3:
         add_user_event(
             hh.get("email"),
@@ -289,14 +313,19 @@ def run_cron():
     query_activations = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    LEFT JOIN list_items l ON h.id = l.household_id
-    WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    LEFT JOIN list_items l ON (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id))
+    WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'activation' AND ee.event_type = 'sent'
       )
@@ -306,6 +335,7 @@ def run_cron():
     ORDER BY h.id, u.created_at ASC
     """
     households_activation = _run(query_activations)
+    print(f"  -> Found {len(households_activation)} household(s) eligible for activation notice.")
     for hh in households_activation:
         add_user_event(
             hh.get("email"),
@@ -321,14 +351,19 @@ def run_cron():
     query_reengagement = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name,
         MAX(l.added_at) as last_active
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    JOIN list_items l ON h.id = l.household_id
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN list_items l ON (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id))
     WHERE COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
@@ -338,10 +373,11 @@ def run_cron():
             AND ee.event_timestamp >= CURRENT_DATE - INTERVAL '30 days'
       )
     GROUP BY h.id, u.id, u.email, u.name, u.created_at
-    HAVING DATE(MAX(l.added_at)) <= CURRENT_DATE - INTERVAL '14 days'
+    HAVING DATE(MAX(l.added_at)) <= CURRENT_DATE - INTERVAL '14 days' OR MAX(l.added_at) <= NOW() - INTERVAL '14 days'
     ORDER BY h.id, u.created_at ASC
     """
     households_reengagement = _run(query_reengagement)
+    print(f"  -> Found {len(households_reengagement)} household(s) eligible for re-engagement notice.")
     for hh in households_reengagement:
         add_user_event(
             hh.get("email"),
@@ -357,14 +393,19 @@ def run_cron():
     query_store_nudge = """
     SELECT DISTINCT ON (h.id) 
         h.id as household_id, 
-        u.id as user_id,
+        u.id as user_id, 
         u.email, 
         u.name as user_name
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
-    JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    JOIN list_items l ON h.id = l.household_id
-    WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id, 
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), 
+        (SELECT ahm3.user_id FROM auth_household_members ahm3 WHERE ahm3.household_id = h.id LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN list_items l ON (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id))
+    WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'store_nudge' AND ee.event_type = 'sent'
@@ -377,6 +418,7 @@ def run_cron():
     ORDER BY h.id, u.created_at ASC
     """
     households_store_nudge = _run(query_store_nudge)
+    print(f"  -> Found {len(households_store_nudge)} household(s) eligible for store nudge.")
     for hh in households_store_nudge:
         add_user_event(
             hh.get("email"),
