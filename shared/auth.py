@@ -1107,7 +1107,7 @@ def register_auth_routes(app):
         hhid = get_household_id()
         if not hhid: return jsonify({"error": "No household"}), 400
         _init_schema()
-        _run("DELETE FROM invites WHERE token = ? AND household_id = ?", (token, hhid))
+        _run("DELETE FROM invites WHERE UPPER(token) = UPPER(?) AND household_id = ?", (token, hhid))
         return jsonify({"ok": True})
 
     @app.route("/api/auth/household/members", methods=["DELETE"])
@@ -1147,13 +1147,20 @@ def register_auth_routes(app):
             return jsonify({"ok": True, "already_member": True})
 
         import secrets
-        token = secrets.token_urlsafe(32)
+        # Generate clean 8-character uppercase single-use invite code (e.g. '8A3F291C')
+        token = secrets.token_hex(4).upper()
+        for _ in range(10):
+            existing_inv = _one("SELECT id FROM invites WHERE UPPER(token) = UPPER(?)", (token,))
+            if not existing_inv:
+                break
+            token = secrets.token_hex(4).upper()
+
         import datetime as _dt
         expires = _dt.datetime.utcnow() + _dt.timedelta(days=7)
         expires_str = expires.strftime('%Y-%m-%d %H:%M:%S')
         _exec(f"""INSERT INTO invites (token, household_id, email, created_by, expires_at)
                VALUES (?, ?, ?, ?, ?)""",
-             (token, hhid, email, get_user_id(), expires_str))
+              (token, hhid, email, get_user_id(), expires_str))
 
         # Get names for email
         hh_name = get_household_name()
@@ -1165,13 +1172,13 @@ def register_auth_routes(app):
         # Send email via SendGrid
         try:
             from email_helper import send_invite
-            send_invite(email, invite_link, household_name=hh_name, inviter_name=inviter)
+            send_invite(email, invite_link, household_name=hh_name, inviter_name=inviter, invite_code=token)
         except Exception as e:
             import traceback
             print(f"[send_invite ERROR] {e}", flush=True)
             traceback.print_exc()
 
-        return jsonify({"ok": True, "invite_link": invite_link, "token": token, "email": email})
+        return jsonify({"ok": True, "invite_link": invite_link, "token": token, "code": token, "invite_code": token, "email": email})
 
     @app.route("/api/auth/invite/<token>")
     def auth_check_invite(token):
@@ -1179,7 +1186,7 @@ def register_auth_routes(app):
         invite = _one(
             """SELECT i.id, h.name as household_name, i.household_id, i.email, i.expires_at, i.used_by
                FROM invites i JOIN auth_households h ON h.id = i.household_id
-               WHERE i.token = ?""",
+               WHERE UPPER(i.token) = UPPER(?)""",
             (token,))
         if not invite:
             return jsonify({"valid": False, "error": "Invalid invite link"}), 404
@@ -1216,7 +1223,7 @@ def register_auth_routes(app):
     def auth_accept_invite(token):
         from flask import request
         _init_schema()
-        invite = _one("SELECT * FROM invites WHERE token = ?", (token,))
+        invite = _one("SELECT * FROM invites WHERE UPPER(token) = UPPER(?)", (token,))
         if not invite:
             return jsonify({"error": "Invalid invite link"}), 404
 
@@ -1270,7 +1277,7 @@ def register_auth_routes(app):
     @require_user
     def auth_decline_invite(token):
         _init_schema()
-        invite = _one("SELECT * FROM invites WHERE token = ? AND used_by IS NULL", (token,))
+        invite = _one("SELECT * FROM invites WHERE UPPER(token) = UPPER(?) AND used_by IS NULL", (token,))
         if not invite:
             return jsonify({"error": "Invalid or expired invite"}), 404
             
@@ -1291,7 +1298,7 @@ def register_auth_routes(app):
         data = request.get_json(silent=True) or {}
         code_input = (data.get("code") or data.get("invite_code") or "").strip()
         if not code_input:
-            return jsonify({"error": "Invite code or link is required"}), 400
+            return jsonify({"error": "Household invite code is required"}), 400
 
         # Extract token if user pasted full URL
         token_candidate = code_input
@@ -1305,17 +1312,17 @@ def register_auth_routes(app):
             token_candidate = token_candidate.rstrip("/").split("/")[-1]
 
         target_hhid = None
-        # 1. Try single-use token from invites table
-        invite = _one("SELECT * FROM invites WHERE token = ?", (token_candidate,))
+        # 1. Try single-use token from invites table (case-insensitive)
+        invite = _one("SELECT * FROM invites WHERE UPPER(token) = UPPER(?)", (token_candidate,))
         if invite:
             if invite.get("used_by"):
-                return jsonify({"error": "This invite link has already been used."}), 410
+                return jsonify({"error": "This invite code has already been used."}), 410
             if invite.get("expires_at"):
                 import datetime as _dt
                 exp = invite["expires_at"]
                 now = _dt.datetime.utcnow() if getattr(exp, 'tzinfo', None) is None else _dt.datetime.now(_dt.timezone.utc)
                 if exp < now:
-                    return jsonify({"error": "This invite link has expired. Please ask the household owner for a new invite."}), 410
+                    return jsonify({"error": "This invite code has expired. Please ask the household owner for a new invite."}), 410
 
             target_hhid = invite["household_id"]
             # Burn invite immediately
@@ -1328,12 +1335,12 @@ def register_auth_routes(app):
                 except Exception as e:
                     print(f"[auth_join_household] Alias insert note: {e}", flush=True)
         else:
-            # 2. Try household invite_code
+            # 2. Try household invite_code (case-insensitive)
             hh_row = _one(f"SELECT id, name FROM {_HH} WHERE UPPER(invite_code) = UPPER(?)", (code_input,))
             if hh_row:
                 target_hhid = hh_row["id"]
             else:
-                return jsonify({"error": "Invalid invite code or link. Please check and try again."}), 404
+                return jsonify({"error": "Invalid household invite code. Please check and try again."}), 404
 
         hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (target_hhid,))
         if not hh:
