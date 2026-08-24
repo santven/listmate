@@ -146,9 +146,9 @@ body { padding-bottom: 50px; }
       </div>
       <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
       <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:left;">
-        <div style="font-size:13px; font-weight:700; color:#555; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Have an invite link or code?</div>
+        <div style="font-size:13px; font-weight:700; color:#555; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Have a Household Invite code?</div>
         <div style="display:flex; gap:8px;">
-          <input type="text" id="manualInviteCodeInput" placeholder="Paste invite code or link..." style="flex-grow:1; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <input type="text" id="manualInviteCodeInput" placeholder="Enter 8-character invite code..." style="flex-grow:1; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; text-transform:uppercase;">
           <button type="button" onclick="joinWithManualCode()" id="btnJoinManualCode" style="background:#10b981; color:#fff; border:none; padding:10px 16px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap;">Join</button>
         </div>
       </div>
@@ -824,7 +824,7 @@ function createHousehold() {
 
 function joinWithManualCode() {
   var code = (document.getElementById('manualInviteCodeInput').value || '').trim();
-  if (!code) { showStep2Error('Please enter an invite code or link'); return; }
+  if (!code) { showStep2Error('Please enter a household invite code'); return; }
   var btn = document.getElementById('btnJoinManualCode');
   if (btn) { btn.disabled = true; btn.textContent = 'Joining...'; }
   showStep2Error('');

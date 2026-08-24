@@ -895,7 +895,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
        <div style="text-align:center; padding: 20px; color: #888;">Loading...</div>
     </div>
     <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); text-align: center;">
-      <button onclick="closeHouseholdSwitcher(); showJoinHouseholdModal();" style="width:100%; background:#f0fdf4; border:1px dashed #86efac; color:var(--green-dark); padding:10px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">🔗 Have an invite link or code? Join here</button>
+      <button onclick="closeHouseholdSwitcher(); showJoinHouseholdModal();" style="width:100%; background:#f0fdf4; border:1px dashed #86efac; color:var(--green-dark); padding:10px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">🔗 Have a Household Invite code? Join here</button>
     </div>
     <div style="margin-top: 12px;">
         <button onclick="closeHouseholdSwitcher()" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
@@ -908,11 +908,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
     <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">🔗 Join a Household</h3>
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">
-      Enter the single-use invite code or paste the invite link you received from a household member.
+      Enter the Household Invite code you received from a household member.
     </p>
     <div style="margin-bottom:14px;">
-      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Invite Link or Code</label>
-      <input type="text" id="joinHouseholdCodeInput" placeholder="Paste invite link or code..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Household Invite Code</label>
+      <input type="text" id="joinHouseholdCodeInput" placeholder="Enter invite code (e.g. 8A3F291C)..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none; text-transform:uppercase;">
     </div>
     <div class="error" id="joinHouseholdError" style="display:none; margin-bottom:12px; color:#ef4444; font-size:13px;"></div>
     <div style="display:flex; gap:10px;">
@@ -3489,7 +3489,7 @@ function submitJoinHouseholdCode() {
   const btn = document.getElementById('btnSubmitJoinHousehold');
   const code = input ? input.value.trim() : '';
   if (!code) {
-    if (err) { err.textContent = 'Please enter an invite code or link'; err.style.display = 'block'; }
+    if (err) { err.textContent = 'Please enter a household invite code'; err.style.display = 'block'; }
     return;
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Joining...'; }
