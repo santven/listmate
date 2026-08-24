@@ -2285,7 +2285,8 @@ def init_data():
             "is_read_only": is_read_only,
             "user_email": authmod._get().get("email") if authmod._get() else "",
             "user_name": authmod._get().get("name", "Someone").split()[0] if authmod._get() else "Someone",
-            "households_count": hh_count
+            "households_count": hh_count,
+            "household_created_at": str(hh_status.get("created_at")) if hh_status and hh_status.get("created_at") else ""
         })
     except Exception as e:
         import traceback; traceback.print_exc()

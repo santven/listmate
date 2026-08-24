@@ -83,6 +83,15 @@ def _get_unsub_link(user_id: int) -> str:
     token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
     return f"{BASE_URL}/api/unsubscribe?token={token}"
 
+def _get_unsub_blocks(user_id: int, purpose: str = "marketing emails") -> tuple:
+    """Returns (unsub_txt, unsub_html) ensuring a single, consistent unsubscribe footer per email."""
+    unsub_link = _get_unsub_link(user_id) if user_id else ""
+    if not unsub_link:
+        return "", ""
+    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}"
+    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from {purpose}.</p>'
+    return unsub_txt, unsub_html
+
 def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int, user_id: int = 0, household_id: int = 0) -> bool:
     """Send subscription ending notice. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
@@ -102,9 +111,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_reminder')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reminder')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
@@ -147,7 +154,7 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Add Members</a>'
                     f'</div>'
                     f'<p style="font-size:13px;color:#666;line-height:1.4;">Remember: Only one subscription is needed per household ($1.99/mo or $9.99/yr). All invited members join and sync free!</p>'
-                    f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -170,9 +177,7 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0, hous
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_solo_nudge')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_solo_nudge')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -228,7 +233,79 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0, hous
                     f'<a href="{add_member_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">👥 Invite Household Members</a>'
                     f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">⭐ View Pro Plans</a>'
                     f'</div>'
+                    f'</div>' + unsub_html
+                ),
+            },
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_store_nudge_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
+    """Send Day 3 nudge to households that only have General List and no custom stores."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "store_nudge"
+    add_store_link = f"{BASE_URL}/open?url={quote('/?action=add_store&source=email_store_nudge')}"
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": "Streamline your grocery runs with store-specific lists 🏪",
+        "content": [
+            {
+                "type": "text/plain",
+                "value": (
+                    f"Hi {user_name},\n\n"
+                    f"We noticed you've been building your grocery list in the General List on ListMate.\n\n"
+                    f"Did you know you can add the specific stores where your household shops (like Trader Joe's, Costco, Safeway, or Target)?\n\n"
+                    f"Here's how store lists make shopping easier:\n"
+                    f"• Organize by aisle: Items group automatically under each store so you can navigate aisles smoothly.\n"
+                    f"• Master Store Catalogs: Easily re-add frequently bought essentials in one tap.\n"
+                    f"• Smart item routing: ListMate remembers where you buy each item and routes it automatically!\n\n"
+                    f"Add your favorite stores to ListMate:\n"
+                    f"{add_store_link}\n\n"
+                    f"— The ListMate Team" + unsub_txt
+                ),
+            },
+            {
+                "type": "text/html",
+                "value": (
+                    f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+                    f'<h2 style="color:#2c5a2c;margin-top:0;">🏪 Organize by Store, Shop Faster</h2>'
+                    f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+                    f'<p style="font-size:15px;color:#333;line-height:1.5;">We noticed you\'ve been adding items to your <strong>General List</strong> in ListMate.</p>'
+                    f'<p style="font-size:15px;color:#333;line-height:1.5;">Did you know you can add the dedicated stores your household shops at (like Trader Joe\'s, Costco, Safeway, or Target)?</p>'
+                    f'<ul style="font-size:14px;color:#444;line-height:1.6;padding-left:20px;">'
+                    f'<li><strong>Aisle & store grouping:</strong> Keep your shopping trips organized and focused by store.</li>'
+                    f'<li><strong>Master catalogs:</strong> Pull frequently purchased essentials into your active trip in one tap.</li>'
+                    f'<li><strong>Smart routing:</strong> ListMate remembers where items belong and suggests the right store automatically.</li>'
+                    f'</ul>'
+                    f'<div style="margin:24px 0 16px;">'
+                    f'<a href="{add_store_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">➕ Add a Store to ListMate</a>'
                     f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -252,9 +329,7 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, ho
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week1')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week1')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -311,7 +386,7 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Add Members</a>'
                     f'</div>'
                     f'<p style="font-size:12px;color:#888;line-height:1.4;margin-top:20px;">Have questions or feedback? Reply directly to this email—we read every message!</p>'
-                    f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -335,9 +410,7 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, ho
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week3')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week3')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -389,7 +462,7 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Add Members</a>'
                     f'</div>'
                     f'<p style="font-size:13px;color:#666;line-height:1.4;">Only one subscription is needed per household—all family members and roommates sync free!</p>'
-                    f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -412,9 +485,7 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0, hous
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_activation')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_activation')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
@@ -458,7 +529,7 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0, hous
                     f'<a href="{app_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Add First Item</a>'
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Invite Members</a>'
                     f'</div>'
-                    f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -481,9 +552,7 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_reengagement')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reengagement')}"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
@@ -526,7 +595,7 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<a href="{app_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Plan Your Next Trip</a>'
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Invite Members</a>'
                     f'</div>'
-                    f'</div>'
+                    f'</div>' + unsub_html
                 ),
             },
         ],
@@ -549,6 +618,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_combined')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_combined')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_combined')}"
+    add_store_link = f"{BASE_URL}/open?url={quote('/?action=add_store&source=email_combined')}"
 
     # Build dynamic subject and content based on events
     html_sections = []
@@ -568,10 +638,27 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         subject = "How's your first week with ListMate? 🛒"
     elif 'trial_week3' in events:
         subject = "3 weeks with ListMate — how is grocery shopping going? 🛒"
+    elif 'store_nudge' in events:
+        subject = "Streamline your grocery runs with store-specific lists 🏪"
     elif 'solo_nudge' in events:
         subject = "Get the most out of ListMate: Invite your household 🛒"
     else:
         subject = "Updates from ListMate 🛒"
+
+    if 'store_nudge' in events:
+        text_sections.append(
+            f"Organize by Store, Shop Faster:\n"
+            f"Did you know you can add the dedicated stores where your household shops (like Trader Joe's, Costco, Safeway, or Target)?\n"
+            f"Items automatically organize by store and aisle so your grocery runs are faster and more organized.\n"
+            f"Add a Store: {add_store_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#f0fdf4;border-left:4px solid #5ebe7e;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#166534;display:block;margin-bottom:4px;">🏪 Organize by Store:</strong>'
+            f'<span style="color:#274c36;font-size:14px;line-height:1.5;">Did you know you can add the specific stores your household shops at? Organizing by store and aisle makes shopping faster and stress-free.</span>'
+            f'<div style="margin-top:8px;"><a href="{add_store_link}" style="color:#166534;font-weight:bold;font-size:13px;text-decoration:underline;">➕ Add a Store &rarr;</a></div>'
+            f'</div>'
+        )
 
     if 'solo_nudge' in events:
         text_sections.append(
@@ -646,9 +733,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + f"\n\nUpgrade Household: {upgrade_link}\nAdd Members: {add_member_link}\n\n— The ListMate Team"
     html_body = f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;"><p style="font-size:16px;color:#333;margin-top:0;">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 30px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from marketing emails.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "personalizations": [{
@@ -668,7 +753,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": text_body + unsub_txt},
-            {"type": "text/html", "value": html_body.replace("</div>", unsub_html + "</div>")},
+            {"type": "text/html", "value": html_body + unsub_html},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": True, "enable_text": False},
@@ -743,9 +828,7 @@ def send_feedback_resolved_email(
         f'</div>'
     )
 
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    unsub_txt = f"\n\nTo unsubscribe from these emails, visit: {unsub_link}" if unsub_link else ""
-    unsub_html = f'<p style="font-size: 11px; color: #888; margin-top: 20px; text-align: center;"><a href="{unsub_link}" style="color: #888; text-decoration: underline;">Unsubscribe</a> from feedback updates.</p>' if unsub_link else ""
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "feedback updates")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -768,7 +851,7 @@ def send_feedback_resolved_email(
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": text_body + unsub_txt},
-            {"type": "text/html", "value": html_body + (unsub_html if unsub_link else "")},
+            {"type": "text/html", "value": html_body + unsub_html},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": True, "enable_text": False},

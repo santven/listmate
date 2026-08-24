@@ -14,6 +14,7 @@ Our system strictly delineates between **Marketing** (lifecycle, engagement, pro
 | Email Type | Classification | Campaign Identifier | Condition / Target Audience |
 | :--- | :--- | :--- | :--- |
 | **Solo Owner Nudge (Day 3)** | 📢 **Marketing** | `solo_nudge` | Encourages single-member households to invite family/roommates. |
+| **Store Nudge (Day 3)** | 📢 **Marketing** | `store_nudge` | Encourages households with only General List items to add custom store lists. |
 | **Trial Week 1 Check-in (Day 7)** | 📢 **Marketing** | `trial_week1` | Promotes early upgrades ($1.99/mo or $9.99/yr) and shares discovery tips. |
 | **Trial Week 3 Check-in (Day 21)** | 📢 **Marketing** | `trial_week3` | Reminds users to lock in an upgrade before the trial ends in ~9 days. |
 | **Activation (Day 3)** | 📢 **Marketing** | `activation` | Sent to users with 0 list items after 3 days. |
@@ -101,6 +102,18 @@ Our system strictly delineates between **Marketing** (lifecycle, engagement, pro
 - **Buttons**:
   - 🛒 **Plan Your Next Trip** (`/?source=email_reengagement`)
   - 👥 **Invite Members** (`/settings?action=add-member&source=email_reengagement`)
+
+---
+
+### 7. Store Nudge (Day 3+ Household with only General List)
+- **Classification**: 📢 **Marketing**
+- **Trigger Condition**: Household created 3+ days ago (`DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'`), with at least 1 item in `list_items`, and NO custom stores created (only `'General List'` or 0 stores).
+- **Tracking**: `email_events` with `campaign = 'store_nudge'` and `event_type = 'sent'`.
+- **Content & Purpose**:
+  - Educates users on the power of store-specific lists (e.g. Trader Joe's, Costco, Safeway, Target).
+  - Explains aisle grouping, master store catalog quick-add, and smart item routing.
+- **Buttons / Actions**:
+  - ➕ **Add a Store** (`/?action=add_store&source=email_store_nudge`) — Navigates directly to the home screen, smoothly scrolls to the "+ New store..." input, focuses it, and illuminates it with a pulsing discovery halo.
 
 ---
 

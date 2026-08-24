@@ -61,7 +61,8 @@ def _one(sql, params=None):
         row = cur.fetchone()
         cols = [d[0] for d in cur.description] if cur.description else []
         return dict(zip(cols, row)) if row else None
-    except Exception:
+    except Exception as e:
+        print(f"[_one SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
         return None
     finally:
         if cur:
@@ -80,7 +81,8 @@ def _run(sql, params=None):
         rows = cur.fetchall() if cur.description else []
         cols = [d[0] for d in cur.description] if cur.description else []
         return [dict(zip(cols, r)) for r in rows]
-    except Exception:
+    except Exception as e:
+        print(f"[_run SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
         return []
     finally:
         if cur:
@@ -150,15 +152,6 @@ def _init_schema():
             subscription_status TEXT NOT NULL DEFAULT 'free',
             trial_ends_at TIMESTAMP,
             subscription_ends_at TIMESTAMP,
-            email_solo_nudge_sent_at TIMESTAMP,
-            email_trial_week1_sent_at TIMESTAMP,
-            email_trial_week3_sent_at TIMESTAMP,
-            email_activation_sent_at TIMESTAMP,
-            email_reengagement_sent_at TIMESTAMP,
-            email_trial_exp_3days_sent_at TIMESTAMP,
-            email_trial_exp_today_sent_at TIMESTAMP,
-            email_sub_exp_3days_sent_at TIMESTAMP,
-            email_sub_exp_today_sent_at TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         """CREATE TABLE IF NOT EXISTS email_events (
             id SERIAL PRIMARY KEY,
@@ -265,15 +258,6 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_solo_nudge_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_week1_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_week3_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_activation_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_reengagement_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_exp_3days_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_exp_today_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_sub_exp_3days_sent_at TIMESTAMP",
-        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_sub_exp_today_sent_at TIMESTAMP",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
         "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')"
     ]:
@@ -377,7 +361,8 @@ def get_household_status():
         "is_read_only": is_read_only,
         "over_limit": over_limit,
         "downgraded_at": hh.get("downgraded_at"),
-        "owner_id": hh.get("owner_id")
+        "owner_id": hh.get("owner_id"),
+        "created_at": str(hh.get("created_at")) if hh.get("created_at") else None
     }
 
 def is_logged_in(): 
