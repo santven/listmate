@@ -209,7 +209,7 @@ def run_cron():
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'solo_nudge' AND ee.event_type = 'sent'
       )
-      AND ahm.marketing_opt_in = TRUE
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND (SELECT COUNT(*) FROM auth_household_members WHERE household_id = h.id) = 1
     ORDER BY h.id, u.created_at ASC
     """
@@ -240,7 +240,7 @@ def run_cron():
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week1' AND ee.event_type = 'sent'
       )
-      AND ahm.marketing_opt_in = TRUE
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
     ORDER BY h.id, u.created_at ASC
     """
     households_week1 = _run(query_week1)
@@ -270,7 +270,7 @@ def run_cron():
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_week3' AND ee.event_type = 'sent'
       )
-      AND ahm.marketing_opt_in = TRUE
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
     ORDER BY h.id, u.created_at ASC
     """
     households_week3 = _run(query_week3)
@@ -300,7 +300,7 @@ def run_cron():
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'activation' AND ee.event_type = 'sent'
       )
-      AND ahm.marketing_opt_in = TRUE
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
     GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING COUNT(l.id) = 0
     ORDER BY h.id, u.created_at ASC
@@ -329,7 +329,7 @@ def run_cron():
     JOIN auth_users u ON u.id = COALESCE(h.owner_id, (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id AND ahm2.role = 'owner' LIMIT 1), (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1))
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     JOIN list_items l ON h.id = l.household_id
-    WHERE ahm.marketing_opt_in = TRUE
+    WHERE COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE ee.household_id = h.id 
@@ -365,12 +365,12 @@ def run_cron():
     JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     JOIN list_items l ON h.id = l.household_id
     WHERE DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days'
-      AND ahm.marketing_opt_in = TRUE
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'store_nudge' AND ee.event_type = 'sent'
       )
       AND NOT EXISTS (
-          SELECT 1 FROM stores s WHERE s.household_id = h.id AND s.name != 'General List'
+          SELECT 1 FROM stores s WHERE s.household_id = h.id AND TRIM(LOWER(s.name)) NOT IN ('general list', 'general')
       )
     GROUP BY h.id, u.id, u.email, u.name, u.created_at
     HAVING COUNT(l.id) > 0
