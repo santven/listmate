@@ -557,6 +557,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
       <a id="menuInviteLink" href="/settings?action=invite" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuInviteLink', event)) return false; if(typeof toggleBurger==='function') toggleBurger();">👥 Add / Invite Members</a>
+      <a id="menuJoinHouseholdLink" href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
@@ -887,8 +888,30 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div id="switcherList" style="display:flex; flex-direction:column; gap:8px; max-height: 50vh; overflow-y: auto;">
        <div style="text-align:center; padding: 20px; color: #888;">Loading...</div>
     </div>
-    <div style="margin-top: 16px;">
+    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); text-align: center;">
+      <button onclick="closeHouseholdSwitcher(); showJoinHouseholdModal();" style="width:100%; background:#f0fdf4; border:1px dashed #86efac; color:var(--green-dark); padding:10px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">🔗 Have an invite link or code? Join here</button>
+    </div>
+    <div style="margin-top: 12px;">
         <button onclick="closeHouseholdSwitcher()" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Join Household Modal -->
+<div class="modal-overlay" id="joinHouseholdModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">🔗 Join a Household</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+      Enter the single-use invite code or paste the invite link you received from a household member.
+    </p>
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Invite Link or Code</label>
+      <input type="text" id="joinHouseholdCodeInput" placeholder="Paste invite link or code..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none;">
+    </div>
+    <div class="error" id="joinHouseholdError" style="display:none; margin-bottom:12px; color:#ef4444; font-size:13px;"></div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSubmitJoinHousehold" onclick="submitJoinHouseholdCode()" style="flex:2; background:var(--green); color:#fff; border:none; padding:12px 16px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Join Household</button>
+      <button onclick="closeJoinHouseholdModal()" style="flex:1; background:none; color:#888; border:1px solid var(--border); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
 </div>
@@ -3431,6 +3454,56 @@ function doAcceptInvite(token, deleteEmpty) {
         if (d.ok) window.location.reload();
         else { alert(d.error || 'Failed to join'); window.location.reload(); }
     }).catch(() => window.location.reload());
+}
+
+function showJoinHouseholdModal() {
+  const modal = document.getElementById('joinHouseholdModal');
+  if (modal) {
+    const input = document.getElementById('joinHouseholdCodeInput');
+    if (input) input.value = '';
+    const err = document.getElementById('joinHouseholdError');
+    if (err) err.style.display = 'none';
+    modal.classList.add('active');
+    setTimeout(() => { if (input) input.focus(); }, 150);
+  }
+}
+function closeJoinHouseholdModal() {
+  const modal = document.getElementById('joinHouseholdModal');
+  if (modal) modal.classList.remove('active');
+}
+function submitJoinHouseholdCode() {
+  const input = document.getElementById('joinHouseholdCodeInput');
+  const err = document.getElementById('joinHouseholdError');
+  const btn = document.getElementById('btnSubmitJoinHousehold');
+  const code = input ? input.value.trim() : '';
+  if (!code) {
+    if (err) { err.textContent = 'Please enter an invite code or link'; err.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Joining...'; }
+  if (err) err.style.display = 'none';
+
+  fetch('/api/auth/household/join', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, delete_current_empty: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) {
+      if (typeof toast === 'function') toast('✅ Successfully joined ' + (res.household_name || 'household') + '!');
+      closeJoinHouseholdModal();
+      setTimeout(() => window.location.reload(), 400);
+    } else {
+      if (err) { err.textContent = res.error || 'Failed to join household'; err.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Join Household'; }
+    }
+  })
+  .catch(() => {
+    if (err) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Join Household'; }
+  });
 }
 
 async function purchasePackage(index) {

@@ -197,6 +197,15 @@ def _init_schema():
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             expires_at TIMESTAMP, used_by INTEGER, used_at TIMESTAMP)""",
         """CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)""",
+        """CREATE TABLE IF NOT EXISTS auth_user_aliases (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+            alias_email TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, alias_email)
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_aua_email ON auth_user_aliases(LOWER(alias_email))""",
+        """CREATE INDEX IF NOT EXISTS idx_aua_user_id ON auth_user_aliases(user_id)""",
     ]:
         _run(stmt)
     for stmt in [
@@ -522,7 +531,10 @@ def register_auth_routes(app):
                     hh_id = mem["household_id"]
                     _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
 
-        open_invites = _run("SELECT id FROM invites WHERE LOWER(email) = LOWER(?) AND used_by IS NULL", (email,))
+        open_invites = _run("""SELECT id FROM invites WHERE (
+            LOWER(email) = LOWER(?) 
+            OR LOWER(email) IN (SELECT LOWER(alias_email) FROM auth_user_aliases WHERE user_id = ?)
+        ) AND used_by IS NULL AND (expires_at IS NULL OR expires_at > NOW())""", (email, uid))
         is_owner = False
         if not is_new_user:
             is_owner = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,)) is not None
@@ -675,6 +687,18 @@ def register_auth_routes(app):
                     if intent_id:
                         _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
                     return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
+            else:
+                open_invites = _run("""SELECT id FROM invites WHERE (
+                    LOWER(email) = LOWER(?) 
+                    OR LOWER(email) IN (SELECT LOWER(alias_email) FROM auth_user_aliases WHERE user_id = ?)
+                ) AND used_by IS NULL AND (expires_at IS NULL OR expires_at > NOW())""", (email, uid))
+                is_owner = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,)) is not None
+                if open_invites and not is_owner:
+                    _set(user["id"], email, user["name"] or name, hh_id, "")
+                    intent_id = data.get("intent")
+                    if intent_id:
+                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+                    return jsonify({"ok": False, "needs_signup": True, "message": "Pending invites interception"}), 200
 
             if hh_id and not hh_name:
                 hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
@@ -900,8 +924,42 @@ def register_auth_routes(app):
         if not user: return jsonify({"error": "User not found"}), 404
 
         if invite:
-            hh = _one(f"SELECT * FROM {_HH} WHERE invite_code = ?", (invite,))
-            if not hh: return jsonify({"error": "Invalid invite code"}), 404
+            token_candidate = invite
+            if "token=" in token_candidate:
+                import urllib.parse
+                parsed = urllib.parse.urlparse(token_candidate)
+                qs = urllib.parse.parse_qs(parsed.query)
+                if "token" in qs and qs["token"]:
+                    token_candidate = qs["token"][0]
+            elif "/" in token_candidate:
+                token_candidate = token_candidate.rstrip("/").split("/")[-1]
+
+            target_hhid = None
+            inv_row = _one("SELECT * FROM invites WHERE token = ?", (token_candidate,))
+            if inv_row:
+                if inv_row.get("used_by"):
+                    return jsonify({"error": "This invite link has already been used."}), 410
+                if inv_row.get("expires_at"):
+                    import datetime as _dt
+                    exp = inv_row["expires_at"]
+                    now = _dt.datetime.utcnow() if getattr(exp, 'tzinfo', None) is None else _dt.datetime.now(_dt.timezone.utc)
+                    if exp < now:
+                        return jsonify({"error": "This invite link has expired. Please ask for a new invite."}), 410
+
+                target_hhid = inv_row["household_id"]
+                _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, inv_row["id"]))
+                if inv_row.get("email") and user.get("email") and inv_row["email"].strip().lower() != user["email"].strip().lower():
+                    try:
+                        _run("INSERT INTO auth_user_aliases (user_id, alias_email) VALUES (?, ?) ON CONFLICT DO NOTHING", (uid, inv_row["email"].strip().lower()))
+                    except Exception as e:
+                        print(f"[auth_signup] Alias insert note: {e}", flush=True)
+            else:
+                hh_candidate = _one(f"SELECT * FROM {_HH} WHERE UPPER(invite_code) = UPPER(?)", (invite,))
+                if not hh_candidate: return jsonify({"error": "Invalid invite code or link"}), 404
+                target_hhid = hh_candidate["id"]
+
+            hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (target_hhid,))
+            if not hh: return jsonify({"error": "Household not found"}), 404
 
             old_hhid = user.get("household_id")
             if old_hhid and old_hhid != 0 and old_hhid != hh["id"]:
@@ -909,7 +967,7 @@ def register_auth_routes(app):
                     _purge_household(old_hhid)
 
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh["id"], uid))
-            _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', (SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1)) ON CONFLICT DO NOTHING", (uid, hh["id"], hh["id"]))
+            _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, hh["id"], hh["id"]))
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
@@ -963,9 +1021,19 @@ def register_auth_routes(app):
             current_hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (active_hhid,))
             current_hh_name = current_hh.get("name", "") if current_hh else ""
         
-        # Get open invites for their email
+        # Get open invites for their primary email and any recorded aliases
         email = get_email()
-        invites = _run("SELECT i.id, i.token, h.name as household_name FROM invites i JOIN auth_households h ON i.household_id = h.id WHERE LOWER(i.email) = LOWER(?) AND i.used_by IS NULL", (email,))
+        invites = _run("""
+            SELECT i.id, i.token, h.name as household_name 
+            FROM invites i 
+            JOIN auth_households h ON i.household_id = h.id 
+            WHERE (
+                LOWER(i.email) = LOWER(?) 
+                OR LOWER(i.email) IN (SELECT LOWER(alias_email) FROM auth_user_aliases WHERE user_id = ?)
+            ) 
+            AND i.used_by IS NULL
+            AND (i.expires_at IS NULL OR i.expires_at > NOW())
+        """, (email, uid))
         
         return jsonify({
             "ok": True,
@@ -1100,7 +1168,7 @@ def register_auth_routes(app):
             print(f"[send_invite ERROR] {e}", flush=True)
             traceback.print_exc()
 
-        return jsonify({"ok": True, "invite_link": invite_link, "email": email})
+        return jsonify({"ok": True, "invite_link": invite_link, "token": token, "email": email})
 
     @app.route("/api/auth/invite/<token>")
     def auth_check_invite(token):
@@ -1113,7 +1181,14 @@ def register_auth_routes(app):
         if not invite:
             return jsonify({"valid": False, "error": "Invalid invite link"}), 404
         if invite.get("used_by"):
-            return jsonify({"valid": False, "error": "Invite already used"}), 410
+            return jsonify({"valid": False, "error": "This invite has already been used."}), 410
+
+        if invite.get("expires_at"):
+            import datetime as _dt
+            exp = invite["expires_at"]
+            now = _dt.datetime.utcnow() if getattr(exp, 'tzinfo', None) is None else _dt.datetime.now(_dt.timezone.utc)
+            if exp < now:
+                return jsonify({"valid": False, "error": "This invite has expired. Please ask for a new invite."}), 410
 
         uid = get_user_id()
         current_is_disposable = False
@@ -1138,33 +1213,44 @@ def register_auth_routes(app):
     def auth_accept_invite(token):
         from flask import request
         _init_schema()
-        invite = _one("SELECT * FROM invites WHERE token = ? AND used_by IS NULL", (token,))
+        invite = _one("SELECT * FROM invites WHERE token = ?", (token,))
         if not invite:
-            return jsonify({"error": "Invalid or expired invite"}), 404
+            return jsonify({"error": "Invalid invite link"}), 404
+
+        if invite.get("used_by"):
+            return jsonify({"error": "This invite has already been used."}), 410
+
+        if invite.get("expires_at"):
+            import datetime as _dt
+            exp = invite["expires_at"]
+            now = _dt.datetime.utcnow() if getattr(exp, 'tzinfo', None) is None else _dt.datetime.now(_dt.timezone.utc)
+            if exp < now:
+                return jsonify({"error": "This invite has expired. Please request a new invite."}), 410
 
         uid = get_user_id()
         user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
         if not user:
             return jsonify({"error": "User not found"}), 404
 
-        if user:
-            mem = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, user['household_id']))
-            user['marketing_opt_in'] = bool(mem['marketing_opt_in']) if mem and mem.get('marketing_opt_in') is not None else True
-
-        if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
-            return jsonify({"error": "This invite is for a different email address"}), 403
+        # Record alias if invite email differs from user email (e.g. Apple Private Relay)
+        if invite.get("email") and user.get("email") and invite["email"].strip().lower() != user["email"].strip().lower():
+            try:
+                _run("INSERT INTO auth_user_aliases (user_id, alias_email) VALUES (?, ?) ON CONFLICT DO NOTHING", (uid, invite["email"].strip().lower()))
+            except Exception as e:
+                print(f"[auth_accept_invite] Alias insert note: {e}", flush=True)
 
         data = request.get_json(silent=True) or {}
         delete_current = data.get("delete_current_empty") or request.args.get("delete_current_empty") in ["1", "true", "True"]
         old_hhid = user.get("household_id")
+
+        # Single-use: burn token immediately
+        _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
 
         # Add to junction table
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, invite["household_id"], invite["household_id"]))
         
         # Switch active household to the new one
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
-        
-        _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
         
         # Clean up disposable empty household if requested
         if delete_current and old_hhid and old_hhid != invite["household_id"]:
@@ -1186,12 +1272,88 @@ def register_auth_routes(app):
             return jsonify({"error": "Invalid or expired invite"}), 404
             
         uid = get_user_id()
-        user = _one(f"SELECT email FROM {_USERS} WHERE id = ?", (uid,))
-        if invite.get("email") and user.get("email","").lower() != invite["email"].lower():
-            return jsonify({"error": "This invite is for a different email address"}), 403
-            
-        _run("DELETE FROM invites WHERE id = ?", (invite["id"],))
+        _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
         return jsonify({"ok": True})
+
+    @app.route("/api/auth/household/join", methods=["POST"])
+    @require_user
+    def auth_join_household():
+        from flask import request
+        _init_schema()
+        uid = get_user_id()
+        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        data = request.get_json(silent=True) or {}
+        code_input = (data.get("code") or data.get("invite_code") or "").strip()
+        if not code_input:
+            return jsonify({"error": "Invite code or link is required"}), 400
+
+        # Extract token if user pasted full URL
+        token_candidate = code_input
+        if "token=" in token_candidate:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(token_candidate)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "token" in qs and qs["token"]:
+                token_candidate = qs["token"][0]
+        elif "/" in token_candidate:
+            token_candidate = token_candidate.rstrip("/").split("/")[-1]
+
+        target_hhid = None
+        # 1. Try single-use token from invites table
+        invite = _one("SELECT * FROM invites WHERE token = ?", (token_candidate,))
+        if invite:
+            if invite.get("used_by"):
+                return jsonify({"error": "This invite link has already been used."}), 410
+            if invite.get("expires_at"):
+                import datetime as _dt
+                exp = invite["expires_at"]
+                now = _dt.datetime.utcnow() if getattr(exp, 'tzinfo', None) is None else _dt.datetime.now(_dt.timezone.utc)
+                if exp < now:
+                    return jsonify({"error": "This invite link has expired. Please ask the household owner for a new invite."}), 410
+
+            target_hhid = invite["household_id"]
+            # Burn invite immediately
+            _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, invite["id"]))
+
+            # Store alias if invite email differs from active user email
+            if invite.get("email") and user.get("email") and invite["email"].strip().lower() != user["email"].strip().lower():
+                try:
+                    _run("INSERT INTO auth_user_aliases (user_id, alias_email) VALUES (?, ?) ON CONFLICT DO NOTHING", (uid, invite["email"].strip().lower()))
+                except Exception as e:
+                    print(f"[auth_join_household] Alias insert note: {e}", flush=True)
+        else:
+            # 2. Try household invite_code
+            hh_row = _one(f"SELECT id, name FROM {_HH} WHERE UPPER(invite_code) = UPPER(?)", (code_input,))
+            if hh_row:
+                target_hhid = hh_row["id"]
+            else:
+                return jsonify({"error": "Invalid invite code or link. Please check and try again."}), 404
+
+        hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (target_hhid,))
+        if not hh:
+            return jsonify({"error": "Household not found"}), 404
+
+        delete_current = bool(data.get("delete_current_empty", True)) or request.args.get("delete_current_empty") in ["1", "true", "True"]
+        old_hhid = user.get("household_id")
+
+        # Add to junction table
+        _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, target_hhid, target_hhid))
+
+        # Switch active household to the new one
+        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (target_hhid, uid))
+
+        # Clean up disposable empty household if requested
+        if delete_current and old_hhid and old_hhid != target_hhid:
+            if _is_disposable_empty_household(old_hhid, uid):
+                _purge_household(old_hhid)
+
+        hh_name = hh.get("name", "")
+        _set(uid, user["email"], user["name"], target_hhid, hh_name)
+
+        return jsonify({"ok": True, "household_id": target_hhid, "household_name": hh_name})
 
     @app.route("/api/auth/household/<int:hh_id>/leave", methods=["POST"])
     @require_user

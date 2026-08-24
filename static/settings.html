@@ -222,6 +222,7 @@
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
       <a href="#" onclick="focusAddMember(); if(typeof toggleBurger==='function') toggleBurger(); return false;">👥 Add / Invite Members</a>
+      <a href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="/">📋 Grocery List</a>
       <a href="/?screen=globalVisits">🗓️ Store Visits</a>
@@ -744,14 +745,19 @@ async function loadHousehold() {
     const pending = householdData.pending_invites || [];
     if (pending.length > 0) {
       list.innerHTML += '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed #d8e0d0"><div style="font-size:12px;color:#888;margin-bottom:8px;">🕐 Pending Invites</div></div>';
+      const baseOrigin = window.location.origin;
       pending.forEach(p => {
-        list.innerHTML += `<div class="member-row" style="opacity:0.7">
-          <div class="member-avatar" style="background:#ccc">?</div>
-          <div class="member-info">
-            <div class="member-name">${p.email}</div>
-            <div class="member-email" style="font-size:10px">Invited ${p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}</div>
+        const invUrl = `${baseOrigin}/login?token=${p.token}`;
+        list.innerHTML += `<div class="member-row" style="opacity:0.9; flex-wrap:wrap; gap:8px;">
+          <div class="member-avatar" style="background:#e0f2fe; color:#0284c7;">✉️</div>
+          <div class="member-info" style="min-width:140px;">
+            <div class="member-name">${escapeHtml(p.email)}</div>
+            <div class="member-email" style="font-size:10px">Invited ${p.created_at ? new Date(p.created_at).toLocaleDateString() : ''} · Single-use</div>
           </div>
-          <button onclick="removeInvite('${p.token}')" style="background:none;border:none;color:#d94a4a;cursor:pointer;font-size:18px;padding:4px 8px" title="Remove invite">×</button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button onclick="copyToClipboard('${escapeHtml(invUrl)}', this, 'Copied Link!')" style="background:#f0fdf4; border:1px solid #86efac; color:var(--green-dark); padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;" title="Copy single-use invite link">📋 Copy Link</button>
+            <button onclick="removeInvite('${p.token}')" style="background:none;border:none;color:#d94a4a;cursor:pointer;font-size:18px;padding:4px 8px" title="Remove invite">×</button>
+          </div>
         </div>`;
       });
     }
@@ -803,11 +809,18 @@ async function addMember() {
     const data = await res.json();
     if (data.ok) {
       const link = data.invite_link;
+      const code = data.token;
       document.getElementById('addSuccess').style.display = 'block';
       document.getElementById('addSuccess').innerHTML = 
-        `<b>Invite link for ${escapeHtml(email)}:</b><br>
-         <input type="text" value="${escapeHtml(link)}" readonly style="width:100%;font-size:11px;padding:4px;margin:4px 0;border:1px solid #ddd;border-radius:4px;" onclick="this.select()">
-         <br><small>Copy this link and send it to ${escapeHtml(email)}</small>`;
+        `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; margin-top:8px;">
+          <div style="font-weight:700; color:var(--green-dark); margin-bottom:6px;">✉️ Invitation created for ${escapeHtml(email)}</div>
+          <div style="font-size:12px; color:#6b7280; margin-bottom:8px;">An email invite was sent via SendGrid. You can also share the direct single-use link or code below:</div>
+          <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <input type="text" value="${escapeHtml(link)}" readonly style="flex:1; font-size:12px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#fff;" onclick="this.select()">
+            <button onclick="copyToClipboard('${escapeHtml(link)}', this, 'Copied!')" style="background:var(--green); color:#fff; border:none; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap;">📋 Copy Link</button>
+          </div>
+          <div style="font-size:11px; color:#4b5563;"><b>Invite Code:</b> <code style="background:#e5e7eb; padding:2px 6px; border-radius:4px;">${escapeHtml(code)}</code></div>
+        </div>`;
       document.getElementById('newMemberEmail').value = '';
       Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation()]);
     } else {
@@ -819,6 +832,39 @@ async function addMember() {
     document.getElementById('addError').textContent = 'Network error.';
   }
   document.getElementById('btnAdd').disabled = false;
+}
+
+function copyToClipboard(text, btnElement, successLabel) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showCopyFeedback(btnElement, successLabel);
+    }).catch(() => fallbackCopy(text, btnElement, successLabel));
+  } else {
+    fallbackCopy(text, btnElement, successLabel);
+  }
+}
+
+function fallbackCopy(text, btnElement, successLabel) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showCopyFeedback(btnElement, successLabel);
+  } catch(e) {
+    alert('Copy failed: ' + text);
+  }
+  document.body.removeChild(ta);
+}
+
+function showCopyFeedback(btnElement, successLabel) {
+  if (!btnElement) return;
+  const original = btnElement.innerHTML;
+  btnElement.innerHTML = `✅ ${successLabel || 'Copied!'}`;
+  setTimeout(() => { btnElement.innerHTML = original; }, 2000);
 }
 
 async function logout() {
@@ -1541,6 +1587,56 @@ function showHouseholdSwitcher() {
         }
         document.getElementById('switcherList').innerHTML = html || '<div style="color:var(--muted); text-align:center;">No other households found.</div>';
     });
+}
+
+function showJoinHouseholdModal() {
+  const modal = document.getElementById('joinHouseholdModal');
+  if (modal) {
+    const input = document.getElementById('joinHouseholdCodeInput');
+    if (input) input.value = '';
+    const err = document.getElementById('joinHouseholdError');
+    if (err) err.style.display = 'none';
+    modal.classList.add('active');
+    setTimeout(() => { if (input) input.focus(); }, 150);
+  }
+}
+function closeJoinHouseholdModal() {
+  const modal = document.getElementById('joinHouseholdModal');
+  if (modal) modal.classList.remove('active');
+}
+function submitJoinHouseholdCode() {
+  const input = document.getElementById('joinHouseholdCodeInput');
+  const err = document.getElementById('joinHouseholdError');
+  const btn = document.getElementById('btnSubmitJoinHousehold');
+  const code = input ? input.value.trim() : '';
+  if (!code) {
+    if (err) { err.textContent = 'Please enter an invite code or link'; err.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Joining...'; }
+  if (err) err.style.display = 'none';
+
+  fetch('/api/auth/household/join', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, delete_current_empty: true })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) {
+      alert('✅ Successfully joined ' + (res.household_name || 'household') + '!');
+      closeJoinHouseholdModal();
+      window.location.reload();
+    } else {
+      if (err) { err.textContent = res.error || 'Failed to join household'; err.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Join Household'; }
+    }
+  })
+  .catch(() => {
+    if (err) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Join Household'; }
+  });
 }
 
 function showFeedbackModal() {
@@ -2390,12 +2486,32 @@ if (document.getElementById('btnActionCancel')) {
     <div id="switcherList" style="display:flex; flex-direction:column; gap:8px; max-height: 50vh; overflow-y: auto;">
        <div style="text-align:center; padding: 20px; color: #888;">Loading...</div>
     </div>
-    <div style="margin-top: 16px;">
+    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); text-align: center;">
+      <button onclick="closeHouseholdSwitcher(); showJoinHouseholdModal();" style="width:100%; background:#f0fdf4; border:1px dashed #86efac; color:var(--green-dark); padding:10px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">🔗 Have an invite link or code? Join here</button>
+    </div>
+    <div style="margin-top: 12px;">
         <button onclick="closeHouseholdSwitcher()" style="width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
   </div>
+</div>
 
-
+<!-- Join Household Modal -->
+<div class="modal-overlay" id="joinHouseholdModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">🔗 Join a Household</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+      Enter the single-use invite code or paste the invite link you received from a household member.
+    </p>
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Invite Link or Code</label>
+      <input type="text" id="joinHouseholdCodeInput" placeholder="Paste invite link or code..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none;">
+    </div>
+    <div class="error" id="joinHouseholdError" style="display:none; margin-bottom:12px; color:#ef4444; font-size:13px;"></div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSubmitJoinHousehold" onclick="submitJoinHouseholdCode()" style="flex:2; background:var(--green); color:#fff; border:none; padding:12px 16px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Join Household</button>
+      <button onclick="closeJoinHouseholdModal()" style="flex:1; background:none; color:#888; border:1px solid var(--border); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- Paywall Modal -->

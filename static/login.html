@@ -145,6 +145,13 @@ body { padding-bottom: 50px; }
           <label for="marketingOptIn" style="margin:0; font-weight:normal; font-size:13px; color:var(--text);">Send me tips, reminders, and updates (you can unsubscribe anytime).</label>
       </div>
       <button class="btn" id="btnCreate" onclick="createHousehold()">Create Household</button>
+      <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:left;">
+        <div style="font-size:13px; font-weight:700; color:#555; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Have an invite link or code?</div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="manualInviteCodeInput" placeholder="Paste invite code or link..." style="flex-grow:1; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+          <button type="button" onclick="joinWithManualCode()" id="btnJoinManualCode" style="background:#10b981; color:#fff; border:none; padding:10px 16px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap;">Join</button>
+        </div>
+      </div>
     </div>
     <button class="btn" id="btnAccept" onclick="acceptInvite()" style="display:none">Accept Invitation</button>
     <div class="error" id="step2Error"></div>
@@ -813,6 +820,33 @@ function createHousehold() {
     if(d.ok) setTimeout(function(){location.replace(getRedirectTarget());}, 200); else showStep2Error(d.error||'Failed');
   }).catch(function(){ showStep2Error('Network error.'); });
   b.disabled=false;
+}
+
+function joinWithManualCode() {
+  var code = (document.getElementById('manualInviteCodeInput').value || '').trim();
+  if (!code) { showStep2Error('Please enter an invite code or link'); return; }
+  var btn = document.getElementById('btnJoinManualCode');
+  if (btn) { btn.disabled = true; btn.textContent = 'Joining...'; }
+  showStep2Error('');
+  fetch('/api/auth/household/join', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, delete_current_empty: true })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      location.replace(getRedirectTarget());
+    } else {
+      showStep2Error(d.error || 'Failed to join household');
+      if (btn) { btn.disabled = false; btn.textContent = 'Join'; }
+    }
+  })
+  .catch(function(e) {
+    showStep2Error('Network error. Try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Join'; }
+  });
 }
 
 function goToStep1() {
