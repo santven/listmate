@@ -1026,7 +1026,7 @@ async function loadPremium() {
     const btnDelete = document.getElementById("btnDeleteAccount");
     const delNotice = document.getElementById("deletePremiumNotice");
     if (btnDelete && delNotice) {
-        if (d.is_owner && d.is_premium && !d.is_early_adopter && (d.subscription_status === 'active' || d.subscription_status === 'premium' || d.subscription_status === 'trial')) {
+        if (d.is_owner && d.is_premium && !d.is_early_adopter && (d.subscription_status === 'active' || d.subscription_status === 'premium')) {
             btnDelete.disabled = true;
             btnDelete.style.opacity = '0.5';
             btnDelete.style.cursor = 'not-allowed';
