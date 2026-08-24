@@ -872,7 +872,7 @@ def register_auth_routes(app):
                 is_prem = hh.get("is_premium")
                 sub_status = hh.get("subscription_status")
                 is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
-                if is_prem and not is_early and sub_status in ['active', 'premium', 'trial']:
+                if is_prem and not is_early and sub_status in ['active', 'premium']:
                     return jsonify({"error": "You cannot delete your account while you have an active subscription as the household owner. Please cancel your subscription first."}), 403
 
 
