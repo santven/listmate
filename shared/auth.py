@@ -1166,7 +1166,11 @@ def register_auth_routes(app):
         hh_name = get_household_name()
         inviter = get_display_name()
 
-        base = request.host_url.rstrip('/')
+        base = os.environ.get("APP_URL", "").rstrip("/")
+        if not base:
+            base = request.host_url.rstrip('/')
+        if "localhost" not in base and "127.0.0.1" not in base and base.startswith("http://"):
+            base = base.replace("http://", "https://")
         invite_link = f"{base}/login?token={token}"
 
         # Send email via SendGrid
