@@ -61,7 +61,8 @@ def _one(sql, params=None):
         row = cur.fetchone()
         cols = [d[0] for d in cur.description] if cur.description else []
         return dict(zip(cols, row)) if row else None
-    except Exception:
+    except Exception as e:
+        print(f"[_one SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
         return None
     finally:
         if cur:
@@ -80,7 +81,8 @@ def _run(sql, params=None):
         rows = cur.fetchall() if cur.description else []
         cols = [d[0] for d in cur.description] if cur.description else []
         return [dict(zip(cols, r)) for r in rows]
-    except Exception:
+    except Exception as e:
+        print(f"[_run SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
         return []
     finally:
         if cur:
