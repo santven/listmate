@@ -259,7 +259,10 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
-        "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')"
+        "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')",
+        "ALTER TABLE invites ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE invites ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMP",
+        "ALTER TABLE invites ADD COLUMN IF NOT EXISTS inviter_notified_at TIMESTAMP"
     ]:
         try:
             _run(stmt)
@@ -1085,7 +1088,12 @@ def register_auth_routes(app):
             subscription_ends_at = subscription_ends_at.isoformat()
             
         members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
-        invites = _run("SELECT token, email, created_at FROM invites WHERE household_id = ? AND used_by IS NULL ORDER BY created_at DESC", (hhid,))
+        invites = _run("""
+            SELECT token, email, created_at, expires_at, reminder_count, last_reminded_at 
+            FROM invites 
+            WHERE household_id = ? AND used_by IS NULL 
+            ORDER BY created_at DESC
+        """, (hhid,))
         
         return jsonify({"ok": True,
             "household": {
@@ -1098,8 +1106,63 @@ def register_auth_routes(app):
             },
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"], 
                          "role": "owner" if m["id"] == hh.get("owner_id") else "member"} for m in members],
-            "pending_invites": [{"email": i["email"], "token": i["token"], "created_at": str(i.get("created_at",""))} for i in invites],
+            "pending_invites": [{
+                "email": i["email"], 
+                "token": i["token"], 
+                "created_at": str(i.get("created_at","")),
+                "expires_at": str(i.get("expires_at","")),
+                "reminder_count": i.get("reminder_count", 0),
+                "last_reminded_at": str(i.get("last_reminded_at","")) if i.get("last_reminded_at") else ""
+            } for i in invites],
             "current_user_id": uid, "is_owner": (uid == hh.get("owner_id"))})
+
+    @app.route("/api/auth/household/invites/<token>/resend", methods=["POST"])
+    @require_user
+    def auth_resend_invite(token):
+        """Manually resend an existing pending invite code to the recipient."""
+        hhid = get_household_id()
+        if not hhid: return jsonify({"error": "No household"}), 400
+        _init_schema()
+        invite = _one("SELECT * FROM invites WHERE UPPER(token) = UPPER(?) AND household_id = ?", (token, hhid))
+        if not invite:
+            return jsonify({"error": "Invite not found"}), 404
+        if invite.get("used_by"):
+            return jsonify({"error": "This invite has already been accepted."}), 400
+        
+        email = (invite.get("email") or "").strip()
+        if not email:
+            return jsonify({"error": "No email associated with this invite code."}), 400
+
+        import datetime as _dt
+        expires = _dt.datetime.utcnow() + _dt.timedelta(days=7)
+        expires_str = expires.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Reset expiry to fresh 7 days, reset reminder tracking and expired notice flags
+        _run("""
+            UPDATE invites 
+            SET expires_at = ?, reminder_count = 0, last_reminded_at = NULL, inviter_notified_at = NULL
+            WHERE id = ?
+        """, (expires_str, invite["id"]))
+
+        hh_name = get_household_name()
+        inviter = get_display_name()
+
+        base = os.environ.get("APP_URL", "").rstrip("/")
+        if not base:
+            base = request.host_url.rstrip('/')
+        if "localhost" not in base and "127.0.0.1" not in base and base.startswith("http://"):
+            base = base.replace("http://", "https://")
+        invite_link = f"{base}/login?token={invite['token']}"
+
+        try:
+            from email_helper import send_invite
+            send_invite(email, invite_link, household_name=hh_name, inviter_name=inviter, invite_code=invite["token"])
+        except Exception as e:
+            import traceback
+            print(f"[resend_invite ERROR] {e}", flush=True)
+            traceback.print_exc()
+
+        return jsonify({"ok": True, "message": f"Invitation resent to {email}", "token": invite["token"], "email": email})
 
     @app.route("/api/auth/household/invites/<token>", methods=["DELETE"])
     @require_user
