@@ -195,8 +195,8 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
             },
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False, "enable_text": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
@@ -368,8 +368,8 @@ def send_invite_reminder(
             {"type": "text/html", "value": html_body},
         ],
         "tracking_settings": {
-            "click_tracking": {"enable": False, "enable_text": False},
-            "open_tracking": {"enable": False},
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
         },
     }
     return _send_via_api(api_key, payload)
