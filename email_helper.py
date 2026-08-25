@@ -201,6 +201,254 @@ def send_invite(to_email: str, invite_link: str, household_name: str, inviter_na
     }
     return _send_via_api(api_key, payload)
 
+
+def send_invite_reminder(
+    to_email: str,
+    invite_link: str,
+    household_name: str,
+    inviter_name: str = "someone",
+    invite_code: str = "",
+    days_remaining: int = 5,
+    user_id: int = 0,
+    household_id: int = 0
+) -> bool:
+    """Send an automated pending invite reminder (Day 2 gentle nudge or Day 5 final urgency)."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    display_code = (invite_code or "").strip()
+    if not display_code and "token=" in invite_link:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(invite_link)
+        qs = urllib.parse.parse_qs(parsed.query)
+        if "token" in qs and qs["token"]:
+            display_code = qs["token"][0]
+
+    is_urgent = (days_remaining <= 2)
+    campaign = "invite_reminder_day5" if is_urgent else "invite_reminder_day2"
+
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    clean_inviter = (inviter_name or "").strip()
+    has_inviter = clean_inviter and clean_inviter.lower() not in ("someone", "unknown", "a user", "none", "")
+
+    if is_urgent:
+        subject = f"Your invite to join {household_name} on ListMate expires in 48 hours"
+        headline = "⏳ Invitation Expiring in 48 Hours"
+        intro_p = f"This is a quick reminder that your invitation to join <strong>{household_name}</strong> on ListMate will expire in <strong>2 days</strong>."
+        plain_intro = f"This is a quick reminder that your invitation to join \"{household_name}\" on ListMate expires in 2 days."
+    else:
+        if has_inviter:
+            subject = f"Reminder: {clean_inviter} invited you to join {household_name} on ListMate"
+            headline = f"🛒 {clean_inviter} is Waiting for You"
+            intro_p = f"<strong>{clean_inviter}</strong> invited you to join <strong>{household_name}</strong> on ListMate to share and organize grocery lists together."
+            plain_intro = f"{clean_inviter} invited you to join \"{household_name}\" on ListMate to share and organize grocery lists together."
+        else:
+            subject = f"Reminder: You're invited to join {household_name} on ListMate"
+            headline = "🛒 Your Household Invite is Waiting"
+            intro_p = f"You're invited to join <strong>{household_name}</strong> on ListMate to share and organize grocery lists together."
+            plain_intro = f"You're invited to join \"{household_name}\" on ListMate to share and organize grocery lists together."
+
+    if display_code:
+        code_section_html = f'''
+      <div style="background-color:#f0fdf4;border:2px dashed #86efac;border-radius:10px;padding:16px;text-align:center;margin:20px 0;">
+        <div style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Your Household Invite Code</div>
+        <div style="font-family:Consolas,Monaco,Courier,monospace;font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;">{display_code}</div>
+      </div>
+      <div style="font-size:14px;color:#374151;line-height:1.6;margin-bottom:20px;">
+        <strong>How to join on mobile:</strong><br>
+        1. Download <strong>ListMate</strong> for your device:<br>
+        <div style="margin:10px 0 14px 0;">
+          <a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;margin-right:8px;vertical-align:middle;">
+            <img src="{app_store_img}" alt="Download on the App Store" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">
+          </a>
+          <a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;vertical-align:middle;">
+            <img src="{google_play_img}" alt="Get it on Google Play" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">
+          </a>
+        </div>
+        2. Sign in with your Google or Apple account.<br>
+        3. Enter your invite code <span style="font-family:Consolas,Monaco,Courier,monospace;font-weight:700;background-color:#f1f5f9;padding:2px 6px;border-radius:4px;">{display_code}</span> when prompted.
+      </div>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{invite_link}" target="_blank" rel="noopener noreferrer" style="background-color:#10b981;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">Accept in Browser</a>
+      </div>
+        '''
+        plain_text = (
+            f"Hi!\n\n"
+            f"{plain_intro}\n\n"
+            f"Your Household Invite Code:\n{display_code}\n\n"
+            f"How to join:\n"
+            f"1. Download ListMate on your mobile device:\n"
+            f"   • iPhone: {ios_link}\n"
+            f"   • Android: {android_link}\n"
+            f"2. Sign in with your Google or Apple account\n"
+            f"3. Under 'Have a Household Invite code?', enter: {display_code}\n\n"
+            f"Or accept directly in your browser:\n"
+            f"{invite_link}\n\n"
+            f"This single-use invite code expires in {days_remaining} days.\n\n"
+            f"— The ListMate Team\n\n"
+            f"--\n"
+            f"ListMate • Powered by PVKS Labs\n"
+            f"You received this reminder because a ListMate member invited you to their household.\n"
+            f"Need help? Contact hello@grocerlist.app"
+        )
+    else:
+        code_section_html = f'''
+      <div style="font-size:14px;color:#374151;line-height:1.6;margin-bottom:20px;">
+        <strong>Download ListMate:</strong><br>
+        <div style="margin:10px 0 14px 0;">
+          <a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;margin-right:8px;vertical-align:middle;">
+            <img src="{app_store_img}" alt="Download on the App Store" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">
+          </a>
+          <a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;vertical-align:middle;">
+            <img src="{google_play_img}" alt="Get it on Google Play" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">
+          </a>
+        </div>
+      </div>
+      <div style="margin:24px 0;text-align:center;">
+        <a href="{invite_link}" target="_blank" rel="noopener noreferrer" style="background-color:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:bold;display:inline-block;">Accept Invitation</a>
+      </div>
+        '''
+        plain_text = (
+            f"Hi!\n\n"
+            f"{plain_intro}\n\n"
+            f"Download ListMate:\n"
+            f"• iPhone: {ios_link}\n"
+            f"• Android: {android_link}\n\n"
+            f"To accept this invitation, click the link below and sign in with your Google or Apple account:\n\n"
+            f"{invite_link}\n\n"
+            f"This single-use invitation link expires in {days_remaining} days.\n\n"
+            f"— The ListMate Team\n\n"
+            f"--\n"
+            f"ListMate • Powered by PVKS Labs\n"
+            f"You received this reminder because a ListMate member invited you to their household.\n"
+            f"Need help? Contact hello@grocerlist.app"
+        )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background-color:#ffffff;color:#334155;">'
+        f'<h2 style="font-size:20px;font-weight:700;color:#0f172a;margin-top:0;margin-bottom:12px;line-height:1.3;">{headline}</h2>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;margin-top:0;margin-bottom:12px;">{intro_p}</p>'
+        f'<p style="font-size:14px;color:#64748b;line-height:1.5;margin-top:0;margin-bottom:20px;">With ListMate, your household can organize grocery items by store, sync live in the aisles, and eliminate duplicate shopping trips.</p>'
+        f'{code_section_html}'
+        f'<p style="font-size:12px;color:#94a3b8;line-height:1.5;margin-top:20px;margin-bottom:0;text-align:center;">Sign in with your Google or Apple account to join. This invite code expires in {days_remaining} days.</p>'
+        f'<div style="font-size:11px;color:#888888;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;line-height:1.6;">'
+        f'<p style="margin:3px 0;font-weight:600;color:#64748b;">ListMate • Powered by PVKS Labs</p>'
+        f'<p style="margin:3px 0;color:#94a3b8;">You received this reminder because a ListMate member invited you to their household.</p>'
+        f'<p style="margin:3px 0;color:#94a3b8;">Need help? Contact <a href="mailto:hello@grocerlist.app" style="color:#64748b;text-decoration:underline;">hello@grocerlist.app</a></p>'
+        f'</div>'
+        f'</div>'
+    )
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_body},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": False, "enable_text": False},
+            "open_tracking": {"enable": False},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_invite_expired_notice(
+    to_email: str,
+    inviter_name: str,
+    invitee_email: str,
+    household_name: str,
+    user_id: int = 0,
+    household_id: int = 0
+) -> bool:
+    """Send notice to household inviter/owner that an invitation has expired after 7 days."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "invite_expired_inviter"
+    name_str = (inviter_name or "there").split(" ")[0].capitalize()
+    subject = f"Household invite to {invitee_email} has expired"
+
+    settings_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_invite_expired')}"
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "household notices", f"You received this notice because you manage the {household_name} household on ListMate.")
+
+    plain_text = (
+        f"Hi {name_str},\n\n"
+        f"The 7-day household invitation code sent to {invitee_email} for \"{household_name}\" has expired without being used.\n\n"
+        f"If they still want to join, you can generate and send a fresh invite code anytime from your Household Settings:\n"
+        f"{settings_link}\n\n"
+        f"— The ListMate Team" + unsub_txt
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background-color:#ffffff;color:#334155;">'
+        f'<div style="text-align:center;margin-bottom:16px;">'
+        f'<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;text-transform:uppercase;letter-spacing:0.5px;">⏳ Invitation Expired</span>'
+        f'<h2 style="font-size:20px;font-weight:700;color:#0f172a;margin:12px 0 6px 0;">Household Invite Expired</h2>'
+        f'</div>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">Hi {name_str},</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">The 7-day invite code sent to <strong>{invitee_email}</strong> to join <strong>{household_name}</strong> has expired without being accepted.</p>'
+        f'<p style="font-size:14px;color:#64748b;line-height:1.5;">You can easily generate and resend a new single-use invite code directly from your Household Settings whenever you\'re ready.</p>'
+        f'<div style="text-align:center;margin:24px 0 16px 0;">'
+        f'<a href="{settings_link}" style="background-color:#10b981;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">Open Household Settings →</a>'
+        f'</div>'
+        f'</div>' + unsub_html
+    )
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_body},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
 def _get_unsub_link(user_id: int) -> str:
     if not user_id: return ""
     import base64, json
@@ -876,6 +1124,23 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             f'<div style="margin:14px 0;">'
             f'<h4 style="color:#2c5a2c;margin:0 0 6px 0;">🛒 It\'s been a while!</h4>'
             f'<p style="font-size:14px;color:#444;line-height:1.5;margin:0;">We wanted to remind you that your shared lists are waiting for you. Stay synced with your household to avoid duplicate buys and make every grocery run effortless.</p>'
+            f'</div>'
+        )
+
+    if 'invite_expired' in events:
+        inv_data = events['invite_expired']
+        invitee_lbl = inv_data.get('invitee_email', 'a household member')
+        hh_lbl = inv_data.get('household_name', 'your household')
+        text_sections.append(
+            f"Household Invite Expired:\n"
+            f"The 7-day invitation code sent to {invitee_lbl} for {hh_lbl} has expired without being used.\n"
+            f"You can generate and resend a fresh invite code anytime in Household Settings:\n{add_member_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#92400e;display:block;margin-bottom:4px;">⏳ Household Invite Expired:</strong>'
+            f'<span style="color:#78350f;font-size:14px;line-height:1.5;">The invite code sent to <strong>{invitee_lbl}</strong> has expired. You can resend a fresh code anytime from your Household Settings.</span>'
+            f'<div style="margin-top:8px;"><a href="{add_member_link}" style="color:#92400e;font-weight:bold;font-size:13px;text-decoration:underline;">Resend Invite &rarr;</a></div>'
             f'</div>'
         )
 

@@ -753,6 +753,7 @@ async function loadHousehold() {
             <div class="member-email" style="font-size:11px">Code: <strong style="font-family:monospace; color:#15803d;">${escapeHtml(p.token)}</strong> · Single-use</div>
           </div>
           <div style="display:flex; gap:6px; align-items:center;">
+            <button onclick="resendInvite('${escapeHtml(p.token)}', this)" style="background:#f8fafc; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;" title="Resend email invite">🔄 Resend</button>
             <button onclick="copyToClipboard('${escapeHtml(p.token)}', this, 'Copied Code!')" style="background:#f0fdf4; border:1px solid #86efac; color:var(--green-dark); padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;" title="Copy single-use invite code">📋 Copy Code</button>
             <button onclick="removeInvite('${p.token}')" style="background:none;border:none;color:#d94a4a;cursor:pointer;font-size:18px;padding:4px 8px" title="Remove invite">×</button>
           </div>
@@ -872,6 +873,34 @@ async function logout() {
 async function removeInvite(token) {
   await fetch('/api/auth/household/invites/' + token, { method: 'DELETE' });
   loadHousehold();
+}
+
+async function resendInvite(token, btn) {
+  if (!btn) return;
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Sending...';
+  try {
+    const res = await fetch(`/api/auth/household/invites/${encodeURIComponent(token)}/resend`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.innerHTML = '✅ Resent!';
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }, 3000);
+    } else {
+      alert(data.error || 'Failed to resend invite.');
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error while resending invite.');
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
 }
 
 async function loadDietary() {
