@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.auth import _run, _init_schema
 from email_helper import (
+    BASE_URL,
     send_subscription_notice,
     send_solo_nudge_notice,
     send_trial_week1_checkin,
@@ -17,6 +18,8 @@ from email_helper import (
     send_activation_notice,
     send_reengagement_notice,
     send_combined_notice,
+    send_invite_reminder,
+    send_invite_expired_notice,
 )
 
 def process_email_events(email, user_name, events, user_id=0, household_id=0):
@@ -25,6 +28,7 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
 
     sent = False
     campaign_names = []
+    db_updates = []
 
     # If there is only one event, use the specific email template
     if len(events) == 1:
@@ -35,6 +39,38 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
             campaign_names.append(campaign)
             print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}).")
             sent = send_subscription_notice(email, user_name, is_trial, days_left, user_id, household_id)
+        elif 'invite_reminder' in events:
+            inv_data = events['invite_reminder']
+            days_rem = inv_data.get('days_remaining', 5)
+            campaign = f"invite_reminder_{'day5' if days_rem <= 2 else 'day2'}"
+            campaign_names.append(campaign)
+            print(f"[{email}] Sending invite reminder notice ({days_rem} days remaining, campaign: {campaign}).")
+            sent = send_invite_reminder(
+                email,
+                inv_data['invite_link'],
+                inv_data['household_name'],
+                inv_data.get('inviter_name', ''),
+                inv_data.get('invite_code', ''),
+                days_rem,
+                user_id,
+                household_id
+            )
+            if sent:
+                db_updates.append(("UPDATE invites SET reminder_count = %s, last_reminded_at = NOW() WHERE id = %s", (inv_data['new_reminder_count'], inv_data['invite_id'])))
+        elif 'invite_expired' in events:
+            inv_data = events['invite_expired']
+            campaign_names.append('invite_expired_inviter')
+            print(f"[{email}] Sending invite expired notice to inviter for invitee {inv_data.get('invitee_email')}.")
+            sent = send_invite_expired_notice(
+                email,
+                user_name,
+                inv_data.get('invitee_email', ''),
+                inv_data.get('household_name', 'your household'),
+                user_id,
+                household_id
+            )
+            if sent:
+                db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (inv_data['invite_id'],)))
         elif 'solo_nudge' in events:
             campaign_names.append('solo_nudge')
             print(f"[{email}] Sending specific solo owner nudge notice.")
@@ -68,11 +104,26 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                 is_trial = ev_val.get('is_trial', False)
                 days_left = ev_val.get('days_left', 0)
                 campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
+            elif ev_key == 'invite_reminder':
+                days_rem = ev_val.get('days_remaining', 5)
+                campaign_names.append(f"invite_reminder_{'day5' if days_rem <= 2 else 'day2'}")
+                if sent:
+                    db_updates.append(("UPDATE invites SET reminder_count = %s, last_reminded_at = NOW() WHERE id = %s", (ev_val['new_reminder_count'], ev_val['invite_id'])))
+            elif ev_key == 'invite_expired':
+                campaign_names.append('invite_expired_inviter')
+                if sent:
+                    db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (ev_val['invite_id'],)))
             else:
                 campaign_names.append(ev_key)
 
-    # Record email sent timestamp in the email_events table for tracking
+    # Record email sent timestamp in the email_events table and execute DB updates
     if sent:
+        for sql, params in db_updates:
+            try:
+                _run(sql, params)
+            except Exception as e:
+                print(f"[{email}] Error executing DB update after email send: {e}")
+
         for cname in campaign_names:
             try:
                 insert_sql = """
@@ -447,6 +498,155 @@ def run_cron():
             True,
             hh.get("user_id"),
             hh.get("household_id"),
+        )
+
+    # --- 8A. Pending Invites: Day 2 Gentle Reminder (Sent to Invitee) ---
+    print("Fetching Pending Invites for Day 2 Reminder...")
+    query_invites_day2 = """
+    SELECT 
+        i.id as invite_id,
+        i.token,
+        i.email as invitee_email,
+        i.household_id,
+        h.name as household_name,
+        u.name as inviter_name,
+        i.created_at,
+        i.expires_at,
+        COALESCE(i.reminder_count, 0) as reminder_count
+    FROM invites i
+    JOIN auth_households h ON h.id = i.household_id
+    LEFT JOIN auth_users u ON u.id = i.created_by
+    WHERE i.used_by IS NULL
+      AND i.email IS NOT NULL AND TRIM(i.email) != ''
+      AND (i.expires_at IS NULL OR i.expires_at > NOW())
+      AND (DATE(i.created_at) <= CURRENT_DATE - INTERVAL '2 days' OR i.created_at <= NOW() - INTERVAL '48 hours')
+      AND COALESCE(i.reminder_count, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE ee.email = i.email 
+            AND ee.campaign = 'invite_reminder_day2' 
+            AND ee.event_type = 'sent'
+            AND ee.created_at >= i.created_at
+      )
+    ORDER BY i.id ASC
+    """
+    invites_day2 = _run(query_invites_day2)
+    print(f"  -> Found {len(invites_day2)} pending invite(s) eligible for Day 2 reminder.")
+    for inv in invites_day2:
+        invite_link = f"{BASE_URL}/login?token={inv['token']}"
+        add_user_event(
+            inv.get("invitee_email"),
+            "",
+            'invite_reminder',
+            {
+                'invite_id': inv.get("invite_id"),
+                'invite_link': invite_link,
+                'household_name': inv.get("household_name") or "the household",
+                'inviter_name': inv.get("inviter_name") or "",
+                'invite_code': inv.get("token"),
+                'days_remaining': 5,
+                'new_reminder_count': 1,
+            },
+            household_id=inv.get("household_id"),
+        )
+
+    # --- 8B. Pending Invites: Day 5 Final Urgency Reminder (Sent to Invitee) ---
+    print("Fetching Pending Invites for Day 5 Reminder...")
+    query_invites_day5 = """
+    SELECT 
+        i.id as invite_id,
+        i.token,
+        i.email as invitee_email,
+        i.household_id,
+        h.name as household_name,
+        u.name as inviter_name,
+        i.created_at,
+        i.expires_at,
+        COALESCE(i.reminder_count, 0) as reminder_count
+    FROM invites i
+    JOIN auth_households h ON h.id = i.household_id
+    LEFT JOIN auth_users u ON u.id = i.created_by
+    WHERE i.used_by IS NULL
+      AND i.email IS NOT NULL AND TRIM(i.email) != ''
+      AND (i.expires_at IS NULL OR i.expires_at > NOW())
+      AND (DATE(i.created_at) <= CURRENT_DATE - INTERVAL '5 days' OR i.created_at <= NOW() - INTERVAL '120 hours')
+      AND COALESCE(i.reminder_count, 0) < 2
+      AND (i.last_reminded_at IS NULL OR i.last_reminded_at <= NOW() - INTERVAL '48 hours')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE ee.email = i.email 
+            AND ee.campaign = 'invite_reminder_day5' 
+            AND ee.event_type = 'sent'
+            AND ee.created_at >= i.created_at
+      )
+    ORDER BY i.id ASC
+    """
+    invites_day5 = _run(query_invites_day5)
+    print(f"  -> Found {len(invites_day5)} pending invite(s) eligible for Day 5 reminder.")
+    for inv in invites_day5:
+        invite_link = f"{BASE_URL}/login?token={inv['token']}"
+        add_user_event(
+            inv.get("invitee_email"),
+            "",
+            'invite_reminder',
+            {
+                'invite_id': inv.get("invite_id"),
+                'invite_link': invite_link,
+                'household_name': inv.get("household_name") or "the household",
+                'inviter_name': inv.get("inviter_name") or "",
+                'invite_code': inv.get("token"),
+                'days_remaining': 2,
+                'new_reminder_count': 2,
+            },
+            household_id=inv.get("household_id"),
+        )
+
+    # --- 8C. Expired Invites: Day 7 Notice to Inviter/Owner ---
+    print("Fetching Expired Invites for Inviter Notice...")
+    query_invites_expired = """
+    SELECT 
+        i.id as invite_id,
+        i.token,
+        i.email as invitee_email,
+        i.household_id,
+        h.name as household_name,
+        u.id as inviter_id,
+        u.email as inviter_email,
+        u.name as inviter_name
+    FROM invites i
+    JOIN auth_households h ON h.id = i.household_id
+    JOIN auth_users u ON u.id = COALESCE(
+        i.created_by,
+        h.owner_id,
+        (SELECT ahm.user_id FROM auth_household_members ahm WHERE ahm.household_id = h.id ORDER BY (CASE WHEN ahm.role = 'owner' THEN 0 ELSE 1 END), ahm.joined_at ASC LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    WHERE i.used_by IS NULL
+      AND i.expires_at <= NOW()
+      AND i.inviter_notified_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.email = u.email OR ee.user_id = u.id)
+            AND ee.campaign = 'invite_expired_inviter' 
+            AND ee.event_type = 'sent'
+            AND ee.created_at >= i.created_at
+      )
+    ORDER BY i.id ASC
+    """
+    invites_expired = _run(query_invites_expired)
+    print(f"  -> Found {len(invites_expired)} expired invite(s) requiring inviter notification.")
+    for inv in invites_expired:
+        add_user_event(
+            inv.get("inviter_email"),
+            inv.get("inviter_name") or "",
+            'invite_expired',
+            {
+                'invite_id': inv.get("invite_id"),
+                'invitee_email': inv.get("invitee_email"),
+                'household_name': inv.get("household_name") or "your household",
+            },
+            user_id=inv.get("inviter_id"),
+            household_id=inv.get("household_id"),
         )
 
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
