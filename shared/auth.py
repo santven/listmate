@@ -208,6 +208,16 @@ def _init_schema():
         )""",
         """CREATE INDEX IF NOT EXISTS idx_aua_email ON auth_user_aliases(LOWER(alias_email))""",
         """CREATE INDEX IF NOT EXISTS idx_aua_user_id ON auth_user_aliases(user_id)""",
+        """CREATE TABLE IF NOT EXISTS email_suppressions (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            reason TEXT NOT NULL,
+            sg_event_id TEXT,
+            details TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_email_suppressions_email ON email_suppressions(LOWER(email))""",
     ]:
         _run(stmt)
     for stmt in [
@@ -291,6 +301,80 @@ def _init_schema():
     # End Migration
 
     _schema_done = True
+
+
+# ── Email Suppression & Preference Helpers ───────────────────
+
+def is_email_suppressed(email: str) -> bool:
+    """Check if an email address is suppressed (due to bounce, spam report, or unsubscribe)."""
+    if not email:
+        return False
+    clean = str(email).strip().lower()
+    if not clean:
+        return False
+    try:
+        row = _one("SELECT id FROM email_suppressions WHERE LOWER(email) = %s LIMIT 1", (clean,))
+        return bool(row)
+    except Exception as e:
+        print(f"[is_email_suppressed error] {clean}: {e}", flush=True)
+        return False
+
+
+def suppress_email(email: str, reason: str, sg_event_id: str = None, details: str = None) -> bool:
+    """Add email to suppression list and disable marketing opt-in for matching users across all households."""
+    if not email:
+        return False
+    clean = str(email).strip().lower()
+    if not clean:
+        return False
+    try:
+        _init_schema()
+        _run("""
+            INSERT INTO email_suppressions (email, reason, sg_event_id, details, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (email) DO UPDATE SET
+                reason = EXCLUDED.reason,
+                sg_event_id = COALESCE(EXCLUDED.sg_event_id, email_suppressions.sg_event_id),
+                details = COALESCE(EXCLUDED.details, email_suppressions.details),
+                updated_at = NOW()
+        """, (clean, reason, sg_event_id, details))
+
+        # Turn off marketing_opt_in in auth_household_members for all accounts matching this email
+        _run("""
+            UPDATE auth_household_members
+            SET marketing_opt_in = FALSE
+            WHERE user_id IN (
+                SELECT id FROM auth_users WHERE LOWER(email) = %s
+            )
+        """, (clean,))
+        return True
+    except Exception as e:
+        print(f"[suppress_email error] {clean}: {e}", flush=True)
+        return False
+
+
+def unsuppress_email(email: str) -> bool:
+    """Remove email from suppression list and re-enable marketing opt-in for matching users."""
+    if not email:
+        return False
+    clean = str(email).strip().lower()
+    if not clean:
+        return False
+    try:
+        _init_schema()
+        _run("DELETE FROM email_suppressions WHERE LOWER(email) = %s", (clean,))
+        _run("""
+            UPDATE auth_household_members
+            SET marketing_opt_in = TRUE
+            WHERE user_id IN (
+                SELECT id FROM auth_users WHERE LOWER(email) = %s
+            )
+        """, (clean,))
+        return True
+    except Exception as e:
+        print(f"[unsuppress_email error] {clean}: {e}", flush=True)
+        return False
+
 
 # ── Session ─────────────────────────────────────────────────
 
@@ -828,6 +912,9 @@ def register_auth_routes(app):
                 return "Invalid token", 400
             
             _init_schema()
+            user_row = _one("SELECT email FROM auth_users WHERE id = ?", (uid,))
+            if user_row and user_row.get("email"):
+                suppress_email(user_row["email"], reason="unsubscribe")
             _run("UPDATE auth_household_members SET marketing_opt_in = FALSE WHERE user_id = ?", (uid,))
             
             return """
@@ -857,6 +944,12 @@ def register_auth_routes(app):
             return jsonify({"error": "Missing context"}), 400
         try:
             _run("UPDATE auth_household_members SET marketing_opt_in = ? WHERE user_id = ? AND household_id = ?", (opt_in, uid, hhid))
+            user_row = _one("SELECT email FROM auth_users WHERE id = ?", (uid,))
+            if user_row and user_row.get("email"):
+                if opt_in:
+                    unsuppress_email(user_row["email"])
+                else:
+                    suppress_email(user_row["email"], reason="unsubscribe")
             return jsonify({"ok": True, "marketing_opt_in": bool(opt_in)})
         except Exception as e:
             print("Error updating marketing_opt_in:", e)

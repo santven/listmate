@@ -8,11 +8,31 @@ FROM_NAME = os.environ.get("SENDGRID_FROM_NAME", "ListMate")
 BASE_URL = os.environ.get("APP_URL", "https://grocerlist.app").rstrip("/")
 
 
+def is_email_suppressed_db(to_email: str) -> bool:
+    """Check if recipient email is suppressed in the PostgreSQL database."""
+    if not to_email:
+        return False
+    try:
+        from shared.auth import is_email_suppressed
+        return is_email_suppressed(to_email)
+    except Exception:
+        return False
+
+
 def _send_via_api(api_key: str, payload: dict) -> bool:
     """Send via SendGrid REST API directly — avoids helper class quirks."""
     import json
     from urllib.request import Request, urlopen
     from urllib.error import HTTPError
+
+    # Defense-in-depth suppression check before sending
+    personalizations = payload.get("personalizations", [])
+    for p in personalizations:
+        for to_obj in p.get("to", []):
+            to_addr = to_obj.get("email")
+            if to_addr and is_email_suppressed_db(to_addr):
+                print(f"[email_helper] Skipping email to {to_addr}: recipient is suppressed in email_suppressions")
+                return False
 
     # Ensure sender identity and reply_to are always configured
     if "from" not in payload:

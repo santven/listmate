@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add parent directory to path to import shared modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import _run, _init_schema
+from shared.auth import _run, _init_schema, is_email_suppressed
 from email_helper import (
     BASE_URL,
     send_subscription_notice,
@@ -23,7 +23,8 @@ from email_helper import (
 )
 
 def process_email_events(email, user_name, events, user_id=0, household_id=0):
-    if not email:
+    if not email or is_email_suppressed(email):
+        print(f"[{email}] Skipping email dispatch — address is suppressed.")
         return False
 
     sent = False
@@ -151,7 +152,7 @@ def run_cron():
     users_to_notify = {}
 
     def add_user_event(email, name, event_name, event_data=True, user_id=0, household_id=0):
-        if not email:
+        if not email or is_email_suppressed(email):
             return
         if email not in users_to_notify:
             users_to_notify[email] = {
@@ -198,7 +199,10 @@ def run_cron():
     )
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE 
-        (
+        NOT EXISTS (
+            SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+        )
+        AND (
             (h.subscription_status = 'trial' AND (
                 (DATE(h.trial_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
                     SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_exp_3days' AND ee.event_type = 'sent'
@@ -281,6 +285,9 @@ def run_cron():
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
       AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE (ee.household_id = h.id OR ee.email = u.email) AND ee.campaign = 'solo_nudge' AND ee.event_type = 'sent'
       )
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
@@ -317,6 +324,9 @@ def run_cron():
     WHERE h.subscription_status = 'trial'
       AND (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '7 days' OR h.created_at <= NOW() - INTERVAL '7 days')
       AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE (ee.household_id = h.id OR ee.email = u.email) AND ee.campaign = 'trial_week1' AND ee.event_type = 'sent'
       )
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
@@ -352,6 +362,9 @@ def run_cron():
     WHERE h.subscription_status = 'trial'
       AND (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '21 days' OR h.created_at <= NOW() - INTERVAL '21 days')
       AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE (ee.household_id = h.id OR ee.email = u.email) AND ee.campaign = 'trial_week3' AND ee.event_type = 'sent'
       )
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
@@ -385,6 +398,9 @@ def run_cron():
     )
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee WHERE (ee.household_id = h.id OR ee.email = u.email) AND ee.campaign = 'activation' AND ee.event_type = 'sent'
       )
@@ -424,6 +440,9 @@ def run_cron():
     )
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE (ee.household_id = h.id OR ee.email = u.email) 
@@ -470,6 +489,9 @@ def run_cron():
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE (DATE(h.created_at) <= CURRENT_DATE - INTERVAL '3 days' OR h.created_at <= NOW() - INTERVAL '3 days')
       AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE (ee.household_id = h.id OR ee.email = u.email) 
@@ -522,6 +544,9 @@ def run_cron():
       AND (DATE(i.created_at) <= CURRENT_DATE - INTERVAL '2 days' OR i.created_at <= NOW() - INTERVAL '48 hours')
       AND COALESCE(i.reminder_count, 0) = 0
       AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(i.email)
+      )
+      AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE ee.email = i.email 
             AND ee.campaign = 'invite_reminder_day2' 
@@ -572,6 +597,9 @@ def run_cron():
       AND (DATE(i.created_at) <= CURRENT_DATE - INTERVAL '5 days' OR i.created_at <= NOW() - INTERVAL '120 hours')
       AND COALESCE(i.reminder_count, 0) < 2
       AND (i.last_reminded_at IS NULL OR i.last_reminded_at <= NOW() - INTERVAL '48 hours')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(i.email)
+      )
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE ee.email = i.email 
@@ -624,6 +652,9 @@ def run_cron():
     WHERE i.used_by IS NULL
       AND i.expires_at <= NOW()
       AND i.inviter_notified_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
       AND NOT EXISTS (
           SELECT 1 FROM email_events ee 
           WHERE (ee.email = u.email OR ee.user_id = u.id)
