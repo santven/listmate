@@ -1324,6 +1324,26 @@ def sendgrid_webhook():
             except Exception as e2:
                 print(f"[SendGrid Webhook] Error inserting event {sg_event_id}: {e2}")
 
+        # Automated suppression and opt-out handling
+        ev_type_lower = (event_type or "").strip().lower()
+        if ev_type_lower in ("bounce", "dropped", "spamreport", "unsubscribe", "group_unsubscribe"):
+            try:
+                authmod.suppress_email(
+                    email=email,
+                    reason=ev_type_lower,
+                    sg_event_id=sg_event_id,
+                    details=str(reason or ev.get("status") or "")
+                )
+                print(f"[SendGrid Webhook] Suppressed {email} due to event '{ev_type_lower}'")
+            except Exception as se:
+                print(f"[SendGrid Webhook] Error suppressing {email}: {se}")
+        elif ev_type_lower == "group_resubscribe":
+            try:
+                authmod.unsuppress_email(email=email)
+                print(f"[SendGrid Webhook] Unsuppressed {email} due to 'group_resubscribe'")
+            except Exception as ue:
+                print(f"[SendGrid Webhook] Error unsuppressing {email}: {ue}")
+
     return jsonify({"ok": True, "processed": processed_count})
 
 
