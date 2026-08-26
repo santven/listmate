@@ -1247,16 +1247,36 @@ def sendgrid_webhook():
         except (ValueError, TypeError):
             household_id = None
 
-        if not user_id or not household_id:
+        # 1. Resolve user and household by email first
+        db_user = None
+        try:
+            db_user = authmod._one("SELECT id, household_id FROM auth_users WHERE LOWER(email) = LOWER(%s) LIMIT 1", (email,))
+        except Exception:
+            pass
+
+        if db_user:
+            user_id = db_user.get("id")
+            household_id = db_user.get("household_id")
+        else:
+            # If no user matches email, verify if supplied user_id exists in auth_users
+            if user_id:
+                try:
+                    exists = authmod._one("SELECT id, household_id FROM auth_users WHERE id = %s LIMIT 1", (user_id,))
+                    if not exists:
+                        user_id = None
+                    elif not household_id:
+                        household_id = exists.get("household_id")
+                except Exception:
+                    user_id = None
+
+        # 2. Verify that household_id exists in auth_households to prevent FK violations
+        if household_id:
             try:
-                user_row = authmod._one("SELECT id, household_id FROM auth_users WHERE email = %s LIMIT 1", (email,))
-                if user_row:
-                    if not user_id:
-                        user_id = user_row.get("id")
-                    if not household_id:
-                        household_id = user_row.get("household_id")
+                hh_exists = authmod._one("SELECT id FROM auth_households WHERE id = %s LIMIT 1", (household_id,))
+                if not hh_exists:
+                    household_id = None
             except Exception:
-                pass
+                household_id = None
 
         target_url = ev.get("url")
         user_agent = ev.get("useragent")
@@ -1293,7 +1313,16 @@ def sendgrid_webhook():
             ))
             processed_count += 1
         except Exception as e:
-            print(f"[SendGrid Webhook] Error inserting event {sg_event_id}: {e}")
+            # Fallback without FK relations if constraint error occurred
+            try:
+                authmod._run(insert_sql, (
+                    email, event_type, campaign, None, None,
+                    target_url, user_agent, ip_address, sg_event_id, sg_message_id,
+                    reason, event_timestamp
+                ))
+                processed_count += 1
+            except Exception as e2:
+                print(f"[SendGrid Webhook] Error inserting event {sg_event_id}: {e2}")
 
     return jsonify({"ok": True, "processed": processed_count})
 
