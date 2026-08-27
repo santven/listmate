@@ -34,104 +34,123 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
     campaign_names = []
     db_updates = []
 
-    # If there is only one event, use the specific email template
-    if len(events) == 1:
-        if 'expiration' in events:
-            is_trial = events['expiration']['is_trial']
-            days_left = events['expiration']['days_left']
-            campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}"
-            campaign_names.append(campaign)
-            print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}).")
-            sent = send_subscription_notice(email, user_name, is_trial, days_left, user_id, household_id)
-        elif 'invite_reminder' in events:
-            inv_data = events['invite_reminder']
-            days_rem = inv_data.get('days_remaining', 5)
-            campaign = f"invite_reminder_{'day5' if days_rem <= 2 else 'day2'}"
-            campaign_names.append(campaign)
-            print(f"[{email}] Sending invite reminder notice ({days_rem} days remaining, campaign: {campaign}).")
-            sent = send_invite_reminder(
-                email,
-                inv_data['invite_link'],
-                inv_data['household_name'],
-                inv_data.get('inviter_name', ''),
-                inv_data.get('invite_code', ''),
-                days_rem,
-                user_id,
-                household_id
-            )
-            if sent:
-                db_updates.append(("UPDATE invites SET reminder_count = %s, last_reminded_at = NOW() WHERE id = %s", (inv_data['new_reminder_count'], inv_data['invite_id'])))
-        elif 'invite_expired' in events:
-            inv_data = events['invite_expired']
-            campaign_names.append('invite_expired_inviter')
-            print(f"[{email}] Sending invite expired notice to inviter for invitee {inv_data.get('invitee_email')}.")
-            sent = send_invite_expired_notice(
-                email,
-                user_name,
-                inv_data.get('invitee_email', ''),
-                inv_data.get('household_name', 'your household'),
-                user_id,
-                household_id
-            )
-            if sent:
-                db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (inv_data['invite_id'],)))
-        elif 'solo_nudge' in events:
-            campaign_names.append('solo_nudge')
-            print(f"[{email}] Sending specific solo owner nudge notice.")
-            sent = send_solo_nudge_notice(email, user_name, user_id, household_id)
-        elif 'trial_week1' in events:
-            campaign_names.append('trial_week1')
-            print(f"[{email}] Sending specific trial week 1 check-in.")
-            sent = send_trial_week1_checkin(email, user_name, user_id, household_id)
-        elif 'trial_week3' in events:
-            campaign_names.append('trial_week3')
-            print(f"[{email}] Sending specific trial week 3 check-in.")
-            sent = send_trial_week3_checkin(email, user_name, user_id, household_id)
-        elif 'store_nudge' in events:
-            campaign_names.append('store_nudge')
-            print(f"[{email}] Sending specific store nudge notice.")
-            sent = send_store_nudge_notice(email, user_name, user_id, household_id)
-        elif 'activation' in events:
-            campaign_names.append('activation')
-            print(f"[{email}] Sending specific activation notice.")
-            sent = send_activation_notice(email, user_name, user_id, household_id)
-        elif 'reengagement' in events:
-            campaign_names.append('reengagement')
-            print(f"[{email}] Sending specific re-engagement notice.")
-            sent = send_reengagement_notice(email, user_name, user_id, household_id)
-        elif 'signup_abandon_day2' in events:
-            campaign_names.append('signup_abandon_day2')
-            print(f"[{email}] Sending Day 2 signup abandonment reminder.")
-            sent = send_signup_abandon_day2(email, user_name, user_id)
-        elif 'signup_abandon_day5' in events:
-            campaign_names.append('signup_abandon_day5')
-            print(f"[{email}] Sending Day 5 signup abandonment reminder.")
-            sent = send_signup_abandon_day5(email, user_name, user_id)
-        elif 'signup_abandon_day7' in events:
-            campaign_names.append('signup_abandon_day7')
-            print(f"[{email}] Sending Day 7 final signup abandonment notice.")
-            sent = send_signup_abandon_day7(email, user_name, user_id)
-    else:
-        # If there are multiple events, send the combined template
-        print(f"[{email}] Sending COMBINED notice for multiple events: {list(events.keys())}")
-        sent = send_combined_notice(email, user_name, events, user_id, household_id)
-        for ev_key, ev_val in events.items():
-            if ev_key == 'expiration':
-                is_trial = ev_val.get('is_trial', False)
-                days_left = ev_val.get('days_left', 0)
-                campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
-            elif ev_key == 'invite_reminder':
-                days_rem = ev_val.get('days_remaining', 5)
-                campaign_names.append(f"invite_reminder_{'day5' if days_rem <= 2 else 'day2'}")
-                if sent:
-                    db_updates.append(("UPDATE invites SET reminder_count = %s, last_reminded_at = NOW() WHERE id = %s", (ev_val['new_reminder_count'], ev_val['invite_id'])))
-            elif ev_key == 'invite_expired':
-                campaign_names.append('invite_expired_inviter')
-                if sent:
-                    db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (ev_val['invite_id'],)))
-            else:
-                campaign_names.append(ev_key)
+    # Priority 1: Invite Reminder (time-sensitive, highly specific action)
+    if 'invite_reminder' in events:
+        inv_data = events['invite_reminder']
+        days_rem = inv_data.get('days_remaining', 5)
+        campaign = f"invite_reminder_{'day5' if days_rem <= 2 else 'day2'}"
+        campaign_names.append(campaign)
+        print(f"[{email}] Priority: Sending invite reminder notice ({days_rem} days remaining, campaign: {campaign}).")
+        sent = send_invite_reminder(
+            email,
+            inv_data['invite_link'],
+            inv_data['household_name'],
+            inv_data.get('inviter_name', ''),
+            inv_data.get('invite_code', ''),
+            days_rem,
+            user_id,
+            household_id
+        )
+        if sent:
+            db_updates.append(("UPDATE invites SET reminder_count = %s, last_reminded_at = NOW() WHERE id = %s", (inv_data['new_reminder_count'], inv_data['invite_id'])))
+        
+        # Suppress generic signup abandon emails since the invite reminder acts as their setup path
+        events.pop('signup_abandon_day2', None)
+        events.pop('signup_abandon_day5', None)
+        events.pop('signup_abandon_day7', None)
+        events.pop('invite_reminder')
 
+    # Priority 2: Invite Expired Notice (sent to inviter, completely disjoint from abandonment)
+    if 'invite_expired' in events:
+        inv_data = events['invite_expired']
+        campaign_names.append('invite_expired_inviter')
+        print(f"[{email}] Priority: Sending invite expired notice to inviter for invitee {inv_data.get('invitee_email')}.")
+        sent_inv = send_invite_expired_notice(
+            email,
+            user_name,
+            inv_data.get('invitee_email', ''),
+            inv_data.get('household_name', 'your household'),
+            user_id,
+            household_id
+        )
+        sent = sent or sent_inv 
+        if sent_inv:
+            db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (inv_data['invite_id'],)))
+        events.pop('invite_expired')
+
+    # Priority 3: Signup Abandonment Flow (cannot co-occur with nudges or expiration due to household_id = 0)
+    if 'signup_abandon_day7' in events:
+        campaign_names.append('signup_abandon_day7')
+        print(f"[{email}] Priority: Sending Day 7 final signup abandonment notice.")
+        sent_sa = send_signup_abandon_day7(email, user_name, user_id)
+        sent = sent or sent_sa
+        events.pop('signup_abandon_day7')
+    elif 'signup_abandon_day5' in events:
+        campaign_names.append('signup_abandon_day5')
+        print(f"[{email}] Priority: Sending Day 5 signup abandonment reminder.")
+        sent_sa = send_signup_abandon_day5(email, user_name, user_id)
+        sent = sent or sent_sa
+        events.pop('signup_abandon_day5')
+    elif 'signup_abandon_day2' in events:
+        campaign_names.append('signup_abandon_day2')
+        print(f"[{email}] Priority: Sending Day 2 signup abandonment reminder.")
+        sent_sa = send_signup_abandon_day2(email, user_name, user_id)
+        sent = sent or sent_sa
+        events.pop('signup_abandon_day2')
+
+    # If there are still events left (expiration, trial nudges, store nudges), process them
+    if events:
+        if len(events) == 1:
+            if 'expiration' in events:
+                is_trial = events['expiration']['is_trial']
+                days_left = events['expiration']['days_left']
+                campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}"
+                campaign_names.append(campaign)
+                print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}).")
+                sent_rem = send_subscription_notice(email, user_name, is_trial, days_left, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'trial_week1' in events:
+                campaign_names.append('trial_week1')
+                print(f"[{email}] Sending specific trial week 1 check-in.")
+                sent_rem = send_trial_week1_checkin(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'trial_week3' in events:
+                campaign_names.append('trial_week3')
+                print(f"[{email}] Sending specific trial week 3 check-in.")
+                sent_rem = send_trial_week3_checkin(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'store_nudge' in events:
+                campaign_names.append('store_nudge')
+                print(f"[{email}] Sending specific store nudge notice.")
+                sent_rem = send_store_nudge_notice(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'solo_nudge' in events:
+                campaign_names.append('solo_nudge')
+                print(f"[{email}] Sending specific solo owner nudge notice.")
+                sent_rem = send_solo_nudge_notice(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'activation' in events:
+                campaign_names.append('activation')
+                print(f"[{email}] Sending specific activation notice.")
+                sent_rem = send_activation_notice(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+            elif 'reengagement' in events:
+                campaign_names.append('reengagement')
+                print(f"[{email}] Sending specific re-engagement notice.")
+                sent_rem = send_reengagement_notice(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+        else:
+            # If there are multiple events, send the combined template
+            print(f"[{email}] Sending COMBINED notice for remaining events: {list(events.keys())}")
+            sent_rem = send_combined_notice(email, user_name, events, user_id, household_id)
+            sent = sent or sent_rem
+            for ev_key, ev_val in events.items():
+                if ev_key == 'expiration':
+                    is_trial = ev_val.get('is_trial', False)
+                    days_left = ev_val.get('days_left', 0)
+                    campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
+                else:
+                    campaign_names.append(ev_key)
 
     # Record email sent timestamp in the email_events table and execute DB updates
     if sent:
@@ -903,7 +922,9 @@ def cleanup_abandoned_signups():
             _run("DELETE FROM auth_feature_flags WHERE user_id = %s", (uid,))
             # 2. Clear user aliases
             _run("DELETE FROM auth_user_aliases WHERE user_id = %s", (uid,))
-            # 3. Delete unattached user (email_events has ON DELETE SET NULL on user_id)
+            # 3. Clear login intents
+            _run("DELETE FROM login_intents WHERE user_id = %s", (uid,))
+            # 4. Delete unattached user (email_events has ON DELETE SET NULL on user_id)
             _run("DELETE FROM auth_users WHERE id = %s", (uid,))
             deleted_count += 1
             print(f"  [Cleanup] Deleted stale abandoned user #{uid} ({uemail}, created {cand.get('created_at')}).")
