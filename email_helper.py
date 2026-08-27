@@ -1304,3 +1304,301 @@ def send_feedback_resolved_email(
     }
     return _send_via_api(api_key, payload)
 
+
+def send_signup_abandon_day2(to_email: str, user_name: str, user_id: int = 0) -> bool:
+    """Send Day 2 gentle reminder to users who signed in but abandoned household setup."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "signup_abandon_day2"
+    name_str = (user_name or "").strip()
+    if not name_str or name_str.lower() in ("someone", "unknown", "a user", "none", "user"):
+        greeting = "Hi,"
+    else:
+        greeting = f"Hi {name_str.split()[0]},"
+
+    setup_link = f"{BASE_URL}/open?url={quote('/login?needs_signup=1&source=email_signup_abandon_day2')}"
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    subject = "Complete your ListMate household setup in 10 seconds 🛒"
+
+    plain_text = (
+        f"{greeting}\n\n"
+        f"You recently started signing in to ListMate with your Google or Apple account, but haven't finished setting up your household list yet.\n\n"
+        f"You're just 10 seconds away from organized grocery shopping! In ListMate you can:\n"
+        f"• Create a new household list for your home, or\n"
+        f"• Enter an 8-character invite code to join an existing household.\n\n"
+        f"Once setup, your grocery lists auto-organize by store and aisle, syncing across all your devices in real time.\n\n"
+        f"Complete your setup here:\n"
+        f"{setup_link}\n\n"
+        f"Download ListMate for mobile:\n"
+        f"• iPhone: {ios_link}\n"
+        f"• Android: {android_link}\n\n"
+        f"— The ListMate Team"
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;color:#334155;">'
+        f'<div style="text-align:center;margin-bottom:16px;">'
+        f'<span style="display:inline-block;background:#eaf8ef;color:#166534;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">🛒 Almost Ready</span>'
+        f'<h2 style="color:#1e293b;margin:12px 0 6px 0;font-size:22px;font-weight:700;line-height:1.3;">Finish Setting Up Your List</h2>'
+        f'</div>'
+        f'<p style="font-size:16px;color:#334155;line-height:1.5;">{greeting}</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">You recently started signing in to ListMate with your Google or Apple account, but haven\'t finished setting up your household yet.</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">You\'re just <strong>10 seconds away</strong> from smooth, stress-free grocery trips:</p>'
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin:18px 0;">'
+        f'<div style="display:flex;align-items:flex-start;margin-bottom:12px;">'
+        f'<div style="font-size:18px;margin-right:10px;line-height:1;">🏠</div>'
+        f'<div style="font-size:14px;color:#334155;line-height:1.4;"><strong>Create a Household:</strong> Name your household list (e.g. "Smith Family" or "Apartment 4B").</div>'
+        f'</div>'
+        f'<div style="display:flex;align-items:flex-start;">'
+        f'<div style="font-size:18px;margin-right:10px;line-height:1;">🔑</div>'
+        f'<div style="font-size:14px;color:#334155;line-height:1.4;"><strong>Or Join with Code:</strong> Enter an 8-character invite code from your partner or roommate.</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="text-align:center;margin:26px 0 20px 0;">'
+        f'<a href="{setup_link}" target="_blank" rel="noopener noreferrer" style="background-color:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Complete Setup in 10 Seconds &rarr;</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin:20px 0 10px 0;">'
+        f'<div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Or download on mobile:</div>'
+        f'<div style="display:inline-block;">'
+        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;margin-right:8px;vertical-align:middle;">'
+        f'<img src="{app_store_img}" alt="Download on the App Store" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;vertical-align:middle;">'
+        f'<img src="{google_play_img}" alt="Get it on Google Play" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": html_body + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_signup_abandon_day5(to_email: str, user_name: str, user_id: int = 0) -> bool:
+    """Send Day 5 value & reassurance reminder addressing hesitations."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "signup_abandon_day5"
+    name_str = (user_name or "").strip()
+    if not name_str or name_str.lower() in ("someone", "unknown", "a user", "none", "user"):
+        greeting = "Hi,"
+    else:
+        greeting = f"Hi {name_str.split()[0]},"
+
+    setup_link = f"{BASE_URL}/open?url={quote('/login?needs_signup=1&source=email_signup_abandon_day5')}"
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    subject = "Need help organizing your household grocery list? 📋"
+
+    plain_text = (
+        f"{greeting}\n\n"
+        f"We noticed you haven't finished setting up your ListMate household yet.\n\n"
+        f"Whether you shop solo or share lists with family and roommates, ListMate takes the chaos out of grocery runs:\n"
+        f"• Instant Live Sync: Everyone adds items as they run out. Items cross off live on all phones so nobody buys duplicates.\n"
+        f"• Store & Aisle Sorting: Keep Trader Joe's, Costco, and Target trips separated and organized by aisle.\n"
+        f"• Start Solo, Invite Anytime: You can always change your household name or invite members later.\n\n"
+        f"💡 Good to know: Only the household manages a subscription ($1.99/mo or $9.99/yr). Invited members join, edit, and sync 100% free!\n\n"
+        f"Finish setting up in seconds:\n"
+        f"{setup_link}\n\n"
+        f"— The ListMate Team"
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;color:#334155;">'
+        f'<div style="text-align:center;margin-bottom:16px;">'
+        f'<span style="display:inline-block;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">📋 Quick Tip</span>'
+        f'<h2 style="color:#1e293b;margin:12px 0 6px 0;font-size:22px;font-weight:700;line-height:1.3;">Shopping Is Better with ListMate</h2>'
+        f'</div>'
+        f'<p style="font-size:16px;color:#334155;line-height:1.5;">{greeting}</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">We noticed you haven\'t completed your household setup yet. Whether you shop for yourself, your partner, or your entire family, ListMate makes every grocery run smooth:</p>'
+        f'<ul style="font-size:14px;color:#334155;line-height:1.6;padding-left:20px;">'
+        f'<li><strong>Zero duplicate buys:</strong> Live sync crosses off items in real time across all household members\' phones.</li>'
+        f'<li><strong>Organize by store & aisle:</strong> Navigate aisles smoothly with store-specific categories (Trader Joe\'s, Costco, Safeway).</li>'
+        f'<li><strong>Flexible & low pressure:</strong> You can start solo and invite family or housemates whenever you\'re ready.</li>'
+        f'</ul>'
+        f'<div style="background:#f0fdf4;border-left:4px solid #10b981;padding:12px 16px;margin:18px 0;border-radius:4px;">'
+        f'<strong style="color:#166534;display:block;margin-bottom:4px;">💡 Good to know:</strong>'
+        f'<span style="color:#274c36;font-size:13px;line-height:1.4;">Only the household ever pays for a Pro subscription ($1.99/mo or $9.99/yr). Invited members join, edit, and sync completely free of charge!</span>'
+        f'</div>'
+        f'<div style="text-align:center;margin:26px 0 20px 0;">'
+        f'<a href="{setup_link}" target="_blank" rel="noopener noreferrer" style="background-color:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Finish Setting Up ListMate &rarr;</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin:20px 0 10px 0;">'
+        f'<div style="display:inline-block;">'
+        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;margin-right:8px;vertical-align:middle;">'
+        f'<img src="{app_store_img}" alt="Download on the App Store" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;vertical-align:middle;">'
+        f'<img src="{google_play_img}" alt="Get it on Google Play" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": html_body + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_signup_abandon_day7(to_email: str, user_name: str, user_id: int = 0) -> bool:
+    """Send Day 7 final urgency notice before pending account reservation is cleared."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "signup_abandon_day7"
+    name_str = (user_name or "").strip()
+    if not name_str or name_str.lower() in ("someone", "unknown", "a user", "none", "user"):
+        greeting = "Hi,"
+    else:
+        greeting = f"Hi {name_str.split()[0]},"
+
+    setup_link = f"{BASE_URL}/open?url={quote('/login?needs_signup=1&source=email_signup_abandon_day7')}"
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    subject = "Important: Your temporary ListMate reservation is expiring ⏳"
+
+    plain_text = (
+        f"{greeting}\n\n"
+        f"You started signing up for ListMate 7 days ago, but your household setup hasn't been completed.\n\n"
+        f"To protect your privacy and keep our directory clean, unattached accounts without an active household list are scheduled to be cleared soon.\n\n"
+        f"If you'd like to keep your account and start using shared, real-time grocery lists, tap below to complete your setup in 10 seconds:\n"
+        f"{setup_link}\n\n"
+        f"— The ListMate Team"
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;color:#334155;">'
+        f'<div style="text-align:center;margin-bottom:16px;">'
+        f'<span style="display:inline-block;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">⏳ Final Reminder</span>'
+        f'<h2 style="color:#1e293b;margin:12px 0 6px 0;font-size:22px;font-weight:700;line-height:1.3;">Your Account Reservation Is Expiring</h2>'
+        f'</div>'
+        f'<p style="font-size:16px;color:#334155;line-height:1.5;">{greeting}</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">You started registering for ListMate 7 days ago, but your household setup hasn\'t been completed.</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">To keep our platform secure and protect your privacy, unattached accounts without an active household list are scheduled to be cleared soon.</p>'
+        f'<div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin:18px 0;border-radius:4px;">'
+        f'<strong style="color:#991b1b;display:block;margin-bottom:4px;">Keep your account & start your shared list:</strong>'
+        f'<span style="color:#7f1d1d;font-size:13px;line-height:1.4;">It only takes 10 seconds to create your household list or join with an invite code. Once complete, you\'re all set!</span>'
+        f'</div>'
+        f'<div style="text-align:center;margin:26px 0 20px 0;">'
+        f'<a href="{setup_link}" target="_blank" rel="noopener noreferrer" style="background-color:#10b981;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Complete Setup & Keep Account &rarr;</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin:20px 0 10px 0;">'
+        f'<div style="display:inline-block;">'
+        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;margin-right:8px;vertical-align:middle;">'
+        f'<img src="{app_store_img}" alt="Download on the App Store" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;vertical-align:middle;">'
+        f'<img src="{google_play_img}" alt="Get it on Google Play" width="135" height="40" border="0" style="display:inline-block;height:40px;width:auto;border:0;outline:none;vertical-align:middle;border-radius:6px;">'
+        f'</a>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": html_body + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+

@@ -20,6 +20,9 @@ from email_helper import (
     send_combined_notice,
     send_invite_reminder,
     send_invite_expired_notice,
+    send_signup_abandon_day2,
+    send_signup_abandon_day5,
+    send_signup_abandon_day7,
 )
 
 def process_email_events(email, user_name, events, user_id=0, household_id=0):
@@ -96,6 +99,18 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
             campaign_names.append('reengagement')
             print(f"[{email}] Sending specific re-engagement notice.")
             sent = send_reengagement_notice(email, user_name, user_id, household_id)
+        elif 'signup_abandon_day2' in events:
+            campaign_names.append('signup_abandon_day2')
+            print(f"[{email}] Sending Day 2 signup abandonment reminder.")
+            sent = send_signup_abandon_day2(email, user_name, user_id)
+        elif 'signup_abandon_day5' in events:
+            campaign_names.append('signup_abandon_day5')
+            print(f"[{email}] Sending Day 5 signup abandonment reminder.")
+            sent = send_signup_abandon_day5(email, user_name, user_id)
+        elif 'signup_abandon_day7' in events:
+            campaign_names.append('signup_abandon_day7')
+            print(f"[{email}] Sending Day 7 final signup abandonment notice.")
+            sent = send_signup_abandon_day7(email, user_name, user_id)
     else:
         # If there are multiple events, send the combined template
         print(f"[{email}] Sending COMBINED notice for multiple events: {list(events.keys())}")
@@ -116,6 +131,7 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                     db_updates.append(("UPDATE invites SET inviter_notified_at = NOW() WHERE id = %s", (ev_val['invite_id'],)))
             else:
                 campaign_names.append(ev_key)
+
 
     # Record email sent timestamp in the email_events table and execute DB updates
     if sent:
@@ -680,6 +696,117 @@ def run_cron():
             household_id=inv.get("household_id"),
         )
 
+    # 9A. Signup Abandonment - Day 2 Gentle Reminder (users registered 2+ days ago with household_id=0)
+    print("Checking for Day 2 signup abandonment users...")
+    query_abandon_day2 = """
+    SELECT u.id AS user_id, u.email, u.name
+    FROM auth_users u
+    WHERE (u.household_id IS NULL OR u.household_id = 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_household_members ahm WHERE ahm.user_id = u.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_households h WHERE h.owner_id = u.id
+      )
+      AND (DATE(u.created_at) <= CURRENT_DATE - INTERVAL '2 days' OR u.created_at <= NOW() - INTERVAL '48 hours')
+      AND (DATE(u.created_at) >= CURRENT_DATE - INTERVAL '14 days' OR u.created_at >= NOW() - INTERVAL '336 hours')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.user_id = u.id OR ee.email = u.email)
+            AND ee.campaign = 'signup_abandon_day2' 
+            AND ee.event_type = 'sent'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+    ORDER BY u.id ASC
+    """
+    abandon_day2_users = _run(query_abandon_day2)
+    print(f"  -> Found {len(abandon_day2_users)} Day 2 signup abandonment user(s).")
+    for u in abandon_day2_users:
+        add_user_event(
+            u.get("email"),
+            u.get("name") or "",
+            'signup_abandon_day2',
+            {},
+            user_id=u.get("user_id"),
+            household_id=0,
+        )
+
+    # 9B. Signup Abandonment - Day 5 Value & Guidance (users registered 5+ days ago with household_id=0)
+    print("Checking for Day 5 signup abandonment users...")
+    query_abandon_day5 = """
+    SELECT u.id AS user_id, u.email, u.name
+    FROM auth_users u
+    WHERE (u.household_id IS NULL OR u.household_id = 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_household_members ahm WHERE ahm.user_id = u.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_households h WHERE h.owner_id = u.id
+      )
+      AND (DATE(u.created_at) <= CURRENT_DATE - INTERVAL '5 days' OR u.created_at <= NOW() - INTERVAL '120 hours')
+      AND (DATE(u.created_at) >= CURRENT_DATE - INTERVAL '14 days' OR u.created_at >= NOW() - INTERVAL '336 hours')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.user_id = u.id OR ee.email = u.email)
+            AND ee.campaign = 'signup_abandon_day5' 
+            AND ee.event_type = 'sent'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+    ORDER BY u.id ASC
+    """
+    abandon_day5_users = _run(query_abandon_day5)
+    print(f"  -> Found {len(abandon_day5_users)} Day 5 signup abandonment user(s).")
+    for u in abandon_day5_users:
+        add_user_event(
+            u.get("email"),
+            u.get("name") or "",
+            'signup_abandon_day5',
+            {},
+            user_id=u.get("user_id"),
+            household_id=0,
+        )
+
+    # 9C. Signup Abandonment - Day 7 Final Urgency Notice (users registered 7+ days ago with household_id=0)
+    print("Checking for Day 7 signup abandonment users...")
+    query_abandon_day7 = """
+    SELECT u.id AS user_id, u.email, u.name
+    FROM auth_users u
+    WHERE (u.household_id IS NULL OR u.household_id = 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_household_members ahm WHERE ahm.user_id = u.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_households h WHERE h.owner_id = u.id
+      )
+      AND (DATE(u.created_at) <= CURRENT_DATE - INTERVAL '7 days' OR u.created_at <= NOW() - INTERVAL '168 hours')
+      AND (DATE(u.created_at) >= CURRENT_DATE - INTERVAL '14 days' OR u.created_at >= NOW() - INTERVAL '336 hours')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.user_id = u.id OR ee.email = u.email)
+            AND ee.campaign = 'signup_abandon_day7' 
+            AND ee.event_type = 'sent'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+    ORDER BY u.id ASC
+    """
+    abandon_day7_users = _run(query_abandon_day7)
+    print(f"  -> Found {len(abandon_day7_users)} Day 7 signup abandonment user(s).")
+    for u in abandon_day7_users:
+        add_user_event(
+            u.get("email"),
+            u.get("name") or "",
+            'signup_abandon_day7',
+            {},
+            user_id=u.get("user_id"),
+            household_id=0,
+        )
+
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
 
     if users_to_notify:
@@ -707,6 +834,12 @@ def run_cron():
     else:
         print("No emails to send today.")
 
+    # 10. Engagement-Aware Signup Abandonment Cleanup (Day 10+ unattached registrations)
+    try:
+        cleanup_abandoned_signups()
+    except Exception as exc:
+        print(f"Signup abandonment cleanup routine failed: {exc}")
+
     # Auto-categorize any uncategorized items
     try:
         from categorize import backfill_uncategorized_items
@@ -714,6 +847,71 @@ def run_cron():
         print(f"Auto-categorization sweep complete: {stats}")
     except Exception as exc:
         print(f"Auto-categorization sweep failed: {exc}")
+
+
+def cleanup_abandoned_signups():
+    """Prune unattached user registrations (Day 10+, no household) with engagement protection.
+    
+    Engagement Protection Rules:
+    - Never delete if user clicked any email in the last 14 days.
+    - Never delete if user opened any email in the last 7 days.
+    - User must have received the final Day 7 notice (or be older than 30 days).
+    """
+    print("Checking for stale signup-abandoned registrations to clean up...")
+    query = """
+    SELECT u.id, u.email, u.name, u.created_at
+    FROM auth_users u
+    WHERE (u.household_id IS NULL OR u.household_id = 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_household_members ahm WHERE ahm.user_id = u.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM auth_households h WHERE h.owner_id = u.id
+      )
+      AND (DATE(u.created_at) <= CURRENT_DATE - INTERVAL '10 days' OR u.created_at <= NOW() - INTERVAL '240 hours')
+      AND (
+          EXISTS (
+              SELECT 1 FROM email_events ee 
+              WHERE (ee.user_id = u.id OR ee.email = u.email)
+                AND ee.campaign = 'signup_abandon_day7' 
+                AND ee.event_type = 'sent'
+          )
+          OR (DATE(u.created_at) <= CURRENT_DATE - INTERVAL '30 days')
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.user_id = u.id OR ee.email = u.email)
+            AND ee.event_type = 'click'
+            AND ee.event_timestamp >= NOW() - INTERVAL '14 days'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.user_id = u.id OR ee.email = u.email)
+            AND ee.event_type = 'open'
+            AND ee.event_timestamp >= NOW() - INTERVAL '7 days'
+      )
+    ORDER BY u.id ASC
+    LIMIT 100
+    """
+    candidates = _run(query)
+    deleted_count = 0
+    for cand in candidates:
+        uid = cand.get('id')
+        uemail = cand.get('email')
+        try:
+            # 1. Clear feature flags
+            _run("DELETE FROM auth_feature_flags WHERE user_id = %s", (uid,))
+            # 2. Clear user aliases
+            _run("DELETE FROM auth_user_aliases WHERE user_id = %s", (uid,))
+            # 3. Delete unattached user (email_events has ON DELETE SET NULL on user_id)
+            _run("DELETE FROM auth_users WHERE id = %s", (uid,))
+            deleted_count += 1
+            print(f"  [Cleanup] Deleted stale abandoned user #{uid} ({uemail}, created {cand.get('created_at')}).")
+        except Exception as exc:
+            print(f"  [Cleanup] Error deleting stale user #{uid}: {exc}")
+    print(f"Stale signup abandonment cleanup complete: {deleted_count} user(s) removed.")
+    return deleted_count
+
 
 if __name__ == "__main__":
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Starting daily cron jobs...")

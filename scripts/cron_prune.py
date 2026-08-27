@@ -92,6 +92,13 @@ def run_prune():
     """
     total_email_events = prune_items("Email Telemetry Events (90-day retention)", email_events_query_template)
 
+    # 4. Stale Unattached Abandoned Signups (10+ days without household setup & no recent engagement)
+    try:
+        from scripts.cron_daily import cleanup_abandoned_signups
+        cleanup_abandoned_signups()
+    except Exception as e:
+        print(f"Error during abandoned signup pruning: {e}")
+
     grand_total = total_free + total_premium + total_email_events
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Pruning job complete. Grand total deleted: {grand_total}")
 
