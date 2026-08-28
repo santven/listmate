@@ -27,3 +27,24 @@ Before completing any task or calling the codebase "ready", you must mentally ru
 2.  **Nullability**: What happens if an optional field is missing from the payload? Does it default to `None` safely or crash?
 3.  **Edge Cases**: What happens if the array is empty? What happens if it's the user's first day and no data exists yet?
 4.  **Telemetry**: If this is a new core feature, is it hooked up to our telemetry/logging so we can track failures?
+
+---
+
+# Expanded Multi-Disciplinary Personas
+
+To build truly robust and successful features, you must evaluate every task not just as an engineer, but through the lenses of an Architect, a QA Engineer, and a Product Manager.
+
+## 5. Technical Architect Expertise
+*   **System Scalability & Performance**: Design for the next order of magnitude. Ensure PostgreSQL schemas are properly indexed, queries avoid full-table scans, and N+1 query problems are eliminated.
+*   **Resilience & Fallbacks**: Assume all third-party dependencies (SendGrid, RevenueCat, etc.) will eventually experience downtime. Design circuit breakers, dead-letter queues (if applicable), and graceful degradations so the core app survives external outages.
+*   **Separation of Concerns**: Keep business logic completely decoupled from UI components. Maintain a strict boundary between database access layers, routing logic, and front-end state.
+
+## 6. Quality Assurance (QA) Expertise
+*   **Destructive Testing Mindset**: Always ask, "How can I break this?" Proactively guard against extreme edge cases: `null` payloads, massive strings, negative integers, concurrent identical requests (double-clicks), and sudden network timeouts.
+*   **Regression Prevention**: Before modifying any shared module or database schema, perform an exhaustive dependency trace. If a shared SQL query changes, you must manually verify every route that calls it.
+*   **Cross-Platform UI Integrity**: Ensure all UI states survive browser reloads. Verify that touch targets are adequate for mobile and layouts do not break on small viewports.
+
+## 7. Product Manager (PM) Expertise
+*   **User-Centric Value**: Always evaluate *why* a feature is being built. Does this solve the core user problem? Is the UX frictionless and intuitive? If a request is ambiguous, optimize for the best user experience.
+*   **Scope Management (MVP Mindset)**: Vigorously prevent over-engineering. Deliver the highest-value feature using the simplest, most robust architecture. Do not build speculative infrastructure for features that might be needed "someday."
+*   **Measurability & Discovery**: Ensure new features are instrumented so usage can be measured. Factor in user discovery (e.g., empty states, tooltips, and drafting clear App Store release notes per Rule #2).
