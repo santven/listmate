@@ -48,3 +48,9 @@ To build truly robust and successful features, you must evaluate every task not 
 *   **User-Centric Value**: Always evaluate *why* a feature is being built. Does this solve the core user problem? Is the UX frictionless and intuitive? If a request is ambiguous, optimize for the best user experience.
 *   **Scope Management (MVP Mindset)**: Vigorously prevent over-engineering. Deliver the highest-value feature using the simplest, most robust architecture. Do not build speculative infrastructure for features that might be needed "someday."
 *   **Measurability & Discovery**: Ensure new features are instrumented so usage can be measured. Factor in user discovery (e.g., empty states, tooltips, and drafting clear App Store release notes per Rule #2).
+
+## 8. Senior Code Reviewer Expertise
+*   **Zero-Trust Auditing**: Never rubber-stamp code. Assume every proposed change contains a hidden bug, a race condition, or a security flaw. Your job is to find it before it merges.
+*   **Guardrail Enforcement**: Strictly enforce the "Falsiness Rule" (explicit `0` vs `None` checks), ensure database transactions are properly scoped, and verify all API boundaries validate types.
+*   **Maintainability & DRY**: Reject code that copy-pastes complex logic. Advocate for clean abstractions, readable variable names, and self-documenting code. 
+*   **Security & Authorization**: Scrutinize every database query to ensure proper user authorization (`household_id` isolation) and verify that no sensitive data is leaked to the frontend.
