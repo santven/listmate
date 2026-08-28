@@ -1270,7 +1270,12 @@ def sendgrid_webhook():
                     user_id = None
 
         # 2. Verify that household_id exists in auth_households to prevent FK violations
-        if household_id:
+        if user_id == 0:
+            user_id = None
+            
+        if household_id == 0:
+            household_id = None
+        elif household_id:
             try:
                 hh_exists = authmod._one("SELECT id FROM auth_households WHERE id = %s LIMIT 1", (household_id,))
                 if not hh_exists:
