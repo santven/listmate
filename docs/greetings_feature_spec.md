@@ -28,7 +28,7 @@ The goal of this feature is to introduce moments of unexpected delight, emotiona
 ### 2.2 Technical Architect Lens
 * **Performance**: 100% client-side resolution for the web/mobile app using deterministic date-hashing. Zero additional database queries or API latency during initial bootstrap.
 * **Timezone Accuracy**: Evaluates the user's local device timezone (`new Date()`) for time-of-day greetings (Morning, Afternoon, Evening, Weekend) rather than server UTC time.
-* **Notification Integration**: Extends `scripts/cron_daily.py` to optionally append a warm closing sign-off to aggregated daily emails.
+* **Strict In-App Scope**: Confined entirely to the client application UI. No changes to external notification emails, backend crons, or databases.
 
 ### 2.3 Quality Assurance (QA) Lens
 * **Tone-Safety Guardrail**: Inspirational greetings must **NEVER** be displayed during error states (e.g. 500 server errors, network offline banners, expired subscriptions, or payment failures).
@@ -39,22 +39,27 @@ The goal of this feature is to introduce moments of unexpected delight, emotiona
 
 ## 3. UX & Visual Design Specification
 
-### 3.1 App Dashboard Placement
-* **Position**: Positioned subtly directly beneath the main greeting header / store selector and above the store item list.
-* **Layout**:
-  * Clean, compact card with soft rounded corners (`rounded-xl`), subtle border (`border border-amber-200/50` or `border-emerald-200/50` in light mode), and warm neutral background (`bg-amber-50/40` or `bg-emerald-50/30`).
-  * Left icon: Minimalist Sparkle or Heart icon (`lucide-react` `Sparkles` or `Heart` with soft warm accent).
-  * Typography: Displayed in refined italicized body typography with high legibility.
-  * Right action: Subtle dismiss icon (`X`) allowing the user to collapse the quote for the remainder of the session.
+### 3.1 Presentation via Reused Bottom Drawer
+* **Container**: Re-uses ListMate's existing animated slide-up Bottom Drawer component.
+* **Backdrop & Dismissal**: Tapping anywhere on the dark backdrop or swiping down automatically closes the bottom drawer.
+* **First-Visit Cadence**: Displays automatically once per day on the user's initial app session (persisted via `localStorage` key `listmate_greeting_last_date = YYYY-MM-DD`).
+* **Menu Recall**: A dedicated **"Daily Inspiration"** item (with a `Sparkles` icon ✨) is placed in the primary App / Settings Menu. Clicking it instantly re-opens the bottom drawer with today's quote at any time.
 
 ```
 +-----------------------------------------------------------------------+
-|  ✨  "Every item checked off is an act of care for your home."     ✕  |
+|                              [ Drag Bar ]                             |
+|                                                                       |
+|                                  ✨                                   |
+|                         "Daily Inspiration"                           |
+|                                                                       |
+|      "Every item checked off is an act of care for your home."        |
+|                                                                       |
+|                          [ Close / Got It ]                           |
 +-----------------------------------------------------------------------+
 ```
 
 ### 3.2 Time-of-Day Dynamic Salutations
-In addition to the daily quote, the dashboard greeting adapts to the user's local time:
+In addition to the daily quote drawer, the dashboard greeting adapts to the user's local time:
 * **05:00 – 11:59**: `"Good morning, [Name] ☕"`
 * **12:00 – 16:59**: `"Good afternoon, [Name] ☀️"`
 * **17:00 – 21:59**: `"Good evening, [Name] 🌙"`
@@ -122,18 +127,26 @@ export function getDailyGreeting(quotes: string[], seedDate: Date = new Date()):
 }
 ```
 
-### 5.2 Daily Cron Notification Integration (`scripts/cron_daily.py`)
-In aggregate email digests:
-* When a daily summary or reminder is sent, the footer can optionally include a small warm sign-off:
-  ```html
-  <p style="margin-top: 24px; font-style: italic; color: #6b7280; font-size: 13px; text-align: center;">
-    "{{ daily_affirmation }}"
-  </p>
-  ```
+### 5.2 Local Storage Cadence Management
+```typescript
+const STORAGE_KEY = 'listmate_daily_inspiration_seen';
+
+export function shouldShowDailyInspiration(): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  const lastSeen = localStorage.getItem(STORAGE_KEY);
+  return lastSeen !== today;
+}
+
+export function markDailyInspirationSeen(): void {
+  const today = new Date().toISOString().slice(0, 10);
+  localStorage.setItem(STORAGE_KEY, today);
+}
+```
 
 ---
 
-## 6. Open Discussion Points for User Review
-1. **Banner Visibility**: Should the daily inspirational card be visible by default on every app open, or should it automatically collapse once the user starts checking off items in a store?
-2. **Custom Quotes**: Would we ever want households to add their own private family mantras or reminder notes to their quote rotation?
-3. **Notification Tone**: Should we include these quotes in daily notification emails, or keep them strictly within the in-app dashboard?
+## 6. Design Decisions & Resolution Log
+1. **Container & Placement**: Reuses the standard bottom drawer. Closing is triggered by tapping outside the drawer, clicking the close button, or swiping down.
+2. **On-Demand Menu Recall**: Users can reopen today's quote at any time via the "Daily Inspiration" (✨) item in the main menu.
+3. **App-Only Boundary**: Strictly scoped to the in-app client experience. External notification emails and crons remain untouched.
+4. **Curated Fixed Dataset**: High-quality, curated static quotes; no custom user-generated quote entries or backend persistence needed.
