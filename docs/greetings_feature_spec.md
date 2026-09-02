@@ -138,10 +138,15 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEA
 ```
 
 **Evaluation Rules**:
-1. If `auth_users.last_inspiration_seen_date` is `NULL` or a prior date (not equal to today), and `daily_inspiration_enabled` is `true`: automatically show the daily quote bottom drawer on visit.
+1. If `auth_users.last_inspiration_seen_date` is `NULL` or a prior date (not equal to today), and `daily_inspiration_enabled` is `true`: automatically show the daily quote bottom drawer when on the home screen.
 2. If `auth_users.last_inspiration_seen_date` equals today's date (`CURRENT_DATE`): do not automatically show the quote.
-3. When shown or closed, call `POST /api/user/inspiration` with `{ seen_date: 'YYYY-MM-DD' }` to record today's date in PostgreSQL.
-4. Settings toggle writes directly to PostgreSQL via `POST /api/user/inspiration` with `{ enabled: boolean }`.
+3. **Continuous Session Triggers**: For active sessions where users remain logged in across midnight/day transitions or navigate through the app:
+   - Evaluated on initial page load / authentication (`checkAuth()`)
+   - Evaluated on list data refresh (`loadData()`)
+   - Evaluated on navigation back to the Home screen (`showScreen('home')`)
+   - Evaluated when switching back to the active tab / gaining window focus (`visibilitychange` / `focus`)
+4. When shown or closed, call `POST /api/user/inspiration` with `{ seen_date: 'YYYY-MM-DD' }` to record today's date in PostgreSQL.
+5. Settings toggle writes directly to PostgreSQL via `POST /api/user/inspiration` with `{ enabled: boolean }`.
 
 ---
 
