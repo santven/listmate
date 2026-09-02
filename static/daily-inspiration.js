@@ -800,18 +800,40 @@
     }
   }
 
-  function initCadence() {
+  var hasTriggeredCadence = false;
+
+  function initCadence(forceDelay) {
     try {
+      if (hasTriggeredCadence) return;
       var isDisabled = localStorage.getItem('listmate_daily_inspiration_disabled') === 'true';
       if (isDisabled) return;
 
+      if (typeof window !== 'undefined' && window.location) {
+        var path = window.location.pathname || '';
+        if (path !== '/' && path !== '' && path !== '/index.html') {
+          return;
+        }
+      }
+
       var today = new Date().toISOString().slice(0, 10);
       var lastSeen = localStorage.getItem('listmate_daily_inspiration_seen');
-
       if (lastSeen !== today) {
+        hasTriggeredCadence = true;
+        var delay = typeof forceDelay === 'number' ? forceDelay : 850;
         setTimeout(function() {
+          // Defer if celebratory feedback modal or cleanup modal is currently visible
+          var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+          if (activeModal) {
+            setTimeout(function() {
+              var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+              if (!stillActive) {
+                openDrawer(false);
+              }
+            }, 2500);
+            return;
+          }
           openDrawer(false);
-        }, 650);
+        }, delay);
       }
     } catch(e) {}
   }
@@ -830,8 +852,21 @@
     checkIsTesterOrAdmin: checkIsTesterOrAdmin
   };
 
-  // Keyboard shortcut (Escape to close)
+  // Auto-lifecycle bootstrap
   if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          initCadence(900);
+        }, 300);
+      });
+    } else {
+      setTimeout(function() {
+        initCadence(900);
+      }, 300);
+    }
+
+    // Keyboard shortcut (Escape to close)
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         var overlay = document.getElementById('dailyInspirationOverlay');

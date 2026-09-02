@@ -1217,6 +1217,9 @@ async function checkAuth() {
     }
     
     updateOfflineStatusUI();
+    if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
+      window.dailyInspirationEngine.initCadence(600);
+    }
     return true;
   } catch(e) { 
     let cfg = null;
@@ -1390,6 +1393,9 @@ async function loadData() {
       checkResolvedFeedbackNotifications();
       if (typeof checkDay7StoreDrawer === 'function') {
         checkDay7StoreDrawer();
+      }
+      if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
+        window.dailyInspirationEngine.initCadence(750);
       }
     }
   } catch (err) {
@@ -5471,6 +5477,16 @@ window.onDay7ShowMeHow = function() {
           window.navigateToNewStoreInput(true);
         }
       }, 700);
+    } else if (action === 'inspiration' || action === 'daily_inspiration' || action === 'daily-inspiration') {
+      urlParams.delete('action');
+      urlParams.delete('source');
+      const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+      window.history.replaceState({}, document.title, cleanUrl);
+      setTimeout(() => {
+        if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.openDrawer === 'function') {
+          window.dailyInspirationEngine.openDrawer(true);
+        }
+      }, 500);
     }
   } catch(e) {}
 })();
