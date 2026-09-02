@@ -2129,6 +2129,7 @@ window.addEventListener('scroll', updateFabVisibility);
 
 function showScreen(name){
   currentScreen = name;
+  window.currentScreen = name;
   if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
   window.scrollTo(0, 0);
   document.body.scrollTop = 0;
@@ -3000,6 +3001,11 @@ window.addEventListener('click', e => {
   };
 
 loadData(); checkAuth(); if (navigator.onLine) syncOfflineQueue();
+window.addEventListener('pageshow', () => {
+  if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
+    window.dailyInspirationEngine.initCadence(500);
+  }
+});
 
 // ---- Share / Copy to Text ----
 function isMobile() {

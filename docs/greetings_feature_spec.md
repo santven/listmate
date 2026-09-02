@@ -144,6 +144,7 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEA
    - Evaluated on initial page load / authentication (`checkAuth()`)
    - Evaluated on list data refresh (`loadData()`)
    - Evaluated on navigation back to the Home screen (`showScreen('home')`)
+   - Evaluated on navigation back from Settings or other pages via Back/Forward cache restore (`pageshow`)
    - Evaluated when switching back to the active tab / gaining window focus (`visibilitychange` / `focus`)
 4. When shown or closed, call `POST /api/user/inspiration` with `{ seen_date: 'YYYY-MM-DD' }` to record today's date in PostgreSQL.
 5. Settings toggle writes directly to PostgreSQL via `POST /api/user/inspiration` with `{ enabled: boolean }`.
