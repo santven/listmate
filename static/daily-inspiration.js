@@ -824,8 +824,26 @@
     }
   }
 
-  var lastAutoPoppedDate = null;
   var isEvaluatingCadence = false;
+
+  function isCurrentlyOnHomeScreen() {
+    try {
+      if (typeof window === 'undefined' || !window.location) return false;
+      var path = window.location.pathname || '';
+      if (path !== '/' && path !== '' && path !== '/index.html') {
+        return false;
+      }
+      var scr = (typeof window.currentScreen !== 'undefined' && window.currentScreen !== null) 
+        ? window.currentScreen 
+        : (typeof currentScreen !== 'undefined' ? currentScreen : 'home');
+      if (scr && scr !== 'home') {
+        return false;
+      }
+      return true;
+    } catch(e) {
+      return true;
+    }
+  }
 
   function evaluateAndTrigger(userInfo, forceDelay) {
     try {
@@ -837,47 +855,31 @@
       var today = getLocalDateString();
       var lastSeen = userInfo.last_inspiration_seen_date;
 
-      // If already marked seen for today in DB, do not show automatically
+      // Pure database persistence: if DB has date of today, do not show automatically
       if (lastSeen === today) {
-        lastAutoPoppedDate = today;
         return;
       }
 
-      // If we already popped the drawer open today during this running session, do not auto-pop again
-      if (lastAutoPoppedDate === today) {
-        return;
-      }
-
-      // If NULL, empty, or prior date -> pop open automatically
-      lastAutoPoppedDate = today;
-      userInfo.last_inspiration_seen_date = today;
-      if (window.currentCfg && window.currentCfg.user_info) {
-        window.currentCfg.user_info.last_inspiration_seen_date = today;
-      }
-
-      var delay = typeof forceDelay === 'number' ? forceDelay : 650;
+      // If NULL, empty, or prior date -> pop open automatically on home screen
+      var delay = typeof forceDelay === 'number' ? forceDelay : 500;
       setTimeout(function() {
         // Only show if user is currently on the home screen
-        if (typeof window !== 'undefined' && window.location) {
-          var path = window.location.pathname || '';
-          if (path !== '/' && path !== '' && path !== '/index.html') {
-            return;
-          }
-          if (typeof window.currentScreen !== 'undefined' && window.currentScreen !== 'home') {
-            return;
-          }
-        }
-        // Defer if celebratory feedback modal or cleanup modal is currently visible
-        var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show, #paywallModal.show');
-        if (activeModal) {
-          setTimeout(function() {
-            var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show, #paywallModal.show');
-            if (!stillActive) {
-              openDrawer(false);
-            }
-          }, 2500);
+        if (!isCurrentlyOnHomeScreen()) {
           return;
         }
+
+        // Defer if feedback modal or other active modal is visible
+        var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.active, #actionConfirmModal.active, #paywallModal.active, #resolvedFeedbackModal.active');
+        if (activeModal) {
+          setTimeout(function() {
+            var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.active, #actionConfirmModal.active, #paywallModal.active, #resolvedFeedbackModal.active');
+            if (!stillActive && isCurrentlyOnHomeScreen()) {
+              openDrawer(false);
+            }
+          }, 2000);
+          return;
+        }
+
         openDrawer(false);
       }, delay);
     } catch(e) {}
@@ -885,21 +887,14 @@
 
   function initCadence(forceDelay, serverUserInfo) {
     try {
-      var today = getLocalDateString();
-      if (lastAutoPoppedDate === today) {
+      if (!isCurrentlyOnHomeScreen()) {
         return;
       }
 
-      if (typeof window !== 'undefined' && window.location) {
-        var path = window.location.pathname || '';
-        if (path !== '/' && path !== '' && path !== '/index.html') {
-          return;
-        }
-      }
+      var today = getLocalDateString();
 
       // If serverUserInfo has a last_inspiration_seen_date that equals today, we know it's already seen
       if (serverUserInfo && serverUserInfo.last_inspiration_seen_date === today) {
-        lastAutoPoppedDate = today;
         return;
       }
 
@@ -945,7 +940,8 @@
     jumpToQuote: jumpToQuote,
     initCadence: initCadence,
     checkIsTesterOrAdmin: checkIsTesterOrAdmin,
-    recordSeen: recordSeen
+    recordSeen: recordSeen,
+    isCurrentlyOnHomeScreen: isCurrentlyOnHomeScreen
   };
 
   // Auto-lifecycle bootstrap
@@ -953,24 +949,29 @@
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
-          initCadence(800);
-        }, 300);
+          initCadence(600);
+        }, 200);
       });
     } else {
       setTimeout(function() {
-        initCadence(800);
-      }, 300);
+        initCadence(600);
+      }, 200);
     }
 
     // Auto-check on tab focus / visibility change (e.g. user leaves tab open overnight across days)
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'visible') {
-        initCadence(500);
+        initCadence(400);
       }
     });
 
     window.addEventListener('focus', function() {
-      initCadence(500);
+      initCadence(400);
+    });
+
+    // Auto-check on Back/Forward cache restore (e.g. navigating back from Settings page)
+    window.addEventListener('pageshow', function(event) {
+      initCadence(400);
     });
 
     // Keyboard shortcut (Escape to close)
