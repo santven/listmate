@@ -54,7 +54,7 @@ The goal of this feature is to introduce moments of unexpected delight, emotiona
 |                                                                       |
 |      "Every item checked off is an act of care for your home."        |
 |                                                                       |
-|                          [ Close / Got It ]                           |
+|                          [ Close ]                           |
 +-----------------------------------------------------------------------+
 ```
 
