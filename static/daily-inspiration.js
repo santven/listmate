@@ -72,11 +72,11 @@
   {
     "id": "tamil-proverb-1",
     "category": "Tamil Wisdom",
-    "theme": "Essential Seasoning",
-    "text": "Food cooked without salt is fit only for the trash.",
-    "original_text": "உப்பில்லா பண்டம் குப்பையிலே",
-    "author": "Tamil Proverb",
-    "era": "Traditional Wisdom"
+    "theme": "Love & Hospitality",
+    "text": "A simple meal prepared and served with genuine love is sweeter than divine nectar.",
+    "original_text": "அன்போடு அளிக்கும் உணவே அமிர்தம்",
+    "author": "Tamil Wisdom",
+    "era": "Traditional Proverb"
   },
   {
     "id": "upanishad-1",
