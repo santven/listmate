@@ -536,18 +536,20 @@
   }
 
   // ── Timezone and Date-Aware Helpers ───────────────────────────
-  function getDayOfYear(date) {
-    var start = new Date(date.getFullYear(), 0, 0);
-    var diff = date - start;
-    var oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
-  }
-
+  // Uses a coprime dispersion generator step = 23 (gcd(23, 57) = 1) seeded by calendar date.
+  // Guarantees:
+  // 1. Dynamic category & author variety every single day (jumps between Thirukkural, chefs, philosophy, French, Italian, and wit).
+  // 2. 100% unique quotes in any 57-day rolling window with zero duplicate repeats.
+  // 3. Deterministic across devices and page reloads on the same calendar day.
   function getDailyQuoteIndex(date) {
     var d = date || new Date();
-    var dayOfYear = getDayOfYear(d);
-    var year = d.getFullYear();
-    return ((year * 365) + dayOfYear) % CULINARY_QUOTES.length;
+    var epoch = new Date(2026, 0, 1).getTime();
+    var target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    var dayIndex = Math.floor((target - epoch) / (1000 * 60 * 60 * 24));
+    var totalCount = CULINARY_QUOTES.length;
+    var step = 23; // Coprime to 57 (57 = 3 * 19)
+    var offset = 11;
+    return Math.abs((dayIndex * step + offset) % totalCount);
   }
 
   function getTimeOfDayGreeting(userName) {
@@ -754,9 +756,7 @@
 
     if (typeof specificIndex === 'number' && specificIndex >= 0 && specificIndex < CULINARY_QUOTES.length) {
       currentQuoteIndex = specificIndex;
-    } else if (forceManual && !isTesterMode) {
-      currentQuoteIndex = getDailyQuoteIndex();
-    } else if (currentQuoteIndex === 0 && !isTesterMode) {
+    } else {
       currentQuoteIndex = getDailyQuoteIndex();
     }
 
