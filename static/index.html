@@ -1218,7 +1218,7 @@ async function checkAuth() {
     
     updateOfflineStatusUI();
     if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
-      window.dailyInspirationEngine.initCadence(600);
+      window.dailyInspirationEngine.initCadence(600, cfg ? cfg.user_info : null);
     }
     return true;
   } catch(e) { 
@@ -1395,7 +1395,8 @@ async function loadData() {
         checkDay7StoreDrawer();
       }
       if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
-        window.dailyInspirationEngine.initCadence(750);
+        const uInfo = (window.currentCfg && window.currentCfg.user_info) ? window.currentCfg.user_info : null;
+        window.dailyInspirationEngine.initCadence(750, uInfo);
       }
     }
   } catch (err) {

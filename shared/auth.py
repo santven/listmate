@@ -270,6 +270,8 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
         "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMP",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS inviter_notified_at TIMESTAMP"
@@ -886,9 +888,21 @@ def register_auth_routes(app):
             user_email = (get_email() or "").strip().lower()
             is_adm = bool(user_email == "venragh@gmail.com")
             resp["is_admin"] = is_adm
+            
+            u_pref = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))
+            last_insp_seen = None
+            insp_enabled = True
+            if u_pref:
+                if u_pref.get("last_inspiration_seen_date"):
+                    last_insp_seen = str(u_pref["last_inspiration_seen_date"])
+                if u_pref.get("daily_inspiration_enabled") is not None:
+                    insp_enabled = bool(u_pref["daily_inspiration_enabled"])
+
             resp["user_info"] = {"id": uid, "name": get_display_name(), "marketing_opt_in": opt_in_val,
                 "email": get_email(), "is_admin": is_adm, "household_id": hh_id,
-                "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None}
+                "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None,
+                "last_inspiration_seen_date": last_insp_seen,
+                "daily_inspiration_enabled": insp_enabled}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))
@@ -930,6 +944,41 @@ def register_auth_routes(app):
         except Exception as e:
             print("Unsubscribe error:", e)
             return "Invalid or expired token", 400
+
+    @app.route("/api/user/inspiration", methods=["GET", "POST"])
+    @app.route("/api/settings/inspiration", methods=["GET", "POST"])
+    @require_user
+    def user_inspiration():
+        uid = get_user_id()
+        _init_schema()
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            seen_date = data.get("seen_date") or data.get("last_seen_date")
+            enabled = data.get("enabled")
+            
+            updates = []
+            params = []
+            if seen_date is not None:
+                updates.append("last_inspiration_seen_date = ?")
+                params.append(seen_date if seen_date else None)
+            if enabled is not None:
+                updates.append("daily_inspiration_enabled = ?")
+                params.append(bool(enabled))
+            
+            if updates:
+                params.append(uid)
+                _run(f"UPDATE auth_users SET {', '.join(updates)} WHERE id = ?", tuple(params))
+            
+            u_row = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))
+            last_seen = str(u_row["last_inspiration_seen_date"]) if u_row and u_row.get("last_inspiration_seen_date") else None
+            is_enabled = bool(u_row["daily_inspiration_enabled"]) if u_row and u_row.get("daily_inspiration_enabled") is not None else True
+            return jsonify({"ok": True, "last_inspiration_seen_date": last_seen, "daily_inspiration_enabled": is_enabled})
+        
+        # GET
+        u_row = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))
+        last_seen = str(u_row["last_inspiration_seen_date"]) if u_row and u_row.get("last_inspiration_seen_date") else None
+        is_enabled = bool(u_row["daily_inspiration_enabled"]) if u_row and u_row.get("daily_inspiration_enabled") is not None else True
+        return jsonify({"last_inspiration_seen_date": last_seen, "daily_inspiration_enabled": is_enabled})
 
     @app.route("/api/auth/marketing", methods=["POST"])
     @require_user
