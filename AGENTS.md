@@ -46,3 +46,18 @@ When the user states that a customer feedback/request is fixed and commands you 
 3. **GitHub Issue & PR Closure**: Ensure the original GitHub issue is closed and the feature PR is merged into `staging`.
 4. **Publish GitHub Release**: Create a new GitHub Release for the build, adhering strictly to the **Dual Release Notes Format** (Rule #2) containing both the technical GitHub notes and the "What's New" App Store notes.
 5. **Production Push (Only if commanded)**: If the user explicitly asks to push this fix to `main`, follow the cherry-pick and `EXPLICIT_MAIN_PUSH=1` guidelines above.
+
+## 6. Exhaustive Code Review & Defensive Programming Guardrails
+To prevent regressions and edge-case bugs in production, all code modifications MUST adhere to this strict engineering checklist prior to committing:
+
+### Python to PostgreSQL Boundary (The "Falsiness" Rule)
+*   **Zero vs. None**: Python evaluates `0` as falsy (e.g., `if household_id:`). When handling numeric database IDs, **never rely on implicit falsiness**. If `0` is an invalid ID, you MUST explicitly catch it (e.g., `if user_id == 0: user_id = None`) before it reaches SQL logic to prevent Foreign Key constraint violations.
+*   **Always Coerce Types Before SQL**: Ensure frontend string inputs (e.g., `'null'`, `''`, `'0'`) are cleanly cast to Python `int` or `None` before being passed as parameters to `db_pg.py`.
+
+### Database Integrity (PostgreSQL)
+*   **Foreign Keys & Cascades**: When inserting telemetry, logs, or dependent records, always verify that the parent record (e.g., `household_id`) exists or use `ON DELETE SET NULL` / `ON DELETE CASCADE` appropriately.
+*   **Connection Leaks**: Ensure all database cursors and connections are properly closed or returned to the connection pool (via context managers like `with conn.cursor()`).
+
+### Front-End & API Contract
+*   **Race Conditions**: Never assume frontend state updates are synchronous. Use React functional state updates or debounce rapid interactions (like button clicks).
+*   **Graceful Failures**: All API calls must have `.catch()` blocks or `try/except` wrappers. Never let an unhandled promise rejection crash the SPA.

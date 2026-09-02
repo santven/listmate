@@ -207,6 +207,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="shortcut icon" href="/icon-192.png">
+  <script src="/static/daily-inspiration.js"></script>
 </head>
 <body>
 
@@ -401,6 +402,28 @@
     <div class="success" id="discoverySuccess" style="margin-top:8px;"></div>
   </div>
 
+    <!-- Daily Inspiration & Wisdom -->
+  <div class="card">
+    <h2>✨ Daily Inspiration & Wisdom</h2>
+    <p>A daily food proverb and culinary wisdom from famous chefs, ancient thinkers, Thirukkural, and world cultures.</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <div style="flex:1; padding-right:12px;">
+        <div style="font-weight:600; font-size:14px; color:#1f2937;">Show Daily Culinary Inspiration</div>
+        <div id="inspirationStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Displays a daily food proverb or culinary quote on your first visit each day.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="inspirationToggle" onchange="toggleInspirationSetting(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div style="margin-top:10px;">
+      <button onclick="if(window.dailyInspirationEngine) { window.dailyInspirationEngine.openDrawer(true); } else { window.location.href='/?action=inspiration'; }" style="width:100%; padding:10px 14px; background:#fff; border:1px solid var(--border); color:var(--text); font-size:13px; font-weight:600; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>✨</span> View Today's Daily Inspiration
+      </button>
+    </div>
+    <div class="success" id="inspirationSuccess" style="margin-top:8px;"></div>
+  </div>
+
   <!-- Support & Feedback -->
   <div class="card">
     <h2>💬 Support & Feedback</h2>
@@ -540,11 +563,60 @@ let householdData = null;
   }
 
   initDiscoveryTipsUI();
+  initInspirationUI();
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
     checkUrlActions();
   });
 })();
+
+
+async function initInspirationUI() {
+  const toggle = document.getElementById('inspirationToggle');
+  const statusText = document.getElementById('inspirationStatusText');
+  if (!toggle) return;
+
+  try {
+    const res = await fetch('/api/user/inspiration', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      const isEnabled = data.daily_inspiration_enabled !== false;
+      toggle.checked = isEnabled;
+      if (statusText) {
+        statusText.textContent = isEnabled
+          ? 'Displays a daily food proverb or culinary quote on your first visit each day.'
+          : 'Daily culinary inspiration is currently disabled.';
+      }
+    }
+  } catch(e) {
+    console.error('Failed to load inspiration setting from database:', e);
+  }
+}
+
+function toggleInspirationSetting(checked) {
+  const statusText = document.getElementById('inspirationStatusText');
+  const success = document.getElementById('inspirationSuccess');
+
+  if (statusText) {
+    statusText.textContent = checked
+      ? 'Displays a daily food proverb or culinary quote on your first visit each day.'
+      : 'Daily culinary inspiration is currently disabled.';
+  }
+  if (success) {
+    success.textContent = checked ? 'Daily Inspiration enabled.' : 'Daily Inspiration disabled.';
+    success.style.display = 'block';
+    setTimeout(() => { success.style.display = 'none'; }, 3000);
+  }
+
+  fetch('/api/user/inspiration', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: checked }),
+    credentials: 'include'
+  }).catch(function(e) {
+    console.error('Failed to save inspiration setting to database:', e);
+  });
+}
 
 function initDiscoveryTipsUI() {
   const toggle = document.getElementById('discoveryTipsToggle');
