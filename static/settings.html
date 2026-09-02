@@ -571,17 +571,43 @@ let householdData = null;
 })();
 
 
-function initInspirationUI() {
+async function initInspirationUI() {
   const toggle = document.getElementById('inspirationToggle');
   const statusText = document.getElementById('inspirationStatusText');
   if (!toggle) return;
-  const isDisabled = localStorage.getItem('listmate_daily_inspiration_disabled') === 'true';
+  let isDisabled = localStorage.getItem('listmate_daily_inspiration_disabled') === 'true';
   toggle.checked = !isDisabled;
   if (statusText) {
     statusText.textContent = !isDisabled
       ? 'Displays a daily food proverb or culinary quote on your first visit each day.'
       : 'Daily culinary inspiration is currently disabled.';
   }
+
+  try {
+    const cfgRes = await fetch('/api/auth/config?_=' + Date.now(), { credentials: 'include' });
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (cfg && cfg.user_info) {
+        if (typeof cfg.user_info.daily_inspiration_enabled === 'boolean') {
+          isDisabled = !cfg.user_info.daily_inspiration_enabled;
+          toggle.checked = !isDisabled;
+          if (isDisabled) {
+            localStorage.setItem('listmate_daily_inspiration_disabled', 'true');
+          } else {
+            localStorage.removeItem('listmate_daily_inspiration_disabled');
+          }
+          if (statusText) {
+            statusText.textContent = !isDisabled
+              ? 'Displays a daily food proverb or culinary quote on your first visit each day.'
+              : 'Daily culinary inspiration is currently disabled.';
+          }
+        }
+        if (cfg.user_info.last_inspiration_seen_date) {
+          localStorage.setItem('listmate_daily_inspiration_seen', cfg.user_info.last_inspiration_seen_date);
+        }
+      }
+    }
+  } catch(e) {}
 }
 
 function toggleInspirationSetting(checked) {
@@ -605,6 +631,13 @@ function toggleInspirationSetting(checked) {
         setTimeout(() => { success.style.display = 'none'; }, 3000);
       }
     }
+
+    fetch('/api/user/inspiration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: checked }),
+      credentials: 'include'
+    }).catch(function() {});
   } catch(e) {}
 }
 

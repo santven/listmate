@@ -747,6 +747,35 @@
     }
   }
 
+  function recordSeen(dateStr) {
+    try {
+      var d = dateStr || new Date().toISOString().slice(0, 10);
+      localStorage.setItem('listmate_daily_inspiration_seen', d);
+      if (typeof fetch === 'function') {
+        fetch('/api/user/inspiration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ seen_date: d }),
+          credentials: 'include'
+        }).catch(function() {});
+      }
+    } catch(e) {}
+  }
+
+  function syncWithServer(userInfo) {
+    try {
+      if (!userInfo) return;
+      if (userInfo.daily_inspiration_enabled === false) {
+        localStorage.setItem('listmate_daily_inspiration_disabled', 'true');
+      } else if (userInfo.daily_inspiration_enabled === true) {
+        localStorage.removeItem('listmate_daily_inspiration_disabled');
+      }
+      if (userInfo.last_inspiration_seen_date) {
+        localStorage.setItem('listmate_daily_inspiration_seen', userInfo.last_inspiration_seen_date);
+      }
+    } catch(e) {}
+  }
+
   function openDrawer(forceManual, specificIndex) {
     ensureDrawerElement();
     var overlay = document.getElementById('dailyInspirationOverlay');
@@ -766,6 +795,8 @@
     requestAnimationFrame(function() {
       overlay.classList.add('show');
     });
+
+    recordSeen();
   }
 
   function closeDrawer() {
@@ -777,10 +808,7 @@
       overlay.style.display = 'none';
     }, 240);
 
-    try {
-      var today = new Date().toISOString().slice(0, 10);
-      localStorage.setItem('listmate_daily_inspiration_seen', today);
-    } catch(e) {}
+    recordSeen();
   }
 
   function handleBackdropClick(e) {
@@ -802,8 +830,11 @@
 
   var hasTriggeredCadence = false;
 
-  function initCadence(forceDelay) {
+  function initCadence(forceDelay, serverUserInfo) {
     try {
+      if (serverUserInfo) {
+        syncWithServer(serverUserInfo);
+      }
       if (hasTriggeredCadence) return;
       var isDisabled = localStorage.getItem('listmate_daily_inspiration_disabled') === 'true';
       if (isDisabled) return;
@@ -849,7 +880,9 @@
     navigateQuote: navigateQuote,
     jumpToQuote: jumpToQuote,
     initCadence: initCadence,
-    checkIsTesterOrAdmin: checkIsTesterOrAdmin
+    checkIsTesterOrAdmin: checkIsTesterOrAdmin,
+    syncWithServer: syncWithServer,
+    recordSeen: recordSeen
   };
 
   // Auto-lifecycle bootstrap
