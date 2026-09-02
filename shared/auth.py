@@ -958,9 +958,14 @@ def register_auth_routes(app):
             
             updates = []
             params = []
-            if seen_date is not None:
+            if seen_date == "today" or seen_date is True:
+                updates.append("last_inspiration_seen_date = CURRENT_DATE")
+            elif seen_date in ("reset", "clear", False, ""):
+                updates.append("last_inspiration_seen_date = NULL")
+            elif seen_date is not None:
                 updates.append("last_inspiration_seen_date = ?")
-                params.append(seen_date if seen_date else None)
+                params.append(seen_date)
+            
             if enabled is not None:
                 updates.append("daily_inspiration_enabled = ?")
                 params.append(bool(enabled))

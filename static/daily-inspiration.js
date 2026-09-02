@@ -747,10 +747,20 @@
     }
   }
 
+  function getLocalDateString() {
+    var d = new Date();
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
   function recordSeen(dateStr) {
     try {
-      var d = dateStr || new Date().toISOString().slice(0, 10);
-      localStorage.setItem('listmate_daily_inspiration_seen', d);
+      var d = dateStr || getLocalDateString();
+      if (window.currentCfg && window.currentCfg.user_info) {
+        window.currentCfg.user_info.last_inspiration_seen_date = d;
+      }
       if (typeof fetch === 'function') {
         fetch('/api/user/inspiration', {
           method: 'POST',
@@ -758,20 +768,6 @@
           body: JSON.stringify({ seen_date: d }),
           credentials: 'include'
         }).catch(function() {});
-      }
-    } catch(e) {}
-  }
-
-  function syncWithServer(userInfo) {
-    try {
-      if (!userInfo) return;
-      if (userInfo.daily_inspiration_enabled === false) {
-        localStorage.setItem('listmate_daily_inspiration_disabled', 'true');
-      } else if (userInfo.daily_inspiration_enabled === true) {
-        localStorage.removeItem('listmate_daily_inspiration_disabled');
-      }
-      if (userInfo.last_inspiration_seen_date) {
-        localStorage.setItem('listmate_daily_inspiration_seen', userInfo.last_inspiration_seen_date);
       }
     } catch(e) {}
   }
@@ -830,15 +826,47 @@
 
   var hasTriggeredCadence = false;
 
+  function evaluateAndTrigger(userInfo, forceDelay) {
+    try {
+      if (hasTriggeredCadence) return;
+      if (!userInfo) return;
+
+      // If disabled by user setting in DB, do not show automatically
+      if (userInfo.daily_inspiration_enabled === false) return;
+
+      var today = getLocalDateString();
+      var lastSeen = userInfo.last_inspiration_seen_date;
+
+      // If already marked seen for today in DB, do not show automatically
+      if (lastSeen === today) {
+        return;
+      }
+
+      // If NULL, empty, or prior date -> pop open automatically
+      hasTriggeredCadence = true;
+      userInfo.last_inspiration_seen_date = today;
+
+      var delay = typeof forceDelay === 'number' ? forceDelay : 850;
+      setTimeout(function() {
+        // Defer if celebratory feedback modal or cleanup modal is currently visible
+        var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+        if (activeModal) {
+          setTimeout(function() {
+            var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+            if (!stillActive) {
+              openDrawer(false);
+            }
+          }, 2500);
+          return;
+        }
+        openDrawer(false);
+      }, delay);
+    } catch(e) {}
+  }
+
   function initCadence(forceDelay, serverUserInfo) {
     try {
-      if (serverUserInfo) {
-        syncWithServer(serverUserInfo);
-      }
       if (hasTriggeredCadence) return;
-      var isDisabled = localStorage.getItem('listmate_daily_inspiration_disabled') === 'true';
-      if (isDisabled) return;
-
       if (typeof window !== 'undefined' && window.location) {
         var path = window.location.pathname || '';
         if (path !== '/' && path !== '' && path !== '/index.html') {
@@ -846,25 +874,24 @@
         }
       }
 
-      var today = new Date().toISOString().slice(0, 10);
-      var lastSeen = localStorage.getItem('listmate_daily_inspiration_seen');
-      if (lastSeen !== today) {
-        hasTriggeredCadence = true;
-        var delay = typeof forceDelay === 'number' ? forceDelay : 850;
-        setTimeout(function() {
-          // Defer if celebratory feedback modal or cleanup modal is currently visible
-          var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
-          if (activeModal) {
-            setTimeout(function() {
-              var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
-              if (!stillActive) {
-                openDrawer(false);
-              }
-            }, 2500);
-            return;
-          }
-          openDrawer(false);
-        }, delay);
+      var uInfo = serverUserInfo || (window.currentCfg && window.currentCfg.user_info);
+      if (uInfo) {
+        evaluateAndTrigger(uInfo, forceDelay);
+        return;
+      }
+
+      // If serverUserInfo is not yet loaded in memory, fetch directly from database API
+      if (typeof fetch === 'function') {
+        fetch('/api/user/inspiration', { credentials: 'include' })
+          .then(function(res) {
+            if (!res.ok) return null;
+            return res.json();
+          })
+          .then(function(data) {
+            if (!data) return;
+            evaluateAndTrigger(data, forceDelay);
+          })
+          .catch(function() {});
       }
     } catch(e) {}
   }
@@ -881,7 +908,6 @@
     jumpToQuote: jumpToQuote,
     initCadence: initCadence,
     checkIsTesterOrAdmin: checkIsTesterOrAdmin,
-    syncWithServer: syncWithServer,
     recordSeen: recordSeen
   };
 

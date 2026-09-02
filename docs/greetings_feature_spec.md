@@ -127,21 +127,21 @@ export function getDailyGreeting(quotes: string[], seedDate: Date = new Date()):
 }
 ```
 
-### 5.2 Local Storage Cadence Management
-```typescript
-const STORAGE_KEY = 'listmate_daily_inspiration_seen';
+### 5.2 Database Cadence & Persistence Management (PostgreSQL Only)
 
-export function shouldShowDailyInspiration(): boolean {
-  const today = new Date().toISOString().slice(0, 10);
-  const lastSeen = localStorage.getItem(STORAGE_KEY);
-  return lastSeen !== today;
-}
+Daily cadence and feature toggle states are persisted exclusively in PostgreSQL (`auth_users` table), eliminating client-side `localStorage` double-gating:
 
-export function markDailyInspirationSeen(): void {
-  const today = new Date().toISOString().slice(0, 10);
-  localStorage.setItem(STORAGE_KEY, today);
-}
+```sql
+-- Schema columns on auth_users
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE;
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ```
+
+**Evaluation Rules**:
+1. If `auth_users.last_inspiration_seen_date` is `NULL` or a prior date (not equal to today), and `daily_inspiration_enabled` is `true`: automatically show the daily quote bottom drawer on visit.
+2. If `auth_users.last_inspiration_seen_date` equals today's date (`CURRENT_DATE`): do not automatically show the quote.
+3. When shown or closed, call `POST /api/user/inspiration` with `{ seen_date: 'YYYY-MM-DD' }` to record today's date in PostgreSQL.
+4. Settings toggle writes directly to PostgreSQL via `POST /api/user/inspiration` with `{ enabled: boolean }`.
 
 ---
 
