@@ -2149,6 +2149,9 @@ function showScreen(name){
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
       document.documentElement.scrollTop = 0;
+      if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
+        window.dailyInspirationEngine.initCadence(500);
+      }
     });
     updateFabVisibility();
   } else if(name==='globalVisits'){

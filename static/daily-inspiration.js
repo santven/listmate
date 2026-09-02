@@ -824,11 +824,11 @@
     }
   }
 
-  var hasTriggeredCadence = false;
+  var lastAutoPoppedDate = null;
+  var isEvaluatingCadence = false;
 
   function evaluateAndTrigger(userInfo, forceDelay) {
     try {
-      if (hasTriggeredCadence) return;
       if (!userInfo) return;
 
       // If disabled by user setting in DB, do not show automatically
@@ -839,20 +839,39 @@
 
       // If already marked seen for today in DB, do not show automatically
       if (lastSeen === today) {
+        lastAutoPoppedDate = today;
+        return;
+      }
+
+      // If we already popped the drawer open today during this running session, do not auto-pop again
+      if (lastAutoPoppedDate === today) {
         return;
       }
 
       // If NULL, empty, or prior date -> pop open automatically
-      hasTriggeredCadence = true;
+      lastAutoPoppedDate = today;
       userInfo.last_inspiration_seen_date = today;
+      if (window.currentCfg && window.currentCfg.user_info) {
+        window.currentCfg.user_info.last_inspiration_seen_date = today;
+      }
 
-      var delay = typeof forceDelay === 'number' ? forceDelay : 850;
+      var delay = typeof forceDelay === 'number' ? forceDelay : 650;
       setTimeout(function() {
+        // Only show if user is currently on the home screen
+        if (typeof window !== 'undefined' && window.location) {
+          var path = window.location.pathname || '';
+          if (path !== '/' && path !== '' && path !== '/index.html') {
+            return;
+          }
+          if (typeof window.currentScreen !== 'undefined' && window.currentScreen !== 'home') {
+            return;
+          }
+        }
         // Defer if celebratory feedback modal or cleanup modal is currently visible
-        var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+        var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show, #paywallModal.show');
         if (activeModal) {
           setTimeout(function() {
-            var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show');
+            var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.show, #actionConfirmModal.show, #paywallModal.show');
             if (!stillActive) {
               openDrawer(false);
             }
@@ -866,7 +885,11 @@
 
   function initCadence(forceDelay, serverUserInfo) {
     try {
-      if (hasTriggeredCadence) return;
+      var today = getLocalDateString();
+      if (lastAutoPoppedDate === today) {
+        return;
+      }
+
       if (typeof window !== 'undefined' && window.location) {
         var path = window.location.pathname || '';
         if (path !== '/' && path !== '' && path !== '/index.html') {
@@ -874,16 +897,20 @@
         }
       }
 
-      var uInfo = serverUserInfo || (window.currentCfg && window.currentCfg.user_info);
-      if (uInfo) {
-        evaluateAndTrigger(uInfo, forceDelay);
+      // If serverUserInfo has a last_inspiration_seen_date that equals today, we know it's already seen
+      if (serverUserInfo && serverUserInfo.last_inspiration_seen_date === today) {
+        lastAutoPoppedDate = today;
         return;
       }
 
-      // If serverUserInfo is not yet loaded in memory, fetch directly from database API
+      if (isEvaluatingCadence) return;
+      isEvaluatingCadence = true;
+
+      // Always fetch fresh authoritative state from database
       if (typeof fetch === 'function') {
-        fetch('/api/user/inspiration', { credentials: 'include' })
+        fetch('/api/user/inspiration?_=' + Date.now(), { credentials: 'include' })
           .then(function(res) {
+            isEvaluatingCadence = false;
             if (!res.ok) return null;
             return res.json();
           })
@@ -891,9 +918,19 @@
             if (!data) return;
             evaluateAndTrigger(data, forceDelay);
           })
-          .catch(function() {});
+          .catch(function() {
+            isEvaluatingCadence = false;
+            if (serverUserInfo) {
+              evaluateAndTrigger(serverUserInfo, forceDelay);
+            }
+          });
+      } else if (serverUserInfo) {
+        isEvaluatingCadence = false;
+        evaluateAndTrigger(serverUserInfo, forceDelay);
       }
-    } catch(e) {}
+    } catch(e) {
+      isEvaluatingCadence = false;
+    }
   }
 
   // Public API
@@ -916,14 +953,25 @@
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
-          initCadence(900);
+          initCadence(800);
         }, 300);
       });
     } else {
       setTimeout(function() {
-        initCadence(900);
+        initCadence(800);
       }, 300);
     }
+
+    // Auto-check on tab focus / visibility change (e.g. user leaves tab open overnight across days)
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        initCadence(500);
+      }
+    });
+
+    window.addEventListener('focus', function() {
+      initCadence(500);
+    });
 
     // Keyboard shortcut (Escape to close)
     document.addEventListener('keydown', function(e) {
@@ -935,5 +983,4 @@
       }
     });
   }
-
 })(typeof window !== 'undefined' ? window : this);
