@@ -548,6 +548,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     }
   });
 </script>
+  <script src="/static/daily-inspiration.js"></script>
 </head>
 <body>
 
@@ -572,6 +573,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
       <a id="menuSwitchHouseholdLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuSwitchHouseholdLink', event)) return false; showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
+      <a href="#" onclick="if(window.dailyInspirationEngine) window.dailyInspirationEngine.openDrawer(true); if(typeof toggleBurger==='function') toggleBurger(); return false;">✨ Daily Inspiration</a>
       <a href="#" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.resetAndStart(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 Feature Discovery Tips</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
