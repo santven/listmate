@@ -1651,7 +1651,12 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
     body_txt = (
         f"Hi there,\n\n"
         f"Your friend {inviter_name} has been using ListMate to manage their household grocery shopping and thought you might find it useful!\n\n"
-        f"ListMate is a shared, store-specific grocery list app designed to make household shopping a breeze.\n\n"
+        f"ListMate is the ultimate shared grocery list app designed to make household shopping a breeze.\n\n"
+        f"Here is what you can do with ListMate:\n"
+        f"- 🛒 Create Store-Specific Lists: Organize your shopping by store so you never miss an aisle.\n"
+        f"- 🤖 Get AI Insights: Receive smart purchase pattern suggestions based on your habits.\n"
+        f"- 🍳 Generate Recipes: Turn your grocery items into delicious meals with AI recipe generation.\n"
+        f"- 👨‍👩‍👧‍👦 Share with Household: Keep everyone in sync in real-time.\n\n"
         f"Download the app here:\n"
         f"App Store: https://grocerlist.app\n"
         f"Google Play: https://grocerlist.app\n"
@@ -1661,10 +1666,17 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
     
     body_html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
-        <h2 style="color: #10b981;">You're Invited!</h2>
+        <h2 style="color: #10b981;">You're Invited to ListMate! 🎉</h2>
         <p>Hi there,</p>
         <p>Your friend <strong>{inviter_name}</strong> has been using ListMate to manage their household grocery shopping and thought you might find it useful!</p>
-        <p>ListMate is a shared, store-specific grocery list app designed to make household shopping a breeze.</p>
+        <p>ListMate is the ultimate shared grocery list app designed to make household shopping a breeze. Here is what makes it special:</p>
+        
+        <ul style="line-height: 1.6; padding-left: 20px; color: #4b5563; margin-bottom: 24px;">
+            <li style="margin-bottom: 8px;"><strong>🛒 Store-Specific Lists:</strong> Organize your shopping by store so you never miss an aisle.</li>
+            <li style="margin-bottom: 8px;"><strong>🤖 AI Insights:</strong> Receive smart purchase pattern suggestions based on your habits.</li>
+            <li style="margin-bottom: 8px;"><strong>🍳 Recipe Generation:</strong> Turn your grocery items into delicious meals with AI recipe ideas.</li>
+            <li style="margin-bottom: 8px;"><strong>👨‍👩‍👧‍👦 Share with Household:</strong> Keep everyone in your home in sync in real-time.</li>
+        </ul>
         
         <div style="margin: 30px 0; text-align: center;">
             <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png" alt="Download on the App Store" width="140" style="width: 140px; border-radius: 8px;"></a>
