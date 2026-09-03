@@ -4642,8 +4642,8 @@ async function deleteSavedRecipe(id) {
     <div id="shareAppError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
     
     <div style="display:flex; gap:10px; margin-bottom:24px;">
-      <button class="btn btn-outline" style="flex:1;" onclick="closeShareAppModal()">Cancel</button>
-      <button class="btn btn-primary" id="shareAppSubmitBtn" style="flex:2;" onclick="submitShareApp()">Send Invites</button>
+      <button id="shareAppSubmitBtn" onclick="submitShareApp()" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Send Invites</button>
+      <button onclick="closeShareAppModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
 
     <div style="text-align:center; padding-top:16px; border-top:1px solid var(--border);">
