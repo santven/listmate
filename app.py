@@ -638,9 +638,8 @@ def _serialize_feedback(row):
 @require_user
 def get_unacknowledged_resolved_feedback():
     """Get resolved feedback for current user that hasn't been acknowledged in-app yet."""
-    email = get_email()
-    hhid = _hh()
-    if not email and not hhid:
+    email = (get_email() or "").strip()
+    if not email:
         return jsonify({"notifications": []})
         
     db = get_db()
@@ -649,12 +648,12 @@ def get_unacknowledged_resolved_feedback():
             """SELECT id, public_title, public_description, public_type, status, 
                       build_number, resolution_note, resolved_at, acknowledged_at
                FROM app_feedback
-               WHERE (user_email = %s OR household_id = %s)
+               WHERE LOWER(TRIM(user_email)) = LOWER(TRIM(%s))
                  AND status = 'resolved'
                  AND acknowledged_at IS NULL
                ORDER BY resolved_at DESC NULLS LAST
                LIMIT 5""",
-            (email, hhid)
+            (email,)
         ).fetchall()
         return jsonify({"notifications": [_serialize_feedback(r) for r in rows]})
     except Exception as e:
@@ -667,8 +666,7 @@ def get_unacknowledged_resolved_feedback():
 @require_user
 def acknowledge_feedback_resolution(fb_id):
     """Mark a resolved feedback notification as acknowledged by the user."""
-    email = get_email()
-    hhid = _hh()
+    email = (get_email() or "").strip()
     is_adm = is_admin_user()
     
     db = get_db()
@@ -677,8 +675,8 @@ def acknowledge_feedback_resolution(fb_id):
             db.execute("UPDATE app_feedback SET acknowledged_at = NOW() WHERE id = %s", (fb_id,))
         else:
             db.execute(
-                "UPDATE app_feedback SET acknowledged_at = NOW() WHERE id = %s AND (user_email = %s OR household_id = %s)",
-                (fb_id, email, hhid)
+                "UPDATE app_feedback SET acknowledged_at = NOW() WHERE id = %s AND LOWER(TRIM(user_email)) = LOWER(TRIM(%s))",
+                (fb_id, email)
             )
         db.commit()
         return jsonify({"ok": True})
