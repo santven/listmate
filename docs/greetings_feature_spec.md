@@ -148,6 +148,7 @@ ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEA
    - Evaluated when switching back to the active tab / gaining window focus (`visibilitychange` / `focus`)
 4. When shown or closed, call `POST /api/user/inspiration` with `{ seen_date: 'YYYY-MM-DD' }` to record today's date in PostgreSQL.
 5. Settings toggle writes directly to PostgreSQL via `POST /api/user/inspiration` with `{ enabled: boolean }`.
+6. **In-Drawer Opt-Out Switch**: The bottom drawer includes an intuitive toggle switch allowing users to turn off daily greetings on the fly without navigating away to Settings. Toggling updates PostgreSQL, syncs settings page controls, and modifies in-memory state immediately.
 
 ---
 
