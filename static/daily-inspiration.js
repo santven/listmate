@@ -520,9 +520,62 @@
     "era": "Traditional"
   }
 ];
-  var CSS_STYLES = ".daily-inspiration-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 10006;\n  background: rgba(15, 23, 42, 0.45);\n  backdrop-filter: blur(2.5px);\n  -webkit-backdrop-filter: blur(2.5px);\n  display: none;\n  align-items: flex-end;\n  justify-content: center;\n  opacity: 0;\n  transition: opacity 0.24s ease-out;\n}\n.daily-inspiration-overlay.show {\n  opacity: 1;\n}\n.daily-inspiration-drawer {\n  width: 100%;\n  max-width: 480px;\n  background: #ffffff;\n  border-radius: 24px 24px 0 0;\n  padding: 16px 20px max(24px, env(safe-area-inset-bottom)) 20px;\n  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22);\n  transform: translateY(100%);\n  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);\n  box-sizing: border-box;\n}\n.daily-inspiration-overlay.show .daily-inspiration-drawer {\n  transform: translateY(0);\n}\n.inspiration-handle {\n  width: 40px;\n  height: 4px;\n  background: #cbd5e1;\n  border-radius: 2px;\n  margin: 0 auto 12px auto;\n}\n.inspiration-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 6px;\n}\n.inspiration-header-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.inspiration-sparkle {\n  font-size: 18px;\n  line-height: 1;\n}\n.inspiration-title {\n  font-size: 17px;\n  font-weight: 700;\n  color: #1e293b;\n  letter-spacing: -0.2px;\n}\n.inspiration-badge {\n  font-size: 11px;\n  font-weight: 700;\n  background: #ecfdf5;\n  color: #047857;\n  padding: 2px 8px;\n  border-radius: 12px;\n  border: 1px solid #a7f3d0;\n  letter-spacing: 0.2px;\n}\n.inspiration-close-btn {\n  background: #f1f5f9;\n  border: none;\n  font-size: 15px;\n  color: #64748b;\n  cursor: pointer;\n  width: 30px;\n  height: 30px;\n  border-radius: 50%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: background 0.15s ease, color 0.15s ease;\n}\n.inspiration-close-btn:hover {\n  background: #e2e8f0;\n  color: #1e293b;\n}\n.inspiration-greeting-line {\n  font-size: 13px;\n  font-weight: 600;\n  color: #059669;\n  margin-bottom: 12px;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.inspiration-tester-bar {\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 10px;\n  padding: 8px 10px;\n  margin-bottom: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.tester-nav-btn {\n  background: #ffffff;\n  border: 1px solid #cbd5e1;\n  border-radius: 6px;\n  padding: 6px 10px;\n  font-size: 12px;\n  font-weight: 600;\n  color: #334155;\n  cursor: pointer;\n  white-space: nowrap;\n  transition: all 0.15s;\n}\n.tester-nav-btn:hover {\n  background: #f1f5f9;\n  border-color: #94a3b8;\n}\n.tester-counter-wrap {\n  flex: 1;\n  min-width: 0;\n}\n.tester-quote-select {\n  width: 100%;\n  font-size: 12px;\n  padding: 5px 6px;\n  border-radius: 6px;\n  border: 1px solid #cbd5e1;\n  background: #ffffff;\n  color: #1e293b;\n  font-weight: 500;\n  outline: none;\n}\n.inspiration-content-card {\n  background: linear-gradient(135deg, #fbfdf9 0%, #f4f9f4 100%);\n  border: 1.5px solid #d1fae5;\n  border-radius: 16px;\n  padding: 16px 16px 14px 16px;\n  margin-bottom: 16px;\n  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.05);\n}\n.inspiration-quote-text {\n  font-size: 15.5px;\n  font-style: italic;\n  line-height: 1.55;\n  color: #0f172a;\n  font-weight: 500;\n}\n.inspiration-original-wrap {\n  background: rgba(16, 185, 129, 0.08);\n  border-left: 3px solid #059669;\n  border-radius: 0 8px 8px 0;\n  padding: 8px 12px;\n  margin-top: 10px;\n}\n.inspiration-original-text {\n  font-size: 14px;\n  line-height: 1.6;\n  color: #065f46;\n  font-weight: 600;\n  font-family: system-ui, -apple-system, sans-serif;\n}\n.inspiration-footer-meta {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 12px;\n  padding-top: 10px;\n  border-top: 1px dashed #cbd5e1;\n  gap: 4px;\n}\n.inspiration-author-text {\n  font-size: 13px;\n  font-weight: 700;\n  color: #334155;\n}\n.inspiration-era-text {\n  font-size: 12px;\n  font-weight: 500;\n  color: #64748b;\n}\n.inspiration-actions {\n  display: flex;\n  gap: 10px;\n}\n.inspiration-btn-close, .inspiration-btn-gotit {\n  width: 100%;\n  background: linear-gradient(135deg, #059669, #10b981);\n  color: #ffffff;\n  border: none;\n  padding: 13px;\n  border-radius: 12px;\n  font-size: 15px;\n  font-weight: 700;\n  cursor: pointer;\n  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);\n  transition: opacity 0.15s;\n}\n.inspiration-btn-gotit:hover {\n  opacity: 0.95;\n}";
+  var CSS_STYLES = ".daily-inspiration-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 10006;\n  background: rgba(15, 23, 42, 0.45);\n  backdrop-filter: blur(2.5px);\n  -webkit-backdrop-filter: blur(2.5px);\n  display: none;\n  align-items: flex-end;\n  justify-content: center;\n  opacity: 0;\n  transition: opacity 0.24s ease-out;\n}\n.daily-inspiration-overlay.show {\n  opacity: 1;\n}\n.daily-inspiration-drawer {\n  width: 100%;\n  max-width: 480px;\n  background: #ffffff;\n  border-radius: 24px 24px 0 0;\n  padding: 16px 20px max(24px, env(safe-area-inset-bottom)) 20px;\n  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22);\n  transform: translateY(100%);\n  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);\n  box-sizing: border-box;\n}\n.daily-inspiration-overlay.show .daily-inspiration-drawer {\n  transform: translateY(0);\n}\n.inspiration-handle {\n  width: 40px;\n  height: 4px;\n  background: #cbd5e1;\n  border-radius: 2px;\n  margin: 0 auto 12px auto;\n}\n.inspiration-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 6px;\n}\n.inspiration-header-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.inspiration-sparkle {\n  font-size: 18px;\n  line-height: 1;\n}\n.inspiration-title {\n  font-size: 17px;\n  font-weight: 700;\n  color: #1e293b;\n  letter-spacing: -0.2px;\n}\n.inspiration-badge {\n  font-size: 11px;\n  font-weight: 700;\n  background: #ecfdf5;\n  color: #047857;\n  padding: 2px 8px;\n  border-radius: 12px;\n  border: 1px solid #a7f3d0;\n  letter-spacing: 0.2px;\n}\n.inspiration-close-btn {\n  background: #f1f5f9;\n  border: none;\n  font-size: 15px;\n  color: #64748b;\n  cursor: pointer;\n  width: 30px;\n  height: 30px;\n  border-radius: 50%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: background 0.15s ease, color 0.15s ease;\n}\n.inspiration-close-btn:hover {\n  background: #e2e8f0;\n  color: #1e293b;\n}\n.inspiration-greeting-line {\n  font-size: 13px;\n  font-weight: 600;\n  color: #059669;\n  margin-bottom: 12px;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.inspiration-tester-bar {\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 10px;\n  padding: 8px 10px;\n  margin-bottom: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.tester-nav-btn {\n  background: #ffffff;\n  border: 1px solid #cbd5e1;\n  border-radius: 6px;\n  padding: 6px 10px;\n  font-size: 12px;\n  font-weight: 600;\n  color: #334155;\n  cursor: pointer;\n  white-space: nowrap;\n  transition: all 0.15s;\n}\n.tester-nav-btn:hover {\n  background: #f1f5f9;\n  border-color: #94a3b8;\n}\n.tester-counter-wrap {\n  flex: 1;\n  min-width: 0;\n}\n.tester-quote-select {\n  width: 100%;\n  font-size: 12px;\n  padding: 5px 6px;\n  border-radius: 6px;\n  border: 1px solid #cbd5e1;\n  background: #ffffff;\n  color: #1e293b;\n  font-weight: 500;\n  outline: none;\n}\n.inspiration-content-card {\n  background: linear-gradient(135deg, #fbfdf9 0%, #f4f9f4 100%);\n  border: 1.5px solid #d1fae5;\n  border-radius: 16px;\n  padding: 16px 16px 14px 16px;\n  margin-bottom: 16px;\n  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.05);\n}\n.inspiration-quote-text {\n  font-size: 15.5px;\n  font-style: italic;\n  line-height: 1.55;\n  color: #0f172a;\n  font-weight: 500;\n}\n.inspiration-original-wrap {\n  background: rgba(16, 185, 129, 0.08);\n  border-left: 3px solid #059669;\n  border-radius: 0 8px 8px 0;\n  padding: 8px 12px;\n  margin-top: 10px;\n}\n.inspiration-original-text {\n  font-size: 14px;\n  line-height: 1.6;\n  color: #065f46;\n  font-weight: 600;\n  font-family: system-ui, -apple-system, sans-serif;\n}\n.inspiration-footer-meta {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 12px;\n  padding-top: 10px;\n  border-top: 1px dashed #cbd5e1;\n  gap: 4px;\n}\n.inspiration-author-text {\n  font-size: 13px;\n  font-weight: 700;\n  color: #334155;\n}\n.inspiration-era-text {\n  font-size: 12px;\n  font-weight: 500;\n  color: #64748b;\n}\n.inspiration-actions {\n  display: flex;\n  gap: 10px;\n}\n.inspiration-btn-close, .inspiration-btn-gotit {\n  width: 100%;\n  background: linear-gradient(135deg, #059669, #10b981);\n  color: #ffffff;\n  border: none;\n  padding: 13px;\n  border-radius: 12px;\n  font-size: 15px;\n  font-weight: 700;\n  cursor: pointer;\n  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);\n  transition: opacity 0.15s;\n}\n.inspiration-btn-gotit:hover {\n  opacity: 0.95;\n}\n.inspiration-toggle-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 12px;\n  padding: 10px 14px;\n  margin-bottom: 14px;\n  gap: 12px;\n  box-sizing: border-box;\n}\n.inspiration-toggle-text {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  flex: 1;\n  min-width: 0;\n}\n.inspiration-toggle-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: #1e293b;\n  line-height: 1.3;\n}\n.inspiration-toggle-hint {\n  font-size: 11.5px;\n  color: #64748b;\n  line-height: 1.3;\n  transition: color 0.2s ease;\n}\n.inspiration-switch {\n  position: relative;\n  display: inline-block;\n  width: 44px;\n  height: 24px;\n  flex-shrink: 0;\n  cursor: pointer;\n}\n.inspiration-switch input {\n  opacity: 0;\n  width: 0;\n  height: 0;\n  position: absolute;\n}\n.inspiration-switch-slider {\n  position: absolute;\n  cursor: pointer;\n  inset: 0;\n  background-color: #cbd5e1;\n  transition: 0.2s ease;\n  border-radius: 24px;\n}\n.inspiration-switch-slider:before {\n  position: absolute;\n  content: '';\n  height: 18px;\n  width: 18px;\n  left: 3px;\n  bottom: 3px;\n  background-color: white;\n  transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);\n  border-radius: 50%;\n  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);\n}\n.inspiration-switch input:checked + .inspiration-switch-slider {\n  background-color: #059669;\n}\n.inspiration-switch input:checked + .inspiration-switch-slider:before {\n  transform: translateX(20px);\n}";
 
   var currentQuoteIndex = 0;
+  var isDailyEnabled = true;
+
+  function syncToggleUI(enabled) {
+    isDailyEnabled = (enabled !== false);
+    var cb = document.getElementById('inspirationDrawerCheckbox');
+    var hint = document.getElementById('inspirationToggleHint');
+    if (cb) {
+      cb.checked = isDailyEnabled;
+    }
+    if (hint) {
+      if (isDailyEnabled) {
+        hint.textContent = "Turn off if you don't want daily greetings";
+        hint.style.color = "#64748b";
+      } else {
+        hint.textContent = "Turned off. You can re-enable anytime here or in Settings";
+        hint.style.color = "#b45309";
+      }
+    }
+  }
+
+  function handleDrawerToggle(checked) {
+    isDailyEnabled = !!checked;
+    syncToggleUI(isDailyEnabled);
+
+    // Synchronize in-memory user configuration
+    if (window.currentCfg && window.currentCfg.user_info) {
+      window.currentCfg.user_info.daily_inspiration_enabled = isDailyEnabled;
+    }
+
+    // Synchronize Settings page toggle if mounted
+    var settingsToggle = document.getElementById('inspirationToggle');
+    if (settingsToggle) {
+      settingsToggle.checked = isDailyEnabled;
+      var statusText = document.getElementById('inspirationStatusText');
+      if (statusText) {
+        statusText.textContent = isDailyEnabled
+          ? 'Displays a daily food proverb or culinary quote on your first visit each day.'
+          : 'Daily culinary inspiration is currently disabled.';
+      }
+    }
+
+    // Persist immediately to PostgreSQL database via API
+    if (typeof fetch === 'function') {
+      fetch('/api/user/inspiration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: isDailyEnabled }),
+        credentials: 'include'
+      }).catch(function(err) {
+        console.error('Failed to save inspiration preference:', err);
+      });
+    }
+  }
   var isTesterMode = false;
 
   // ── Inject Styles ─────────────────────────────────────────────
@@ -646,6 +699,17 @@
       '      <div id="inspirationAuthor" class="inspiration-author-text"></div>',
       '      <div id="inspirationEra" class="inspiration-era-text"></div>',
       '    </div>',
+      '  </div>',
+      '  <!-- Daily Cadence Opt-out Toggle -->',
+      '  <div class="inspiration-toggle-row">',
+      '    <div class="inspiration-toggle-text">',
+      '      <span class="inspiration-toggle-title">Show daily inspiration</span>',
+      '      <span id="inspirationToggleHint" class="inspiration-toggle-hint">Turn off if you don\'t want daily greetings</span>',
+      '    </div>',
+      '    <label class="inspiration-switch" aria-label="Toggle daily inspiration greetings">',
+      '      <input type="checkbox" id="inspirationDrawerCheckbox" checked onchange="window.dailyInspirationEngine.handleDrawerToggle(this.checked)">',
+      '      <span class="inspiration-switch-slider"></span>',
+      '    </label>',
       '  </div>',
       '  <!-- Actions -->',
       '  <div class="inspiration-actions">',
@@ -779,6 +843,12 @@
 
     isTesterMode = checkIsTesterOrAdmin();
 
+    var enabled = true;
+    if (window.currentCfg && window.currentCfg.user_info && window.currentCfg.user_info.daily_inspiration_enabled !== undefined) {
+      enabled = window.currentCfg.user_info.daily_inspiration_enabled !== false;
+    }
+    syncToggleUI(enabled);
+
     if (typeof specificIndex === 'number' && specificIndex >= 0 && specificIndex < CULINARY_QUOTES.length) {
       currentQuoteIndex = specificIndex;
     } else {
@@ -849,6 +919,10 @@
     try {
       if (!userInfo) return;
 
+      if (userInfo.daily_inspiration_enabled !== undefined) {
+        syncToggleUI(userInfo.daily_inspiration_enabled !== false);
+      }
+
       // If disabled by user setting in DB, do not show automatically
       if (userInfo.daily_inspiration_enabled === false) return;
 
@@ -891,6 +965,13 @@
         return;
       }
 
+      if (serverUserInfo && serverUserInfo.daily_inspiration_enabled !== undefined) {
+        syncToggleUI(serverUserInfo.daily_inspiration_enabled !== false);
+      }
+      if (serverUserInfo && serverUserInfo.daily_inspiration_enabled === false) {
+        return;
+      }
+
       var today = getLocalDateString();
 
       // If serverUserInfo has a last_inspiration_seen_date that equals today, we know it's already seen
@@ -911,6 +992,9 @@
           })
           .then(function(data) {
             if (!data) return;
+            if (data.daily_inspiration_enabled !== undefined) {
+              syncToggleUI(data.daily_inspiration_enabled !== false);
+            }
             evaluateAndTrigger(data, forceDelay);
           })
           .catch(function() {
@@ -936,6 +1020,8 @@
     openDrawer: openDrawer,
     closeDrawer: closeDrawer,
     handleBackdropClick: handleBackdropClick,
+    handleDrawerToggle: handleDrawerToggle,
+    syncToggleUI: syncToggleUI,
     navigateQuote: navigateQuote,
     jumpToQuote: jumpToQuote,
     initCadence: initCadence,
