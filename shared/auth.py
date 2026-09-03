@@ -922,14 +922,20 @@ def register_auth_routes(app):
             import base64, json
             data = json.loads(base64.urlsafe_b64decode(token.encode()).decode())
             uid = data.get("uid")
-            if not uid:
+            email = data.get("email")
+            if not uid and not email:
                 return "Invalid token", 400
             
             _init_schema()
-            user_row = _one("SELECT email FROM auth_users WHERE id = ?", (uid,))
-            if user_row and user_row.get("email"):
-                suppress_email(user_row["email"], reason="unsubscribe")
-            _run("UPDATE auth_household_members SET marketing_opt_in = FALSE WHERE user_id = ?", (uid,))
+            if email:
+                suppress_email(email, reason="unsubscribe")
+            elif uid:
+                user_row = _one("SELECT email FROM auth_users WHERE id = ?", (uid,))
+                if user_row and user_row.get("email"):
+                    suppress_email(user_row["email"], reason="unsubscribe")
+            
+            if uid:
+                _run("UPDATE auth_household_members SET marketing_opt_in = FALSE WHERE user_id = ?", (uid,))
             
             return """
             <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; } .success { color: #10b981; font-size: 48px; margin-bottom: 20px; } h2 { color: #333; } p { color: #666; }</style></head>

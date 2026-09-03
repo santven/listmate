@@ -426,6 +426,12 @@
 
   <!-- Support & Feedback -->
   <div class="card">
+  <div class="card">
+    <h2>🎁 Share ListMate</h2>
+    <p style="font-size: 14px; margin-bottom: 12px; color: var(--muted);">Know someone who could use a better grocery list? Send them a link to download the app.</p>
+    <button class="btn btn-outline" style="width: 100%; border-radius: 8px;" onclick="showShareAppModal();">Invite Friends</button>
+  </div>
+
     <h2>💬 Support & Feedback</h2>
     <p>Found a bug, have a suggestion, or just want to say hi? We'd love to hear from you!</p>
     <button onclick="document.getElementById('feedbackModal').classList.add('active')" style="width:100%; padding:12px; background:var(--green); border:none; color:#fff; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">
@@ -1787,7 +1793,58 @@ function closeFeedbackModal() {
   updateFeedbackStars();
 }
 
-async function submitFeedback() {
+async 
+function showShareAppModal() {
+  document.getElementById('shareAppEmails').value = '';
+  document.getElementById('shareAppError').style.display = 'none';
+  document.getElementById('shareAppModal').classList.add('active');
+}
+
+function closeShareAppModal(e) {
+  if(e && e.target !== e.currentTarget && e.target.classList.contains('modal-overlay') === false) return;
+  document.getElementById('shareAppModal').classList.remove('active');
+}
+
+async function submitShareApp() {
+  const emails = document.getElementById('shareAppEmails').value.trim();
+  const errEl = document.getElementById('shareAppError');
+  if(!emails) {
+    errEl.textContent = 'Please enter at least one email address.';
+    errEl.style.display = 'block';
+    return;
+  }
+  
+  const btn = document.getElementById('shareAppSubmitBtn');
+  const oldText = btn.textContent;
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  
+  try {
+    const res = await fetch('/api/share/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails })
+    });
+    const data = await res.json();
+    if(res.ok) {
+      closeShareAppModal();
+      if(typeof toast === 'function') toast(`🎉 ${data.sent_count} Invites sent successfully!`);
+      else alert(`🎉 ${data.sent_count} Invites sent successfully!`);
+    } else {
+      errEl.textContent = data.error || 'Failed to send invitations.';
+      errEl.style.display = 'block';
+    }
+  } catch(err) {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
+
+function submitFeedback() {
   const type = document.getElementById('feedbackType').value;
   const msg = document.getElementById('feedbackMessage').value.trim();
   const errEl = document.getElementById('feedbackError');
@@ -2454,6 +2511,31 @@ if (document.getElementById('btnActionCancel')) {
 </div>
 
 <!-- Feedback Modal -->
+
+<div class="modal-overlay" id="shareAppModal" onclick="closeShareAppModal(event)">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">🎁 Share ListMate</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">Know someone who could use a better grocery list? Send them a link to download the app.</p>
+    
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Friend's Emails (comma separated)</label>
+    <textarea id="shareAppEmails" rows="4" placeholder="friend1@example.com, friend2@example.com" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
+    
+    <div id="shareAppError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
+    
+    <div style="display:flex; gap:10px; margin-bottom:24px;">
+      <button class="btn btn-outline" style="flex:1;" onclick="closeShareAppModal()">Cancel</button>
+      <button class="btn btn-primary" id="shareAppSubmitBtn" style="flex:2; background-color: var(--green); color: #fff; border: none; border-radius: 8px; font-weight: 600;" onclick="submitShareApp()">Send Invites</button>
+    </div>
+
+    <div style="text-align:center; padding-top:16px; border-top:1px solid var(--border);">
+      <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">Also available at <a href="https://grocerlist.app" target="_blank" style="color:var(--green-dark); font-weight:600;">grocerlist.app</a></p>
+      <div style="display:flex; justify-content:center; gap:12px;">
+        <a href="https://grocerlist.app" target="_blank"><img src="/static/app_store_badge.png" alt="App Store" style="height:40px; border-radius:6px; object-fit:contain;"></a>
+        <a href="https://grocerlist.app" target="_blank"><img src="/static/google_play_badge.png" alt="Google Play" style="height:40px; border-radius:6px; object-fit:contain;"></a>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="feedbackModal">
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left;">
     <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">💬 Send Feedback</h3>
