@@ -575,6 +575,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="if(window.dailyInspirationEngine) window.dailyInspirationEngine.openDrawer(true); if(typeof toggleBurger==='function') toggleBurger(); return false;">✨ Daily Inspiration</a>
       <a href="#" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.resetAndStart(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 Feature Discovery Tips</a>
+      <a href="#" onclick="if(typeof toggleBurger==='function') toggleBurger(); showShareAppModal(); return false;">🎁 Share ListMate</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
@@ -4629,6 +4630,25 @@ async function deleteSavedRecipe(id) {
 </div>
 
 <!-- Feedback Modal -->
+
+<div class="modal-overlay" id="shareAppModal" onclick="closeShareAppModal(event)">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">🎁 Share ListMate</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">Know someone who could use a better grocery list? Send them a link to download the app.</p>
+    
+    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text);">Friend's Emails (comma separated)</label>
+    <textarea id="shareAppEmails" rows="4" placeholder="friend1@example.com, friend2@example.com" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); font-size:16px; resize:vertical; font-family:inherit; margin-bottom:16px;"></textarea>
+    
+    <div id="shareAppError" style="color:#d94a4a; font-size:13px; margin-bottom:10px; display:none;"></div>
+    
+    <div style="display:flex; gap:10px; margin-bottom:24px;">
+      <button id="shareAppSubmitBtn" onclick="submitShareApp()" style="flex:1; background:var(--green); border:none; color:#fff; padding:14px; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Send Invites</button>
+      <button onclick="closeShareAppModal()" style="padding:14px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+
+    
+  </div>
+</div>
 <div class="modal-overlay" id="feedbackModal">
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:left;">
     <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">💬 Send Feedback</h3>
@@ -4774,6 +4794,55 @@ async function dismissResolvedFeedbackModal() {
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(checkResolvedFeedbackNotifications, 800);
 });
+
+function showShareAppModal() {
+  document.getElementById('shareAppEmails').value = '';
+  document.getElementById('shareAppError').style.display = 'none';
+  document.getElementById('shareAppModal').classList.add('active');
+}
+
+function closeShareAppModal(e) {
+  if(e && e.target !== e.currentTarget && e.target.classList.contains('modal-overlay') === false) return;
+  document.getElementById('shareAppModal').classList.remove('active');
+}
+
+async function submitShareApp() {
+  const emails = document.getElementById('shareAppEmails').value.trim();
+  const errEl = document.getElementById('shareAppError');
+  if(!emails) {
+    errEl.textContent = 'Please enter at least one email address.';
+    errEl.style.display = 'block';
+    return;
+  }
+  
+  const btn = document.getElementById('shareAppSubmitBtn');
+  const oldText = btn.textContent;
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  
+  try {
+    const res = await fetch('/api/share/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails })
+    });
+    const data = await res.json();
+    if(res.ok) {
+      closeShareAppModal();
+      if(typeof toast === 'function') toast(`🎉 ${data.sent_count} Invites sent successfully!`);
+    } else {
+      errEl.textContent = data.error || 'Failed to send invitations.';
+      errEl.style.display = 'block';
+    }
+  } catch(err) {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
 function showFeedbackModal() {
   if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
   document.getElementById('feedbackModal').classList.add('active');
