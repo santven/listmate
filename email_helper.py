@@ -1682,7 +1682,7 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
     
     payload = {
         "personalizations": [{"to": [{"email": to_email}]}],
-        "from": {"email": SENDER_EMAIL, "name": "ListMate"},
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "subject": subject,
         "content": [
             {"type": "text/plain", "value": body_txt + footer_txt},
@@ -1690,4 +1690,5 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
         ]
     }
     
-    return _send_via_api(SENDGRID_API_KEY, payload)
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    return _send_via_api(api_key, payload)
