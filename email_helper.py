@@ -1667,8 +1667,8 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
         <p>ListMate is a shared, store-specific grocery list app designed to make household shopping a breeze.</p>
         
         <div style="margin: 30px 0; text-align: center;">
-            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://grocerlist.app/app-store-badge.png" alt="Download on the App Store" width="140" style="width: 140px; border-radius: 8px;"></a>
-            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://grocerlist.app/google-play-badge.png" alt="Get it on Google Play" width="140" style="width: 140px; border-radius: 8px;"></a>
+            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png" alt="Download on the App Store" width="140" style="width: 140px; border-radius: 8px;"></a>
+            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png" alt="Get it on Google Play" width="140" style="width: 140px; border-radius: 8px;"></a>
         </div>
         <div style="text-align: center; margin-bottom: 20px;">
             <a href="https://grocerlist.app" style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Visit Web Portal</a>
