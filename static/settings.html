@@ -608,6 +608,13 @@ function toggleInspirationSetting(checked) {
     setTimeout(() => { success.style.display = 'none'; }, 3000);
   }
 
+  if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.syncToggleUI === 'function') {
+    window.dailyInspirationEngine.syncToggleUI(checked);
+  }
+  if (window.currentCfg && window.currentCfg.user_info) {
+    window.currentCfg.user_info.daily_inspiration_enabled = checked;
+  }
+
   fetch('/api/user/inspiration', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
