@@ -578,6 +578,58 @@ def _find_household_id_from_uid(uid, event=None):
     return None
 
 
+
+@app.route("/api/share/invite", methods=["POST"])
+@require_user
+def share_invite():
+    data = request.json or {}
+    emails_str = data.get("emails", "")
+    if not emails_str:
+        return jsonify({"error": "No emails provided"}), 400
+        
+    sender_email = get_email()
+    hhid = _hh()
+    user_name = get_display_name() or "Someone"
+    
+    # Split, strip, deduplicate
+    import re
+    raw_emails = [e.strip() for e in emails_str.replace(';', ',').split(',')]
+    valid_emails = []
+    
+    # Basic email regex
+    email_regex = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+    for e in raw_emails:
+        if e and email_regex.match(e) and e not in valid_emails:
+            valid_emails.append(e)
+            
+    if not valid_emails:
+        return jsonify({"error": "No valid emails found"}), 400
+        
+    if len(valid_emails) > 10:
+        valid_emails = valid_emails[:10]
+        
+    db = get_db()
+    sent_count = 0
+    try:
+        from email_helper import send_app_invite
+        for recipient in valid_emails:
+            # Insert into DB
+            db.execute(
+                "INSERT INTO app_invites (sender_email, household_id, recipient_email) VALUES (%s, %s, %s)",
+                (sender_email, hhid, recipient)
+            )
+            # Send Email
+            success = send_app_invite(to_email=recipient, inviter_name=user_name)
+            if success:
+                sent_count += 1
+        db.commit()
+        return jsonify({"ok": True, "sent_count": sent_count, "processed": len(valid_emails)})
+    except Exception as e:
+        print(f"Error sending invites: {e}")
+        return jsonify({"error": "Failed to process invitations"}), 500
+    finally:
+        close_db(db)
+
 @app.route("/api/feedback", methods=["POST"])
 @require_user
 def submit_feedback():

@@ -476,6 +476,41 @@ def _get_unsub_link(user_id: int) -> str:
     token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
     return f"{BASE_URL}/api/unsubscribe?token={token}"
 
+def _get_unsub_link_email(email: str) -> str:
+    if not email: return ""
+    import base64, json
+    data = {"email": email}
+    token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+    return f"{BASE_URL}/api/unsubscribe?token={token}"
+
+def _get_footer_blocks_email(email: str = "", purpose: str = "marketing emails", context_reason: str = "You received this email because you were invited to ListMate.") -> tuple:
+    unsub_link = _get_unsub_link_email(email) if email else ""
+    txt_lines = [
+        "\n\n--",
+        "ListMate • Powered by PVKS Labs",
+    ]
+    if context_reason:
+        txt_lines.append(context_reason)
+    txt_lines.append(f"Need help or have feedback? Contact hello@grocerlist.app")
+    if unsub_link:
+        txt_lines.append(f"To unsubscribe from {purpose}, visit: {unsub_link}")
+    
+    footer_txt = "\n".join(txt_lines)
+
+    html_parts = [
+        '<div style="font-size: 11px; color: #888888; margin-top: 28px; padding-top: 16px; border-top: 1px solid #e2e8f0; text-align: center; line-height: 1.6;">',
+        '<p style="margin: 3px 0; font-weight: 600; color: #64748b;">ListMate • Powered by PVKS Labs</p>',
+    ]
+    if context_reason:
+        html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">{context_reason}</p>')
+    html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">Need help or have feedback? Contact <a href="mailto:hello@grocerlist.app" style="color: #64748b; text-decoration: underline;">hello@grocerlist.app</a>.</p>')
+    if unsub_link:
+        html_parts.append(f'<p style="margin: 6px 0 0 0;"><a href="{unsub_link}" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> from {purpose}.</p>')
+    html_parts.append('</div>')
+    
+    footer_html = "\n".join(html_parts)
+    return footer_txt, footer_html
+
 def _get_footer_blocks(user_id: int = 0, purpose: str = "marketing emails", context_reason: str = "You received this email because you are a registered user of ListMate.") -> tuple:
     """Returns (footer_txt, footer_html) with sender branding, context reason, support contact, and unsubscribe footer."""
     unsub_link = _get_unsub_link(user_id) if user_id else ""
@@ -1602,3 +1637,57 @@ def send_signup_abandon_day7(to_email: str, user_name: str, user_id: int = 0) ->
     return _send_via_api(api_key, payload)
 
 
+
+def send_app_invite(to_email: str, inviter_name: str) -> bool:
+    if not to_email:
+        return False
+    to_email = to_email.strip().lower()
+    if is_email_suppressed_db(to_email):
+        print(f"Skipping app invite to {to_email} (suppressed)")
+        return False
+        
+    subject = f"{inviter_name} invited you to try ListMate!"
+    
+    body_txt = (
+        f"Hi there,\n\n"
+        f"Your friend {inviter_name} has been using ListMate to manage their household grocery shopping and thought you might find it useful!\n\n"
+        f"ListMate is a shared, store-specific grocery list app designed to make household shopping a breeze.\n\n"
+        f"Download the app here:\n"
+        f"App Store: https://grocerlist.app\n"
+        f"Google Play: https://grocerlist.app\n"
+        f"Web: https://grocerlist.app\n\n"
+        f"Happy Shopping,\nThe ListMate Team"
+    )
+    
+    body_html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+        <h2 style="color: #10b981;">You're Invited!</h2>
+        <p>Hi there,</p>
+        <p>Your friend <strong>{inviter_name}</strong> has been using ListMate to manage their household grocery shopping and thought you might find it useful!</p>
+        <p>ListMate is a shared, store-specific grocery list app designed to make household shopping a breeze.</p>
+        
+        <div style="margin: 30px 0; text-align: center;">
+            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://grocerlist.app/app-store-badge.png" alt="Download on the App Store" width="140" style="width: 140px; border-radius: 8px;"></a>
+            <a href="https://grocerlist.app" style="display: inline-block; margin: 10px;"><img src="https://grocerlist.app/google-play-badge.png" alt="Get it on Google Play" width="140" style="width: 140px; border-radius: 8px;"></a>
+        </div>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <a href="https://grocerlist.app" style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Visit Web Portal</a>
+        </div>
+        
+        <p>Happy Shopping,<br>The ListMate Team</p>
+    </div>
+    """
+    
+    footer_txt, footer_html = _get_footer_blocks_email(email=to_email, purpose="invitations")
+    
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": SENDER_EMAIL, "name": "ListMate"},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": body_txt + footer_txt},
+            {"type": "text/html", "value": body_html + footer_html}
+        ]
+    }
+    
+    return _send_via_api(SENDGRID_API_KEY, payload)
