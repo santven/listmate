@@ -519,7 +519,7 @@ function toggleBurger() {
   document.getElementById("burgerOverlay").classList.toggle("show");
 }
 
-let householdData = null;
+var householdData = null;
 
 (async function init() {
   // Check auth
@@ -1153,7 +1153,7 @@ async function loadPremium() {
   } catch(e) {}
 }
 
-let revenueCatOfferings = null;
+var revenueCatOfferings = null;
 
 function openRecipePlanner() {
     localStorage.setItem('open_recipes', '1');
@@ -1756,7 +1756,7 @@ function showFeedbackModal() {
   document.getElementById('feedbackModal').classList.add('active');
 }
 
-let currentFeedbackRating = 0;
+var currentFeedbackRating = 0;
 function updateFeedbackStars() {
   document.querySelectorAll('#starRatingContainer span').forEach(star => {
     const val = parseInt(star.getAttribute('data-val'));
@@ -1778,7 +1778,7 @@ document.addEventListener('DOMContentLoaded', initFeedbackStars);
 // Also call immediately in case DOM is already loaded when script runs
 initFeedbackStars();
 
-let isSubmittingFeedback = false;
+var isSubmittingFeedback = false;
 function closeFeedbackModal() {
   isSubmittingFeedback = false;
   if (document.activeElement && typeof document.activeElement.blur === 'function') {
@@ -1911,8 +1911,8 @@ async function submitFeedback() {
 
 
 
-let adminFeedbackData = [];
-let adminFeedbackFilter = 'all';
+var adminFeedbackData = [];
+var adminFeedbackFilter = 'all';
 
 function setAdminFeedbackFilter(f) {
   adminFeedbackFilter = f;
@@ -2493,7 +2493,7 @@ async function refreshData(showToast = true) {
   }, { passive: true });
 })();
 
-let cleanupCallback = null;
+var cleanupCallback = null;
 function showCleanupModal(currentName, targetName, cb) {
     const desc = document.getElementById('cleanupModalDesc');
     if (desc) {
@@ -2516,7 +2516,7 @@ if (document.getElementById('btnCleanupKeep')) {
     });
 }
 
-let actionConfirmCb = null;
+var actionConfirmCb = null;
 function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
     document.getElementById('actionConfirmTitle').innerHTML = title;
     document.getElementById('actionConfirmDesc').innerHTML = desc;
