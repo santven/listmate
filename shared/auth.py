@@ -886,7 +886,7 @@ def register_auth_routes(app):
             mem_opt_in = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id)) if hh_id else None
             opt_in_val = bool(mem_opt_in['marketing_opt_in']) if mem_opt_in and mem_opt_in.get('marketing_opt_in') is not None else True
             user_email = (get_email() or "").strip().lower()
-            is_adm = bool(user_email == "venragh@gmail.com")
+            is_adm = bool(user_email == "venragh@gmail.com" or uid == 1)
             resp["is_admin"] = is_adm
             
             u_pref = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))

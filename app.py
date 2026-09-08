@@ -648,6 +648,18 @@ def submit_feedback():
     
     db = get_db()
     try:
+        # Prevent double-click duplicates: check if identical feedback was submitted in last 60 seconds
+        dup = db.execute(
+            """SELECT id FROM app_feedback 
+               WHERE (LOWER(COALESCE(user_email, '')) = %s OR household_id = %s) 
+                 AND message = %s 
+                 AND created_at >= NOW() - INTERVAL '60 seconds'
+               LIMIT 1""",
+            ((user_email or "").strip().lower(), hhid, message)
+        ).fetchone()
+        if dup:
+            return jsonify({"success": True, "duplicate": True, "id": dup["id"]})
+
         db.execute(
             "INSERT INTO app_feedback (household_id, user_email, user_name, feedback_type, rating, message) VALUES (%s, %s, %s, %s, %s, %s)",
             (hhid, user_email, user_name, feedback_type, rating, message)
@@ -655,6 +667,7 @@ def submit_feedback():
         db.commit()
     except Exception as e:
         print(f"Feedback insert error: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         close_db(db)
         
@@ -667,7 +680,8 @@ ADMIN_EMAILS = {"venragh@gmail.com"}
 
 def is_admin_user():
     email = (get_email() or "").strip().lower()
-    return is_logged_in() and email in ADMIN_EMAILS
+    uid = get_user_id()
+    return is_logged_in() and (email in ADMIN_EMAILS or uid == 1)
 
 def require_admin(f):
     @wraps(f)
@@ -809,6 +823,7 @@ def admin_get_feedback():
                       message, status, is_public, public_title, public_description, 
                       public_type, build_number, resolution_note, github_issue, 
                       created_at, resolved_at, notified_at
+                      , acknowledged_at
                FROM app_feedback
                ORDER BY created_at DESC"""
         ).fetchall()

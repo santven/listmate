@@ -4869,7 +4869,9 @@ function initFeedbackStars() {
 document.addEventListener('DOMContentLoaded', initFeedbackStars);
 initFeedbackStars();
 
+let isSubmittingFeedback = false;
 function closeFeedbackModal() {
+  isSubmittingFeedback = false;
   if (document.activeElement && typeof document.activeElement.blur === 'function') {
     document.activeElement.blur();
   }
@@ -4878,13 +4880,18 @@ function closeFeedbackModal() {
   document.getElementById('feedbackMessage').value = '';
   document.getElementById('feedbackError').style.display = 'none';
   document.getElementById('feedbackSuccess').style.display = 'none';
-  document.getElementById('btnSubmitFeedback').disabled = false;
-  document.getElementById('btnSubmitFeedback').textContent = 'Submit';
+  const btn = document.getElementById('btnSubmitFeedback');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.pointerEvents = '';
+    btn.textContent = 'Submit';
+  }
   currentFeedbackRating = 0;
   updateFeedbackStars();
 }
 
 async function submitFeedback() {
+  if (isSubmittingFeedback) return;
   const type = document.getElementById('feedbackType').value;
   const msg = document.getElementById('feedbackMessage').value.trim();
   const errEl = document.getElementById('feedbackError');
@@ -4897,6 +4904,7 @@ async function submitFeedback() {
     return;
   }
   
+  isSubmittingFeedback = true;
   if (document.activeElement && typeof document.activeElement.blur === 'function') {
     document.activeElement.blur();
   }
@@ -4905,12 +4913,14 @@ async function submitFeedback() {
   errEl.style.display = 'none';
   succEl.style.display = 'none';
   btn.disabled = true;
+  btn.style.pointerEvents = 'none';
   btn.textContent = 'Sending...';
   
   try {
     const res = await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ type: type, message: msg, rating: currentFeedbackRating })
     });
     const data = await res.json();
@@ -4923,13 +4933,17 @@ async function submitFeedback() {
       errEl.textContent = data.error || 'Failed to send feedback.';
       errEl.style.display = 'block';
       btn.disabled = false;
+      btn.style.pointerEvents = '';
       btn.textContent = 'Submit';
+      isSubmittingFeedback = false;
     }
   } catch(e) {
     errEl.textContent = 'Network error. Please try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
+    btn.style.pointerEvents = '';
     btn.textContent = 'Submit';
+    isSubmittingFeedback = false;
   }
 }
 
