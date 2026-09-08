@@ -1778,7 +1778,9 @@ document.addEventListener('DOMContentLoaded', initFeedbackStars);
 // Also call immediately in case DOM is already loaded when script runs
 initFeedbackStars();
 
+let isSubmittingFeedback = false;
 function closeFeedbackModal() {
+  isSubmittingFeedback = false;
   if (document.activeElement && typeof document.activeElement.blur === 'function') {
     document.activeElement.blur();
   }
@@ -1787,8 +1789,12 @@ function closeFeedbackModal() {
   document.getElementById('feedbackMessage').value = '';
   document.getElementById('feedbackError').style.display = 'none';
   document.getElementById('feedbackSuccess').style.display = 'none';
-  document.getElementById('btnSubmitFeedback').disabled = false;
-  document.getElementById('btnSubmitFeedback').textContent = 'Submit';
+  const btn = document.getElementById('btnSubmitFeedback');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.pointerEvents = '';
+    btn.textContent = 'Submit';
+  }
   currentFeedbackRating = 0;
   updateFeedbackStars();
 }
@@ -1845,6 +1851,7 @@ async function submitShareApp() {
 }
 
 async function submitFeedback() {
+  if (isSubmittingFeedback) return;
   const type = document.getElementById('feedbackType').value;
   const msg = document.getElementById('feedbackMessage').value.trim();
   const errEl = document.getElementById('feedbackError');
@@ -1857,6 +1864,7 @@ async function submitFeedback() {
     return;
   }
   
+  isSubmittingFeedback = true;
   if (document.activeElement && typeof document.activeElement.blur === 'function') {
     document.activeElement.blur();
   }
@@ -1865,12 +1873,14 @@ async function submitFeedback() {
   errEl.style.display = 'none';
   succEl.style.display = 'none';
   btn.disabled = true;
+  btn.style.pointerEvents = 'none';
   btn.textContent = 'Sending...';
   
   try {
     const res = await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ type: type, message: msg, rating: currentFeedbackRating })
     });
     const data = await res.json();
@@ -1883,13 +1893,17 @@ async function submitFeedback() {
       errEl.textContent = data.error || 'Failed to send feedback.';
       errEl.style.display = 'block';
       btn.disabled = false;
+      btn.style.pointerEvents = '';
       btn.textContent = 'Submit';
+      isSubmittingFeedback = false;
     }
   } catch(e) {
     errEl.textContent = 'Network error. Please try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
+    btn.style.pointerEvents = '';
     btn.textContent = 'Submit';
+    isSubmittingFeedback = false;
   }
 }
 
@@ -1915,18 +1929,42 @@ async function loadAdminFeedback(force = false) {
   if (force) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted); font-size:13px;">Refreshing feedback...</div>';
 
   try {
-    const res = await fetch('/api/admin/feedback');
+    const res = await fetch('/api/admin/feedback', { credentials: 'include' });
     if (res.status === 403) {
       card.style.display = 'none';
       return;
     }
+    if (!res.ok) {
+      let errMsg = 'HTTP ' + res.status;
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) errMsg = errJson.error;
+      } catch (_) {}
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:24px 16px; color:#d94a4a; font-size:13px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px;">
+          <div style="font-weight:600; margin-bottom:6px;">⚠️ Unable to load feedback (${escapeHtml(errMsg)})</div>
+          <button onclick="loadAdminFeedback(true)" style="background:#fff; border:1px solid #fca5a5; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; color:#991b1b; margin-top:8px;">
+            🔄 Retry
+          </button>
+        </div>
+      `;
+      return;
+    }
     const data = await res.json();
-    adminFeedbackData = data.feedback || [];
+    adminFeedbackData = Array.isArray(data.feedback) ? data.feedback : [];
     updateAdminFeedbackCounts();
     renderAdminFeedbackList();
   } catch (e) {
     console.error('Error loading admin feedback:', e);
-    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#d94a4a; font-size:13px;">Failed to load feedback.</div>';
+    const errText = e && e.message ? e.message : 'Network error or connection failed.';
+    listEl.innerHTML = `
+      <div style="text-align:center; padding:24px 16px; color:#d94a4a; font-size:13px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px;">
+        <div style="font-weight:600; margin-bottom:6px;">⚠️ Unable to load feedback (${escapeHtml(errText)})</div>
+        <button onclick="loadAdminFeedback(true)" style="background:#fff; border:1px solid #fca5a5; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; color:#991b1b; margin-top:8px;">
+          🔄 Retry
+        </button>
+      </div>
+    `;
   }
 }
 
@@ -1972,7 +2010,8 @@ function renderAdminFeedbackList() {
   container.innerHTML = filtered.map(item => {
     const isPub = Boolean(item.is_public);
     const isResolved = item.status === 'resolved';
-    const stars = item.rating ? '★'.repeat(item.rating) : '';
+    const ratingNum = parseInt(item.rating, 10);
+    const stars = (ratingNum > 0 && ratingNum <= 5) ? '★'.repeat(ratingNum) : '';
     const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
     const resDateStr = item.resolved_at ? new Date(item.resolved_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
@@ -2071,7 +2110,7 @@ async function autoAnonymizeCurrentTriage() {
   if (text) text.textContent = 'Sanitizing PII...';
   
   try {
-    const res = await fetch(`/api/admin/feedback/${id}/sanitize`, { method: 'POST' });
+    const res = await fetch(`/api/admin/feedback/${id}/sanitize`, { method: 'POST', credentials: 'include' });
     const data = await res.json();
     if (res.ok && data.sanitized) {
       const s = data.sanitized;
@@ -2147,6 +2186,7 @@ async function submitAdminTriage() {
   try {
     const res = await fetch(`/api/admin/feedback/${id}/triage`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         public_title: title,
@@ -2221,6 +2261,7 @@ async function submitAdminResolve() {
   try {
     const res = await fetch(`/api/admin/feedback/${id}/resolve`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         build_number: buildNumber,
