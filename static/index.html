@@ -1963,7 +1963,7 @@ function renderCatalog(filter) {
     const name=el.dataset.new;
     if(!name) return;
     const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
-    const added = await addToList(currentStore.id, name, qty);
+    const added = await addToList(currentStore.id, name, qty, false, true);
     if (added) {
       if (navigator.onLine && allStoreItems[currentStore.id] && !allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())) {
         try{await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});}catch(e){}
@@ -1978,7 +1978,7 @@ function renderCatalog(filter) {
       return;
     }
     const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
-    const added = await addToList(currentStore.id, name, qty);
+    const added = await addToList(currentStore.id, name, qty, false, true);
     if (added) {
       $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
     }
@@ -2477,7 +2477,7 @@ async function loadSuggestions(){
   }catch(e){}
 }
 
-async function addToList(sid, name, qty = '', skipSuggest = false) {
+async function addToList(sid, name, qty = '', skipSuggest = false, fromCatalog = false) {
   if (enforceReadOnly()) return;
   if (!canEditOffline()) return false;
 
@@ -2518,7 +2518,7 @@ async function addToList(sid, name, qty = '', skipSuggest = false) {
     const res = await fetch(API+'/list', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ store_id: sid, name: name, quantity: qty })
+      body: JSON.stringify({ store_id: sid, name: name, quantity: qty, from_catalog: fromCatalog })
     });
     const data = await res.json();
     if (!res.ok) { toast('Error: ' + (data.error || 'Failed')); return false; }
@@ -2777,7 +2777,17 @@ async function deleteItem(id) {
     return;
   }
 
-  await fetch(API+'/list/'+id, {method:'DELETE'});
+  const delRes = await fetch(API+'/list/'+id, {method:'DELETE'});
+  if (delRes.ok) {
+    try {
+      const delData = await delRes.json();
+      if (delData && delData.catalog_pruned && item && allStoreItems[item.store_id]) {
+        allStoreItems[item.store_id] = (allStoreItems[item.store_id] || []).filter(
+          si => si.name.toLowerCase().trim() !== item.name.toLowerCase().trim()
+        );
+      }
+    } catch(e) {}
+  }
   list = await fetch(API+'/list').then(r=>r.json());
   saveCache();
   renderHome();
