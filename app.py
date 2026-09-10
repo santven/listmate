@@ -2544,7 +2544,8 @@ def list_store_items(store_id):
             if norm not in known_names:
                 known_names.add(norm)
                 item_list.append({
-                    "id": ai["id"],
+                    "id": f"virt_{ai['id']}",
+                    "is_virtual": True,
                     "store_id": ai["store_id"],
                     "name": ai["name"],
                     "category": ai["category"],
@@ -3198,11 +3199,31 @@ def move_list_item(item_id):
 @require_user
 def clear_list():
     db = get_db()
+    hh = _hh()
     try:
+        cleared_items = db.execute(
+            "SELECT DISTINCT store_id, name FROM list_items WHERE purchased = FALSE AND household_id = ?",
+            (hh,)
+        ).fetchall()
+
         db.execute(
             "DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?",
-            (_hh(),),
+            (hh,),
         )
+        
+        for item in cleared_items:
+            store_id = item["store_id"]
+            name = item["name"]
+            has_purchased = db.execute(
+                "SELECT 1 FROM list_items WHERE household_id = ? AND store_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = TRUE LIMIT 1",
+                (hh, store_id, name)
+            ).fetchone()
+            if not has_purchased:
+                db.execute(
+                    "DELETE FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                    (store_id, hh, name)
+                )
+
         db.commit()
         return jsonify({"ok": True})
     finally:
@@ -3240,9 +3261,11 @@ def sync_offline_actions():
                 store_id = act_data.get("store_id")
                 name = (act_data.get("name") or "").strip()
                 quantity = (act_data.get("quantity") or "").strip()
+                from_catalog = bool(act_data.get("from_catalog"))
                 if name and store_id:
-                    store = db.execute("SELECT id FROM stores WHERE id = ? AND household_id = ?", (store_id, hh_id)).fetchone()
+                    store = db.execute("SELECT id, name FROM stores WHERE id = ? AND household_id = ?", (store_id, hh_id)).fetchone()
                     if store:
+                        store_name = (store["name"] if isinstance(store, dict) else store[1]) or ""
                         existing = db.execute(
                             "SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE",
                             (store_id, hh_id, name)
@@ -3265,6 +3288,19 @@ def sync_offline_actions():
                                 "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
                                 (hh_id, store_id, name, existing_category, quantity, display_name)
                             )
+                            if from_catalog and store_name != "General List":
+                                cat_exists = db.execute(
+                                    "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                                    (store_id, hh_id, name)
+                                ).fetchone()
+                                if not cat_exists:
+                                    try:
+                                        db.execute(
+                                            "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                                            (hh_id, store_id, name, existing_category)
+                                        )
+                                    except Exception:
+                                        pass
                             applied_count += 1
 
             elif act_type == "toggle":

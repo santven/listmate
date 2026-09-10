@@ -1898,15 +1898,19 @@ async function openStore(sid) {
 }
 
 function renderCatalog(filter) {
+  if (!currentStore) return;
   const items=allStoreItems[currentStore.id]||[];
-  const onList=new Set(list.filter(i=>i.store_id===currentStore.id&&!i.purchased).map(i=>i.name.toLowerCase()));
-  let filtered=filter?items.filter(i=>i.name.toLowerCase().includes(filter.toLowerCase())):items;
+  const onList=new Set(list.filter(i=>i.store_id===currentStore.id&&!i.purchased).map(i=>(i.name||'').toLowerCase().trim()));
+  let filtered=filter?items.filter(i=>(i.name||'').toLowerCase().includes(filter.toLowerCase().trim())):items;
   let html='';
-  if(filter&&!items.find(i=>i.name.toLowerCase()===filter.toLowerCase()))
-    html+='<div class="catalog-item" data-new="'+filter+'">+ Add "'+filter+'"</div>';
+  if(filter&&!items.find(i=>(i.name||'').toLowerCase().trim()===filter.toLowerCase().trim())) {
+    const filterEsc = escapeHtml(filter.trim());
+    html+='<div class="catalog-item" data-new="'+filterEsc+'">+ Add "'+filterEsc+'"</div>';
+  }
   // Group store items by category with category headers
   const cats = {};
   filtered.forEach(i => {
+    if (!i || !i.name) return;
     const c = (i.category || 'General').trim() || 'General';
     if (!cats[c]) cats[c] = [];
     cats[c].push(i);
@@ -1940,9 +1944,18 @@ function renderCatalog(filter) {
   });
 
   for (const cat of catOrder) {
+    const validItems = cats[cat].filter(i => {
+      if (!i || !i.name) return false;
+      if (i.is_virtual) {
+        return list.some(l => l.store_id === currentStore.id && !l.purchased && (l.name || '').toLowerCase().trim() === (i.name || '').toLowerCase().trim());
+      }
+      return true;
+    });
+    if (validItems.length === 0) continue;
+
     if (cat) html += '<div class="cat-header" style="grid-column:1/-1;margin-top:4px">' + cat + '</div>';
-    html += cats[cat].sort((a, b) => a.name.localeCompare(b.name)).map(i => {
-      const activeListItem = list.find(l => l.store_id === currentStore.id && !l.purchased && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
+    html += validItems.sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(i => {
+      const activeListItem = list.find(l => l.store_id === currentStore.id && !l.purchased && (l.name || '').toLowerCase().trim() === (i.name || '').toLowerCase().trim());
       const isAdded = !!activeListItem;
       const itemNameEsc = escapeHtml(i.name);
       return '<div class="catalog-item-card" title="' + itemNameEsc + '" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1.5px solid ' + (isAdded ? '#d8e0d0' : 'var(--border)') + '; border-radius:12px; background:var(--card); font-size:14px; opacity:' + (isAdded ? '0.85' : '1') + '; min-width:0;">'+
@@ -1952,7 +1965,7 @@ function renderCatalog(filter) {
         '</div>'+
         '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
           (isAdded ? '' : '<button class="catalog-item-btn" data-id="'+i.id+'" data-name="'+itemNameEsc+'" style="font-size:12px; color:var(--green); background:none; border:1px solid var(--green); padding:4px 8px; border-radius:6px; cursor:pointer; font-weight:600; white-space:nowrap;">+ Add</button>') +
-          '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+itemNameEsc+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:4px; border-radius:4px; flex-shrink:0;">🗑</button>'+
+          (i.is_virtual ? '' : '<button class="btn-delete-catalog-item" data-id="'+i.id+'" data-name="'+itemNameEsc+'" title="Delete from store catalog" style="background:none; border:none; color:#aaa; cursor:pointer; font-size:13px; padding:4px; border-radius:4px; flex-shrink:0;">🗑</button>')+
         '</div>'+
       '</div>';
     }).join('');
@@ -1965,16 +1978,16 @@ function renderCatalog(filter) {
     const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
     const added = await addToList(currentStore.id, name, qty, false, true);
     if (added) {
-      if (navigator.onLine && allStoreItems[currentStore.id] && !allStoreItems[currentStore.id].find(i=>i.name.toLowerCase()===name.toLowerCase())) {
+      if (navigator.onLine && allStoreItems[currentStore.id] && !allStoreItems[currentStore.id].find(i=>(i.name||'').toLowerCase().trim()===name.toLowerCase().trim())) {
         try{await fetch(API+'/stores/'+currentStore.id+'/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});}catch(e){}
-        try { allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json()); }catch(e){}
+        try { allStoreItems[currentStore.id]=await fetch(API+'/stores/'+currentStore.id+'/items').then(r=>r.json()); saveCache(); }catch(e){}
       }
       $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value=''; renderCatalog(''); renderHome();
     }
   }));
   $$('#catalogItems .catalog-item-btn').forEach(el=>el.addEventListener('click',async()=>{
     const name=el.dataset.name;
-    if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&i.name.toLowerCase()===name.toLowerCase())){
+    if(list.some(i=>i.store_id===currentStore.id&&!i.purchased&&(i.name||'').toLowerCase().trim()===(name||'').toLowerCase().trim())){
       return;
     }
     const qty = $('#catalogQty') ? $('#catalogQty').value.trim() : '';
@@ -1989,7 +2002,7 @@ function renderCatalog(filter) {
     const name=el.dataset.name;
     await deleteItem(listId);
     toast('Removed from list: '+name);
-    renderCatalog($('#catalogSearch').value.trim());
+    if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
     renderHome();
   }));
 
@@ -2002,7 +2015,8 @@ function renderCatalog(filter) {
       const r=await fetch(API+'/stores/'+currentStore.id+'/items/'+id,{method:'DELETE'});
       if(!r.ok){toast('Error deleting item');return;}
       toast('🗑 Removed '+name);
-      allStoreItems[currentStore.id]=(allStoreItems[currentStore.id]||[]).filter(i=>i.id!==parseInt(id));
+      allStoreItems[currentStore.id]=(allStoreItems[currentStore.id]||[]).filter(i=>String(i.id)!==String(id));
+      saveCache();
       renderCatalog($('#catalogSearch').value.trim());
     }catch(err){toast('Network error');}
   }));
@@ -2509,7 +2523,7 @@ async function addToList(sid, name, qty = '', skipSuggest = false, fromCatalog =
     list.unshift(newItem);
     saveCache();
     renderHome();
-    enqueueOfflineAction({ type: 'add', data: { store_id: sid, name: name, quantity: qty } });
+    enqueueOfflineAction({ type: 'add', data: { store_id: sid, name: name, quantity: qty, from_catalog: fromCatalog } });
     toast('⚡ Saved offline (will sync online)');
     return true;
   }
@@ -2528,8 +2542,24 @@ async function addToList(sid, name, qty = '', skipSuggest = false, fromCatalog =
     renderHome();
     return true;
   } catch(e) {
-    if (window.currentCfg && window.currentCfg.is_premium) {
-      return addToList(sid, name, qty);
+    if (canEditOffline()) {
+      const storeName = (stores.find(s=>s.id===sid)||{}).name || 'Store';
+      const tempId = 'temp_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+      const newItem = {
+        id: tempId,
+        store_id: sid,
+        name: name,
+        quantity: qty || '',
+        purchased: false,
+        category: null,
+        store_name: storeName
+      };
+      list.unshift(newItem);
+      saveCache();
+      renderHome();
+      enqueueOfflineAction({ type: 'add', data: { store_id: sid, name: name, quantity: qty, from_catalog: fromCatalog } });
+      toast('⚡ Saved offline (will sync online)');
+      return true;
     }
     toast('Network error');
     return false;
@@ -2768,6 +2798,11 @@ async function deleteItem(id) {
 
   if (!navigator.onLine) {
     list = list.filter(i => String(i.id) !== String(id));
+    if (item && allStoreItems[item.store_id]) {
+      allStoreItems[item.store_id] = (allStoreItems[item.store_id] || []).filter(
+        si => !(si.is_virtual && (si.id === 'virt_' + id || (si.name || '').toLowerCase().trim() === (item.name || '').toLowerCase().trim()))
+      );
+    }
     saveCache();
     renderHome();
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
@@ -2781,9 +2816,14 @@ async function deleteItem(id) {
   if (delRes.ok) {
     try {
       const delData = await delRes.json();
-      if (delData && delData.catalog_pruned && item && allStoreItems[item.store_id]) {
+      if (item && allStoreItems[item.store_id]) {
+        if (delData && delData.catalog_pruned) {
+          allStoreItems[item.store_id] = (allStoreItems[item.store_id] || []).filter(
+            si => (si.name || '').toLowerCase().trim() !== (item.name || '').toLowerCase().trim()
+          );
+        }
         allStoreItems[item.store_id] = (allStoreItems[item.store_id] || []).filter(
-          si => si.name.toLowerCase().trim() !== item.name.toLowerCase().trim()
+          si => !(si.is_virtual && (si.id === 'virt_' + id || (si.name || '').toLowerCase().trim() === (item.name || '').toLowerCase().trim()))
         );
       }
     } catch(e) {}
@@ -2808,7 +2848,9 @@ $('#quickAddInput').addEventListener('input', () => {
     try {
       const res = await fetch(API + '/search_catalog?q=' + encodeURIComponent(q));
       if (!res.ok) return;
+      if ($('#quickAddInput').value.trim() !== q) return;
       const items = await res.json();
+      if ($('#quickAddInput').value.trim() !== q) return;
       if (items.length === 0) {
         dropdown.style.display = 'none';
         return;
@@ -2833,6 +2875,7 @@ $('#quickAddInput').addEventListener('input', () => {
       $$('.quick-add-item').forEach(el => el.addEventListener('click', async () => {
         const sid = parseInt(el.dataset.sid);
         const name = el.dataset.name;
+        clearTimeout(quickAddTimeout);
         dropdown.style.display = 'none';
         $('#quickAddInput').value = '';
         await addToList(sid, name, '', true); // skip suggest since explicit
@@ -2843,6 +2886,7 @@ $('#quickAddInput').addEventListener('input', () => {
 });
 
 $('#btnQuickAdd').addEventListener('click', async () => {
+  clearTimeout(quickAddTimeout);
   const name = $('#quickAddInput').value.trim();
   if (!name) return;
   
@@ -2968,6 +3012,11 @@ async function moveItem(targetStoreId) {
       } else {
         item.store_id = targetStoreId;
       }
+      if (oldStoreId && allStoreItems[oldStoreId]) {
+        allStoreItems[oldStoreId] = allStoreItems[oldStoreId].filter(
+          si => !(si.is_virtual && (si.id === 'virt_' + moveItemId || (si.name || '').toLowerCase().trim() === (item.name || '').toLowerCase().trim()))
+        );
+      }
       saveCache();
       $('#moveModal').classList.remove('active');
       toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');
@@ -2983,6 +3032,11 @@ async function moveItem(targetStoreId) {
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({store_id:targetStoreId})
   });
+  if (oldStoreId && allStoreItems[oldStoreId] && item) {
+    allStoreItems[oldStoreId] = allStoreItems[oldStoreId].filter(
+      si => !(si.is_virtual && (si.id === 'virt_' + moveItemId || (si.name || '').toLowerCase().trim() === (item.name || '').toLowerCase().trim()))
+    );
+  }
   list = await fetch(API+'/list').then(r=>r.json());
   saveCache();
   $('#moveModal').classList.remove('active');
