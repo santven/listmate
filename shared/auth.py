@@ -1215,7 +1215,23 @@ def register_auth_routes(app):
         
         # Get all households they belong to
         hhs = _run("SELECT h.id, h.name, h.subscription_status, h.is_premium, h.owner_id, h.is_default, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
-        
+        if not hhs and active_hhid:
+            cur_hh = _one(f"SELECT id, name, subscription_status, is_premium, owner_id, is_default FROM {_HH} WHERE id = ?", (active_hhid,))
+            if cur_hh:
+                role = 'owner' if cur_hh.get('owner_id') == uid else 'member'
+                _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", (uid, active_hhid, role))
+                cur_hh["role"] = role
+                hhs = [cur_hh]
+
+        if not hhs and not active_hhid:
+            user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
+            if user:
+                active_hhid, cur_name = _create_default_household_for_user(uid, user.get("email"), user.get("name"))
+                cur_hh = _one(f"SELECT id, name, subscription_status, is_premium, owner_id, is_default FROM {_HH} WHERE id = ?", (active_hhid,))
+                if cur_hh:
+                    cur_hh["role"] = 'owner'
+                    hhs = [cur_hh]
+
         for h in hhs:
             hh_id = h["id"]
             mem_cnt = _one("SELECT COUNT(*) as c FROM auth_household_members WHERE household_id = ?", (hh_id,))
@@ -1433,13 +1449,15 @@ def register_auth_routes(app):
         return jsonify({"ok": True})
 
     @app.route("/api/auth/household/members", methods=["DELETE"])
+    @app.route("/api/auth/household/members/<int:member_id>/remove", methods=["POST", "DELETE"])
     @require_user
-    def auth_remove_member():
+    def auth_remove_member(member_id=None):
         """Remove a member from the household (owner only)."""
         hhid = get_household_id()
         if not hhid: return jsonify({"error": "No household"}), 400
-        data = request.get_json(silent=True) or {}
-        member_id = data.get("user_id")
+        if member_id is None:
+            data = request.get_json(silent=True) or {}
+            member_id = data.get("user_id")
         if not member_id: return jsonify({"error": "user_id required"}), 400
         _init_schema()
         # Only allow removing from own household; can't remove self
@@ -1453,18 +1471,26 @@ def register_auth_routes(app):
         if not is_owner:
             return jsonify({"error": "Only the household owner can remove members"}), 403
 
+        # Cannot remove another owner
+        target_mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (member_id, hhid))
+        if target_mem and target_mem.get("role") == "owner":
+            return jsonify({"error": "Cannot remove an owner"}), 400
+
         mem = _one("SELECT * FROM auth_household_members WHERE user_id = ? AND household_id = ?", (member_id, hhid))
-        user_row = _one(f"SELECT id, email, household_id FROM {_USERS} WHERE id = ?", (member_id,))
+        user_row = _one(f"SELECT id, email, name, household_id FROM {_USERS} WHERE id = ?", (member_id,))
         if not mem and not (user_row and user_row.get("household_id") == hhid):
             return jsonify({"error": "Member not found in your household"}), 404
 
         _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (member_id, hhid))
 
-        # If their active household was this one, switch them to another household they belong to (or NULL)
+        # If their active household was this one, switch them to another household they belong to (or create default)
         if user_row and user_row.get("household_id") == hhid:
             other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY (role = 'owner') DESC, household_id ASC LIMIT 1", (member_id,))
-            new_hhid = other["household_id"] if other else None
-            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, member_id))
+            if other:
+                new_hhid = other["household_id"]
+                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, member_id))
+            else:
+                _create_default_household_for_user(member_id, user_row.get("email"), user_row.get("name"))
 
         removed_email = user_row.get("email") if user_row else str(member_id)
         return jsonify({"ok": True, "removed": removed_email})
@@ -1719,20 +1745,25 @@ def register_auth_routes(app):
     def auth_leave_household(hh_id):
         _init_schema()
         uid = get_user_id()
+        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
         mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
+        if not mem and user and user.get("household_id") == hh_id:
+            hh = _one(f"SELECT owner_id FROM {_HH} WHERE id = ?", (hh_id,))
+            role = 'owner' if hh and hh.get('owner_id') == uid else 'member'
+            mem = {"role": role}
+
         if not mem:
             return jsonify({"error": "Not a member"}), 404
             
-        if mem["role"] == "owner":
+        if mem.get("role") == "owner":
             owners_count = _one("SELECT COUNT(*) as c FROM auth_household_members WHERE household_id = ? AND role = 'owner'", (hh_id,))
             if owners_count and owners_count["c"] <= 1:
                 return jsonify({"error": "You are the only owner. You cannot leave without assigning another owner or deleting the household."}), 400
                 
         _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
         
-        user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
         if user and user.get("household_id") == hh_id:
-            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY household_id ASC LIMIT 1", (uid,))
+            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY (role = 'owner') DESC, household_id ASC LIMIT 1", (uid,))
             if other:
                 new_id = other["household_id"]
                 _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_id, uid))
@@ -1740,8 +1771,8 @@ def register_auth_routes(app):
                 hh_name = other_hh.get("name", "") if other_hh else ""
                 _set(uid, user["email"], user["name"], new_id, hh_name)
             else:
-                _run(f"UPDATE {_USERS} SET household_id = 0 WHERE id = ?", (uid,))
-                _set(uid, user["email"], user["name"], 0, "")
+                new_id, hh_name = _create_default_household_for_user(uid, user.get("email"), user.get("name"))
+                _set(uid, user.get("email"), user.get("name"), new_id, hh_name)
         
         return jsonify({"ok": True})
 
@@ -1785,9 +1816,9 @@ def register_auth_routes(app):
                 _set(uid, user["email"], user["name"], new_hhid, hh_name)
                 switched_to = new_hhid
             else:
-                _run(f"UPDATE {_USERS} SET household_id = 0 WHERE id = ?", (uid,))
-                _set(uid, user["email"], user["name"], 0, "")
-                switched_to = 0
+                new_hhid, hh_name = _create_default_household_for_user(uid, user.get("email"), user.get("name"))
+                _set(uid, user.get("email"), user.get("name"), new_hhid, hh_name)
+                switched_to = new_hhid
 
         _purge_household(hh_id)
         return jsonify({"ok": True, "deleted_household_id": hh_id, "switched_to": switched_to})

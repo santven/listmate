@@ -48,27 +48,30 @@ if (document.getElementById('btnCleanupKeep')) {
     });
 }
 
-let actionConfirmCb = null;
 function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
-    document.getElementById('actionConfirmTitle').innerHTML = title;
-    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const modal = document.getElementById('actionConfirmModal');
+    if (!modal) return;
+    const titleEl = document.getElementById('actionConfirmTitle');
+    const descEl = document.getElementById('actionConfirmDesc');
     const btn = document.getElementById('btnActionConfirm');
-    btn.innerHTML = confirmText;
-    btn.style.background = confirmColor;
-    actionConfirmCb = cb;
-    document.getElementById('actionConfirmModal').classList.add('active');
-}
-if (document.getElementById('btnActionConfirm')) {
-    document.getElementById('btnActionConfirm').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(true);
-    });
-}
-if (document.getElementById('btnActionCancel')) {
-    document.getElementById('btnActionCancel').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(false);
-    });
+    const cancelBtn = document.getElementById('btnActionCancel');
+    if (titleEl) titleEl.innerHTML = title;
+    if (descEl) descEl.innerHTML = desc;
+    if (btn) {
+        btn.innerHTML = confirmText;
+        btn.style.background = confirmColor;
+        btn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(true);
+        };
+    }
+    if (cancelBtn) {
+        cancelBtn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(false);
+        };
+    }
+    modal.classList.add('active');
 }
 </script>
 <script type="text/javascript" src="https://appleid.cdn.apple.com/appleauth/static/js/issuer/v1/token.js" onload="if(window.initAppleID)initAppleID()"></script>

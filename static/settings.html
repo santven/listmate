@@ -266,6 +266,9 @@
       <div class="error" id="addError"></div>
       <div class="success" id="addSuccess"></div>
     </div>
+    <div id="leaveHouseholdSection" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+      <button onclick="confirmLeaveCurrentHousehold()" style="width:100%; background:#fff1f2; border:1px solid #fecdd3; color:#e11d48; padding:10px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">🚪 Leave Household</button>
+    </div>
   </div>
 
   <!-- Dietary Restrictions -->
@@ -820,16 +823,31 @@ async function loadHousehold() {
 
     // Render members
     const list = document.getElementById('memberList');
-    list.innerHTML = members.map(m => `
-      <div class="member-row">
-        <div class="member-avatar">${escapeHtml((String(m.display_name || m.user_id))[0].toUpperCase())}</div>
-        <div class="member-info">
-          <div class="member-name">${escapeHtml(m.display_name)}${m.user_id === householdData.current_user_id ? '<span class="you-badge">you</span>' : ''}</div>
-          <div class="member-email">${escapeHtml(m.email)}</div>
+    list.innerHTML = members.map(m => {
+      const isMe = m.user_id === householdData.current_user_id;
+      const canKick = householdData.is_owner && !isMe && m.role !== 'owner';
+      const kickBtn = canKick ? `<button onclick="confirmKickMember(${m.user_id}, '${escapeHtml(m.display_name || m.email || 'Member').replace(/'/g, "\\'")}')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:16px; padding:4px 6px; line-height:1;" title="Remove Member" aria-label="Remove Member">🗑️</button>` : '';
+      return `
+      <div class="member-row" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+          <div class="member-avatar">${escapeHtml((String(m.display_name || m.user_id))[0].toUpperCase())}</div>
+          <div class="member-info" style="min-width:0;">
+            <div class="member-name">${escapeHtml(m.display_name)}${isMe ? '<span class="you-badge">you</span>' : ''}</div>
+            <div class="member-email">${escapeHtml(m.email)}</div>
+          </div>
         </div>
-        <div class="member-role">${escapeHtml(m.role)}</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="member-role">${escapeHtml(m.role)}</div>
+          ${kickBtn}
+        </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
+
+    const leaveSection = document.getElementById('leaveHouseholdSection');
+    if (leaveSection) {
+      leaveSection.style.display = (!householdData.is_owner) ? 'block' : 'none';
+    }
 
     // Render pending invites
     const pending = householdData.pending_invites || [];
@@ -1745,7 +1763,7 @@ function showHouseholdSwitcher() {
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
                     deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
-                } else if (!isActive) {
+                } else if (h.role !== 'owner') {
                     deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
                 }
                 
@@ -2388,6 +2406,49 @@ function confirmDeleteHousehold(id, name) {
 }
 
 
+
+function confirmKickMember(userId, name) {
+    showActionConfirm('👤 Remove Member', 'Remove <b>' + escapeHtml(name) + '</b> from this household?', 'Remove Member', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            fetch('/api/auth/household/members/' + userId + '/remove', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.ok) {
+                    loadHousehold();
+                } else {
+                    alert(res.error || 'Failed to remove member');
+                }
+            })
+            .catch(() => alert('Network error'));
+        }
+    });
+}
+
+function confirmLeaveCurrentHousehold() {
+    if (!householdData || !householdData.household) return;
+    const hh = householdData.household;
+    showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave \'<b>' + escapeHtml(hh.name) + '</b>\'?', 'Leave Household', '#ef4444', function(confirmed) {
+        if (confirmed) {
+            fetch('/api/auth/household/' + hh.id + '/leave', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.ok) window.location.reload();
+                else alert(res.error || 'Failed to leave household');
+            })
+            .catch(() => alert('Network error'));
+        }
+    });
+}
+
 function confirmLeaveHousehold(id, name) {
     showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave "<b>' + escapeHtml(name) + '</b>"?', 'Leave', '#ef4444', function(confirmed) {
         if (confirmed) {
@@ -2589,27 +2650,30 @@ if (document.getElementById('btnCleanupKeep')) {
     });
 }
 
-var actionConfirmCb = null;
 function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
-    document.getElementById('actionConfirmTitle').innerHTML = title;
-    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const modal = document.getElementById('actionConfirmModal');
+    if (!modal) return;
+    const titleEl = document.getElementById('actionConfirmTitle');
+    const descEl = document.getElementById('actionConfirmDesc');
     const btn = document.getElementById('btnActionConfirm');
-    btn.innerHTML = confirmText;
-    btn.style.background = confirmColor;
-    actionConfirmCb = cb;
-    document.getElementById('actionConfirmModal').classList.add('active');
-}
-if (document.getElementById('btnActionConfirm')) {
-    document.getElementById('btnActionConfirm').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(true);
-    });
-}
-if (document.getElementById('btnActionCancel')) {
-    document.getElementById('btnActionCancel').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(false);
-    });
+    const cancelBtn = document.getElementById('btnActionCancel');
+    if (titleEl) titleEl.innerHTML = title;
+    if (descEl) descEl.innerHTML = desc;
+    if (btn) {
+        btn.innerHTML = confirmText;
+        btn.style.background = confirmColor;
+        btn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(true);
+        };
+    }
+    if (cancelBtn) {
+        cancelBtn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(false);
+        };
+    }
+    modal.classList.add('active');
 }
 </script>
 <div class="ad-banner-bottom">
