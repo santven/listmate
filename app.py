@@ -2129,7 +2129,7 @@ def recipes_endpoint():
 
         cur = db.execute(
             "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-            "VALUES (%s, %s, %s, %s, %s, ?, ?, ?, ?, ?) RETURNING id",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
         )
         recipe_id = cur.fetchall()[0]["id"]
