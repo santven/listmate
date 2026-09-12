@@ -252,7 +252,7 @@
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
       <div style="display:flex; align-items:center; gap:8px;">
         <h2 id="householdTitle" style="font-size:18px; font-weight:700; color:#1f2937; margin-bottom:0; display:flex; align-items:center; gap:6px;">🏡 Household</h2>
-        <button id="btnRenameHousehold" onclick="openRenameHouseholdModal()" style="background:none; border:none; cursor:pointer; font-size:15px; padding:4px 6px; border-radius:6px; color:var(--muted); line-height:1;" title="Rename Household" aria-label="Rename Household">✏️</button>
+        <button id="btnRenameHousehold" onclick="openRenameHouseholdModal()" style="display:none; background:none; border:none; cursor:pointer; font-size:15px; padding:4px 6px; border-radius:6px; color:var(--muted); line-height:1;" title="Rename Household" aria-label="Rename Household">✏️</button>
       </div>
       <span id="householdDesc" style="font-size:12px; font-weight:700; color:var(--green-dark); background:#f0f7f2; border:1px solid #c8e6c9; padding:4px 10px; border-radius:12px; white-space:nowrap;"></span>
     </div>
@@ -799,6 +799,8 @@ async function loadHousehold() {
 
     if (hh) {
       document.getElementById('householdTitle').textContent = '🏡 ' + (hh.name || 'My Household');
+      const btnRename = document.getElementById('btnRenameHousehold');
+      if (btnRename) btnRename.style.display = householdData.is_owner ? 'inline-block' : 'none';
     }
     
     if (hh.over_limit) {
@@ -1738,7 +1740,7 @@ function showHouseholdSwitcher() {
                 const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
-                let renameHtml = `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>`;
+                let renameHtml = h.role === 'owner' ? `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>` : '';
                 
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
