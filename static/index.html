@@ -1141,6 +1141,15 @@ async function checkAuth() {
   try {
     const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); 
     window.currentCfg = cfg;
+    if (cfg.household_id) {
+      if (window.currentHouseholdId && window.currentHouseholdId !== cfg.household_id) {
+        try { localStorage.removeItem('listmate_offline_queue'); } catch(e){}
+      }
+      window.currentHouseholdId = cfg.household_id;
+    }
+    if (cfg.household_name) {
+      window.currentHouseholdName = cfg.household_name;
+    }
     try { localStorage.setItem('listmate_cfg', JSON.stringify(cfg)); } catch(e){}
     if (!cfg.user) { window.location.href='/login'; return false; }
     if (!cfg.household_id || cfg.household_id === 0 || cfg.needs_signup) { window.location.href='/login?needs_signup=1'; return false; }
@@ -1310,7 +1319,7 @@ function enqueueOfflineAction(action) {
 
 function saveCache() {
   try {
-    localStorage.setItem('listmate_cache', JSON.stringify({ stores, list, recipes, allStoreItems }));
+    localStorage.setItem('listmate_cache', JSON.stringify({ household_id: window.currentHouseholdId, stores, list, recipes, allStoreItems }));
   } catch(e){}
 }
 
@@ -1379,12 +1388,14 @@ async function loadData() {
     const cached = localStorage.getItem('listmate_cache');
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed.stores) && parsed.stores.length > 0) stores = parsed.stores;
-      if (Array.isArray(parsed.list)) list = parsed.list;
-      if (Array.isArray(parsed.recipes)) recipes = parsed.recipes;
-      if (parsed.allStoreItems && typeof parsed.allStoreItems === 'object') allStoreItems = parsed.allStoreItems;
-      renderHome();
-      loadSuggestions();
+      if (!parsed.household_id || !window.currentHouseholdId || parsed.household_id === window.currentHouseholdId) {
+        if (Array.isArray(parsed.stores) && parsed.stores.length > 0) stores = parsed.stores;
+        if (Array.isArray(parsed.list)) list = parsed.list;
+        if (Array.isArray(parsed.recipes)) recipes = parsed.recipes;
+        if (parsed.allStoreItems && typeof parsed.allStoreItems === 'object') allStoreItems = parsed.allStoreItems;
+        renderHome();
+        loadSuggestions();
+      }
     }
   } catch(e) {}
 
@@ -1399,6 +1410,15 @@ async function loadData() {
       stores = initData.stores;
       list = initData.list;
       recipes = initData.recipes;
+      if (initData.household_id) {
+        if (window.currentHouseholdId && window.currentHouseholdId !== initData.household_id) {
+          try { localStorage.removeItem('listmate_offline_queue'); } catch(e){}
+        }
+        window.currentHouseholdId = initData.household_id;
+      }
+      if (initData.household_name) {
+        window.currentHouseholdName = initData.household_name;
+      }
       if (initData.user_email) {
         window.userEmail = initData.user_email;
       }
