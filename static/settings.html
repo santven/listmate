@@ -1665,6 +1665,10 @@ async function executeSpinOff() {
 var renameHhTargetId = null;
 function openRenameHouseholdModal(hhId, currentName) {
   renameHhTargetId = hhId || null;
+  if (!currentName && window._switcherHouseholds) {
+    var found = window._switcherHouseholds.find(function(h) { return h.id === hhId; });
+    if (found) currentName = found.name;
+  }
   var input = document.getElementById('renameHouseholdInput');
   var err = document.getElementById('renameHouseholdError');
   if (err) err.style.display = 'none';
@@ -1748,6 +1752,8 @@ function showHouseholdSwitcher() {
     .then(r => r.json())
     .then(res => {
         if (!res.ok) return;
+        window._switcherHouseholds = res.households || [];
+        window._switcherInvites = res.invites || [];
         let html = '';
         if (res.households.length > 0) {
             html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Your Households</div>';
@@ -1757,14 +1763,14 @@ function showHouseholdSwitcher() {
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
                 const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
-                let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
+                let actionHtml = isActive ? '✅' : '<button type=\"button\" onclick=\"switchHousehold(' + h.id + ')\" style=\"background:transparent; border:none; cursor:pointer; font-size:18px; padding:6px; min-width:32px; min-height:32px; display:inline-flex; align-items:center; justify-content:center;\">➡️</button>';
                 let renameHtml = h.role === 'owner' ? `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>` : '';
                 
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
-                    deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
+                    deleteOrLeaveHtml = `<button type=\"button\" onclick=\"event.stopPropagation(); confirmDeleteHousehold(${h.id})\" style=\"background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px; padding:6px 8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center;\" title=\"Delete Empty Household\">🗑️</button>`;
                 } else if (h.role !== 'owner') {
-                    deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
+                    deleteOrLeaveHtml = `<button type=\"button\" onclick=\"event.stopPropagation(); confirmLeaveHousehold(${h.id})\" style=\"background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px; padding:6px 8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center;\" title=\"Leave Household\">🚪</button>`;
                 }
                 
                 html += `
@@ -1792,8 +1798,8 @@ function showHouseholdSwitcher() {
                             <div style="font-size:12px; color:var(--muted);">Invite</div>
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button onclick="confirmDeclineInvite('${inv.token}', '${escapeHtml(inv.household_name)}')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Decline</button>
-                            <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                            <button type="button" onclick="event.stopPropagation(); confirmDeclineInvite('${inv.token}')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Decline</button>
+                            <button type="button" onclick="event.stopPropagation(); acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
                         </div>
                     </div>
                 `;
@@ -2393,9 +2399,15 @@ async function submitAdminResolve() {
 }
 
 function confirmDeleteHousehold(id, name) {
+    if (!name && window._switcherHouseholds) {
+        var found = window._switcherHouseholds.find(function(h) { return h.id === id; });
+        if (found) name = found.name;
+    }
+    name = name || 'Household';
     showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
             fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
                 if (res.ok) window.location.reload();
@@ -2441,7 +2453,13 @@ function confirmLeaveCurrentHousehold() {
             })
             .then(r => r.json())
             .then(res => {
-                if (res.ok) window.location.reload();
+                if (res.ok) {
+                    try {
+                        localStorage.removeItem('listmate_cache');
+                        localStorage.removeItem('listmate_offline_queue');
+                    } catch(e) {}
+                    window.location.reload();
+                }
                 else alert(res.error || 'Failed to leave household');
             })
             .catch(() => alert('Network error'));
@@ -2450,28 +2468,51 @@ function confirmLeaveCurrentHousehold() {
 }
 
 function confirmLeaveHousehold(id, name) {
+    if (!name && window._switcherHouseholds) {
+        var found = window._switcherHouseholds.find(function(h) { return h.id === id; });
+        if (found) name = found.name;
+    }
+    name = name || 'Household';
     showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave "<b>' + escapeHtml(name) + '</b>"?', 'Leave', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
             fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
-                if (res.ok) window.location.reload();
-                else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
-            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+                if (res.ok) {
+                    try {
+                        localStorage.removeItem('listmate_cache');
+                        localStorage.removeItem('listmate_offline_queue');
+                    } catch(e) {}
+                    window.location.reload();
+                } else {
+                    alert(res.error || 'Failed to leave');
+                    showHouseholdSwitcher();
+                }
+            }).catch(() => {
+                alert('Network error');
+                showHouseholdSwitcher();
+            });
         }
     });
 }
 
 
 function confirmDeclineInvite(token, name) {
+    if (!name && window._switcherInvites) {
+        var found = window._switcherInvites.find(function(i) { return i.token === token; });
+        if (found) name = found.household_name;
+    }
+    name = name || 'Household';
     showActionConfirm('❌ Decline Invite', 'Are you sure you want to decline the invite for "<b>' + escapeHtml(name) + '</b>"?', 'Decline', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
             fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
                 if (res.ok) window.location.reload();
-                else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
-            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+                else { alert(res.error || 'Failed to decline'); showHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); showHouseholdSwitcher(); });
         }
     });
 }
@@ -2673,6 +2714,12 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
             if (cb) cb(false);
         };
     }
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            modal.classList.remove('active');
+            if (cb) cb(false);
+        }
+    };
     modal.classList.add('active');
 }
 </script>
@@ -2954,8 +3001,8 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
 </div>
 
 <!-- Action Confirm Modal -->
-<div class="modal-overlay" id="actionConfirmModal">
-  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+<div class="modal-overlay" id="actionConfirmModal" style="z-index: 10050;">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; position: relative; z-index: 10051;">
     <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
     <div style="display:flex; flex-direction:column; gap:10px;">
