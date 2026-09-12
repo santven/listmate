@@ -438,7 +438,9 @@ def get_household_status():
         except:
             pass
             
-    members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,))
+    members = _run("SELECT user_id FROM auth_household_members WHERE household_id = ?", (hhid,))
+    if not members:
+        members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,))
     is_read_only = False
     over_limit = False
     if not is_prem and len(members) > int(__import__("os").environ.get("FREE_TIER_MEMBER_LIMIT", 1)):
@@ -1080,14 +1082,19 @@ def register_auth_routes(app):
         try: _run(f"DELETE FROM {_FLAGS} WHERE user_id = ?", (uid,))
         except Exception: pass
 
-        # 2. Check remaining members in household
-        members = _run(f"SELECT id FROM {_USERS} WHERE household_id = ?", (hhid,)) if hhid else []
-        is_last_member = len(members) <= 1
+        # 2. Delete user from auth_household_members
+        _run("DELETE FROM auth_household_members WHERE user_id = ?", (uid,))
 
-        # 3. Delete user record
+        # 3. Check remaining members in household
+        remaining = _run("SELECT user_id FROM auth_household_members WHERE household_id = ?", (hhid,)) if hhid else []
+        if not remaining and hhid:
+            remaining = _run(f"SELECT id FROM {_USERS} WHERE household_id = ? AND id != ?", (hhid, uid))
+        is_last_member = len(remaining) == 0
+
+        # 4. Delete user record
         _run(f"DELETE FROM {_USERS} WHERE id = ?", (uid,))
 
-        # 4. If last member, purge household data
+        # 5. If last member, purge household data
         if hhid and is_last_member:
             _purge_household(hhid)
 
@@ -1328,7 +1335,17 @@ def register_auth_routes(app):
         if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
             subscription_ends_at = subscription_ends_at.isoformat()
             
-        members = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
+        members = _run(f"""
+            SELECT u.id, u.name, u.email, m.role
+            FROM auth_household_members m
+            JOIN {_USERS} u ON m.user_id = u.id
+            WHERE m.household_id = ?
+            ORDER BY (m.role = 'owner') DESC, m.joined_at ASC, u.id ASC
+        """, (hhid,))
+        if not members:
+            fallback_users = _run(f"SELECT id, name, email FROM {_USERS} WHERE household_id = ?", (hhid,))
+            members = [{"id": m["id"], "name": m["name"], "email": m["email"], "role": "owner" if m["id"] == hh.get("owner_id") else "member"} for m in fallback_users]
+
         invites = _run("""
             SELECT token, email, created_at, expires_at, reminder_count, last_reminded_at 
             FROM invites 
@@ -1347,7 +1364,7 @@ def register_auth_routes(app):
                 "free_tier_member_limit": int(__import__("os").environ.get("FREE_TIER_MEMBER_LIMIT", 1))
             },
             "members": [{"user_id": m["id"], "email": m["email"], "display_name": m["name"], 
-                         "role": "owner" if m["id"] == hh.get("owner_id") else "member"} for m in members],
+                         "role": "owner" if (m.get("role") == "owner" or m["id"] == hh.get("owner_id")) else "member"} for m in members],
             "pending_invites": [{
                 "email": i["email"], 
                 "token": i["token"], 
@@ -1428,10 +1445,29 @@ def register_auth_routes(app):
         # Only allow removing from own household; can't remove self
         me = get_user_id()
         if member_id == me: return jsonify({"error": "Cannot remove yourself"}), 400
-        member = _one(f"SELECT * FROM {_USERS} WHERE id = ? AND household_id = ?", (member_id, hhid))
-        if not member: return jsonify({"error": "Member not found in your household"}), 404
-        _run(f"UPDATE {_USERS} SET household_id = NULL WHERE id = ?", (member_id,))
-        return jsonify({"ok": True, "removed": member["email"]})
+
+        # Only the household owner can remove members
+        my_mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (me, hhid))
+        hh = _one(f"SELECT owner_id FROM {_HH} WHERE id = ?", (hhid,))
+        is_owner = (my_mem and my_mem.get("role") == "owner") or (hh and hh.get("owner_id") == me)
+        if not is_owner:
+            return jsonify({"error": "Only the household owner can remove members"}), 403
+
+        mem = _one("SELECT * FROM auth_household_members WHERE user_id = ? AND household_id = ?", (member_id, hhid))
+        user_row = _one(f"SELECT id, email, household_id FROM {_USERS} WHERE id = ?", (member_id,))
+        if not mem and not (user_row and user_row.get("household_id") == hhid):
+            return jsonify({"error": "Member not found in your household"}), 404
+
+        _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (member_id, hhid))
+
+        # If their active household was this one, switch them to another household they belong to (or NULL)
+        if user_row and user_row.get("household_id") == hhid:
+            other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY (role = 'owner') DESC, household_id ASC LIMIT 1", (member_id,))
+            new_hhid = other["household_id"] if other else None
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, member_id))
+
+        removed_email = user_row.get("email") if user_row else str(member_id)
+        return jsonify({"ok": True, "removed": removed_email})
 
     @app.route("/api/auth/household/members", methods=["POST"])
     @require_user
@@ -1446,8 +1482,14 @@ def register_auth_routes(app):
         _init_schema()
 
         # Check if already a member
-        existing = _one(f"SELECT * FROM {_USERS} WHERE LOWER(email) = LOWER(?) AND household_id = ?",
-                       (email, hhid))
+        existing = _one(f"""
+            SELECT u.id FROM auth_household_members m
+            JOIN {_USERS} u ON m.user_id = u.id
+            WHERE LOWER(u.email) = LOWER(?) AND m.household_id = ?
+        """, (email, hhid))
+        if not existing:
+            existing = _one(f"SELECT * FROM {_USERS} WHERE LOWER(email) = LOWER(?) AND household_id = ?",
+                           (email, hhid))
         if existing:
             return jsonify({"ok": True, "already_member": True})
 
