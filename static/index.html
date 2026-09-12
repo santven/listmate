@@ -44,27 +44,36 @@ if (document.getElementById('btnCleanupKeep')) {
     });
 }
 
-var actionConfirmCb = null;
 function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
-    document.getElementById('actionConfirmTitle').innerHTML = title;
-    document.getElementById('actionConfirmDesc').innerHTML = desc;
+    const modal = document.getElementById('actionConfirmModal');
+    if (!modal) return;
+    const titleEl = document.getElementById('actionConfirmTitle');
+    const descEl = document.getElementById('actionConfirmDesc');
     const btn = document.getElementById('btnActionConfirm');
-    btn.innerHTML = confirmText;
-    btn.style.background = confirmColor;
-    actionConfirmCb = cb;
-    document.getElementById('actionConfirmModal').classList.add('active');
-}
-if (document.getElementById('btnActionConfirm')) {
-    document.getElementById('btnActionConfirm').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(true);
-    });
-}
-if (document.getElementById('btnActionCancel')) {
-    document.getElementById('btnActionCancel').addEventListener('click', () => {
-        document.getElementById('actionConfirmModal').classList.remove('active');
-        if (actionConfirmCb) actionConfirmCb(false);
-    });
+    const cancelBtn = document.getElementById('btnActionCancel');
+    if (titleEl) titleEl.innerHTML = title;
+    if (descEl) descEl.innerHTML = desc;
+    if (btn) {
+        btn.innerHTML = confirmText;
+        btn.style.background = confirmColor;
+        btn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(true);
+        };
+    }
+    if (cancelBtn) {
+        cancelBtn.onclick = function() {
+            modal.classList.remove('active');
+            if (cb) cb(false);
+        };
+    }
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            modal.classList.remove('active');
+            if (cb) cb(false);
+        }
+    };
+    modal.classList.add('active');
 }
 </script>
 <style>
@@ -906,6 +915,25 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 </div>
 
+<!-- Rename Household Modal -->
+<div class="modal-overlay" id="renameHouseholdModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">✏️ Rename Household</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+      Enter a new name for your household.
+    </p>
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Household Name</label>
+      <input type="text" id="renameHouseholdInput" placeholder="e.g. Smith Family, Downtown Apt..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none;" maxlength="60">
+    </div>
+    <div class="error" id="renameHouseholdError" style="display:none; margin-bottom:12px; color:#ef4444; font-size:13px;"></div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSubmitRenameHousehold" onclick="submitRenameHousehold()" style="flex:2; background:var(--green); color:#fff; border:none; padding:12px 16px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Save</button>
+      <button onclick="closeRenameHouseholdModal()" style="flex:1; background:none; color:#888; border:1px solid var(--border); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Join Household Modal -->
 <div class="modal-overlay" id="joinHouseholdModal">
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
@@ -1119,6 +1147,15 @@ async function checkAuth() {
   try {
     const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); 
     window.currentCfg = cfg;
+    if (cfg.household_id) {
+      if (window.currentHouseholdId && window.currentHouseholdId !== cfg.household_id) {
+        try { localStorage.removeItem('listmate_offline_queue'); } catch(e){}
+      }
+      window.currentHouseholdId = cfg.household_id;
+    }
+    if (cfg.household_name) {
+      window.currentHouseholdName = cfg.household_name;
+    }
     try { localStorage.setItem('listmate_cfg', JSON.stringify(cfg)); } catch(e){}
     if (!cfg.user) { window.location.href='/login'; return false; }
     if (!cfg.household_id || cfg.household_id === 0 || cfg.needs_signup) { window.location.href='/login?needs_signup=1'; return false; }
@@ -1288,7 +1325,7 @@ function enqueueOfflineAction(action) {
 
 function saveCache() {
   try {
-    localStorage.setItem('listmate_cache', JSON.stringify({ stores, list, recipes, allStoreItems }));
+    localStorage.setItem('listmate_cache', JSON.stringify({ household_id: window.currentHouseholdId, stores, list, recipes, allStoreItems }));
   } catch(e){}
 }
 
@@ -1357,12 +1394,14 @@ async function loadData() {
     const cached = localStorage.getItem('listmate_cache');
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed.stores) && parsed.stores.length > 0) stores = parsed.stores;
-      if (Array.isArray(parsed.list)) list = parsed.list;
-      if (Array.isArray(parsed.recipes)) recipes = parsed.recipes;
-      if (parsed.allStoreItems && typeof parsed.allStoreItems === 'object') allStoreItems = parsed.allStoreItems;
-      renderHome();
-      loadSuggestions();
+      if (!parsed.household_id || !window.currentHouseholdId || parsed.household_id === window.currentHouseholdId) {
+        if (Array.isArray(parsed.stores) && parsed.stores.length > 0) stores = parsed.stores;
+        if (Array.isArray(parsed.list)) list = parsed.list;
+        if (Array.isArray(parsed.recipes)) recipes = parsed.recipes;
+        if (parsed.allStoreItems && typeof parsed.allStoreItems === 'object') allStoreItems = parsed.allStoreItems;
+        renderHome();
+        loadSuggestions();
+      }
     }
   } catch(e) {}
 
@@ -1377,6 +1416,15 @@ async function loadData() {
       stores = initData.stores;
       list = initData.list;
       recipes = initData.recipes;
+      if (initData.household_id) {
+        if (window.currentHouseholdId && window.currentHouseholdId !== initData.household_id) {
+          try { localStorage.removeItem('listmate_offline_queue'); } catch(e){}
+        }
+        window.currentHouseholdId = initData.household_id;
+      }
+      if (initData.household_name) {
+        window.currentHouseholdName = initData.household_name;
+      }
       if (initData.user_email) {
         window.userEmail = initData.user_email;
       }
@@ -3408,6 +3456,72 @@ function showPremiumModal(featureName) {
 }
 
 
+
+var renameHhTargetId = null;
+function openRenameHouseholdModal(hhId, currentName) {
+  renameHhTargetId = hhId || null;
+  if (!currentName && window._switcherHouseholds) {
+    var found = window._switcherHouseholds.find(function(h) { return h.id === hhId; });
+    if (found) currentName = found.name;
+  }
+  var input = document.getElementById('renameHouseholdInput');
+  var err = document.getElementById('renameHouseholdError');
+  if (err) err.style.display = 'none';
+  if (input) {
+    input.value = currentName || '';
+  }
+  var modal = document.getElementById('renameHouseholdModal');
+  if (modal) {
+    modal.classList.add('active');
+    setTimeout(function() { if (input) { input.focus(); input.select(); } }, 150);
+  }
+}
+function closeRenameHouseholdModal() {
+  var modal = document.getElementById('renameHouseholdModal');
+  if (modal) modal.classList.remove('active');
+  renameHhTargetId = null;
+}
+function submitRenameHousehold() {
+  var input = document.getElementById('renameHouseholdInput');
+  var err = document.getElementById('renameHouseholdError');
+  var btn = document.getElementById('btnSubmitRenameHousehold');
+  var val = input ? input.value.trim() : '';
+  if (!val) {
+    if (err) { err.textContent = 'Household name cannot be empty'; err.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  var url = renameHhTargetId ? ('/api/auth/household/' + renameHhTargetId + '/rename') : '/api/auth/household/rename';
+  fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: val })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.ok) {
+      closeRenameHouseholdModal();
+      var switcher = document.getElementById('switcherModal');
+      if (switcher && switcher.classList.contains('active')) {
+        showHouseholdSwitcher();
+      }
+      if (typeof toast === 'function') {
+        toast('✅ Household renamed');
+      } else {
+        alert('✅ Household renamed to ' + res.household_name);
+      }
+    } else {
+      if (err) { err.textContent = res.error || 'Failed to rename household'; err.style.display = 'block'; }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  })
+  .catch(function(e) {
+    if (err) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  });
+}
+
 function showHouseholdSwitcher() {
     const modal = document.getElementById('switcherModal');
     if (!modal) return;
@@ -3418,6 +3532,8 @@ function showHouseholdSwitcher() {
     .then(r => r.json())
     .then(res => {
         if (!res.ok) return;
+        window._switcherHouseholds = res.households || [];
+        window._switcherInvites = res.invites || [];
         let html = '';
         if (res.households.length > 0) {
             html += '<div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Your Households</div>';
@@ -3427,13 +3543,14 @@ function showHouseholdSwitcher() {
                 const roleBadge = h.role === 'owner' ? '<span style="color:#10b981; font-size:10px; font-weight:bold; margin-left:6px;">Owner</span>' : '';
                 const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
-                let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
+                let actionHtml = isActive ? '✅' : '<button type=\"button\" onclick=\"switchHousehold(' + h.id + ')\" style=\"background:transparent; border:none; cursor:pointer; font-size:18px; padding:6px; min-width:32px; min-height:32px; display:inline-flex; align-items:center; justify-content:center;\">➡️</button>';
+                let renameHtml = h.role === 'owner' ? `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>` : '';
                 
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
-                    deleteOrLeaveHtml = `<button onclick="confirmDeleteHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Delete Empty Household">🗑️</button>`;
-                } else if (!isActive) {
-                    deleteOrLeaveHtml = `<button onclick="confirmLeaveHousehold(${h.id}, '${escapeHtml(h.name)}')" style="background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:16px; padding:4px;" title="Leave Household">🚪</button>`;
+                    deleteOrLeaveHtml = `<button type=\"button\" onclick=\"event.stopPropagation(); confirmDeleteHousehold(${h.id})\" style=\"background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px; padding:6px 8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center;\" title=\"Delete Empty Household\">🗑️</button>`;
+                } else if (h.role !== 'owner') {
+                    deleteOrLeaveHtml = `<button type=\"button\" onclick=\"event.stopPropagation(); confirmLeaveHousehold(${h.id})\" style=\"background:transparent; border:none; cursor:pointer; color:#ef4444; font-size:18px; padding:6px 8px; min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center;\" title=\"Leave Household\">🚪</button>`;
                 }
                 
                 html += `
@@ -3443,6 +3560,7 @@ function showHouseholdSwitcher() {
                             <div style="font-size:12px; color:var(--muted); margin-top:2px;">${counts}</div>
                         </div>
                         <div style="display:flex; gap:10px; align-items:center;">
+                            ${renameHtml}
                             ${actionHtml}
                             ${deleteOrLeaveHtml}
                         </div>
@@ -3460,8 +3578,8 @@ function showHouseholdSwitcher() {
                             <div style="font-size:12px; color:var(--muted);">Invite</div>
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button onclick="confirmDeclineInvite('${inv.token}', '${escapeHtml(inv.household_name)}')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Decline</button>
-                            <button onclick="acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
+                            <button type="button" onclick="event.stopPropagation(); confirmDeclineInvite('${inv.token}')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Decline</button>
+                            <button type="button" onclick="event.stopPropagation(); acceptInvite('${inv.token}')" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">Join</button>
                         </div>
                     </div>
                 `;
@@ -3472,9 +3590,15 @@ function showHouseholdSwitcher() {
 }
 
 function confirmDeleteHousehold(id, name) {
+    if (!name && window._switcherHouseholds) {
+        var found = window._switcherHouseholds.find(function(h) { return h.id === id; });
+        if (found) name = found.name;
+    }
+    name = name || 'Household';
     showActionConfirm('🗑️ Delete Empty List', 'Delete empty household "<b>' + escapeHtml(name) + '</b>"?<br>This cannot be undone.', 'Delete List', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Deleting...</div>';
             fetch('/api/auth/household/' + id + '/delete', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
                 if (res.ok) window.location.reload();
@@ -3486,28 +3610,51 @@ function confirmDeleteHousehold(id, name) {
 
 
 function confirmLeaveHousehold(id, name) {
+    if (!name && window._switcherHouseholds) {
+        var found = window._switcherHouseholds.find(function(h) { return h.id === id; });
+        if (found) name = found.name;
+    }
+    name = name || 'Household';
     showActionConfirm('🚪 Leave Household', 'Are you sure you want to leave "<b>' + escapeHtml(name) + '</b>"?', 'Leave', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Leaving...</div>';
             fetch('/api/auth/household/' + id + '/leave', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
-                if (res.ok) window.location.reload();
-                else { alert(res.error || 'Failed to leave'); closeHouseholdSwitcher(); }
-            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+                if (res.ok) {
+                    try {
+                        localStorage.removeItem('listmate_cache');
+                        localStorage.removeItem('listmate_offline_queue');
+                    } catch(e) {}
+                    window.location.reload();
+                } else {
+                    alert(res.error || 'Failed to leave');
+                    showHouseholdSwitcher();
+                }
+            }).catch(() => {
+                alert('Network error');
+                showHouseholdSwitcher();
+            });
         }
     });
 }
 
 
 function confirmDeclineInvite(token, name) {
+    if (!name && window._switcherInvites) {
+        var found = window._switcherInvites.find(function(i) { return i.token === token; });
+        if (found) name = found.household_name;
+    }
+    name = name || 'Household';
     showActionConfirm('❌ Decline Invite', 'Are you sure you want to decline the invite for "<b>' + escapeHtml(name) + '</b>"?', 'Decline', '#ef4444', function(confirmed) {
         if (confirmed) {
-            document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
+            var listEl = document.getElementById('switcherList');
+            if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Declining...</div>';
             fetch('/api/auth/invite/' + token + '/decline', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'} })
             .then(r => r.json()).then(res => {
                 if (res.ok) window.location.reload();
-                else { alert(res.error || 'Failed to decline'); closeHouseholdSwitcher(); }
-            }).catch(() => { alert('Network error'); closeHouseholdSwitcher(); });
+                else { alert(res.error || 'Failed to decline'); showHouseholdSwitcher(); }
+            }).catch(() => { alert('Network error'); showHouseholdSwitcher(); });
         }
     });
 }
@@ -3527,18 +3674,7 @@ function switchHousehold(id) {
     }).then(() => window.location.reload());
 }
 function acceptInvite(token) {
-    fetch('/api/auth/invite/' + token, { credentials: 'include' })
-    .then(r => r.json())
-    .then(inv => {
-        if (inv.current_is_disposable && inv.current_household_name) {
-            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
-                doAcceptInvite(token, deleteEmpty);
-            });
-        } else {
-            doAcceptInvite(token, false);
-        }
-    })
-    .catch(() => doAcceptInvite(token, false));
+    doAcceptInvite(token, true);
 }
 function doAcceptInvite(token, deleteEmpty) {
     document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
@@ -5662,8 +5798,8 @@ window.onDay7ShowMeHow = function() {
 </div>
 
 <!-- Action Confirm Modal -->
-<div class="modal-overlay" id="actionConfirmModal">
-  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+<div class="modal-overlay" id="actionConfirmModal" style="z-index: 10050;">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; position: relative; z-index: 10051;">
     <h3 style="margin:0 0 16px 0; font-size:20px; font-weight:700;" id="actionConfirmTitle">Confirm Action</h3>
     <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;" id="actionConfirmDesc"></p>
     <div style="display:flex; flex-direction:column; gap:10px;">

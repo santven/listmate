@@ -326,13 +326,15 @@ def auth_callback():
     if not user:
         return redirect("/login")
     authmod._run("DELETE FROM login_intents WHERE id = ?", ("code_" + code,))
-    hh_id = user.get("household_id", 0)
+    hh_id = user.get("household_id", 0) or 0
     hh_name = ""
-    if hh_id:
+    if not hh_id:
+        hh_id, hh_name = authmod._resolve_user_household(user, False, user.get("email", ""), user.get("name", ""))
+    elif hh_id:
         hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
         hh_name = hh.get("name", "") if hh else ""
-    authmod._set(user["id"], user.get("email", ""), user.get("name", ""), hh_id, hh_name)
-    target_url = "/login?needs_signup=1" if hh_id == 0 else "/"
+        authmod._set(user["id"], user.get("email", ""), user.get("name", ""), hh_id, hh_name)
+    target_url = "/"
     return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Successful</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>function proceed(){{try{{window.location.href="listmate://sso_callback";}}catch(e){{}}setTimeout(function(){{window.location.replace("{target_url}");}},1000);}}if(window.opener && window.opener !== window){{try{{window.close();}}catch(e){{}}setTimeout(proceed, 500);}}else{{proceed();}}</script></body></html>"""
 
 
@@ -367,44 +369,14 @@ def login_google_native():
             if user.get("google_id") != gid:
                 authmod._run(f"UPDATE {authmod._USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
             
-            uid = user["id"]
-            hh_id = user.get("household_id", 0) or 0
-            hh_name = ""
-            
-            if not is_new_user and hh_id == 0:
-                owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
-                if owned:
-                    hh_id = owned["household_id"]
-                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                else:
-                    mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
-                    if mem:
-                        hh_id = mem["household_id"]
-                        authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-            
-            if not hh_id:
-                hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
-                if hh_count and hh_count.get("cnt", 0) == 0:
-                    import secrets
-                    code = secrets.token_hex(4).upper()
-                    prem_val = True
-                    authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
-                    hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
-                    hh_id = hh["id"] if hh else 1
-                    hh_name = hh["name"] if hh else "Root Household"
-                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-            
-            if hh_id and not hh_name:
-                hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
-                hh_name = hh.get("name", "") if hh else ""
-            
-            authmod._set(user["id"], email, user.get("name") or name, hh_id, hh_name)
+            payload = {"intent": intent_id}
+            invite_code = request.form.get("invite")
+            if invite_code:
+                payload["invite_token"] = invite_code
+            hh_id, hh_name = authmod._resolve_user_household(user, is_new_user, email, name, payload)
             if intent_id:
                 authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                
-            if hh_id == 0:
-                return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/login?needs_signup=1');</script></body></html>'''
-                
+
             return '''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><script>window.location.replace('/');</script></body></html>'''
             
     except Exception as e:
@@ -2157,7 +2129,7 @@ def recipes_endpoint():
 
         cur = db.execute(
             "INSERT INTO recipes (household_id, title, description, prep_time, cook_time, servings, cuisine, dietary_tags, instructions, ingredients) "
-            "VALUES (%s, %s, %s, %s, %s, ?, ?, ?, ?, ?) RETURNING id",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             (hhid, title, desc, prep, cook, servings, cuisine, tags_json, instr_json, ingr_json)
         )
         recipe_id = cur.fetchall()[0]["id"]
@@ -2389,6 +2361,8 @@ def init_data():
             "is_read_only": is_read_only,
             "user_email": authmod._get().get("email") if authmod._get() else "",
             "user_name": authmod._get().get("name", "Someone").split()[0] if authmod._get() else "Someone",
+            "household_id": hh,
+            "household_name": authmod.get_household_name(),
             "households_count": hh_count,
             "household_created_at": str(hh_status.get("created_at")) if hh_status and hh_status.get("created_at") else ""
         })
@@ -3565,30 +3539,7 @@ def auth_google_callback():
             user = authmod._one(
                 f"SELECT id, email, name, household_id, google_id FROM {authmod._USERS} WHERE google_id = ?", (info['sub'],))
         
-        hh_id = user.get('household_id', 0) if user else 0
-        hh_name = ''
-        
-        if not hh_id:
-            hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
-            if hh_count and hh_count.get('cnt', 0) == 0:
-                code_hh = _secrets.token_hex(4).upper()
-                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code) VALUES (?,?)", ("Root Household", code_hh))
-                hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
-                hh_id = hh['id'] if hh else 1
-                hh_name = hh.get('name', 'Root Household') if hh else 'Root Household'
-                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user['id']))
-            else:
-                authmod._set(user['id'], email, name, 0, '')
-                return ('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
-                        '<body style="text-align:center;font-family:sans-serif;padding-top:40px">' +
-                        "<script>window.location.replace(\'/login?needs_signup=1\');</script></body></html>")
-        
-        if hh_id and not hh_name:
-            hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
-            hh_name = hh.get('name', '') if hh else ''
-        
-
-        authmod._set(user["id"], email, name, hh_id, hh_name)
+        hh_id, hh_name = authmod._resolve_user_household(user, False, email, name)
         
         if state.startswith("intent_"):
             intent_id = state.split("intent_")[1]
