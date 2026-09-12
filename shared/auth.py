@@ -3,7 +3,7 @@
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps
-from flask import request, jsonify, session, send_from_directory, has_request_context
+from flask import request, jsonify, session, send_from_directory, has_request_context, g
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from google.auth.exceptions import GoogleAuthError
@@ -393,13 +393,109 @@ def install(app, cookie_name="listmate_session", cookie_secure=False):
     app.config["SESSION_COOKIE_SECURE"] = True
     
 def _set(uid, email, name, hhid, hhname):
-    session[COOKIE_NAME] = {"user_id": uid, "email": email, "name": name,
-                             "household_id": hhid, "household_name": hhname}
+    s = {"user_id": uid, "email": email, "name": name,
+         "household_id": hhid, "household_name": hhname}
+    session[COOKIE_NAME] = s
     session.permanent = True
     session.modified = True
+    if has_request_context():
+        g._auth_session = s
 
-def _clear(): session.pop(COOKIE_NAME, None)
+def _clear():
+    session.pop(COOKIE_NAME, None)
+    if has_request_context():
+        g._auth_session = None
+
+def _reconcile_session(s):
+    """
+    Validates that the logged-in user is actually an active member or owner of the household
+    specified in their session cookie. If the user was kicked out, left, or the household was deleted,
+    automatically reconciles their active session to their existing or newly created personal household.
+    """
+    if not s or not s.get("user_id"):
+        return s
+
+    uid = s.get("user_id")
+    hhid = s.get("household_id", 0)
+
+    # 1. Fast path: check if user is an active member or owner of the session household
+    if hhid and int(hhid) > 0:
+        row = _one(f"""
+            SELECT h.id, h.name, h.owner_id, m.role
+            FROM {_HH} h
+            LEFT JOIN auth_household_members m ON m.household_id = h.id AND m.user_id = ?
+            WHERE h.id = ?
+        """, (uid, hhid))
+
+        if row and (row.get("role") or row.get("owner_id") == uid):
+            # Still an active member or owner!
+            # If owner is missing from junction table, repair it
+            if row.get("owner_id") == uid and not row.get("role"):
+                _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'owner') ON CONFLICT (user_id, household_id) DO NOTHING", (uid, hhid))
+            # Sync household name if updated
+            if row.get("name") and row["name"] != s.get("household_name"):
+                s["household_name"] = row["name"]
+                session[COOKIE_NAME] = s
+                session.permanent = True
+                session.modified = True
+            return s
+
+    # 2. Reconcile path: user was kicked from hhid, hhid was deleted, or hhid is 0.
+    user = _one(f"SELECT id, email, name, household_id FROM {_USERS} WHERE id = ?", (uid,))
+    if not user:
+        _clear()
+        return None
+
+    email = user.get("email") or s.get("email", "")
+    name = user.get("name") or s.get("name", "")
+    assigned_hhid = user.get("household_id")
+    new_hhid = None
+    new_hhname = ""
+
+    # Check if assigned household in auth_users is valid for this user
+    if assigned_hhid and int(assigned_hhid) > 0 and assigned_hhid != hhid:
+        cand = _one(f"""
+            SELECT h.id, h.name, h.owner_id, m.role
+            FROM {_HH} h
+            LEFT JOIN auth_household_members m ON m.household_id = h.id AND m.user_id = ?
+            WHERE h.id = ?
+        """, (uid, assigned_hhid))
+        if cand and (cand.get("role") or cand.get("owner_id") == uid):
+            new_hhid = cand["id"]
+            new_hhname = cand.get("name", "")
+
+    # Fallback: find any household user belongs to (preferring owned households)
+    if not new_hhid:
+        cand = _one(f"""
+            SELECT h.id, h.name
+            FROM {_HH} h
+            JOIN auth_household_members m ON m.household_id = h.id
+            WHERE m.user_id = ? AND h.id != ?
+            ORDER BY (m.role = 'owner') DESC, h.id ASC
+            LIMIT 1
+        """, (uid, hhid if hhid else 0))
+        if cand:
+            new_hhid = cand["id"]
+            new_hhname = cand.get("name", "")
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
+
+    # Fallback: create personalized default household on the fly
+    if not new_hhid:
+        new_hhid, new_hhname = _create_default_household_for_user(uid, email, name)
+
+    s["household_id"] = new_hhid
+    s["household_name"] = new_hhname
+    session[COOKIE_NAME] = s
+    session.permanent = True
+    session.modified = True
+    return s
+
 def _get():
+    if not has_request_context():
+        return None
+    if hasattr(g, "_auth_session"):
+        return g._auth_session
+
     s = session.get(COOKIE_NAME)
     if not s:
         is_dev = bool(os.environ.get("BYPASS_AUTH")) or (not bool(os.environ.get("DATABASE_URL")) and "RENDER" not in os.environ.get("RENDER_EXTERNAL_HOSTNAME", ""))
@@ -409,9 +505,20 @@ def _get():
             session[COOKIE_NAME] = s
             session.permanent = True
             session.modified = True
+            g._auth_session = s
+            return s
         else:
+            g._auth_session = None
             return None
+
+    try:
+        s = _reconcile_session(s)
+    except Exception as e:
+        print(f"[_reconcile_session warning] {e}", flush=True)
+
+    g._auth_session = s
     return s
+
 
 def get_household_status():
     hhid = get_household_id()
@@ -1217,20 +1324,29 @@ def register_auth_routes(app):
         hhs = _run("SELECT h.id, h.name, h.subscription_status, h.is_premium, h.owner_id, h.is_default, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
         if not hhs and active_hhid:
             cur_hh = _one(f"SELECT id, name, subscription_status, is_premium, owner_id, is_default FROM {_HH} WHERE id = ?", (active_hhid,))
-            if cur_hh:
-                role = 'owner' if cur_hh.get('owner_id') == uid else 'member'
-                _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", (uid, active_hhid, role))
-                cur_hh["role"] = role
+            if cur_hh and cur_hh.get('owner_id') == uid:
+                _run("INSERT INTO auth_household_members (user_id, household_id, role) VALUES (?, ?, 'owner') ON CONFLICT DO NOTHING", (uid, active_hhid))
+                cur_hh["role"] = 'owner'
                 hhs = [cur_hh]
 
-        if not hhs and not active_hhid:
+        if not hhs:
             user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
             if user:
                 active_hhid, cur_name = _create_default_household_for_user(uid, user.get("email"), user.get("name"))
+                _set(uid, user.get("email"), user.get("name"), active_hhid, cur_name)
                 cur_hh = _one(f"SELECT id, name, subscription_status, is_premium, owner_id, is_default FROM {_HH} WHERE id = ?", (active_hhid,))
                 if cur_hh:
                     cur_hh["role"] = 'owner'
                     hhs = [cur_hh]
+
+        # Ensure active_hhid matches one of their valid households
+        hh_ids = [h["id"] for h in hhs]
+        if active_hhid not in hh_ids and hhs:
+            owned = [h for h in hhs if h.get("role") == "owner"]
+            chosen = owned[0] if owned else hhs[0]
+            active_hhid = chosen["id"]
+            user = _one(f"SELECT email, name FROM {_USERS} WHERE id = ?", (uid,))
+            _set(uid, user.get("email") if user else "", user.get("name") if user else "", active_hhid, chosen.get("name", ""))
 
         for h in hhs:
             hh_id = h["id"]
@@ -1762,7 +1878,7 @@ def register_auth_routes(app):
                 
         _run("DELETE FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
         
-        if user and user.get("household_id") == hh_id:
+        if user and (user.get("household_id") == hh_id or get_household_id() == hh_id):
             other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY (role = 'owner') DESC, household_id ASC LIMIT 1", (uid,))
             if other:
                 new_id = other["household_id"]
@@ -1806,7 +1922,7 @@ def register_auth_routes(app):
 
         user = _one(f"SELECT * FROM {_USERS} WHERE id = ?", (uid,))
         switched_to = None
-        if user and user.get("household_id") == hh_id:
+        if user and (user.get("household_id") == hh_id or get_household_id() == hh_id):
             other = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND household_id != ? ORDER BY household_id ASC LIMIT 1", (uid, hh_id))
             if other:
                 new_hhid = other["household_id"]
