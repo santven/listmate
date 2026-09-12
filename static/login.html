@@ -185,11 +185,16 @@ fetch('/api/version').then(r=>r.json()).then(d=>{
 }).catch(e=>{});
 var inviteToken = urlParams.get('token') || sessionStorage.getItem('listmate_invite');
 if (urlParams.get('needs_signup')) {
-  setTimeout(function() {
-    document.getElementById('step1').classList.remove('active');
-    document.getElementById('step2').classList.add('active');
-    showSignupOrInvites();
-  }, 100);
+  fetch('/api/auth/signup', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({marketing_opt_in: true})
+  }).then(function() {
+    processInviteThenRedirect();
+  }).catch(function() {
+    setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
+  });
 }
 if (inviteToken) sessionStorage.removeItem('listmate_invite');
 var googleCredential = null;
@@ -209,11 +214,16 @@ function checkSessionAndProceed(proceedFn) {
         if (c.user && c.household_id && c.household_id !== 0) {
           setTimeout(function(){location.replace(getRedirectTarget());}, 200);
         } else if (c.user && (!c.household_id || c.household_id === 0)) {
-          document.getElementById('loadingState').style.display = 'none';
-          document.getElementById('authButtonsContainer').style.display = 'none';
-          document.getElementById('step1').classList.remove('active');
-          document.getElementById('step2').classList.add('active');
-          showSignupOrInvites();
+          fetch('/api/auth/signup', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({marketing_opt_in: true})
+          }).then(function() {
+            processInviteThenRedirect();
+          }).catch(function() {
+            setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
+          });
         } else {
           if(b1) b1.disabled=false;
           if(b2) b2.disabled=false;
@@ -269,9 +279,16 @@ function startPollingIntent(intentId) {
           if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
             try { window.Capacitor.Plugins.Browser.close(); } catch(e) {}
           }
-          document.getElementById('step1').classList.remove('active');
-          document.getElementById('step2').classList.add('active');
-          showSignupOrInvites();
+          fetch('/api/auth/signup', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({marketing_opt_in: true})
+          }).then(function() {
+            processInviteThenRedirect();
+          }).catch(function() {
+            processInviteThenRedirect();
+          });
         }
       }).catch(function(){});
   }, 2000);
@@ -279,28 +296,22 @@ function startPollingIntent(intentId) {
 
 function processInviteThenRedirect() {
   if (inviteToken) {
-    fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
-      .then(r => r.json())
-      .then(inv => {
-        if (inv.current_is_disposable && inv.current_household_name) {
-            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
-                doProcessInviteThenRedirect(inviteToken, deleteEmpty);
-            });
-        } else {
-            doProcessInviteThenRedirect(inviteToken, false);
-        }
-      }).catch(() => doProcessInviteThenRedirect(inviteToken, false));
+    fetch('/api/auth/invite/' + encodeURIComponent(inviteToken) + '/accept', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete_current_empty: true })
+    }).then(function() {
+      setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
+    }).catch(function() {
+      setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
+    });
   } else {
-    setTimeout(() => location.replace(getRedirectTarget()), 200);
+    setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
   }
 }
 function doProcessInviteThenRedirect(token, deleteEmpty) {
-    fetch('/api/auth/invite/' + token + '/accept', {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delete_current_empty: deleteEmpty })
-    }).then(r => r.json()).then(d => {
-        setTimeout(() => location.replace(getRedirectTarget()), 200);
-    }).catch(() => setTimeout(() => location.replace(getRedirectTarget()), 200));
+    processInviteThenRedirect();
 }
 
 
@@ -367,11 +378,16 @@ async function _doSignIn() {
           if (c.user && c.household_id && c.household_id !== 0) {
             setTimeout(function(){location.replace(getRedirectTarget());}, 200);
           } else if (c.user && (!c.household_id || c.household_id === 0)) {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('authButtonsContainer').style.display = 'none';
-            document.getElementById('step1').classList.remove('active');
-            document.getElementById('step2').classList.add('active');
-            showSignupOrInvites();
+            fetch('/api/auth/signup', {
+              method: 'POST',
+              credentials: 'include',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({marketing_opt_in: true})
+            }).then(function() {
+              processInviteThenRedirect();
+            }).catch(function() {
+              setTimeout(function(){ location.replace(getRedirectTarget()); }, 200);
+            });
           } else {
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('authButtonsContainer').style.display = 'flex';
@@ -548,7 +564,7 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
   fetch('/api/auth/apple', { credentials: 'include',
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({id_token: idToken, user: userObj, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
+    body: JSON.stringify({id_token: idToken, user: userObj, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null), invite_token: inviteToken || null})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
@@ -568,21 +584,16 @@ function handleAppleCredential(idToken, userObj, isFallbackPopup) {
       return;
     }
     if (r.data.needs_signup) {
-      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><p style="margin-top:15px;"><a href="listmate://sso_callback" style="color:#2563eb;font-weight:bold;text-decoration:underline;">Tap here if you are not automatically redirected</a></p></div>';
-        try { window.location.href = "listmate://sso_callback"; } catch(e) {}
-        try { window.close(); } catch(e) {}
-        return;
-      }
-      if (typeof isIntentCallback !== 'undefined' && isIntentCallback && window.opener && window.opener !== window) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
-        try { window.close(); } catch(e) {}
-        setTimeout(function() { location.replace('/login?needs_signup=1'); }, 500);
-        return;
-      }
-      document.getElementById('step1').classList.remove('active');
-      document.getElementById('step2').classList.add('active');
-      showSignupOrInvites();
+      fetch('/api/auth/signup', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({marketing_opt_in: true})
+      }).then(function() {
+        processInviteThenRedirect();
+      }).catch(function() {
+        processInviteThenRedirect();
+      });
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
@@ -608,6 +619,13 @@ function handleCredential(credential, isIntentCallback) {
      stateInput.value = (typeof currentIntentId !== 'undefined' ? currentIntentId : '');
      form.appendChild(tokenInput);
      form.appendChild(stateInput);
+     if (inviteToken) {
+       var invInput = document.createElement('input');
+       invInput.type = 'hidden';
+       invInput.name = 'invite';
+       invInput.value = inviteToken;
+       form.appendChild(invInput);
+     }
      document.body.appendChild(form);
      form.submit();
      return;
@@ -615,7 +633,7 @@ function handleCredential(credential, isIntentCallback) {
   
   fetch('/api/auth/login', { credentials: 'include',
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({credential: credential, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null)})
+    body: JSON.stringify({credential: credential, intent: (typeof currentIntentId !== 'undefined' ? currentIntentId : null), invite_token: inviteToken || null})
   }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d, status: r.status}; }); })
   .then(function(r) {
     if (r.data.ok) {
@@ -629,14 +647,16 @@ function handleCredential(credential, isIntentCallback) {
       return;
     }
     if (r.data.needs_signup) {
-      if (typeof isFallbackPopup !== 'undefined' && isFallbackPopup) {
-        document.body.innerHTML = '<div style="text-align:center;font-family:sans-serif;padding-top:40px;color:#2c2c2c;"><h2>✅ Authentication Successful</h2><p style="color:#888;margin-top:20px;">You can now close this window and return to the app to complete setup.</p></div>';
-        try { window.close(); } catch(e) {}
-        return;
-      }
-      document.getElementById('step1').classList.remove('active');
-      document.getElementById('step2').classList.add('active');
-      showSignupOrInvites();
+      fetch('/api/auth/signup', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({marketing_opt_in: true})
+      }).then(function() {
+        processInviteThenRedirect();
+      }).catch(function() {
+        processInviteThenRedirect();
+      });
       return;
     }
     showError(r.data.error||('Server error ('+r.status+')'));
@@ -762,18 +782,7 @@ function deleteEmptyHousehold(id, name) {
 
 function acceptPendingInvite(token) {
     showStep2Error('');
-    fetch('/api/auth/invite/' + token, { credentials: 'include' })
-    .then(r => r.json())
-    .then(inv => {
-        if (inv.current_is_disposable && inv.current_household_name) {
-            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
-                doAcceptPending(token, deleteEmpty);
-            });
-        } else {
-            doAcceptPending(token, false);
-        }
-    })
-    .catch(() => doAcceptPending(token, false));
+    doAcceptPending(token, true);
 }
 function doAcceptPending(token, deleteEmpty) {
     fetch('/api/auth/invite/' + token + '/accept', {
@@ -787,17 +796,7 @@ function doAcceptPending(token, deleteEmpty) {
 
 function acceptInvite(force) {
     var b = document.getElementById('btnAccept'); b.disabled = true; showStep2Error('');
-    fetch('/api/auth/invite/' + inviteToken, { credentials: 'include' })
-    .then(r => r.json())
-    .then(inv => {
-        if (inv.current_is_disposable && inv.current_household_name) {
-            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
-                doAcceptInviteLogin(inviteToken, force, deleteEmpty, b);
-            });
-        } else {
-            doAcceptInviteLogin(inviteToken, force, false, b);
-        }
-    }).catch(() => doAcceptInviteLogin(inviteToken, force, false, b));
+    doAcceptInviteLogin(inviteToken, force, true, b);
 }
 function doAcceptInviteLogin(token, force, deleteEmpty, b) {
     var url = '/api/auth/invite/' + token + '/accept' + (force ? '?force=1' : '');

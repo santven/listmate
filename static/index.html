@@ -906,6 +906,25 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 </div>
 
+<!-- Rename Household Modal -->
+<div class="modal-overlay" id="renameHouseholdModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
+    <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">✏️ Rename Household</h3>
+    <p style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+      Enter a new name for your household.
+    </p>
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Household Name</label>
+      <input type="text" id="renameHouseholdInput" placeholder="e.g. Smith Family, Downtown Apt..." style="width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); font-size:16px; outline:none;" maxlength="60">
+    </div>
+    <div class="error" id="renameHouseholdError" style="display:none; margin-bottom:12px; color:#ef4444; font-size:13px;"></div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSubmitRenameHousehold" onclick="submitRenameHousehold()" style="flex:2; background:var(--green); color:#fff; border:none; padding:12px 16px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Save</button>
+      <button onclick="closeRenameHouseholdModal()" style="flex:1; background:none; color:#888; border:1px solid var(--border); padding:12px; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Join Household Modal -->
 <div class="modal-overlay" id="joinHouseholdModal">
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
@@ -3408,6 +3427,68 @@ function showPremiumModal(featureName) {
 }
 
 
+
+var renameHhTargetId = null;
+function openRenameHouseholdModal(hhId, currentName) {
+  renameHhTargetId = hhId || null;
+  var input = document.getElementById('renameHouseholdInput');
+  var err = document.getElementById('renameHouseholdError');
+  if (err) err.style.display = 'none';
+  if (input) {
+    input.value = currentName || '';
+  }
+  var modal = document.getElementById('renameHouseholdModal');
+  if (modal) {
+    modal.classList.add('active');
+    setTimeout(function() { if (input) { input.focus(); input.select(); } }, 150);
+  }
+}
+function closeRenameHouseholdModal() {
+  var modal = document.getElementById('renameHouseholdModal');
+  if (modal) modal.classList.remove('active');
+  renameHhTargetId = null;
+}
+function submitRenameHousehold() {
+  var input = document.getElementById('renameHouseholdInput');
+  var err = document.getElementById('renameHouseholdError');
+  var btn = document.getElementById('btnSubmitRenameHousehold');
+  var val = input ? input.value.trim() : '';
+  if (!val) {
+    if (err) { err.textContent = 'Household name cannot be empty'; err.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  var url = renameHhTargetId ? ('/api/auth/household/' + renameHhTargetId + '/rename') : '/api/auth/household/rename';
+  fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: val })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.ok) {
+      closeRenameHouseholdModal();
+      var switcher = document.getElementById('switcherModal');
+      if (switcher && switcher.classList.contains('active')) {
+        showHouseholdSwitcher();
+      }
+      if (typeof toast === 'function') {
+        toast('✅ Household renamed');
+      } else {
+        alert('✅ Household renamed to ' + res.household_name);
+      }
+    } else {
+      if (err) { err.textContent = res.error || 'Failed to rename household'; err.style.display = 'block'; }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  })
+  .catch(function(e) {
+    if (err) { err.textContent = 'Network error. Please try again.'; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+  });
+}
+
 function showHouseholdSwitcher() {
     const modal = document.getElementById('switcherModal');
     if (!modal) return;
@@ -3428,6 +3509,7 @@ function showHouseholdSwitcher() {
                 const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
+                let renameHtml = `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>`;
                 
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
@@ -3443,6 +3525,7 @@ function showHouseholdSwitcher() {
                             <div style="font-size:12px; color:var(--muted); margin-top:2px;">${counts}</div>
                         </div>
                         <div style="display:flex; gap:10px; align-items:center;">
+                            ${renameHtml}
                             ${actionHtml}
                             ${deleteOrLeaveHtml}
                         </div>
@@ -3527,18 +3610,7 @@ function switchHousehold(id) {
     }).then(() => window.location.reload());
 }
 function acceptInvite(token) {
-    fetch('/api/auth/invite/' + token, { credentials: 'include' })
-    .then(r => r.json())
-    .then(inv => {
-        if (inv.current_is_disposable && inv.current_household_name) {
-            showCleanupModal(inv.current_household_name, inv.household_name, function(deleteEmpty) {
-                doAcceptInvite(token, deleteEmpty);
-            });
-        } else {
-            doAcceptInvite(token, false);
-        }
-    })
-    .catch(() => doAcceptInvite(token, false));
+    doAcceptInvite(token, true);
 }
 function doAcceptInvite(token, deleteEmpty) {
     document.getElementById('switcherList').innerHTML = '<div style="text-align:center; padding:20px; color:#888;">Joining...</div>';
