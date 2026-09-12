@@ -1287,8 +1287,13 @@ def register_auth_routes(app):
             return jsonify({"error": "No household specified"}), 400
 
         mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, target_id))
-        if not mem:
+        hh = _one(f"SELECT owner_id FROM {_HH} WHERE id = ?", (target_id,))
+        if not mem and not (hh and hh.get("owner_id") == uid):
             return jsonify({"error": "Not a member of this household"}), 403
+
+        is_owner = (mem and mem.get("role") == "owner") or (hh and hh.get("owner_id") == uid)
+        if not is_owner:
+            return jsonify({"error": "Only the household owner can rename this household"}), 403
 
         data = request.get_json(silent=True) or {}
         new_name = (data.get("name") or data.get("household_name") or "").strip()

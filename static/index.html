@@ -3509,7 +3509,7 @@ function showHouseholdSwitcher() {
                 const counts = `${h.member_count || 1} member${(h.member_count || 1) === 1 ? '' : 's'} · ${h.items_count || 0} item${(h.items_count || 0) === 1 ? '' : 's'}`;
                 
                 let actionHtml = isActive ? '✅' : '<button onclick="switchHousehold(' + h.id + ')" style="background:transparent; border:none; cursor:pointer; font-size:18px;">➡️</button>';
-                let renameHtml = `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>`;
+                let renameHtml = h.role === 'owner' ? `<button onclick="event.stopPropagation(); openRenameHouseholdModal(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\\\'")}')" style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;" title="Rename Household">✏️</button>` : '';
                 
                 let deleteOrLeaveHtml = '';
                 if (h.can_delete) {
