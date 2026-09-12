@@ -189,6 +189,8 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
         except Exception: pass
+        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
+        except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS auto_populated BOOLEAN DEFAULT FALSE")
         except Exception: pass
         try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE")
