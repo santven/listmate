@@ -3,7 +3,7 @@
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps
-from flask import request, jsonify, session, send_from_directory
+from flask import request, jsonify, session, send_from_directory, has_request_context
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from google.auth.exceptions import GoogleAuthError
@@ -152,6 +152,7 @@ def _init_schema():
             subscription_status TEXT NOT NULL DEFAULT 'free',
             trial_ends_at TIMESTAMP,
             subscription_ends_at TIMESTAMP,
+            is_default BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         """CREATE TABLE IF NOT EXISTS email_events (
             id SERIAL PRIMARY KEY,
@@ -224,6 +225,7 @@ def _init_schema():
         
         "ALTER TABLE auth_household_members ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS owner_id INTEGER",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS downgraded_at TIMESTAMP",
         "UPDATE auth_households h SET owner_id = (SELECT id FROM auth_users u WHERE u.household_id = h.id ORDER BY id ASC LIMIT 1) WHERE owner_id IS NULL",
         """CREATE TABLE IF NOT EXISTS household_subscription_history (
@@ -525,7 +527,7 @@ def _is_disposable_empty_household(hhid, uid):
         
     # Check catalog items
     catalog_cnt_row = _one("SELECT COUNT(*) as cnt FROM store_items WHERE household_id = ?", (hhid,))
-    if catalog_cnt_row and catalog_cnt_row.get("cnt", 0) >= 5:
+    if catalog_cnt_row and catalog_cnt_row.get("cnt", 0) > 0:
         return False
         
     return True
@@ -556,6 +558,150 @@ def _purge_household(hhid):
         except Exception as e:
             print(f"[_purge_household] Notice for {sql}: {e}", flush=True)
 
+
+
+def _cleanup_disposable_default_household(old_hhid, uid):
+    """
+    If the user joins another household, and if there are no list items, store items
+    and there is only one household which is also the default household as indicated
+    by is_default = TRUE, delete the household behind the scenes.
+    """
+    if not old_hhid or int(old_hhid) <= 0:
+        return False
+    old_hh = _one(f"SELECT id, is_default FROM {_HH} WHERE id = ?", (old_hhid,))
+    if not old_hh or not old_hh.get("is_default"):
+        return False
+
+    # Check that user only belonged to this 1 household before joining (at most 2: old + newly joined)
+    mem_cnt_row = _one("SELECT COUNT(*) as cnt FROM auth_household_members WHERE user_id = ?", (uid,))
+    total_user_hhs = mem_cnt_row.get("cnt", 0) if mem_cnt_row else 0
+    if total_user_hhs > 2:
+        return False
+
+    if _is_disposable_empty_household(old_hhid, uid):
+        print(f"[_cleanup_disposable_default_household] Silently purging empty default household {old_hhid} for user {uid}", flush=True)
+        _purge_household(old_hhid)
+        return True
+    return False
+
+
+def _create_default_household_for_user(uid, email, name, marketing_opt_in=True):
+    """
+    Creates a personalized default household on the fly (is_default = TRUE),
+    registers user as owner, and sets it as active household.
+    """
+    import secrets
+    code = secrets.token_hex(4).upper()
+    count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
+    existing_cnt = count_row.get("cnt", 0) if count_row else 0
+    is_early = existing_cnt < int(os.environ.get("EARLY_ADOPTER_LIMIT", 25))
+    prem_val = is_early
+    status = 'premium' if is_early else 'trial'
+    trial_days = os.environ.get("TRIAL_PERIOD_DAYS", "30")
+    trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
+
+    clean_name = (name or "").strip()
+    if clean_name and not clean_name.lower().startswith("user_"):
+        first_name = clean_name.split()[0]
+        if first_name.lower().endswith("list") or first_name.lower().endswith("household"):
+            hname = first_name
+        elif first_name.endswith("s") or first_name.endswith("S"):
+            hname = f"{first_name}' List"
+        else:
+            hname = f"{first_name}'s List"
+    elif email and email.split("@")[0]:
+        first_part = email.split("@")[0].replace(".", " ").replace("_", " ").title().split()[0]
+        hname = f"{first_part}'s List"
+    else:
+        hname = "My Grocery List"
+
+    hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id, is_default) VALUES (?,?,?,?, {trial_expr}, ?, TRUE) RETURNING id", (hname, code, prem_val, status, uid))
+    _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, marketing_opt_in))
+    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
+    return hhid, hname
+
+
+def _resolve_user_household(user, is_new_user, email, name, data=None):
+    """
+    1. Direct Invite Token Bypass: If an invite token exists, attach to invited household directly.
+    2. Approach 1 (Last Active Household Continuity): Preserve current household_id if user is an active member.
+    3. Fallback to existing household memberships.
+    4. Auto-create default household on the fly (is_default = TRUE).
+    """
+    uid = user["id"]
+    hh_id = user.get("household_id", 0) or 0
+    hh_name = ""
+
+    data = data or {}
+    invite_token = data.get("invite_token") or data.get("invite")
+    if not invite_token and has_request_context():
+        invite_token = request.args.get("token") or request.args.get("invite")
+        if not invite_token:
+            try:
+                invite_token = request.cookies.get("listmate_invite")
+            except Exception:
+                pass
+
+    # 1. Direct Invite Bypass
+    if invite_token:
+        token_candidate = str(invite_token).strip()
+        if "token=" in token_candidate:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(token_candidate)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "token" in qs and qs["token"]:
+                token_candidate = qs["token"][0]
+        elif "/" in token_candidate:
+            token_candidate = token_candidate.rstrip("/").split("/")[-1]
+
+        inv = _one("SELECT * FROM invites WHERE UPPER(token) = UPPER(?) AND used_by IS NULL AND (expires_at IS NULL OR expires_at > NOW())", (token_candidate,))
+        if inv and inv.get("household_id"):
+            target_hhid = inv["household_id"]
+            _run("UPDATE invites SET used_by = ?, used_at = NOW() WHERE id = ?", (uid, inv["id"]))
+            if inv.get("email") and email and inv["email"].strip().lower() != email.strip().lower():
+                try:
+                    _run("INSERT INTO auth_user_aliases (user_id, alias_email) VALUES (?, ?) ON CONFLICT DO NOTHING", (uid, inv["email"].strip().lower()))
+                except Exception as e:
+                    print(f"[_resolve_user_household] Alias insert note: {e}", flush=True)
+
+            _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, target_hhid, target_hhid))
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (target_hhid, uid))
+
+            if hh_id and hh_id != target_hhid:
+                _cleanup_disposable_default_household(hh_id, uid)
+
+            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (target_hhid,))
+            hh_name = hh.get("name", "") if hh else ""
+            _set(uid, email, user.get("name") or name, target_hhid, hh_name)
+            return target_hhid, hh_name
+
+    # 2. Approach 1: Last Active Household Continuity
+    if hh_id > 0:
+        active_mem = _one("SELECT 1 FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id))
+        if active_mem:
+            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+            if hh:
+                hh_name = hh.get("name", "")
+                _set(uid, email, user.get("name") or name, hh_id, hh_name)
+                return hh_id, hh_name
+        hh_id = 0
+
+    # 3. Fallback to existing household memberships
+    if not hh_id:
+        mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? ORDER BY (role = 'owner') DESC, household_id ASC LIMIT 1", (uid,))
+        if mem:
+            hh_id = mem["household_id"]
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
+            hh_name = hh.get("name", "") if hh else ""
+            _set(uid, email, user.get("name") or name, hh_id, hh_name)
+            return hh_id, hh_name
+
+    # 4. Auto-create default household on the fly
+    hh_id, hh_name = _create_default_household_for_user(uid, email, name)
+    _set(uid, email, user.get("name") or name, hh_id, hh_name)
+    return hh_id, hh_name
+
 # ── Routes ──────────────────────────────────────────────────
 
 def register_auth_routes(app):
@@ -569,28 +715,9 @@ def register_auth_routes(app):
         if not intent: return jsonify({"status": "pending"})
         user = _one(f"SELECT id, email, name, household_id FROM {_USERS} WHERE id = ?", (intent["user_id"],))
         if not user: return jsonify({"error": "User not found"}), 404
-        hh_id = user.get('household_id', 0)
-        hh_name = ''
-        if not hh_id:
-            hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
-            if hh_count and hh_count.get("cnt", 0) == 0:
-                import secrets
-                code = secrets.token_hex(4).upper()
-                prem_val = True
-                _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
-                hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
-                hh_id = hh["id"] if hh else 1
-                hh_name = hh.get("name", "Root Household") if hh else "Root Household"
-                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-        if hh_id and not hh_name:
-            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-            hh_name = hh.get('name', '') if hh else ''
-        _set(user["id"], user["email"], user["name"], hh_id, hh_name)
+        hh_id, hh_name = _resolve_user_household(user, False, user["email"], user["name"])
         _run("DELETE FROM login_intents WHERE id = ?", (intent_id,))
-        
-        if hh_id == 0:
-            return jsonify({"ok": False, "status": "completed", "needs_signup": True, "message": "No household"})
-        return jsonify({"ok": True, "status": "completed"})
+        return jsonify({"ok": True, "status": "completed", "household_id": hh_id, "household_name": hh_name, "needs_signup": False})
 
 
     def _process_login(gid, email, name, data):
@@ -608,59 +735,20 @@ def register_auth_routes(app):
         if user and user.get("google_id") != gid:
             _run(f"UPDATE {_USERS} SET google_id = ? WHERE id = ?", (gid, user["id"]))
 
-        uid = user["id"]
-        hh_id = user.get("household_id", 0) if user else 0
-        hh_name = ""
+        hh_id, hh_name = _resolve_user_household(user, is_new_user, email, name, data)
 
-        if not is_new_user:
-            owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
-            if owned:
-                hh_id = owned["household_id"]
-                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-            elif hh_id == 0:
-                mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
-                if mem:
-                    hh_id = mem["household_id"]
-                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-
-        open_invites = _run("""SELECT id FROM invites WHERE (
-            LOWER(email) = LOWER(?) 
-            OR LOWER(email) IN (SELECT LOWER(alias_email) FROM auth_user_aliases WHERE user_id = ?)
-        ) AND used_by IS NULL AND (expires_at IS NULL OR expires_at > NOW())""", (email, uid))
-        is_owner = False
-        if not is_new_user:
-            is_owner = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,)) is not None
-
-        if not hh_id:
-            hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
-            if hh_count and hh_count.get("cnt", 0) == 0:
-                import secrets
-                code = secrets.token_hex(4).upper()
-                _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, True, 'premium'))
-                hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
-                hh_id = hh["id"] if hh else 1
-                hh_name = hh["name"] if hh else "Root Household"
-                _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-            else:
-                _set(uid, email, name, 0, "")
-                intent_id = data.get("intent")
-                if intent_id:
-                    _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, uid))
-                return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
-        elif open_invites and not is_owner:
-            _set(uid, email, name, hh_id, "")
-            return jsonify({"ok": False, "needs_signup": True, "message": "Pending invites interception"}), 200
-
-        if hh_id and not hh_name:
-            hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-            hh_name = hh.get("name", "") if hh else ""
-
-        _set(uid, email, name, hh_id, hh_name)
         intent_id = data.get("intent")
         if intent_id:
-            _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, uid))
-            
-        return jsonify({"ok": True, "name": name, "email": email, "household_id": hh_id, "household_name": hh_name})
+            _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+
+        return jsonify({
+            "ok": True,
+            "name": user.get("name") or name,
+            "email": email,
+            "household_id": hh_id,
+            "household_name": hh_name,
+            "needs_signup": False
+        })
 
     @app.route("/api/auth/google", methods=["POST"])
     def auth_google():
@@ -747,63 +835,20 @@ def register_auth_routes(app):
                     user["apple_id"] = apple_sub
                 except Exception: pass
 
-            uid = user["id"]
-            hh_id = user.get("household_id", 0) if user else 0
-            hh_name = ""
-
-            if not is_new_user and hh_id == 0:
-                owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
-                if owned:
-                    hh_id = owned["household_id"]
-                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                else:
-                    mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
-                    if mem:
-                        hh_id = mem["household_id"]
-                        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-
-            if not hh_id:
-                hh_count = _one(f"SELECT COUNT(*) as cnt FROM {_HH}", None)
-                if hh_count and hh_count.get("cnt", 0) == 0:
-                    import secrets
-                    code = secrets.token_hex(4).upper()
-                    prem_val = True
-                    _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, 'premium'))
-                    hh = _one(f"SELECT id, name FROM {_HH} ORDER BY id DESC LIMIT 1", None)
-                    hh_id = hh["id"] if hh else 1
-                    hh_name = hh["name"] if hh else "Root Household"
-                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-                else:
-                    _set(user["id"], email, user["name"] or name, 0, "")
-                    intent_id = data.get("intent")
-                    if intent_id:
-                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                    return jsonify({"ok": False, "needs_signup": True, "message": "No household — please complete signup"}), 200
-            else:
-                open_invites = _run("""SELECT id FROM invites WHERE (
-                    LOWER(email) = LOWER(?) 
-                    OR LOWER(email) IN (SELECT LOWER(alias_email) FROM auth_user_aliases WHERE user_id = ?)
-                ) AND used_by IS NULL AND (expires_at IS NULL OR expires_at > NOW())""", (email, uid))
-                is_owner = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,)) is not None
-                if open_invites and not is_owner:
-                    _set(user["id"], email, user["name"] or name, hh_id, "")
-                    intent_id = data.get("intent")
-                    if intent_id:
-                        _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                    return jsonify({"ok": False, "needs_signup": True, "message": "Pending invites interception"}), 200
-
-            if hh_id and not hh_name:
-                hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-                hh_name = hh.get("name", "") if hh else ""
-
-            
-            _set(user["id"], email, user["name"] or name, hh_id, hh_name)
+            hh_id, hh_name = _resolve_user_household(user, is_new_user, email, name, data)
 
             intent_id = data.get("intent")
             if intent_id:
                 _run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
 
-            return jsonify({"ok": True, "name": user["name"] or name, "email": email, "household_id": hh_id, "household_name": hh_name})
+            return jsonify({
+                "ok": True,
+                "name": user.get("name") or name,
+                "email": email,
+                "household_id": hh_id,
+                "household_name": hh_name,
+                "needs_signup": False
+            })
         except Exception as e:
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
@@ -824,26 +869,16 @@ def register_auth_routes(app):
             uid = get_user_id()
             hh_id = get_household_id()
             
-            # Auto-heal household_id if zero but user belongs to a household
+            # Auto-heal household_id if zero or not set
             if (not hh_id or hh_id == 0) and uid:
                 _init_schema()
-                owned = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
-                if owned:
-                    hh_id = owned["household_id"]
-                    _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                    hh_row = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-                    _set(uid, get_email(), get_display_name(), hh_id, hh_row.get("name", "") if hh_row else "")
-                else:
-                    mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
-                    if mem:
-                        hh_id = mem["household_id"]
-                        _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                        hh_row = _one(f"SELECT name FROM {_HH} WHERE id = ?", (hh_id,))
-                        _set(uid, get_email(), get_display_name(), hh_id, hh_row.get("name", "") if hh_row else "")
+                user = _one(f"SELECT id, email, name, household_id FROM {_USERS} WHERE id = ?", (uid,))
+                if user:
+                    hh_id, hh_name = _resolve_user_household(user, False, get_email(), get_display_name())
 
             resp["household_id"] = hh_id or 0
             resp["household_name"] = get_household_name()
-            resp["needs_signup"] = bool(not hh_id or hh_id == 0)
+            resp["needs_signup"] = False
             is_prem = False
             if hh_id:
                 _init_schema()
@@ -1122,15 +1157,20 @@ def register_auth_routes(app):
 
             old_hhid = user.get("household_id")
             if old_hhid and old_hhid != 0 and old_hhid != hh["id"]:
-                if delete_current and _is_disposable_empty_household(old_hhid, uid):
-                    _purge_household(old_hhid)
+                _cleanup_disposable_default_household(old_hhid, uid)
 
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hh["id"], uid))
             _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'member', COALESCE((SELECT marketing_opt_in FROM auth_household_members WHERE household_id = ? AND role = 'owner' LIMIT 1), TRUE)) ON CONFLICT DO NOTHING", (uid, hh["id"], hh["id"]))
             _set(uid, user["email"], user["name"], hh["id"], hh["name"])
             return jsonify({"ok": True, "household_id": hh["id"], "household_name": hh["name"]})
 
-        if user["household_id"] != 0: return jsonify({"error": "Already in household"}), 400
+        if user["household_id"] != 0:
+            if hname:
+                _run(f"UPDATE {_HH} SET name = ?, is_default = FALSE WHERE id = ?", (hname, user["household_id"]))
+                _set(uid, user["email"], user["name"], user["household_id"], hname)
+                return jsonify({"ok": True, "household_id": user["household_id"], "household_name": hname})
+            hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (user["household_id"],))
+            return jsonify({"ok": True, "household_id": user["household_id"], "household_name": hh["name"] if hh else "My Grocery List"})
 
         if not hname:
             user_name = (user.get("name") or "").strip() or (user.get("email", "").split("@")[0] if user.get("email") else "My")
@@ -1145,7 +1185,7 @@ def register_auth_routes(app):
         status = 'premium' if is_early else 'trial'
         trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "30")
         trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
-        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id) VALUES (?,?,?,?, {trial_expr}, ?) RETURNING id", (hname, code, prem_val, status, uid))
+        hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id, is_default) VALUES (?,?,?,?, {trial_expr}, ?, FALSE) RETURNING id", (hname, code, prem_val, status, uid))
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (hhid, uid))
         _set(uid, user["email"], user["name"], hhid, hname)
@@ -1161,7 +1201,7 @@ def register_auth_routes(app):
         active_hhid = get_household_id()
         
         # Get all households they belong to
-        hhs = _run("SELECT h.id, h.name, h.subscription_status, h.is_premium, h.owner_id, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
+        hhs = _run("SELECT h.id, h.name, h.subscription_status, h.is_premium, h.owner_id, h.is_default, m.role FROM auth_households h JOIN auth_household_members m ON h.id = m.household_id WHERE m.user_id = ? ORDER BY h.id ASC", (uid,))
         
         for h in hhs:
             hh_id = h["id"]
@@ -1172,6 +1212,7 @@ def register_auth_routes(app):
             
             h["can_delete"] = _is_disposable_empty_household(hh_id, uid)
             h["is_disposable"] = h["can_delete"]
+            h["is_default"] = bool(h.get("is_default", False))
 
         current_is_disposable = False
         current_hh_name = ""
@@ -1216,10 +1257,46 @@ def register_auth_routes(app):
         mem = _one("SELECT 1 FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, target_id))
         if not mem: return jsonify({"error": "Not a member of that household"}), 403
         
+        old_hhid = get_household_id()
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (target_id, uid))
         hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (target_id,))
-        _set(uid, get_email(), get_display_name(), target_id, hh["name"] if hh else "")
-        return jsonify({"ok": True})
+        hh_name = hh["name"] if hh else ""
+        _set(uid, get_email(), get_display_name(), target_id, hh_name)
+
+        # Silent behind-the-scenes cleanup of old empty default household
+        if old_hhid and old_hhid != target_id:
+            _cleanup_disposable_default_household(old_hhid, uid)
+
+        return jsonify({"ok": True, "household_id": target_id, "household_name": hh_name})
+
+    @app.route("/api/auth/household/rename", methods=["POST", "PUT"])
+    @app.route("/api/auth/household/<int:hh_id>/rename", methods=["POST", "PUT"])
+    @app.route("/api/auth/household", methods=["PUT"])
+    @require_user
+    def auth_rename_household(hh_id=None):
+        _init_schema()
+        uid = get_user_id()
+        target_id = hh_id or get_household_id()
+        if not target_id:
+            return jsonify({"error": "No household specified"}), 400
+
+        mem = _one("SELECT role FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, target_id))
+        if not mem:
+            return jsonify({"error": "Not a member of this household"}), 403
+
+        data = request.get_json(silent=True) or {}
+        new_name = (data.get("name") or data.get("household_name") or "").strip()
+        if not new_name:
+            return jsonify({"error": "Household name cannot be empty"}), 400
+        if len(new_name) > 60:
+            new_name = new_name[:60]
+
+        _run(f"UPDATE {_HH} SET name = ?, is_default = FALSE WHERE id = ?", (new_name, target_id))
+
+        if target_id == get_household_id():
+            _set(uid, get_email(), get_display_name(), target_id, new_name)
+
+        return jsonify({"ok": True, "household_id": target_id, "household_name": new_name})
 
     @app.route("/api/auth/household")
     @require_user
@@ -1253,6 +1330,7 @@ def register_auth_routes(app):
                 "id": hh["id"], "name": hh["name"], "invite_code": hh.get("invite_code",""), 
                 "is_premium": is_prem, "subscription_status": sub_status, 
                 "trial_ends_at": trial_ends_at, "subscription_ends_at": subscription_ends_at,
+            "is_default": bool(hh.get("is_default", False)),
                 "is_owner": uid == hh.get("owner_id"), "is_read_only": status["is_read_only"],
                 "over_limit": status["over_limit"],
                 "free_tier_member_limit": int(__import__("os").environ.get("FREE_TIER_MEMBER_LIMIT", 1))
@@ -1483,9 +1561,8 @@ def register_auth_routes(app):
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (invite["household_id"], uid))
         
         # Clean up disposable empty household if requested
-        if delete_current and old_hhid and old_hhid != invite["household_id"]:
-            if _is_disposable_empty_household(old_hhid, uid):
-                _purge_household(old_hhid)
+        if old_hhid and old_hhid != invite["household_id"]:
+            _cleanup_disposable_default_household(old_hhid, uid)
 
         hh = _one(f"SELECT name FROM {_HH} WHERE id = ?", (invite["household_id"],))
         hh_name = hh.get("name", "") if hh else ""
@@ -1575,10 +1652,9 @@ def register_auth_routes(app):
         # Switch active household to the new one
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (target_hhid, uid))
 
-        # Clean up disposable empty household if requested
-        if delete_current and old_hhid and old_hhid != target_hhid:
-            if _is_disposable_empty_household(old_hhid, uid):
-                _purge_household(old_hhid)
+        # Clean up disposable empty default household behind the scenes
+        if old_hhid and old_hhid != target_hhid:
+            _cleanup_disposable_default_household(old_hhid, uid)
 
         hh_name = hh.get("name", "")
         _set(uid, user["email"], user["name"], target_hhid, hh_name)
@@ -1689,6 +1765,7 @@ def register_auth_routes(app):
         
         # Move the user to the new household
         _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
+        _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', TRUE) ON CONFLICT DO NOTHING", (uid, new_hhid))
         
         # We need to copy lists, etc.
         # But this is inside auth.py, we might not have all tables imported. 
