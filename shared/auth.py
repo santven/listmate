@@ -504,6 +504,9 @@ def _is_disposable_empty_household(hhid, uid):
     sub_status = hh.get("subscription_status") or "free"
     if is_prem and sub_status in ["active", "premium"]:
         return False
+    # User must be owner if owner is assigned
+    if hh.get("owner_id") and hh.get("owner_id") != uid:
+        return False
     mem_cnt_row = _one("SELECT COUNT(*) as cnt FROM auth_household_members WHERE household_id = ?", (hhid,))
     mem_cnt = mem_cnt_row.get("cnt", 0) if mem_cnt_row else 0
     user_cnt_row = _one(f"SELECT COUNT(*) as cnt FROM {_USERS} WHERE household_id = ? AND id != ?", (hhid, uid))
@@ -537,11 +540,11 @@ def _purge_household(hhid):
     if not hhid or int(hhid) <= 0:
         return
     stmts = [
-        "DELETE FROM store_visits WHERE household_id = ?",
+        "DELETE FROM store_visits WHERE household_id = ? OR store_id IN (SELECT id FROM stores WHERE household_id = ?)",
         "DELETE FROM store_enrich_queue WHERE household_id = ?",
         "DELETE FROM item_purchase_stats WHERE household_id = ?",
-        "DELETE FROM list_items WHERE household_id = ?",
-        "DELETE FROM store_items WHERE household_id = ?",
+        "DELETE FROM list_items WHERE household_id = ? OR store_id IN (SELECT id FROM stores WHERE household_id = ?)",
+        "DELETE FROM store_items WHERE household_id = ? OR store_id IN (SELECT id FROM stores WHERE household_id = ?)",
         "DELETE FROM stores WHERE household_id = ?",
         "DELETE FROM invites WHERE household_id = ?",
         "DELETE FROM household_subscription_history WHERE household_id = ?",
@@ -549,12 +552,14 @@ def _purge_household(hhid):
         "DELETE FROM recipes WHERE household_id = ?",
         "DELETE FROM recipe_generations WHERE household_id = ?",
         "DELETE FROM ai_insights_cache WHERE household_id = ?",
+        "DELETE FROM email_events WHERE household_id = ?",
         "DELETE FROM auth_household_members WHERE household_id = ?",
         f"DELETE FROM {_HH} WHERE id = ?",
     ]
     for sql in stmts:
         try:
-            _exec(sql, (hhid,))
+            params = (hhid, hhid) if sql.count("?") == 2 else (hhid,)
+            _exec(sql, params)
         except Exception as e:
             print(f"[_purge_household] Notice for {sql}: {e}", flush=True)
 
@@ -562,14 +567,15 @@ def _purge_household(hhid):
 
 def _cleanup_disposable_default_household(old_hhid, uid):
     """
-    If the user joins another household, and if there are no list items, store items
-    and there is only one household which is also the default household as indicated
-    by is_default = TRUE, delete the household behind the scenes.
+    If the user joins another household, and their previous household was an empty
+    disposable household (0 list items, 0 store items, 0 custom stores, 0 recipes,
+    only 1 member, not paid) that was their default or initial solo household,
+    delete the household behind the scenes even if they renamed it.
     """
     if not old_hhid or int(old_hhid) <= 0:
         return False
-    old_hh = _one(f"SELECT id, is_default FROM {_HH} WHERE id = ?", (old_hhid,))
-    if not old_hh or not old_hh.get("is_default"):
+    old_hh = _one(f"SELECT id, is_default, owner_id FROM {_HH} WHERE id = ?", (old_hhid,))
+    if not old_hh:
         return False
 
     # Check that user only belonged to this 1 household before joining (at most 2: old + newly joined)
@@ -579,7 +585,7 @@ def _cleanup_disposable_default_household(old_hhid, uid):
         return False
 
     if _is_disposable_empty_household(old_hhid, uid):
-        print(f"[_cleanup_disposable_default_household] Silently purging empty default household {old_hhid} for user {uid}", flush=True)
+        print(f"[_cleanup_disposable_default_household] Silently purging empty household {old_hhid} for user {uid}", flush=True)
         _purge_household(old_hhid)
         return True
     return False
@@ -1166,7 +1172,7 @@ def register_auth_routes(app):
 
         if user["household_id"] != 0:
             if hname:
-                _run(f"UPDATE {_HH} SET name = ?, is_default = FALSE WHERE id = ?", (hname, user["household_id"]))
+                _run(f"UPDATE {_HH} SET name = ? WHERE id = ?", (hname, user["household_id"]))
                 _set(uid, user["email"], user["name"], user["household_id"], hname)
                 return jsonify({"ok": True, "household_id": user["household_id"], "household_name": hname})
             hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (user["household_id"],))
@@ -1291,7 +1297,7 @@ def register_auth_routes(app):
         if len(new_name) > 60:
             new_name = new_name[:60]
 
-        _run(f"UPDATE {_HH} SET name = ?, is_default = FALSE WHERE id = ?", (new_name, target_id))
+        _run(f"UPDATE {_HH} SET name = ? WHERE id = ?", (new_name, target_id))
 
         if target_id == get_household_id():
             _set(uid, get_email(), get_display_name(), target_id, new_name)
