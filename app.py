@@ -2947,8 +2947,12 @@ def toggle_list_item(item_id):
 @require_user
 def get_visit_items(store_id, visit_date):
     db = get_db()
+    hh_id = _hh()
     try:
-        # PostgreSQL specific cast: DATE(purchased_at)
+        store_row = db.execute("SELECT id, name FROM stores WHERE id = ? AND household_id = ?", (store_id, hh_id)).fetchone()
+        is_instacart = bool(store_row and ("instacart" in (store_row.get("name") or "").lower()))
+
+        # 1. First attempt exact date match
         items = db.execute('''
             SELECT id, name, category 
             FROM list_items 
@@ -2956,7 +2960,54 @@ def get_visit_items(store_id, visit_date):
               AND purchased = TRUE 
               AND DATE(purchased_at) = ?
             ORDER BY name
-        ''', (store_id, _hh(), visit_date)).fetchall()
+        ''', (store_id, hh_id, visit_date)).fetchall()
+
+        # 2. Fallback (+/- 1 day window) to handle UTC vs client local timezone drift
+        if not items:
+            items = db.execute('''
+                SELECT id, name, category 
+                FROM list_items 
+                WHERE store_id = ? AND household_id = ? 
+                  AND purchased = TRUE 
+                  AND purchased_at >= (?::date - INTERVAL '1 day')
+                  AND purchased_at < (?::date + INTERVAL '2 days')
+                ORDER BY name
+            ''', (store_id, hh_id, visit_date, visit_date)).fetchall()
+
+        # 3. If Instacart visit has no items (e.g. prior order before store_id assignment),
+        # reconcile recently purchased items in this household around the visit date
+        if is_instacart and not items:
+            sv = db.execute('''
+                SELECT items_count FROM store_visits 
+                WHERE store_id = ? AND household_id = ? 
+                  AND (visit_date = ? OR (visit_date >= (?::date - INTERVAL '1 day') AND visit_date <= (?::date + INTERVAL '1 day')))
+                ORDER BY items_count DESC LIMIT 1
+            ''', (store_id, hh_id, visit_date, visit_date, visit_date)).fetchone()
+
+            target_count = sv["items_count"] if sv and sv.get("items_count") else 20
+            reconcile_items = db.execute('''
+                SELECT id, name, category, store_id
+                FROM list_items
+                WHERE household_id = ? AND purchased = TRUE
+                  AND purchased_at >= (?::date - INTERVAL '1 day')
+                  AND purchased_at < (?::date + INTERVAL '2 days')
+                ORDER BY purchased_at DESC
+                LIMIT ?
+            ''', (hh_id, visit_date, visit_date, target_count)).fetchall()
+
+            if reconcile_items:
+                rec_ids = [it["id"] for it in reconcile_items]
+                rec_placeholders = ",".join(["?"] * len(rec_ids))
+                db.execute(
+                    f"UPDATE list_items SET store_id = ? WHERE household_id = ? AND id IN ({rec_placeholders})",
+                    [store_id, hh_id] + rec_ids
+                )
+                db.commit()
+                items = db.execute(
+                    f"SELECT id, name, category FROM list_items WHERE id IN ({rec_placeholders}) ORDER BY name",
+                    rec_ids
+                ).fetchall()
+
         return jsonify([dict(r) for r in items])
     finally:
         db.close()
@@ -3002,19 +3053,22 @@ def get_global_visits():
     db = get_db()
     try:
         visits = db.execute('''
-            SELECT v.store_id, v.visit_date, v.items_count, s.name as store_name
+            SELECT v.store_id, v.visit_date, SUM(v.items_count) as items_count, s.name as store_name
             FROM store_visits v
             JOIN stores s ON v.store_id = s.id
             WHERE v.household_id = ? AND s.name != 'General List'
+            GROUP BY v.store_id, v.visit_date, s.name
             ORDER BY v.visit_date DESC
             LIMIT 100
         ''', (_hh(),)).fetchall()
-        
+
         visits_list = []
         for v in visits:
             d = dict(v)
             if d.get("visit_date"):
                 d["visit_date"] = str(d["visit_date"])
+            if d.get("items_count") is not None:
+                d["items_count"] = int(d["items_count"])
             visits_list.append(d)
         return jsonify(visits_list)
     finally:
@@ -3308,6 +3362,7 @@ def create_instacart_cart():
 def complete_instacart_order():
     """Mark ordered items as purchased and record an Instacart store visit."""
     import datetime
+    import re
     db = get_db()
     hh_id = _hh()
     user_display = get_display_name() or "Instacart"
@@ -3321,6 +3376,21 @@ def complete_instacart_order():
         clean_ids = [int(i) for i in item_ids if str(i).isdigit()]
         if not clean_ids:
             return jsonify({"ok": True, "completed_count": 0, "message": "No valid item IDs"})
+
+        # Determine visit date: prefer client-provided date/timezone, fallback to server today
+        client_date = str(data.get("client_date") or request.headers.get("X-Client-Date") or "").strip()
+        client_tz = str(data.get("timezone") or request.headers.get("X-Client-Timezone") or "").strip()
+
+        if client_date and re.match(r"^\d{4}-\d{2}-\d{2}$", client_date):
+            today = client_date
+        elif client_tz:
+            try:
+                from zoneinfo import ZoneInfo
+                today = datetime.datetime.now(ZoneInfo(client_tz)).date().isoformat()
+            except Exception:
+                today = datetime.date.today().isoformat()
+        else:
+            today = datetime.date.today().isoformat()
 
         # 1. Ensure an Instacart store exists for this household
         instacart_store = db.execute(
@@ -3353,15 +3423,15 @@ def complete_instacart_order():
         actual_ids = [it["id"] for it in matching_items]
         update_placeholders = ",".join(["?"] * len(actual_ids))
 
-        # 3. Mark matching items as purchased
+        # 3. Mark matching items as purchased and assign them to the Instacart store
         db.execute(
-            f"UPDATE list_items SET purchased = TRUE, purchased_by = ?, purchased_at = NOW() WHERE household_id = ? AND id IN ({update_placeholders})",
-            [user_display, hh_id] + actual_ids
+            f"UPDATE list_items SET purchased = TRUE, purchased_by = ?, purchased_at = NOW(), store_id = ? WHERE household_id = ? AND id IN ({update_placeholders})",
+            [user_display, instacart_store_id, hh_id] + actual_ids
         )
 
-        # 4. Update item_purchase_stats for each item
+        # 4. Update item_purchase_stats and promote to store_items for Instacart catalog
         for it in matching_items:
-            cat = (it.get("category") or "").strip()
+            cat = (it.get("category") or "").strip() or categorize(it["name"])
             try:
                 db.execute("""
                     INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
@@ -3372,8 +3442,20 @@ def complete_instacart_order():
             except Exception:
                 pass
 
-        # 5. Log store visit under the Instacart store for today
-        today = datetime.date.today().isoformat()
+            try:
+                exists_si = db.execute(
+                    "SELECT id FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                    (instacart_store_id, hh_id, it["name"])
+                ).fetchone()
+                if not exists_si:
+                    db.execute(
+                        "INSERT INTO store_items (household_id, store_id, name, category) VALUES (?, ?, ?, ?)",
+                        (hh_id, instacart_store_id, it["name"], cat)
+                    )
+            except Exception:
+                pass
+
+        # 5. Log store visit under the Instacart store for today (client-aligned date)
         sv = db.execute(
             "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
             (instacart_store_id, hh_id, today)
@@ -3401,7 +3483,8 @@ def complete_instacart_order():
             "ok": True,
             "completed_count": len(actual_ids),
             "store_id": instacart_store_id,
-            "store_name": "Instacart"
+            "store_name": "Instacart",
+            "visit_date": today
         })
     except Exception as e:
         db.rollback()
