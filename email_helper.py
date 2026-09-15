@@ -812,8 +812,8 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f"Hi {user_name},\n\n"
                     f"How is your first week with ListMate going? We hope your grocery runs have been faster and more organized!\n\n"
                     f"You are currently enjoying your 30-day free Pro trial with unlimited stores and real-time syncing.\n\n"
-                    f"💡 Upgrade Early & Keep Your Full Trial:\n"
-                    f"You can choose a monthly ($1.99/mo) or annual ($9.99/yr) plan anytime. When you upgrade early, you will STILL receive your full 30-day trial period before your paid subscription begins!\n\n"
+                    f"💡 Keep Your Household in Sync:\n"
+                    f"You can choose a monthly ($1.99/mo) or annual ($9.99/yr) plan anytime to ensure uninterrupted access to unlimited stores and live syncing across all household members.\n\n"
                     f"💡 Feature Discovery Tips:\n"
                     f"Be sure to check out the \"Feature Discovery Tips\" in the app menu to learn about aisle auto-sorting, store filters (Costco, Patel Brothers, Trader Joe's, etc.), and multi-store planning.\n\n"
                     f"Upgrade Household: {upgrade_link}\n"
@@ -831,8 +831,8 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<p style="font-size:15px;color:#333;line-height:1.5;">How has your first week of grocery shopping with ListMate been? We hope it’s making trips smoother for your household!</p>'
                     f'<p style="font-size:15px;color:#333;line-height:1.5;">You are currently enjoying your <strong>30-day Pro trial</strong> with live sync and store-by-store categorization.</p>'
                     f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
-                    f'<strong style="color:#1e293b;display:block;margin-bottom:6px;font-size:14px;">💡 Lock in your plan early without losing trial days:</strong>'
-                    f'<span style="color:#475569;font-size:13px;line-height:1.5;display:block;">You can select a monthly ($1.99/mo) or annual ($9.99/yr) plan today. Your paid billing will only start <em>after</em> your 30-day trial concludes.</span>'
+                    f'<strong style="color:#1e293b;display:block;margin-bottom:6px;font-size:14px;">💡 Keep your household in sync:</strong>'
+                    f'<span style="color:#475569;font-size:13px;line-height:1.5;display:block;">You can select a monthly ($1.99/mo) or annual ($9.99/yr) plan anytime. One subscription covers your entire household, keeping everyone connected.</span>'
                     f'</div>'
                     f'<div style="background:#ecfdf5;border:1px solid #a7f3d0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
                     f'<strong style="color:#065f46;display:block;margin-bottom:6px;font-size:14px;">✨ Explore Feature Discovery Tips:</strong>'
@@ -894,8 +894,8 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f"Hi {user_name},\n\n"
                     f"You're 3 weeks into your ListMate Pro trial (~9 days remaining)!\n\n"
                     f"We hope ListMate has saved your household time, cut down on duplicate purchases, and made grocery trips stress-free.\n\n"
-                    f"💡 Lock in your Pro Plan anytime:\n"
-                    f"Upgrade to a monthly ($1.99/mo) or annual ($9.99/yr) subscription to ensure your household continues syncing without interruption. Upgrading now still gives you the full remaining days of your free trial!\n\n"
+                    f"💡 Upgrade to Pro anytime:\n"
+                    f"Upgrade to a monthly ($1.99/mo) or annual ($9.99/yr) subscription to ensure your household continues syncing without interruption before your trial concludes.\n\n"
                     f"Remember: One subscription covers your whole household.\n\n"
                     f"Upgrade Household: {upgrade_link}\n"
                     f"Add Household Members: {add_member_link}\n"
@@ -913,7 +913,7 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<p style="font-size:15px;color:#333;line-height:1.5;">We hope ListMate has helped streamline your grocery runs and eliminated the chaos of duplicate buying and forgotten items.</p>'
                     f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
                     f'<strong style="color:#1e293b;display:block;margin-bottom:6px;font-size:14px;">💡 Keep your household in sync:</strong>'
-                    f'<span style="color:#475569;font-size:13px;line-height:1.5;display:block;">Upgrade for just <strong>$1.99/mo</strong> or <strong>$9.99/yr</strong>. Locking in your subscription now preserves your remaining free trial days, so you won\'t be charged until the 30-day period ends.</span>'
+                    f'<span style="color:#475569;font-size:13px;line-height:1.5;display:block;">Upgrade for just <strong>$1.99/mo</strong> or <strong>$9.99/yr</strong> before your trial ends to ensure seamless, uninterrupted collaboration for your entire household.</span>'
                     f'</div>'
                     f'<div style="margin:24px 0 16px;">'
                     f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">⭐ Upgrade Subscription</a>'
@@ -1136,13 +1136,13 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     if 'trial_week1' in events:
         text_sections.append(
             f"1 Week Down with ListMate:\n"
-            f"You're currently enjoying your 30-day Pro trial. You can lock in your monthly ($1.99/mo) or annual ($9.99/yr) plan anytime—your billing will only start after your full 30-day trial finishes.\n"
+            f"You're currently enjoying your 30-day Pro trial. You can upgrade to a monthly ($1.99/mo) or annual ($9.99/yr) plan anytime to keep everyone in sync.\n"
             f"Tip: Explore Feature Discovery Tips in the app menu for smart aisle sorting and store filters."
         )
         html_sections.append(
             f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px 16px;margin:14px 0;border-radius:8px;">'
             f'<strong style="color:#1e293b;display:block;margin-bottom:4px;">🌟 1 Week Down with ListMate:</strong>'
-            f'<span style="color:#475569;font-size:13px;line-height:1.5;">Upgrading early preserves your full 30-day trial period before billing starts. Check out the <strong>Feature Discovery Tips</strong> in the app menu to learn about aisle sorting and store filters!</span>'
+            f'<span style="color:#475569;font-size:13px;line-height:1.5;">You can upgrade anytime ($1.99/mo or $9.99/yr) to cover your entire household. Check out the <strong>Feature Discovery Tips</strong> in the app menu to learn about aisle sorting and store filters!</span>'
             f'</div>'
         )
 
@@ -1154,7 +1154,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         html_sections.append(
             f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px 16px;margin:14px 0;border-radius:8px;">'
             f'<strong style="color:#1e293b;display:block;margin-bottom:4px;">⏳ 3 Weeks with ListMate (~9 days left):</strong>'
-            f'<span style="color:#475569;font-size:13px;line-height:1.5;">Lock in your household subscription ($1.99/mo or $9.99/yr) anytime without losing any remaining trial days.</span>'
+            f'<span style="color:#475569;font-size:13px;line-height:1.5;">Upgrade your household subscription ($1.99/mo or $9.99/yr) before your trial ends to ensure uninterrupted live collaboration.</span>'
             f'</div>'
         )
 

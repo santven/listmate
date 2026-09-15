@@ -63,7 +63,7 @@ Our system strictly delineates between **Marketing** (lifecycle, engagement, pro
 - **Tracking**: `email_events` with `campaign = 'trial_week1'` and `event_type = 'sent'`.
 - **Content & Purpose**:
   - Asks what they think of ListMate and how their first week went.
-  - Highlights early upgrade options ($1.99/mo or $9.99/yr) while reassuring that **upgrading early still gives them their full 30-day trial period** (paid billing begins only after the 30-day trial concludes).
+  - Highlights upgrade options ($1.99/mo or $9.99/yr) to ensure uninterrupted live collaboration and store mapping for the household.
   - Recommends the **Feature Discovery Tips** in the app menu to learn about aisle auto-sorting, store filters (Patel Brothers, Costco, Trader Joe's), and multi-store planning.
 - **Buttons**:
   - ⭐ **Upgrade Subscription** (`/settings?action=upgrade&source=email_trial_week1`)
@@ -77,7 +77,7 @@ Our system strictly delineates between **Marketing** (lifecycle, engagement, pro
 - **Tracking**: `email_events` with `campaign = 'trial_week3'` and `event_type = 'sent'`.
 - **Content & Purpose**:
   - Check-in at 3 weeks (~9 days left in trial).
-  - Reminds user to lock in their household plan ($1.99/mo or $9.99/yr) before trial expiration, preserving remaining free trial days.
+  - Reminds user to upgrade their household plan ($1.99/mo or $9.99/yr) before trial expiration to keep real-time sync active across all members.
   - Reminds that 1 subscription covers the entire household.
 - **Buttons**:
   - ⭐ **Upgrade Subscription** (`/settings?action=upgrade&source=email_trial_week3`)
