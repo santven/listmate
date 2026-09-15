@@ -2974,39 +2974,39 @@ def get_visit_items(store_id, visit_date):
                 ORDER BY name
             ''', (store_id, hh_id, visit_date, visit_date)).fetchall()
 
-        # 3. If Instacart visit has no items (e.g. prior order before store_id assignment),
+        # 3. If Instacart visit has fewer items than recorded count (e.g. prior order items before store_id assignment),
         # reconcile recently purchased items in this household around the visit date
-        if is_instacart and not items:
+        if is_instacart:
             sv = db.execute('''
                 SELECT items_count FROM store_visits 
                 WHERE store_id = ? AND household_id = ? 
                   AND (visit_date = ? OR (visit_date >= (?::date - INTERVAL '1 day') AND visit_date <= (?::date + INTERVAL '1 day')))
                 ORDER BY items_count DESC LIMIT 1
             ''', (store_id, hh_id, visit_date, visit_date, visit_date)).fetchone()
-
-            target_count = sv["items_count"] if sv and sv.get("items_count") else 20
-            reconcile_items = db.execute('''
-                SELECT id, name, category, store_id
-                FROM list_items
-                WHERE household_id = ? AND purchased = TRUE
-                  AND purchased_at >= (?::date - INTERVAL '1 day')
-                  AND purchased_at < (?::date + INTERVAL '2 days')
-                ORDER BY purchased_at DESC
-                LIMIT ?
-            ''', (hh_id, visit_date, visit_date, target_count)).fetchall()
-
-            if reconcile_items:
-                rec_ids = [it["id"] for it in reconcile_items]
-                rec_placeholders = ",".join(["?"] * len(rec_ids))
-                db.execute(
-                    f"UPDATE list_items SET store_id = ? WHERE household_id = ? AND id IN ({rec_placeholders})",
-                    [store_id, hh_id] + rec_ids
-                )
-                db.commit()
-                items = db.execute(
-                    f"SELECT id, name, category FROM list_items WHERE id IN ({rec_placeholders}) ORDER BY name",
-                    rec_ids
-                ).fetchall()
+            target_count = sv["items_count"] if sv and sv.get("items_count") else 0
+            if not items or len(items) < target_count:
+                limit_needed = target_count if target_count > 0 else 20
+                reconcile_items = db.execute('''
+                    SELECT id, name, category, store_id
+                    FROM list_items
+                    WHERE household_id = ? AND purchased = TRUE
+                      AND purchased_at >= (?::date - INTERVAL '1 day')
+                      AND purchased_at < (?::date + INTERVAL '2 days')
+                    ORDER BY purchased_at DESC
+                    LIMIT ?
+                ''', (hh_id, visit_date, visit_date, limit_needed)).fetchall()
+                if reconcile_items:
+                    rec_ids = [it["id"] for it in reconcile_items]
+                    rec_placeholders = ",".join(["?"] * len(rec_ids))
+                    db.execute(
+                        f"UPDATE list_items SET store_id = ? WHERE household_id = ? AND id IN ({rec_placeholders})",
+                        [store_id, hh_id] + rec_ids
+                    )
+                    db.commit()
+                    items = db.execute(
+                        f"SELECT id, name, category FROM list_items WHERE id IN ({rec_placeholders}) ORDER BY name",
+                        rec_ids
+                    ).fetchall()
 
         return jsonify([dict(r) for r in items])
     finally:
