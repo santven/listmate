@@ -3224,6 +3224,191 @@ def clear_list():
         db.close()
 
 
+# ── Instacart Shoppable List Integration ───────────────────────────
+
+@app.route("/api/integrations/instacart/cart", methods=["POST"])
+@require_user
+def create_instacart_cart():
+    """Build a shoppable Instacart cart link from a list of household grocery items."""
+    data = request.get_json(silent=True) or {}
+    items = data.get("items", [])
+    title = data.get("title", "ListMate Grocery Order")
+
+    if not items:
+        return jsonify({"error": "No items provided"}), 400
+
+    ingredients = []
+    item_ids = []
+    for it in items:
+        if isinstance(it, dict):
+            name = (it.get("name") or "").strip()
+            qty = (it.get("quantity") or "").strip()
+            item_id = it.get("id")
+            if item_id is not None:
+                item_ids.append(item_id)
+        elif isinstance(it, str):
+            name = it.strip()
+            qty = ""
+        else:
+            continue
+
+        if name:
+            line = f"{qty} {name}".strip() if qty else name
+            ingredients.append(line)
+
+    if not ingredients:
+        return jsonify({"error": "No valid grocery items provided"}), 400
+
+    instacart_key = os.environ.get("INSTACART_API_KEY", "").strip()
+    partner_id = os.environ.get("INSTACART_PARTNER_ID", "listmate").strip() or "listmate"
+    cart_url = None
+
+    if instacart_key:
+        try:
+            import urllib.request
+            import json
+            payload = json.dumps({
+                "title": title,
+                "ingredients": ingredients,
+                "partner_id": partner_id
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://connect.instacart.com/v2/partners/lists",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {instacart_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                cart_url = res_data.get("url") or (res_data.get("data") or {}).get("url")
+        except Exception as e:
+            print(f"[Instacart API] Connect API error: {e}")
+
+    # Seamless fallback / universal link if key is not yet configured
+    if not cart_url:
+        import urllib.parse
+        encoded_title = urllib.parse.quote(title)
+        encoded_items = urllib.parse.quote(",".join(ingredients))
+        cart_url = f"https://www.instacart.com/store/partner_cart?title={encoded_title}&partner_id={partner_id}&items={encoded_items}"
+
+    return jsonify({
+        "ok": True,
+        "url": cart_url,
+        "items_count": len(ingredients),
+        "item_ids": item_ids
+    })
+
+
+@app.route("/api/integrations/instacart/complete", methods=["POST"])
+@require_user
+def complete_instacart_order():
+    """Mark ordered items as purchased and record an Instacart store visit."""
+    import datetime
+    db = get_db()
+    hh_id = _hh()
+    user_display = get_display_name() or "Instacart"
+
+    try:
+        data = request.get_json(silent=True) or {}
+        item_ids = data.get("item_ids", [])
+        if not item_ids or not isinstance(item_ids, list):
+            return jsonify({"error": "item_ids list required"}), 400
+
+        clean_ids = [int(i) for i in item_ids if str(i).isdigit()]
+        if not clean_ids:
+            return jsonify({"ok": True, "completed_count": 0, "message": "No valid item IDs"})
+
+        # 1. Ensure an Instacart store exists for this household
+        instacart_store = db.execute(
+            "SELECT id, name FROM stores WHERE household_id = ? AND LOWER(TRIM(name)) = 'instacart'",
+            (hh_id,)
+        ).fetchone()
+
+        if not instacart_store:
+            instacart_store = db.execute(
+                "INSERT INTO stores (name, household_id) VALUES ('Instacart', ?) RETURNING id, name",
+                (hh_id,)
+            ).fetchone()
+        instacart_store_id = instacart_store["id"]
+
+        # 2. Query open items belonging to this household
+        placeholders = ",".join(["?"] * len(clean_ids))
+        matching_items = db.execute(
+            f"SELECT id, name, category, store_id FROM list_items WHERE household_id = ? AND purchased = FALSE AND id IN ({placeholders})",
+            [hh_id] + clean_ids
+        ).fetchall()
+
+        if not matching_items:
+            return jsonify({
+                "ok": True,
+                "completed_count": 0,
+                "message": "Items were already checked off or removed",
+                "store_id": instacart_store_id
+            })
+
+        actual_ids = [it["id"] for it in matching_items]
+        update_placeholders = ",".join(["?"] * len(actual_ids))
+
+        # 3. Mark matching items as purchased
+        db.execute(
+            f"UPDATE list_items SET purchased = TRUE, purchased_by = ?, purchased_at = NOW() WHERE household_id = ? AND id IN ({update_placeholders})",
+            [user_display, hh_id] + actual_ids
+        )
+
+        # 4. Update item_purchase_stats for each item
+        for it in matching_items:
+            cat = (it.get("category") or "").strip()
+            try:
+                db.execute("""
+                    INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                    VALUES (?, ?, ?, 1, NOW())
+                    ON CONFLICT (household_id, name)
+                    DO UPDATE SET total_purchases = item_purchase_stats.total_purchases + 1, last_purchased = NOW()
+                """, (hh_id, it["name"], cat))
+            except Exception:
+                pass
+
+        # 5. Log store visit under the Instacart store for today
+        today = datetime.date.today().isoformat()
+        sv = db.execute(
+            "SELECT id, items_count FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+            (instacart_store_id, hh_id, today)
+        ).fetchone()
+
+        if sv:
+            db.execute(
+                "UPDATE store_visits SET items_count = items_count + ?, created_at = NOW() WHERE id = ?",
+                (len(actual_ids), sv["id"])
+            )
+        else:
+            db.execute(
+                "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, ?)",
+                (instacart_store_id, hh_id, today, len(actual_ids))
+            )
+
+        # 6. Clear planned visit fields for Instacart store
+        db.execute(
+            "UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?",
+            (instacart_store_id, hh_id)
+        )
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "completed_count": len(actual_ids),
+            "store_id": instacart_store_id,
+            "store_name": "Instacart"
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
 @app.route("/api/sync", methods=["POST"])
 @require_user
 def sync_offline_actions():
