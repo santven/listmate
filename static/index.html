@@ -1707,7 +1707,7 @@ function getVisitLabel(store) {
     const diffTime = today.getTime() - last.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Last visited: Today';
+    if (diffDays <= 0) return 'Last visited: Today';
     if (diffDays === 1) return 'Last visited: Yesterday';
     return `Last visited: ${diffDays} days ago`;
   }
@@ -2562,28 +2562,42 @@ async function loadGlobalVisits() {
       } else {
         const grouped = {};
         visits.forEach(v => {
-          if (!grouped[v.visit_date]) grouped[v.visit_date] = [];
-          grouped[v.visit_date].push(v);
+          let dStr = v.visit_date;
+          if (v.visit_date && typeof v.visit_date === 'string') {
+            const parts = v.visit_date.split('-');
+            if (parts.length === 3) {
+              const localD = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const yesterday = new Date(today);
+              yesterday.setDate(yesterday.getDate() - 1);
+              const visitDay = new Date(localD);
+              visitDay.setHours(0, 0, 0, 0);
+
+              if (visitDay.getTime() >= today.getTime()) dStr = "Today";
+              else if (visitDay.getTime() === yesterday.getTime()) dStr = "Yesterday";
+              else dStr = localD.toLocaleDateString(undefined, {weekday:'long', month:'short', day:'numeric', year:'numeric'});
+            }
+          }
+          if (!grouped[dStr]) grouped[dStr] = [];
+          grouped[dStr].push(v);
         });
         
         let html = '';
-        for (const [dateKey, dayVisits] of Object.entries(grouped).sort((a,b) => b[0].localeCompare(a[0]))) {
-           let dStr = dateKey;
-           const d = new Date(dateKey);
-           if (!isNaN(d.getTime())) {
-             const [y,m,day] = dateKey.split('-');
-             const localD = new Date(y, m-1, day);
-             const today = new Date();
-             const yesterday = new Date(today);
-             yesterday.setDate(yesterday.getDate() - 1);
-             
-             if (localD.toDateString() === today.toDateString()) dStr = "Today";
-             else if (localD.toDateString() === yesterday.toDateString()) dStr = "Yesterday";
-             else dStr = localD.toLocaleDateString(undefined, {weekday:'long', month:'short', day:'numeric', year:'numeric'});
-           }
-           
+        const groupKeys = Object.keys(grouped).sort((a, b) => {
+          if (a === "Today") return -1;
+          if (b === "Today") return 1;
+          if (a === "Yesterday") return -1;
+          if (b === "Yesterday") return 1;
+          const maxDateA = Math.max(...grouped[a].map(v => new Date(v.visit_date).getTime() || 0));
+          const maxDateB = Math.max(...grouped[b].map(v => new Date(v.visit_date).getTime() || 0));
+          return maxDateB - maxDateA;
+        });
+
+        for (const dStr of groupKeys) {
+           const dayVisits = grouped[dStr];
            html += '<div style="font-size:13px; font-weight:700; color:var(--muted); margin: 20px 0 10px 4px; text-transform:uppercase; letter-spacing:0.5px;">' + dStr + '</div>';
-           
+                      
            dayVisits.forEach(v => {
              html += `<div class="store-visit-card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 12px; border:2px solid var(--border); background:var(--card); border-radius:var(--radius); margin-bottom:10px; cursor:pointer; transition:all 0.15s;" onclick="openVisitDetail(${v.store_id}, '${escapeHtml(v.store_name).replace(/'/g, "\\'")}', '${v.visit_date}', '${dStr.replace(/'/g, "\\'")}')">` +
                      '  <div style="font-weight:600; font-size:15px; color:var(--text);">' + escapeHtml(v.store_name) + '</div>' +
@@ -5103,10 +5117,22 @@ async function confirmInstacartPurchased() {
     const pending = JSON.parse(raw);
     const itemIds = pending.item_ids || [];
 
+    const now = new Date();
+    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const tz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+
     const res = await fetch(API + '/integrations/instacart/complete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_ids: itemIds })
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-Client-Date': todayStr,
+        'X-Client-Timezone': tz
+      },
+      body: JSON.stringify({ 
+        item_ids: itemIds,
+        client_date: todayStr,
+        timezone: tz
+      })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -5123,10 +5149,7 @@ async function confirmInstacartPurchased() {
       confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
     }
     toast(`🎉 ${data.completed_count || itemIds.length} items marked as purchased via Instacart!`);
-
-    if (currentScreen === 'instacart') {
-      showScreen('home');
-    }
+    showScreen('home');
   } catch (e) {
     toast('Error recording Instacart purchase');
     console.error(e);
