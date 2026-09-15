@@ -34,11 +34,13 @@ def _connect():
     conn.autocommit = True
     return conn
 
-def _put_conn(conn):
+def _put_conn(conn, close=False):
     global _pool
     if _pool and conn:
         try:
-            if not getattr(conn, 'closed', False):
+            if close or getattr(conn, 'closed', False):
+                _pool.putconn(conn, close=True)
+            else:
                 _pool.putconn(conn)
         except Exception:
             try: conn.close()
@@ -61,8 +63,21 @@ def _one(sql, params=None):
         row = cur.fetchone()
         cols = [d[0] for d in cur.description] if cur.description else []
         return dict(zip(cols, row)) if row else None
+    except (psycopg2.OperationalError, psycopg2.InterfaceError) as oe:
+        _put_conn(conn, close=True)
+        conn = _connect()
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            row = cur.fetchone()
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return dict(zip(cols, row)) if row else None
+        except Exception as e2:
+            print(f"[_one retry SQL Error]: {e2} | Query: {sql_fixed} | Params: {params}", flush=True)
+            return None
     except Exception as e:
-        print(f"[_one SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
+        print(f"[_one SQL Error]: {e} | Query: {sql_fixed} | Params: {params}", flush=True)
         return None
     finally:
         if cur:
@@ -81,8 +96,21 @@ def _run(sql, params=None):
         rows = cur.fetchall() if cur.description else []
         cols = [d[0] for d in cur.description] if cur.description else []
         return [dict(zip(cols, r)) for r in rows]
+    except (psycopg2.OperationalError, psycopg2.InterfaceError) as oe:
+        _put_conn(conn, close=True)
+        conn = _connect()
+        try:
+            cur = conn.cursor()
+            if params: cur.execute(sql_fixed, params)
+            else: cur.execute(sql_fixed)
+            rows = cur.fetchall() if cur.description else []
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return [dict(zip(cols, r)) for r in rows]
+        except Exception as e2:
+            print(f"[_run retry SQL Error]: {e2} | Query: {sql_fixed} | Params: {params}", flush=True)
+            return []
     except Exception as e:
-        print(f"[_run SQL Error]: {e}\nQuery: {sql_fixed}\nParams: {params}", flush=True)
+        print(f"[_run SQL Error]: {e} | Query: {sql_fixed} | Params: {params}", flush=True)
         return []
     finally:
         if cur:
@@ -99,6 +127,12 @@ def _exec(sql, params=None):
         cur = conn.cursor()
         if params: cur.execute(sql_fixed, params)
         else: cur.execute(sql_fixed)
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _put_conn(conn, close=True)
+        conn = _connect()
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
     finally:
         if cur:
             try: cur.close()
@@ -111,6 +145,19 @@ def _insert(sql, params=None):
     conn = _connect()
     cur = None
     try:
+        cur = conn.cursor()
+        if params: cur.execute(sql_fixed, params)
+        else: cur.execute(sql_fixed)
+        row = cur.fetchone() if cur.description else None
+        if row:
+            new_id = row[0]
+        else:
+            cur.execute("SELECT lastval()")
+            new_id = cur.fetchone()[0]
+        return new_id
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _put_conn(conn, close=True)
+        conn = _connect()
         cur = conn.cursor()
         if params: cur.execute(sql_fixed, params)
         else: cur.execute(sql_fixed)
@@ -453,7 +500,7 @@ def _reconcile_session(s):
     new_hhname = ""
 
     # Check if assigned household in auth_users is valid for this user
-    if assigned_hhid and int(assigned_hhid) > 0 and assigned_hhid != hhid:
+    if assigned_hhid and int(assigned_hhid) > 0:
         cand = _one(f"""
             SELECT h.id, h.name, h.owner_id, m.role
             FROM {_HH} h
@@ -470,18 +517,25 @@ def _reconcile_session(s):
             SELECT h.id, h.name
             FROM {_HH} h
             JOIN auth_household_members m ON m.household_id = h.id
-            WHERE m.user_id = ? AND h.id != ?
+            WHERE m.user_id = ?
             ORDER BY (m.role = 'owner') DESC, h.id ASC
             LIMIT 1
-        """, (uid, hhid if hhid else 0))
+        """, (uid,))
         if cand:
             new_hhid = cand["id"]
             new_hhname = cand.get("name", "")
             _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
 
-    # Fallback: create personalized default household on the fly
+    # Fallback: create personalized default household on the fly ONLY if user belongs to no households at all
     if not new_hhid:
-        new_hhid, new_hhname = _create_default_household_for_user(uid, email, name)
+        existing_mem = _one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+        if existing_mem:
+            new_hhid = existing_mem["household_id"]
+            hh_row = _one(f"SELECT name FROM {_HH} WHERE id = ?", (new_hhid,))
+            new_hhname = hh_row.get("name", "") if hh_row else ""
+            _run(f"UPDATE {_USERS} SET household_id = ? WHERE id = ?", (new_hhid, uid))
+        else:
+            new_hhid, new_hhname = _create_default_household_for_user(uid, email, name)
 
     s["household_id"] = new_hhid
     s["household_name"] = new_hhname
