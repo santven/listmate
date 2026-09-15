@@ -1155,7 +1155,7 @@ def stripe_webhook():
             # Fix logic: they are premium if active/trialing, regardless of cancel_at_period_end
             is_premium = True if status in ["active", "trialing"] else False
             is_canceled = bool(cancel_at_period_end or canceled_at or cancel_at)
-            db_status = "canceled" if is_canceled else status
+            db_status = "canceled" if is_canceled else ("active" if status == "trialing" else status)
             
             # Use hhid if available (for robustness if customer_id not yet linked)
             if hhid:
@@ -1629,6 +1629,26 @@ def billing_checkout():
                 "success_url": success_redirect,
                 "cancel_url": cancel_redirect,
             }
+            
+            try:
+                hh = authmod._one(f"SELECT subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
+                if hh and hh.get("subscription_status") == "trial" and hh.get("trial_ends_at"):
+                    import datetime
+                    trial_ends_at = hh["trial_ends_at"]
+                    if isinstance(trial_ends_at, str):
+                        try:
+                            trial_ends_at = datetime.datetime.fromisoformat(trial_ends_at.replace("Z", "+00:00"))
+                        except:
+                            pass
+                    if isinstance(trial_ends_at, datetime.datetime):
+                        if trial_ends_at.tzinfo is None:
+                            trial_ends_at = trial_ends_at.replace(tzinfo=datetime.timezone.utc)
+                        now = datetime.datetime.now(datetime.timezone.utc)
+                        # Stripe requires trial_end to be at least 48 hours in the future
+                        if trial_ends_at > now + datetime.timedelta(hours=48):
+                            body_params["subscription_data[trial_end]"] = str(int(trial_ends_at.timestamp()))
+            except Exception as e:
+                print(f"[Stripe Checkout] Error checking trial_ends_at: {e}")
             encoded_body = urllib.parse.urlencode(body_params).encode("utf-8")
             req = urllib.request.Request(
                 url,
