@@ -1032,11 +1032,50 @@ def revenuecat_webhook():
         return jsonify({"ok": True, "warning": "Household not found"})
 
     exp_ms = event.get("expiration_at_ms")
+    purchased_ms = event.get("purchased_at_ms")
     exp_clause = ""
     exp_args = []
     if exp_ms:
+        target_exp = int(exp_ms) / 1000.0
+        if purchased_ms:
+            # Honor internal trial offsets for mobile in-app purchases.
+            # If the user is currently on an internal trial, push their native App Store expiration
+            # out by the remaining trial duration so they don't lose days.
+            try:
+                hh = authmod._one(f"SELECT trial_ends_at, subscription_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
+                if hh:
+                    import datetime
+                    
+                    def parse_time(t):
+                        if not t: return None
+                        if isinstance(t, str):
+                            try: t = datetime.datetime.fromisoformat(t.replace("Z", "+00:00"))
+                            except: return None
+                        if isinstance(t, datetime.datetime) and t.tzinfo is None:
+                            t = t.replace(tzinfo=datetime.timezone.utc)
+                        return t
+                        
+                    trial_t = parse_time(hh.get("trial_ends_at"))
+                    sub_t = parse_time(hh.get("subscription_ends_at"))
+                    purchased_t = datetime.datetime.fromtimestamp(int(purchased_ms)/1000.0, tz=datetime.timezone.utc)
+                    exp_t = datetime.datetime.fromtimestamp(target_exp, tz=datetime.timezone.utc)
+                    
+                    duration = exp_t - purchased_t
+                    
+                    # We only apply the trial offset for INITIAL_PURCHASE or PRODUCT_CHANGE
+                    # Otherwise, RENEWAL webhooks that arrive late or are re-delivered could compound incorrectly.
+                    if evt_type in ["INITIAL_PURCHASE", "PRODUCT_CHANGE"]:
+                        if trial_t and trial_t > purchased_t:
+                            # Apply the remaining trial time!
+                            adjusted_exp = trial_t + duration
+                            # Only use it if it's better than native expiration
+                            if adjusted_exp > exp_t:
+                                target_exp = adjusted_exp.timestamp()
+            except Exception as e:
+                print(f"[Webhook] Error computing trial offset: {e}")
+                
         exp_clause = ", subscription_ends_at = TO_TIMESTAMP(?)"
-        exp_args = [int(exp_ms) / 1000.0]
+        exp_args = [target_exp]
 
     if evt_type == "CANCELLATION":
         authmod._run(f"UPDATE {authmod._HH} SET subscription_status = ? {exp_clause} WHERE id = ?", ("canceled", *exp_args, hhid))
