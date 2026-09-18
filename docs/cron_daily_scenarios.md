@@ -1,5 +1,9 @@
 # Daily Cron Job Scenarios (`scripts/cron_daily.py`)
 
+> **Related Architecture Specification**:
+> For the comprehensive post-trial expiration cadence, partner friction recovery, dormancy state machine, 60-day breakup emails, and 90-day deliverability sunsetting architecture, see [`trial_and_retention_lifecycle_design.md`](./trial_and_retention_lifecycle_design.md).
+
+
 ## Overview
 The `cron_daily.py` script runs daily to evaluate user and household lifecycle states and send automated, high-conversion email reminders.
 
@@ -21,6 +25,9 @@ Our system strictly delineates between **Marketing** (lifecycle, engagement, pro
 | **Re-engagement (Day 14)** | 📢 **Marketing** | `reengagement` | Sent to dormant users who haven't added items in 14+ days. |
 | **Trial Expirations (Day 3 / Day 0)** | ⚖️ **Transactional** | `trial_exp_3days` / `trial_exp_today` | Essential service/account status notices (imminent access changes). |
 | **Sub Expirations (Day 3 / Day 0)** | ⚖️ **Transactional** | `sub_exp_3days` / `sub_exp_today` | Essential payment renewal/lapsing notices. |
+| **Trial Lapsed Partner Nudge (Day 32)** | 📢 **Marketing** | `trial_lapsed_day2` | Highlights loss of 2-way partner list sync for multi-member households. |
+| **Trial Extension Offer (Day 37)** | 📢 **Marketing** | `trial_ext_day7` | 7-day trial extension offer for unconverted lapsed households. |
+| **Breakup Permission Email (Day 60)** | 📢 **Marketing** | `breakup_day60` | Final permission check sent before moving user to deliverability sunset. |
 
 ### Legal Safeguards
 1. **`marketing_opt_in` Enforcement**: All marketing emails are guarded by `AND ahm.marketing_opt_in = TRUE` in their SQL queries. Users who disable marketing communications in their Settings will never be queried or sent these emails.
