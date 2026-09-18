@@ -243,6 +243,7 @@ def run_cron():
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_breakup_day60_sent_at TIMESTAMP")
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP")
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_extension_claimed_at TIMESTAMP")
         _run("CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)")
     except Exception as e:
         print(f"Warning: schema initialization check: {e}")
@@ -468,6 +469,7 @@ def run_cron():
             AND ee.event_type = 'sent'
       )
       AND h.email_trial_ext_day7_sent_at IS NULL
+      AND h.trial_extension_claimed_at IS NULL
       AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
     ORDER BY h.id, u.id ASC
     """
