@@ -1226,7 +1226,7 @@ def send_breakup_day60_notice(to_email: str, user_name: str, user_id: int = 0, h
 
     campaign = "breakup_day60"
     keep_active_link = f"{BASE_URL}/open?url={quote('/?action=keep-active&source=email_breakup_day60')}"
-    unsub_direct_link = f"{BASE_URL}/open?url={quote('/settings?action=unsubscribe&source=email_breakup_day60')}"
+    unsub_direct_link = _get_unsub_link(user_id) if user_id else f"{BASE_URL}/open?url={quote('/settings?action=unsubscribe&source=email_breakup_day60')}"
     subject = "Should we stop emailing you? (Quick check-in from ListMate)"
 
     unsub_txt, unsub_html = _get_unsub_blocks(user_id, "all marketing and product emails", "You received this email because you registered a ListMate account.")
@@ -1325,6 +1325,8 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         subject = "Missing real-time grocery sync with your household? 🛒"
     elif 'trial_ext_day7' in events:
         subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
+    elif 'breakup_day60' in events:
+        subject = "Should we stop emailing you? (Quick check-in from ListMate)"
     elif 'solo_nudge' in events:
         subject = "Get the most out of ListMate: Invite your household 🛒"
     else:
@@ -1420,6 +1422,25 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             f'<h4 style="color:#2c5a2c;margin:0 0 6px 0;">👋 Getting Started</h4>'
             f'<p style="font-size:14px;color:#444;line-height:1.5;margin:0;">We noticed you haven\'t added any items yet. Sharing a live list with your partner or housemates makes store trips smoother and prevents duplicate buys.</p>'
             f'</div>'
+        )
+
+    if 'breakup_day60' in events:
+        bk_keep_link = f"{BASE_URL}/open?url={quote('/?action=keep-active&source=email_combined')}"
+        bk_unsub_link = _get_unsub_link(user_id) if user_id else f"{BASE_URL}/open?url={quote('/settings?action=unsubscribe&source=email_combined')}"
+        text_sections.append(
+            f"Should we stop emailing you?\n"
+            f"We noticed you haven't used ListMate or opened our recent emails. Your inbox is valuable, and if you're no longer using ListMate, we'll automatically mute product updates and reminders in 14 days.\n"
+            f"Keep My Updates & Lists: {bk_keep_link}\n"
+            f"Unsubscribe Now: {bk_unsub_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px 16px;margin:14px 0;border-radius:8px;">'
+            f'<strong style="color:#334155;display:block;margin-bottom:6px;">📬 Should we stop emailing you?</strong>'
+            f'<span style="color:#475569;font-size:14px;line-height:1.5;">We noticed you haven\'t used ListMate or opened our recent emails. If you\'re no longer using ListMate, no worries! We\'ll automatically mute product updates and reminders in 14 days.</span>'
+            f'<div style="margin-top:12px;">'
+            f'<a href="{bk_keep_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:bold;margin-right:8px;margin-bottom:6px;">Keep My Updates & Lists</a>'
+            f'<a href="{bk_unsub_link}" style="display:inline-block;background:#ffffff;color:#64748b;border:1px solid #cbd5e1;padding:8px 14px;border-radius:6px;text-decoration:none;font-size:13px;margin-bottom:6px;">Unsubscribe Now</a>'
+            f'</div></div>'
         )
 
     if 'reengagement' in events:

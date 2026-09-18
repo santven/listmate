@@ -690,6 +690,46 @@ def claim_trial_extension(household_id=None, user_id=None):
 
     return True, "🎉 7 extra days of ListMate Premium have been added to your trial!", 7
 
+
+def keep_household_active(household_id=None, user_id=None):
+    """Reactivate a household from sunset_pending back to active or lapsed, resetting sunset timer."""
+    _init_schema()
+    if not household_id:
+        household_id = get_household_id()
+    if not household_id:
+        return False, "No household found."
+
+    hh = _one(f"SELECT id, lifecycle_status, is_premium FROM {_HH} WHERE id = ?", (household_id,))
+    if not hh:
+        return False, "Household not found."
+
+    # If is_premium is True -> 'active', else 'lapsed' (retains non-sunset active engagement state)
+    target_status = 'active' if hh.get("is_premium") else 'lapsed'
+
+    _run(f"""
+        UPDATE {_HH}
+        SET lifecycle_status = %s,
+            last_email_clicked_at = NOW()
+        WHERE id = %s
+    """, (target_status, household_id))
+
+    try:
+        if not user_id:
+            user_id = get_user_id()
+        if user_id:
+            u = _one(f"SELECT email FROM {_USERS} WHERE id = ?", (user_id,))
+            email = u.get("email") if u else None
+            if email:
+                _run("""
+                    INSERT INTO email_events (email, event_type, campaign, user_id, household_id, event_timestamp)
+                    VALUES (%s, 'click', 'breakup_keep_active', %s, %s, NOW())
+                """, (email, user_id, household_id))
+    except Exception as e:
+        print(f"[keep_household_active] Error logging event: {e}")
+
+    return True, "✅ Your account has been confirmed active! We'll keep sending your household updates."
+
+
 def is_logged_in(): 
     s = _get()
     return bool(s)
