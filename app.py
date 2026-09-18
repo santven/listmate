@@ -1386,6 +1386,16 @@ def sendgrid_webhook():
             except Exception as ue:
                 print(f"[SendGrid Webhook] Error unsuppressing {email}: {ue}")
 
+        # Update household email engagement metrics
+        if household_id:
+            try:
+                if ev_type_lower == "open":
+                    authmod._run("UPDATE auth_households SET last_email_opened_at = NOW() WHERE id = %s", (household_id,))
+                elif ev_type_lower == "click":
+                    authmod._run("UPDATE auth_households SET last_email_clicked_at = NOW(), lifecycle_status = 'active' WHERE id = %s", (household_id,))
+            except Exception as eng_err:
+                print(f"[SendGrid Webhook] Error updating engagement metrics for household {household_id}: {eng_err}")
+
     return jsonify({"ok": True, "processed": processed_count})
 
 

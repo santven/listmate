@@ -1067,6 +1067,227 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
     return _send_via_api(api_key, payload)
 
 
+def send_trial_lapsed_day2_notice(to_email: str, user_name: str, partner_name: str = "your partner", household_name: str = "your household", user_id: int = 0, household_id: int = 0) -> bool:
+    """Send Day 32 post-trial partner friction notice to multi-member households."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "trial_lapsed_day2"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_lapsed_day2')}"
+    settings_link = f"{BASE_URL}/open?url={quote('/settings?source=email_trial_lapsed_day2')}"
+
+    partner_display = partner_name if partner_name and partner_name.strip() and partner_name.strip().lower() not in ("someone", "your household", "partner") else "your partner"
+    subject = f"Missing real-time grocery sync with {partner_display}? 🛒"
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and lifecycle updates", "You received this email because you created a ListMate household or manage household members.")
+
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"Two days ago, your ListMate 30-day trial concluded and your household transitioned to our Free single-user plan.\n\n"
+        f"If {partner_display} tried adding or crossing off items recently, they probably noticed their access has switched to read-only mode.\n\n"
+        f"Real-time shared grocery sync is the #1 feature couples and families rely on to stop duplicate store trips and keep shopping organized.\n\n"
+        f"Good news: All your aisles, custom stores, and grocery history are completely safe and ready. Only one subscription is needed per household ($1.99/mo or $9.99/yr)—all invited members sync 100% free!\n\n"
+        f"Restore Partner Sync: {upgrade_link}\n"
+        f"Manage Household Settings: {settings_link}\n\n"
+        f"— The ListMate Team" + unsub_txt
+    )
+
+    html_content = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<h2 style="color:#2c5a2c;margin-top:0;">🛒 Missing real-time grocery sync?</h2>'
+        f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">Two days ago, your ListMate 30-day trial wrapped up and your household transitioned to our <strong>Free single-user plan</strong>.</p>'
+        f'<div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin:16px 0;border-radius:4px;">'
+        f'<strong style="color:#991b1b;display:block;margin-bottom:4px;">👥 Partner Sync is in Read-Only Mode:</strong>'
+        f'<span style="color:#7f1d1d;font-size:14px;line-height:1.5;">If {partner_display} tried adding or crossing off groceries recently, they probably noticed their access is now read-only.</span>'
+        f'</div>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">Shared live sync is the #1 feature couples and families rely on to avoid duplicate shopping trips and keep everyone on the same page at the store.</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">All your aisle categories, custom stores, and past items are completely saved. Plus, <strong>only one subscription is needed per household</strong> ($1.99/mo or $9.99/yr)—all invited members sync completely free!</p>'
+        f'<div style="margin:24px 0 16px;">'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Restore Partner Sync ($1.99/mo)</a>'
+        f'<a href="{settings_link}" style="display:inline-block;background:#f8fafc;color:#475569;border:1px solid #cbd5e1;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Manage Household</a>'
+        f'</div>'
+        f'</div>' + unsub_html
+    )
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_content},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_trial_ext_day7_notice(to_email: str, user_name: str, household_name: str = "your household", user_id: int = 0, household_id: int = 0) -> bool:
+    """Send Day 37 post-trial 7-day extension offer to unconverted households."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "trial_ext_day7"
+    extension_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&source=email_trial_ext_day7')}"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_ext_day7')}"
+    subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "promotional and trial updates", "You received this email because you registered a ListMate household.")
+
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"We noticed your ListMate trial concluded last week. Depending on your shopping schedule, you might not have had enough grocery runs to experience the full convenience of store-organized lists.\n\n"
+        f"We'd love to give you an extra 7 days of full Premium access—completely on us, no credit card required!\n\n"
+        f"Enjoy unlimited household sync across all family members, automatic store aisle sorting, and custom stores for one more week.\n\n"
+        f"Claim Your 7-Day Extension: {extension_link}\n\n"
+        f"Or lock in our Annual Plan for $9.99/year (just $0.83/month):\n{upgrade_link}\n\n"
+        f"— The ListMate Team" + unsub_txt
+    )
+
+    html_content = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<h2 style="color:#2c5a2c;margin-top:0;">🎁 Need a little more time?</h2>'
+        f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">We noticed your trial wrapped up last week. Depending on your grocery routine, you might not have had enough shopping runs to see how much time and money ListMate saves you.</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">We\'d love to give you an <strong>extra 7 days of full Premium access</strong>—completely on us, no credit card required!</p>'
+        f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
+        f'<strong style="color:#166534;display:block;margin-bottom:6px;">✨ What\'s unlocked for 7 more days:</strong>'
+        f'<ul style="margin:0;padding-left:20px;color:#274c36;font-size:14px;line-height:1.6;">'
+        f'<li>Real-time sync across your entire household</li>'
+        f'<li>Automatic aisle categorization for faster store trips</li>'
+        f'<li>Custom store lists for Trader Joe\'s, Costco, Safeway & more</li>'
+        f'</ul>'
+        f'</div>'
+        f'<div style="margin:24px 0 16px;">'
+        f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim 7 Days of Premium Free</a>'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $9.99/yr (Save 58%)</a>'
+        f'</div>'
+        f'</div>' + unsub_html
+    )
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_content},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
+def send_breakup_day60_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
+    """Send Day 60 permission/breakup notice before moving user to deliverability sunset."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "breakup_day60"
+    keep_active_link = f"{BASE_URL}/open?url={quote('/?action=keep-active&source=email_breakup_day60')}"
+    unsub_direct_link = f"{BASE_URL}/open?url={quote('/settings?action=unsubscribe&source=email_breakup_day60')}"
+    subject = "Should we stop emailing you? (Quick check-in from ListMate)"
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "all marketing and product emails", "You received this email because you registered a ListMate account.")
+
+    plain_text = (
+        f"Hi {user_name},\n\n"
+        f"We noticed you haven't used ListMate or opened our recent emails. Your inbox is valuable, and the last thing we want to do is clutter it with messages you don't need.\n\n"
+        f"If you're no longer using ListMate, no worries at all! If you don't do anything, we'll automatically mute marketing updates and product emails in 14 days so we don't bug you.\n\n"
+        f"If you'd still like to keep your lists and receive updates, just click below to let us know:\n"
+        f"Keep My Account & Updates: {keep_active_link}\n\n"
+        f"Or if you prefer to unsubscribe right away:\n"
+        f"Unsubscribe: {unsub_direct_link}\n\n"
+        f"Whenever you're ready to organize your grocery shopping again, your account and store lists will always be here for you.\n\n"
+        f"— The ListMate Team" + unsub_txt
+    )
+
+    html_content = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<h2 style="color:#334155;margin-top:0;">📬 Should we stop emailing you?</h2>'
+        f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">We noticed you haven\'t used ListMate or opened our emails in a while. Your inbox is valuable, and the last thing we want to do is send messages you don\'t need.</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">If you\'re no longer using ListMate, <strong>no hard feelings at all!</strong> If you don\'t do anything, we\'ll automatically mute product emails and reminders in 14 days so we don\'t clutter your inbox.</p>'
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:14px 16px;margin:18px 0;border-radius:8px;">'
+        f'<p style="margin:0 0 10px;font-size:14px;color:#475569;line-height:1.5;">If you\'d like to stay connected and keep receiving product updates and list sync tips, click below:</p>'
+        f'<a href="{keep_active_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold;margin-right:10px;margin-bottom:6px;">Keep My Updates & Lists</a>'
+        f'<a href="{unsub_direct_link}" style="display:inline-block;background:#ffffff;color:#64748b;border:1px solid #cbd5e1;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:13px;margin-bottom:6px;">Unsubscribe Now</a>'
+        f'</div>'
+        f'<p style="font-size:14px;color:#64748b;line-height:1.5;margin-bottom:0;">Whenever you\'re ready to simplify your grocery shopping again, your saved items and aisle lists will always be ready for you.</p>'
+        f'</div>' + unsub_html
+    )
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_content},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
+
 def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: int = 0, household_id: int = 0) -> bool:
     """Send a combined notice when multiple daily events occur for the same user."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
@@ -1100,10 +1321,41 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         subject = "3 weeks with ListMate — how is grocery shopping going? 🛒"
     elif 'store_nudge' in events:
         subject = "Streamline your grocery runs with store-specific lists 🏪"
+    elif 'trial_lapsed_day2' in events:
+        subject = "Missing real-time grocery sync with your household? 🛒"
+    elif 'trial_ext_day7' in events:
+        subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
     elif 'solo_nudge' in events:
         subject = "Get the most out of ListMate: Invite your household 🛒"
     else:
         subject = "Updates from ListMate 🛒"
+
+    if 'trial_lapsed_day2' in events:
+        text_sections.append(
+            f"Partner Sync is in Read-Only Mode:\n"
+            f"Your household trial wrapped up, so shared real-time sync is currently paused for invited members.\n"
+            f"Upgrade for $1.99/mo to restore instant shared list sync for everyone:\n{upgrade_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#991b1b;display:block;margin-bottom:4px;">👥 Partner Sync is in Read-Only Mode:</strong>'
+            f'<span style="color:#7f1d1d;font-size:14px;line-height:1.5;">Your 30-day trial concluded and secondary members can no longer edit list items. Upgrade for $1.99/mo to restore full sync across all members!</span>'
+            f'<div style="margin-top:8px;"><a href="{upgrade_link}" style="color:#991b1b;font-weight:bold;font-size:13px;text-decoration:underline;">Restore Partner Sync &rarr;</a></div>'
+            f'</div>'
+        )
+    if 'trial_ext_day7' in events:
+        ext_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&source=email_combined')}"
+        text_sections.append(
+            f"Enjoy 7 Extra Days of Premium on Us:\n"
+            f"Need a little more time to organize your household grocery runs? Claim 7 extra days of full Premium access free:\n{ext_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#f0fdf4;border-left:4px solid #5ebe7e;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#166534;display:block;margin-bottom:4px;">🎁 7 Extra Days of Premium Free:</strong>'
+            f'<span style="color:#274c36;font-size:14px;line-height:1.5;">We\'ve unlocked 7 additional days of unlimited multi-member sync and aisle sorting on us.</span>'
+            f'<div style="margin-top:8px;"><a href="{ext_link}" style="color:#166534;font-weight:bold;font-size:13px;text-decoration:underline;">Claim 7-Day Extension &rarr;</a></div>'
+            f'</div>'
+        )
 
     if 'store_nudge' in events:
         text_sections.append(
