@@ -488,6 +488,14 @@ def api_claim_trial_extension():
     ok, msg, days = authmod.claim_trial_extension(hhid, uid)
     return jsonify({"ok": ok, "message": msg, "days_left": days})
 
+@app.route("/api/household/keep-active", methods=["POST", "GET"])
+@require_user
+def api_keep_household_active():
+    uid = authmod.get_user_id()
+    hhid = _hh()
+    ok, msg = authmod.keep_household_active(hhid, uid)
+    return jsonify({"ok": ok, "message": msg})
+
 
 @app.route("/upgrade")
 def upgrade_page():

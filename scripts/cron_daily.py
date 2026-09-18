@@ -101,6 +101,19 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
         sent = sent or sent_sa
         events.pop('signup_abandon_day2')
 
+    # Priority 4: Breakup / Deliverability Sunsetting (single-purpose permission email)
+    if 'breakup_day60' in events:
+        campaign_names.append('breakup_day60')
+        print(f"[{email}] Priority: Sending Day 60 Breakup / Permission notice.")
+        sent_bk = send_breakup_day60_notice(email, user_name, user_id, household_id)
+        sent = sent or sent_bk
+        if sent_bk and household_id:
+            db_updates.append(("UPDATE auth_households SET email_breakup_day60_sent_at = NOW(), lifecycle_status = 'sunset_pending' WHERE id = %s", (household_id,)))
+        events.pop('breakup_day60')
+        # Deliverability breakup is an exclusive permission notice; clear all secondary marketing nudges
+        for non_critical in ('reengagement', 'store_nudge', 'solo_nudge', 'activation'):
+            events.pop(non_critical, None)
+
     # If there are still events left (expiration, trial nudges, store nudges), process them
     if events:
         if len(events) == 1:
@@ -231,6 +244,13 @@ def run_cron():
                 'user_id': user_id,
                 'household_id': household_id,
             }
+        # Breakup / Deliverability Sunsetting takes absolute precedence over marketing nudges
+        if event_name == 'breakup_day60':
+            for non_crit in ('reengagement', 'store_nudge', 'solo_nudge', 'activation'):
+                users_to_notify[email]['events'].pop(non_crit, None)
+        elif 'breakup_day60' in users_to_notify[email]['events'] and event_name in ('reengagement', 'store_nudge', 'solo_nudge', 'activation'):
+            return
+
         users_to_notify[email]['events'][event_name] = event_data
         if household_id and not users_to_notify[email].get('household_id'):
             users_to_notify[email]['household_id'] = household_id
@@ -658,6 +678,7 @@ def run_cron():
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
       AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+      AND h.email_breakup_day60_sent_at IS NULL
       AND NOT EXISTS (
           SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
       )
