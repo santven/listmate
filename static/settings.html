@@ -742,7 +742,33 @@ function focusAddMember() {
 function checkUrlActions() {
   const params = new URLSearchParams(window.location.search);
   const hash = window.location.hash;
-  if (params.get('action') === 'invite' || params.get('action') === 'add-member' || params.get('action') === 'add_member' || hash === '#add-member' || hash === '#householdCard' || hash === '#members') {
+  if (params.get('action') === 'claim-extension' || params.get('extension')) {
+    setTimeout(async () => {
+      const extStatus = params.get('extension');
+      const extMsg = params.get('msg');
+      if (extStatus === 'claimed') {
+        toast('🎉 7-Day Extension Activated! Enjoy 7 extra days of ListMate Premium.');
+        if (typeof loadPremium === 'function') loadPremium();
+      } else if (extStatus === 'already_claimed') {
+        toast(extMsg || 'ℹ️ Your household has already claimed the 7-day trial extension offer.');
+      } else if (params.get('action') === 'claim-extension') {
+        try {
+          const res = await fetch('/api/household/claim-extension', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            toast('🎉 7-Day Extension Activated! Enjoy 7 extra days of ListMate Premium.');
+            if (typeof loadPremium === 'function') loadPremium();
+          } else {
+            toast(data.message || 'Trial extension notice.');
+          }
+        } catch(e) {
+          console.error('Claim extension error:', e);
+        }
+      }
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }, 350);
+  } else if (params.get('action') === 'invite' || params.get('action') === 'add-member' || params.get('action') === 'add_member' || hash === '#add-member' || hash === '#householdCard' || hash === '#members') {
     setTimeout(focusAddMember, 250);
   } else if (params.get('action') === 'upgrade' || params.get('action') === 'paywall' || hash === '#upgrade' || hash === '#paywall') {
     setTimeout(() => {

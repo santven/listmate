@@ -460,7 +460,33 @@ def settings_page():
     if not is_logged_in():
         next_url = request.full_path if request.query_string else request.path
         return redirect("/login?next=" + quote(next_url))
+    action = request.args.get("action")
+    if action == "claim-extension":
+        uid = authmod.get_user_id()
+        hhid = authmod.get_household_id()
+        ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+        status_param = "claimed" if ok else "already_claimed"
+        return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
     return send_from_directory("static", "settings.html")
+
+@app.route("/claim-extension")
+def direct_claim_extension():
+    if not is_logged_in():
+        next_url = request.full_path if request.query_string else request.path
+        return redirect("/login?next=" + quote(next_url))
+    uid = authmod.get_user_id()
+    hhid = authmod.get_household_id()
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    status_param = "claimed" if ok else "already_claimed"
+    return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+
+@app.route("/api/household/claim-extension", methods=["POST", "GET"])
+@require_user
+def api_claim_trial_extension():
+    uid = authmod.get_user_id()
+    hhid = _hh()
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    return jsonify({"ok": ok, "message": msg, "days_left": days})
 
 
 @app.route("/upgrade")
