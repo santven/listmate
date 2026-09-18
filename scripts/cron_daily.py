@@ -11,6 +11,9 @@ from shared.auth import _run, _init_schema, is_email_suppressed
 from email_helper import (
     BASE_URL,
     send_subscription_notice,
+    send_trial_lapsed_day2_notice,
+    send_trial_ext_day7_notice,
+    send_breakup_day60_notice,
     send_solo_nudge_notice,
     send_trial_week1_checkin,
     send_trial_week3_checkin,
@@ -139,6 +142,32 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                 print(f"[{email}] Sending specific re-engagement notice.")
                 sent_rem = send_reengagement_notice(email, user_name, user_id, household_id)
                 sent = sent or sent_rem
+            elif 'trial_lapsed_day2' in events:
+                campaign_names.append('trial_lapsed_day2')
+                ev_data = events['trial_lapsed_day2'] if isinstance(events['trial_lapsed_day2'], dict) else {}
+                partner_name = ev_data.get('partner_name', 'your partner')
+                hh_name = ev_data.get('household_name', 'your household')
+                print(f"[{email}] Sending post-trial partner friction notice (Day 32, partner={partner_name}).")
+                sent_rem = send_trial_lapsed_day2_notice(email, user_name, partner_name, hh_name, user_id, household_id)
+                sent = sent or sent_rem
+                if sent_rem and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_trial_lapsed_day2_sent_at = NOW() WHERE id = %s", (household_id,)))
+            elif 'trial_ext_day7' in events:
+                campaign_names.append('trial_ext_day7')
+                ev_data = events['trial_ext_day7'] if isinstance(events['trial_ext_day7'], dict) else {}
+                hh_name = ev_data.get('household_name', 'your household')
+                print(f"[{email}] Sending post-trial 7-day extension offer (Day 37).")
+                sent_rem = send_trial_ext_day7_notice(email, user_name, hh_name, user_id, household_id)
+                sent = sent or sent_rem
+                if sent_rem and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_trial_ext_day7_sent_at = NOW() WHERE id = %s", (household_id,)))
+            elif 'breakup_day60' in events:
+                campaign_names.append('breakup_day60')
+                print(f"[{email}] Sending breakup / permission notice (Day 60).")
+                sent_rem = send_breakup_day60_notice(email, user_name, user_id, household_id)
+                sent = sent or sent_rem
+                if sent_rem and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_breakup_day60_sent_at = NOW(), lifecycle_status = 'sunset_pending' WHERE id = %s", (household_id,)))
         else:
             # If there are multiple events, send the combined template
             print(f"[{email}] Sending COMBINED notice for remaining events: {list(events.keys())}")
@@ -151,6 +180,12 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                     campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
                 else:
                     campaign_names.append(ev_key)
+                if ev_key == 'trial_lapsed_day2' and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_trial_lapsed_day2_sent_at = NOW() WHERE id = %s", (household_id,)))
+                elif ev_key == 'trial_ext_day7' and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_trial_ext_day7_sent_at = NOW() WHERE id = %s", (household_id,)))
+                elif ev_key == 'breakup_day60' and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_breakup_day60_sent_at = NOW(), lifecycle_status = 'sunset_pending' WHERE id = %s", (household_id,)))
 
     # Record email sent timestamp in the email_events table and execute DB updates
     if sent:
@@ -199,6 +234,47 @@ def run_cron():
         users_to_notify[email]['events'][event_name] = event_data
         if household_id and not users_to_notify[email].get('household_id'):
             users_to_notify[email]['household_id'] = household_id
+
+    # Step 0: Ensure lifecycle schema and sync expired trials to 'lapsed'
+    try:
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS lifecycle_status TEXT NOT NULL DEFAULT 'active'")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_lapsed_day2_sent_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_ext_day7_sent_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_breakup_day60_sent_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP")
+        _run("CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)")
+    except Exception as e:
+        print(f"Warning: schema initialization check: {e}")
+
+    try:
+        # Transition expired trials to 'expired' and set downgraded_at if unset
+        _run("""
+            UPDATE auth_households
+            SET subscription_status = 'expired',
+                downgraded_at = COALESCE(downgraded_at, trial_ends_at, NOW())
+            WHERE subscription_status = 'trial'
+              AND trial_ends_at <= NOW()
+              AND is_premium = FALSE
+        """)
+        _run("""
+            UPDATE auth_households
+            SET lifecycle_status = 'lapsed'
+            WHERE subscription_status = 'expired'
+              AND is_premium = FALSE
+              AND lifecycle_status = 'active'
+        """)
+        # Auto-sunset households pending sunset for 14+ days without open or click
+        _run("""
+            UPDATE auth_households
+            SET lifecycle_status = 'sunsetted'
+            WHERE lifecycle_status = 'sunset_pending'
+              AND email_breakup_day60_sent_at <= NOW() - INTERVAL '14 days'
+              AND (last_email_opened_at IS NULL OR last_email_opened_at < email_breakup_day60_sent_at)
+              AND (last_email_clicked_at IS NULL OR last_email_clicked_at < email_breakup_day60_sent_at)
+        """)
+    except Exception as e:
+        print(f"Warning: lifecycle state synchronization: {e}")
 
     print("--- Diagnostic Scan ---")
     recent_hhs = _run("""
@@ -302,6 +378,110 @@ def run_cron():
                     hh.get("user_id"),
                     hh.get("household_id"),
                 )
+
+    # --- 1B. Post-Trial Partner Nudge (Day 32: 2 days after trial ended, multi-member households) ---
+    print("Fetching Post-Trial Partner Nudge Candidates (Day 32)...")
+    query_lapsed_day2 = """
+    SELECT DISTINCT ON (h.id)
+        h.id as household_id,
+        h.name as household_name,
+        u.id as user_id,
+        u.email,
+        u.name as user_name,
+        (
+            SELECT u_partner.name 
+            FROM auth_household_members ahm_p
+            JOIN auth_users u_partner ON u_partner.id = ahm_p.user_id
+            WHERE ahm_p.household_id = h.id AND ahm_p.user_id != u.id AND ahm_p.role != 'owner'
+            ORDER BY ahm_p.joined_at ASC LIMIT 1
+        ) as partner_name
+    FROM auth_households h
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id,
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id ORDER BY (CASE WHEN ahm2.role = 'owner' THEN 0 ELSE 1 END), ahm2.joined_at ASC LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    WHERE h.is_premium = FALSE
+      AND (
+          (h.downgraded_at IS NOT NULL AND DATE(h.downgraded_at) = CURRENT_DATE - INTERVAL '2 days')
+          OR
+          (h.downgraded_at IS NULL AND h.trial_ends_at IS NOT NULL AND DATE(h.trial_ends_at) = CURRENT_DATE - INTERVAL '2 days')
+      )
+      AND (SELECT COUNT(*) FROM auth_household_members WHERE household_id = h.id) >= 2
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.household_id = h.id OR ee.email = u.email) 
+            AND ee.campaign = 'trial_lapsed_day2' 
+            AND ee.event_type = 'sent'
+      )
+      AND h.email_trial_lapsed_day2_sent_at IS NULL
+      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+    ORDER BY h.id, u.id ASC
+    """
+    households_lapsed_day2 = _run(query_lapsed_day2)
+    print(f"  -> Found {len(households_lapsed_day2)} household(s) eligible for post-trial partner nudge (Day 32).")
+    for hh in households_lapsed_day2:
+        add_user_event(
+            hh.get("email"),
+            hh.get("user_name"),
+            'trial_lapsed_day2',
+            {'partner_name': hh.get("partner_name") or 'your partner', 'household_name': hh.get("household_name")},
+            hh.get("user_id"),
+            hh.get("household_id"),
+        )
+
+    # --- 1C. Post-Trial 7-Day Extension Offer (Day 37: 7 days after trial ended, all unconverted) ---
+    print("Fetching Post-Trial Extension Candidates (Day 37)...")
+    query_ext_day7 = """
+    SELECT DISTINCT ON (h.id)
+        h.id as household_id,
+        h.name as household_name,
+        u.id as user_id,
+        u.email,
+        u.name as user_name
+    FROM auth_households h
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id,
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id ORDER BY (CASE WHEN ahm2.role = 'owner' THEN 0 ELSE 1 END), ahm2.joined_at ASC LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    WHERE h.is_premium = FALSE
+      AND (
+          (h.downgraded_at IS NOT NULL AND DATE(h.downgraded_at) = CURRENT_DATE - INTERVAL '7 days')
+          OR
+          (h.downgraded_at IS NULL AND h.trial_ends_at IS NOT NULL AND DATE(h.trial_ends_at) = CURRENT_DATE - INTERVAL '7 days')
+      )
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.household_id = h.id OR ee.email = u.email) 
+            AND ee.campaign = 'trial_ext_day7' 
+            AND ee.event_type = 'sent'
+      )
+      AND h.email_trial_ext_day7_sent_at IS NULL
+      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+    ORDER BY h.id, u.id ASC
+    """
+    households_ext_day7 = _run(query_ext_day7)
+    print(f"  -> Found {len(households_ext_day7)} household(s) eligible for post-trial extension offer (Day 37).")
+    for hh in households_ext_day7:
+        add_user_event(
+            hh.get("email"),
+            hh.get("user_name"),
+            'trial_ext_day7',
+            {'household_name': hh.get("household_name")},
+            hh.get("user_id"),
+            hh.get("household_id"),
+        )
 
     # --- 2. Solo Household Nudge (Day 3+, only 1 owner/member in household) ---
     print("Fetching Solo Household Nudges...")
@@ -475,6 +655,7 @@ def run_cron():
     )
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
     WHERE COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
       AND NOT EXISTS (
           SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
       )
@@ -503,6 +684,60 @@ def run_cron():
             hh.get("user_name"),
             'reengagement',
             True,
+            hh.get("user_id"),
+            hh.get("household_id"),
+        )
+
+    # --- 6B. Breakup / Permission Email (Day 60: 30 days post-downgrade, inactive, no opens) ---
+    print("Fetching Breakup / Sunset-Pending Candidates (Day 60)...")
+    query_breakup_day60 = """
+    SELECT DISTINCT ON (h.id)
+        h.id as household_id,
+        h.name as household_name,
+        u.id as user_id,
+        u.email,
+        u.name as user_name
+    FROM auth_households h
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id,
+        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id ORDER BY (CASE WHEN ahm2.role = 'owner' THEN 0 ELSE 1 END), ahm2.joined_at ASC LIMIT 1),
+        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    WHERE h.is_premium = FALSE
+      AND (
+          (h.downgraded_at IS NOT NULL AND h.downgraded_at <= NOW() - INTERVAL '30 days')
+          OR
+          (h.trial_ends_at IS NOT NULL AND h.trial_ends_at <= NOW() - INTERVAL '30 days')
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM list_items l 
+          WHERE (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id))
+            AND l.added_at >= NOW() - INTERVAL '30 days'
+      )
+      AND (h.last_email_opened_at IS NULL OR h.last_email_opened_at <= NOW() - INTERVAL '45 days')
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee 
+          WHERE (ee.household_id = h.id OR ee.email = u.email) 
+            AND ee.campaign = 'breakup_day60' 
+            AND ee.event_type = 'sent'
+      )
+      AND h.email_breakup_day60_sent_at IS NULL
+      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+    ORDER BY h.id, u.id ASC
+    """
+    households_breakup = _run(query_breakup_day60)
+    print(f"  -> Found {len(households_breakup)} household(s) eligible for breakup notice (Day 60).")
+    for hh in households_breakup:
+        add_user_event(
+            hh.get("email"),
+            hh.get("user_name"),
+            'breakup_day60',
+            {'household_name': hh.get("household_name")},
             hh.get("user_id"),
             hh.get("household_id"),
         )
