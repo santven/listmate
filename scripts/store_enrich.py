@@ -63,7 +63,7 @@ def get_key():
     return ""
 
 def gemini_query(prompt, key):
-    """Query Gemini 3.1 Flash Lite API with 6000 output tokens max for multi-store batching."""
+    """Query Gemini API with model fallbacks and 6000 output tokens max for multi-store batching."""
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -71,25 +71,43 @@ def gemini_query(prompt, key):
             "temperature": 0.3
         }
     }
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": key
-        }
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        err_body = ""
-        try:
-            err_body = e.read().decode("utf-8")
-        except Exception:
-            pass
-        raise RuntimeError(f"HTTP Error {e.code}: {e.reason} — {err_body}")
+    models = [m.strip() for m in os.environ.get(
+        "GEMINI_MODEL_NAME",
+        "gemini-flash-latest,gemini-3.1-flash-lite-preview,gemini-2.5-flash-lite,gemini-3.1-flash-lite"
+    ).split(",") if m.strip()]
+
+    last_error = None
+    data_bytes = json.dumps(body).encode("utf-8")
+    for model in models:
+        for api_ver in ("v1beta", "v1"):
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent"
+            req = urllib.request.Request(
+                url,
+                data=data_bytes,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": key
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                err_body = ""
+                try:
+                    err_body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                last_error = f"HTTP Error {e.code}: {e.reason} — {err_body}"
+                if e.code == 404:
+                    continue  # Try next model/version
+                raise RuntimeError(last_error)
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+    raise RuntimeError(last_error or "All Gemini models failed")
+
 
 def determine_category(item_name, gemini_cat=""):
     """Determine proper item category using categorize matcher + Gemini fallback."""

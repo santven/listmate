@@ -3042,10 +3042,18 @@ def replan_visit_items(store_id):
             ).fetchone()
             
             if not existing:
+                cat_row = db.execute(
+                    "SELECT category FROM store_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+                    (store_id, _hh(), name_clean),
+                ).fetchone()
+                item_cat = ((cat_row["category"] if cat_row else "") or "").strip()
+                if not item_cat:
+                    item_cat = categorize(name_clean)
+
                 # Add it as a new unpurchased item without quantity
                 db.execute(
-                    "INSERT INTO list_items (store_id, name, category, household_id, added_by, purchased) VALUES (?, ?, '', ?, ?, FALSE)",
-                    (store_id, name_clean, _hh(), get_display_name())
+                    "INSERT INTO list_items (store_id, name, category, household_id, added_by, purchased) VALUES (?, ?, ?, ?, ?, FALSE)",
+                    (store_id, name_clean, item_cat, _hh(), get_display_name())
                 )
                 added_count += 1
                 
