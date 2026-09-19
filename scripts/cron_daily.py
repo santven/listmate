@@ -1193,6 +1193,19 @@ def cleanup_abandoned_signups():
 
 
 if __name__ == "__main__":
+    import sys
+    if any(arg in sys.argv for arg in ("--sweep-only", "--categorize-only", "--backfill")):
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running auto-categorization sweep only...")
+        try:
+            from categorize import backfill_uncategorized_items
+            stats = backfill_uncategorized_items()
+            print(f"Auto-categorization sweep complete: {stats}")
+        except Exception as exc:
+            print(f"Auto-categorization sweep failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Starting daily cron jobs...")
     run_cron()
     print("Done.")
+
