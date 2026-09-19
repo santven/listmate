@@ -317,6 +317,14 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'free'",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS lifecycle_status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_lapsed_day2_sent_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_trial_ext_day7_sent_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_breakup_day60_sent_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_extension_claimed_at TIMESTAMP",
+        "CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
         "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE",
@@ -618,6 +626,109 @@ def get_household_status():
         "owner_id": hh.get("owner_id"),
         "created_at": str(hh.get("created_at")) if hh.get("created_at") else None
     }
+
+def claim_trial_extension(household_id=None, user_id=None):
+    """Grant a 7-day trial extension to an eligible household.
+    Returns (success: bool, message: str, days_left: int)."""
+    if not household_id:
+        household_id = get_household_id()
+    if not household_id:
+        return False, "No household found for this user.", 0
+
+    hh = _one(f"SELECT id, name, is_premium, subscription_status, trial_ends_at, trial_extension_claimed_at FROM {_HH} WHERE id = ?", (household_id,))
+    if not hh:
+        return False, "Household not found.", 0
+
+    # Check if already an active paying subscriber
+    if hh.get("is_premium") and hh.get("subscription_status") in ("premium", "active"):
+        return False, "Your household already has active ListMate Premium access.", 0
+
+    # Check if extension was already claimed
+    if hh.get("trial_extension_claimed_at"):
+        import datetime
+        t_end = hh.get("trial_ends_at")
+        days = 0
+        if t_end:
+            if isinstance(t_end, str):
+                try:
+                    if 'T' in t_end:
+                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                    else:
+                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    t_end = None
+            if t_end:
+                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                days = max(0, (t_end - now).days)
+        return False, "Your household has already claimed the 7-day trial extension offer.", days
+
+    # Grant 7-day extension from GREATEST(trial_ends_at, NOW())
+    _run(f"""
+        UPDATE {_HH}
+        SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + INTERVAL '7 days',
+            subscription_status = 'trial',
+            lifecycle_status = 'active',
+            downgraded_at = NULL,
+            trial_extension_claimed_at = NOW()
+        WHERE id = %s
+    """, (household_id,))
+
+    # Log email event for tracking
+    try:
+        if not user_id:
+            user_id = get_user_id()
+        if user_id:
+            user = _one(f"SELECT email FROM {_USERS} WHERE id = ?", (user_id,))
+            email = user.get("email") if user else None
+            if email:
+                _run("""
+                    INSERT INTO email_events (email, event_type, campaign, user_id, household_id, event_timestamp)
+                    VALUES (%s, 'click', 'trial_ext_claimed', %s, %s, NOW())
+                """, (email, user_id, household_id))
+    except Exception as ev_err:
+        print(f"[claim_trial_extension] Error logging event: {ev_err}")
+
+    return True, "🎉 7 extra days of ListMate Premium have been added to your trial!", 7
+
+
+def keep_household_active(household_id=None, user_id=None):
+    """Reactivate a household from sunset_pending back to active or lapsed, resetting sunset timer."""
+    _init_schema()
+    if not household_id:
+        household_id = get_household_id()
+    if not household_id:
+        return False, "No household found."
+
+    hh = _one(f"SELECT id, lifecycle_status, is_premium FROM {_HH} WHERE id = ?", (household_id,))
+    if not hh:
+        return False, "Household not found."
+
+    # If is_premium is True -> 'active', else 'lapsed' (retains non-sunset active engagement state)
+    target_status = 'active' if hh.get("is_premium") else 'lapsed'
+
+    _run(f"""
+        UPDATE {_HH}
+        SET lifecycle_status = %s,
+            last_email_clicked_at = NOW()
+        WHERE id = %s
+    """, (target_status, household_id))
+
+    try:
+        if not user_id:
+            user_id = get_user_id()
+        if user_id:
+            u = _one(f"SELECT email FROM {_USERS} WHERE id = ?", (user_id,))
+            email = u.get("email") if u else None
+            if email:
+                _run("""
+                    INSERT INTO email_events (email, event_type, campaign, user_id, household_id, event_timestamp)
+                    VALUES (%s, 'click', 'breakup_keep_active', %s, %s, NOW())
+                """, (email, user_id, household_id))
+    except Exception as e:
+        print(f"[keep_household_active] Error logging event: {e}")
+
+    return True, "✅ Your account has been confirmed active! We'll keep sending your household updates."
+
 
 def is_logged_in(): 
     s = _get()

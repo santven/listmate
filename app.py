@@ -460,7 +460,41 @@ def settings_page():
     if not is_logged_in():
         next_url = request.full_path if request.query_string else request.path
         return redirect("/login?next=" + quote(next_url))
+    action = request.args.get("action")
+    if action == "claim-extension":
+        uid = authmod.get_user_id()
+        hhid = authmod.get_household_id()
+        ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+        status_param = "claimed" if ok else "already_claimed"
+        return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
     return send_from_directory("static", "settings.html")
+
+@app.route("/claim-extension")
+def direct_claim_extension():
+    if not is_logged_in():
+        next_url = request.full_path if request.query_string else request.path
+        return redirect("/login?next=" + quote(next_url))
+    uid = authmod.get_user_id()
+    hhid = authmod.get_household_id()
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    status_param = "claimed" if ok else "already_claimed"
+    return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+
+@app.route("/api/household/claim-extension", methods=["POST", "GET"])
+@require_user
+def api_claim_trial_extension():
+    uid = authmod.get_user_id()
+    hhid = _hh()
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    return jsonify({"ok": ok, "message": msg, "days_left": days})
+
+@app.route("/api/household/keep-active", methods=["POST", "GET"])
+@require_user
+def api_keep_household_active():
+    uid = authmod.get_user_id()
+    hhid = _hh()
+    ok, msg = authmod.keep_household_active(hhid, uid)
+    return jsonify({"ok": ok, "message": msg})
 
 
 @app.route("/upgrade")
@@ -1385,6 +1419,16 @@ def sendgrid_webhook():
                 print(f"[SendGrid Webhook] Unsuppressed {email} due to 'group_resubscribe'")
             except Exception as ue:
                 print(f"[SendGrid Webhook] Error unsuppressing {email}: {ue}")
+
+        # Update household email engagement metrics
+        if household_id:
+            try:
+                if ev_type_lower == "open":
+                    authmod._run("UPDATE auth_households SET last_email_opened_at = NOW() WHERE id = %s", (household_id,))
+                elif ev_type_lower == "click":
+                    authmod._run("UPDATE auth_households SET last_email_clicked_at = NOW(), lifecycle_status = 'active' WHERE id = %s", (household_id,))
+            except Exception as eng_err:
+                print(f"[SendGrid Webhook] Error updating engagement metrics for household {household_id}: {eng_err}")
 
     return jsonify({"ok": True, "processed": processed_count})
 
@@ -2947,8 +2991,9 @@ def toggle_list_item(item_id):
 @require_user
 def get_visit_items(store_id, visit_date):
     db = get_db()
+    hh_id = _hh()
     try:
-        # PostgreSQL specific cast: DATE(purchased_at)
+        # 1. First attempt exact date match
         items = db.execute('''
             SELECT id, name, category 
             FROM list_items 
@@ -2956,7 +3001,20 @@ def get_visit_items(store_id, visit_date):
               AND purchased = TRUE 
               AND DATE(purchased_at) = ?
             ORDER BY name
-        ''', (store_id, _hh(), visit_date)).fetchall()
+        ''', (store_id, hh_id, visit_date)).fetchall()
+
+        # 2. Fallback (+/- 1 day window) to handle UTC vs client local timezone drift
+        if not items:
+            items = db.execute('''
+                SELECT id, name, category 
+                FROM list_items 
+                WHERE store_id = ? AND household_id = ? 
+                  AND purchased = TRUE 
+                  AND purchased_at >= (?::date - INTERVAL '1 day')
+                  AND purchased_at < (?::date + INTERVAL '2 days')
+                ORDER BY name
+            ''', (store_id, hh_id, visit_date, visit_date)).fetchall()
+
         return jsonify([dict(r) for r in items])
     finally:
         db.close()
@@ -3002,19 +3060,22 @@ def get_global_visits():
     db = get_db()
     try:
         visits = db.execute('''
-            SELECT v.store_id, v.visit_date, v.items_count, s.name as store_name
+            SELECT v.store_id, v.visit_date, SUM(v.items_count) as items_count, s.name as store_name
             FROM store_visits v
             JOIN stores s ON v.store_id = s.id
             WHERE v.household_id = ? AND s.name != 'General List'
+            GROUP BY v.store_id, v.visit_date, s.name
             ORDER BY v.visit_date DESC
             LIMIT 100
         ''', (_hh(),)).fetchall()
-        
+
         visits_list = []
         for v in visits:
             d = dict(v)
             if d.get("visit_date"):
                 d["visit_date"] = str(d["visit_date"])
+            if d.get("items_count") is not None:
+                d["items_count"] = int(d["items_count"])
             visits_list.append(d)
         return jsonify(visits_list)
     finally:
