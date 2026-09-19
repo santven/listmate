@@ -143,15 +143,6 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
   .modal-store-option.current { opacity: 0.4; pointer-events: none; }
   .modal-store-option.current::after { content: ' (current)'; font-size: 11px; color: var(--muted); }
 
-  /* Instacart Order Screen & Components */
-  .instacart-item-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px; transition: all 0.15s ease; user-select: none; cursor: pointer; }
-  .instacart-item-row.selected { background: #fffaf5; border-color: #fed7aa; }
-  .instacart-checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; background: #fff; font-size: 13px; font-weight: 700; color: transparent; }
-  .instacart-item-row.selected .instacart-checkbox { background: #ea580c; border-color: #ea580c; color: #fff; }
-  .instacart-item-info { flex: 1; min-width: 0; }
-  .instacart-item-title { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .instacart-item-store-badge { font-size: 11px; font-weight: 500; color: var(--muted); background: #f1f5f9; padding: 2px 6px; border-radius: 6px; display: inline-block; margin-top: 3px; }
-  .instacart-item-qty { font-size: 13px; font-weight: 600; color: #ea580c; margin-right: 4px; }
 
   .quick-add-item:hover, .quick-add-item:active { background: #f0f4ed; }
             .modal-cancel { display: block; width: 100%; padding: 14px; border-radius: 12px; border: none; background: #eee; font-size: 15px; cursor: pointer; }
@@ -554,7 +545,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
     const screenParam = urlParams.get('screen');
     const actionParam = urlParams.get('action');
-    if (screenParam === 'instacart') { setTimeout(() => { openInstacartOrderScreen(); }, 400); } else if (actionParam === 'upgrade' || actionParam === 'paywall' || screenParam === 'upgrade') {
+    if (actionParam === 'upgrade' || actionParam === 'paywall' || screenParam === 'upgrade') {
       setTimeout(() => { if (typeof showPaywall === 'function') showPaywall(); }, 400);
     } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
@@ -587,7 +578,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a id="menuJoinHouseholdLink" href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
-      <a id="menuInstacartOrderLink" href="#" onclick="openInstacartOrderScreen(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🥕 Order via Instacart</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
@@ -613,19 +603,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
   <div id="screenHome">
     <div id="offlineBadge" class="offline-badge pro" style="display:none;"></div>
-    <div id="instacartPendingBanner" style="display:none; margin-bottom:12px; background:linear-gradient(135deg, #fff7ed, #ffedd5); border:1px solid #fed7aa; border-radius:12px; padding:10px 14px; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:18px;">🥕</span>
-        <div>
-          <div style="font-weight:700; font-size:13px; color:#9a3412;" id="instacartPendingBannerTitle">Instacart Order Pending</div>
-          <div style="font-size:11px; color:#c2410c;" id="instacartPendingBannerSub">Items sent to Instacart cart</div>
-        </div>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button onclick="confirmInstacartPurchased()" style="background:#ea580c; color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; cursor:pointer;">Mark Done</button>
-        <button onclick="dismissInstacartBanner()" style="background:transparent; border:1px solid #fdba74; color:#9a3412; border-radius:8px; padding:6px 8px; font-size:12px; cursor:pointer;">Dismiss</button>
-      </div>
-    </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <div style="display:flex; align-items:center; gap:8px;">
         <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
@@ -664,49 +641,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <button id="btnNewStore">+</button>
     </div>
   </div>
-  <!-- INSTACART ORDER SCREEN -->
-  <div id="screenInstacart" style="display:none; padding-bottom:90px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button onclick="showScreen('home')" style="background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 8px 0 0; white-space:nowrap; display:flex; align-items:center; gap:4px;">← Back</button>
-        <div style="font-size:14px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.5px;">Order via Instacart 🥕</div>
-      </div>
-      <div id="instacartSelectionCount" style="font-size:12px; font-weight:600; color:#ea580c; background:#fff7ed; border:1px solid #fed7aa; padding:4px 8px; border-radius:12px;">0 selected</div>
-    </div>
-
-    <!-- Quick Add Box -->
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-      <div style="display:flex; gap:8px;">
-        <input type="text" id="instacartQuickAddInput" placeholder="Add an item to this order..." style="flex:1; border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:14px; outline:none; background:#f9fafb;" onkeydown="if(event.key==='Enter') quickAddInstacartItem();">
-        <button onclick="quickAddInstacartItem()" style="background:#ea580c; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">+ Add</button>
-      </div>
-      <div style="font-size:11px; color:var(--muted); margin-top:6px;">Items added here are also saved to your General List.</div>
-    </div>
-
-    <!-- Items list header & Select All toggle -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:0 4px;">
-      <div style="font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Select items to order:</div>
-      <div style="display:flex; gap:10px;">
-        <button onclick="toggleAllInstacartItems(true)" style="background:none; border:none; color:var(--green-dark, #059669); font-size:12px; font-weight:600; cursor:pointer; padding:0;">Select All</button>
-        <span style="color:#ccc;">|</span>
-        <button onclick="toggleAllInstacartItems(false)" style="background:none; border:none; color:var(--muted); font-size:12px; font-weight:500; cursor:pointer; padding:0;">Clear All</button>
-      </div>
-    </div>
-
-    <!-- Items Checklist Container -->
-    <div id="instacartItemsList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:24px;"></div>
-
-    <!-- Sticky Bottom Checkout Bar -->
-    <div id="instacartBottomBar" style="position:fixed; bottom:0; left:0; right:0; background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-top:1px solid var(--border); padding:12px 16px calc(14px + env(safe-area-inset-bottom)); z-index:900; display:none; justify-content:center;">
-      <div style="width:100%; max-width:600px;">
-        <button id="btnCreateInstacartCart" onclick="createInstacartCart()" style="width:100%; background:linear-gradient(135deg, #ea580c, #f97316); color:#fff; border:none; border-radius:14px; padding:14px 20px; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 14px rgba(234,88,12,0.35); transition:all .15s;">
-          <span>🥕</span>
-          <span id="btnCreateInstacartCartText">Create Instacart Cart (0 items)</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
   <div class="catalog" id="screenCatalog">
     <div class="store-manage-bar" style="display:flex; align-items:center; justify-content:space-between; background:var(--card); padding:10px 14px; border-radius:12px; border:1px solid var(--border); margin-bottom:12px;">
       <div style="font-weight:600; font-size:15px; color:var(--text);" id="catalogStoreName">Store Catalog</div>
@@ -1038,42 +972,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); margin-bottom:4px;">Item From Recipe</div>
     <h3 id="recipeTagModalTitle" style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:16px;"></h3>
     <button id="btnRecipeTagClose" class="modal-cancel">Close</button>
-  </div>
-</div>
-
-<!-- Instacart Cart Ready Modal -->
-<div class="modal-overlay" id="instacartReadyModal" onclick="if(event.target===this) closeInstacartReadyModal();">
-  <div class="modal-sheet" style="text-align:center; padding:26px 20px calc(24px + env(safe-area-inset-bottom));">
-    <div style="width:56px; height:56px; background:#ffedd5; border-radius:28px; display:inline-flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:14px;">🥕</div>
-    <h3 style="margin:0 0 8px 0; font-size:19px; font-weight:800; color:var(--text);">Your Instacart Cart is Ready!</h3>
-    <p style="margin:0 0 20px 0; font-size:14px; color:var(--muted); line-height:1.5;" id="instacartReadyModalDesc">We have prepared your items. Tap below to pick your store, review matches, and place your order on Instacart.</p>
-    
-    <button id="btnOpenInstacartApp" onclick="launchInstacartCart()" style="width:100%; background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; border-radius:12px; padding:14px; font-size:16px; font-weight:700; cursor:pointer; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(16,185,129,0.3);">
-      <span>🛒</span>
-      <span>Open Instacart Cart</span>
-    </button>
-    <button onclick="closeInstacartReadyModal()" style="background:none; border:none; color:var(--muted); padding:8px 16px; font-size:14px; font-weight:500; cursor:pointer;">Cancel</button>
-  </div>
-</div>
-
-<!-- Instacart Welcome Back Modal -->
-<div class="modal-overlay" id="instacartWelcomeBackModal" onclick="if(event.target===this) closeInstacartWelcomeBackModal();">
-  <div class="modal-sheet" style="text-align:center; padding:26px 20px calc(24px + env(safe-area-inset-bottom));">
-    <div style="width:56px; height:56px; background:#ecfdf5; border-radius:28px; display:inline-flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:14px;">🛍️</div>
-    <h3 style="margin:0 0 8px 0; font-size:19px; font-weight:800; color:var(--text);">Did you place your Instacart order?</h3>
-    <p style="margin:0 0 20px 0; font-size:14px; color:var(--muted); line-height:1.5;">Would you like to mark <span id="instacartWelcomeBackCount" style="font-weight:700; color:var(--text);">0</span> items as purchased and record an Instacart store visit?</p>
-    
-    <button onclick="confirmInstacartPurchased()" style="width:100%; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; border-radius:12px; padding:14px; font-size:15px; font-weight:700; cursor:pointer; margin-bottom:10px; box-shadow:0 4px 12px rgba(5,150,105,0.25);">
-      ✅ Yes, Mark as Purchased
-    </button>
-    <div style="display:flex; gap:8px;">
-      <button onclick="startNewInstacartOrder()" style="flex:1; background:#f3f4f6; color:var(--text); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:13px; font-weight:600; cursor:pointer;">
-        🛒 Start New Order
-      </button>
-      <button onclick="dismissInstacartKeepOnList()" style="flex:1; background:#f3f4f6; color:var(--muted); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:13px; font-weight:600; cursor:pointer;">
-        Keep on List
-      </button>
-    </div>
   </div>
 </div>
 
@@ -1586,7 +1484,6 @@ async function loadData() {
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.checkAndApply();
   }
-  renderInstacartPendingBanner();
 }
 
 function updateFiltersUI() {
@@ -2036,8 +1933,6 @@ async function openStore(sid) {
   $('#headerTitle').textContent='Add to ' + currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
   $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
-  if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-  if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   if (navigator.onLine) {
     try {
@@ -2314,8 +2209,6 @@ function showScreen(name){
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
     $('#catalogSearch').value='';
     if($('#catalogQty'))$('#catalogQty').value='';
     loadData().then(() => {
@@ -2327,7 +2220,6 @@ function showScreen(name){
       }
     });
     updateFabVisibility();
-    renderInstacartPendingBanner();
   } else if(name==='globalVisits'){
     if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
     document.querySelector('.header').classList.add('hide-badges');
@@ -2337,8 +2229,6 @@ function showScreen(name){
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
     $('#headerTitle').textContent='Store Visits';
     loadGlobalVisits();
   } else if(name==='visitDetail'){
@@ -2349,8 +2239,6 @@ function showScreen(name){
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
     $('#headerTitle').textContent='Visit Details';
   } else if(name==='analytics'){
     if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
@@ -2361,8 +2249,6 @@ function showScreen(name){
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
     $('#headerTitle').textContent='Analytics';
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
@@ -2376,30 +2262,12 @@ function showScreen(name){
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='none';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
-  } else if(name==='instacart'){
-    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
-    document.querySelector('.header').classList.add('hide-badges');
-    if($('#screenHome')) $('#screenHome').style.display='none';
-    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
-    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
-    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
-    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
-    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
-    if($('#screenInstacart')) $('#screenInstacart').style.display='block';
-    if($('#instacartBottomBar')) $('#instacartBottomBar').style.display='flex';
-    $('#headerTitle').textContent='Order via Instacart';
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
-    document.documentElement.scrollTop = 0;
-    loadInstacartScreen();
   }
   updateFabVisibility();
 }
@@ -4847,384 +4715,6 @@ async function deleteSavedRecipe(id) {
 
 
 
-// ── Instacart Shoppable List Integration ───────────────────────────
-let instacartSelectedIds = new Set();
-let currentInstacartCartUrl = '';
-
-function openInstacartOrderScreen() {
-  try {
-    const raw = localStorage.getItem('listmate_pending_instacart');
-    if (raw) {
-      const pending = JSON.parse(raw);
-      if (pending && Array.isArray(pending.item_ids) && pending.item_ids.length > 0) {
-        const openPendingIds = pending.item_ids.filter(id => {
-          const it = list.find(item => item.id == id);
-          return it && !it.purchased;
-        });
-        if (openPendingIds.length > 0) {
-          const countEl = document.getElementById('instacartWelcomeBackCount');
-          if (countEl) countEl.textContent = openPendingIds.length;
-          const modal = document.getElementById('instacartWelcomeBackModal');
-          if (modal) {
-            modal.classList.add('active');
-            return;
-          }
-        }
-      }
-    }
-  } catch (e) {}
-  showScreen('instacart');
-}
-
-function loadInstacartScreen() {
-  const openItems = list.filter(i => !i.purchased);
-  instacartSelectedIds = new Set(openItems.map(i => i.id));
-  renderInstacartItems();
-}
-
-function renderInstacartItems() {
-  const openItems = list.filter(i => !i.purchased);
-  const container = document.getElementById('instacartItemsList');
-  const countEl = document.getElementById('instacartSelectionCount');
-  const btnText = document.getElementById('btnCreateInstacartCartText');
-  const bottomBar = document.getElementById('instacartBottomBar');
-
-  if (bottomBar) bottomBar.style.display = (currentScreen === 'instacart') ? 'flex' : 'none';
-  if (countEl) countEl.textContent = `${instacartSelectedIds.size} selected`;
-  if (btnText) btnText.textContent = `Create Instacart Cart (${instacartSelectedIds.size} item${instacartSelectedIds.size === 1 ? '' : 's'})`;
-
-  if (!container) return;
-  if (openItems.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center; padding:40px 20px; background:var(--card); border:1px dashed var(--border); border-radius:14px; margin-top:10px;">
-        <div style="font-size:36px; margin-bottom:10px;">🥕</div>
-        <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:6px;">No Open Grocery Items</div>
-        <div style="font-size:13px; color:var(--muted); line-height:1.4;">Add items using the box above or add them to your stores to order via Instacart.</div>
-      </div>
-    `;
-    const btn = document.getElementById('btnCreateInstacartCart');
-    if (btn) btn.disabled = true;
-    return;
-  }
-
-  const btn = document.getElementById('btnCreateInstacartCart');
-  if (btn) btn.disabled = (instacartSelectedIds.size === 0);
-
-  container.innerHTML = openItems.map(item => {
-    const isSelected = instacartSelectedIds.has(item.id);
-    const storeName = item.store_name || (stores.find(s => s.id === item.store_id) || {}).name || 'Store';
-    const qtyStr = item.quantity ? `<span class="instacart-item-qty">${escapeHtml(item.quantity)}</span>` : '';
-    return `
-      <div class="instacart-item-row ${isSelected ? 'selected' : ''}" onclick="toggleInstacartItem(${item.id})">
-        <div class="instacart-checkbox">${isSelected ? '✓' : ''}</div>
-        <div class="instacart-item-info">
-          <div class="instacart-item-title">${qtyStr}${escapeHtml(item.name)}</div>
-          <div class="instacart-item-store-badge">📍 ${escapeHtml(storeName)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function toggleInstacartItem(id) {
-  if (instacartSelectedIds.has(id)) {
-    instacartSelectedIds.delete(id);
-  } else {
-    instacartSelectedIds.add(id);
-  }
-  renderInstacartItems();
-}
-
-function toggleAllInstacartItems(checkAll) {
-  const openItems = list.filter(i => !i.purchased);
-  if (checkAll) {
-    openItems.forEach(i => instacartSelectedIds.add(i.id));
-  } else {
-    instacartSelectedIds.clear();
-  }
-  renderInstacartItems();
-}
-
-async function quickAddInstacartItem() {
-  const input = document.getElementById('instacartQuickAddInput');
-  if (!input) return;
-  const val = input.value.trim();
-  if (!val) return;
-
-  const generalStore = stores.find(s => s.name === 'General List') || stores[0];
-  if (!generalStore) {
-    toast('No store available to add item');
-    return;
-  }
-
-  input.value = '';
-  input.disabled = true;
-
-  try {
-    const ok = await addToList(generalStore.id, val, '', true);
-    if (ok) {
-      const addedItem = list.find(i => !i.purchased && i.name.toLowerCase() === val.toLowerCase());
-      if (addedItem) {
-        instacartSelectedIds.add(addedItem.id);
-      }
-      renderInstacartItems();
-      toast(`Added "${val}" to General List`);
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
-    input.disabled = false;
-    input.focus();
-  }
-}
-
-async function createInstacartCart() {
-  if (instacartSelectedIds.size === 0) {
-    toast('Please select at least one item');
-    return;
-  }
-
-  const selectedItems = list.filter(i => instacartSelectedIds.has(i.id) && !i.purchased);
-  if (selectedItems.length === 0) {
-    toast('No open items currently selected');
-    return;
-  }
-
-  const btn = document.getElementById('btnCreateInstacartCart');
-  const originalHtml = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span><span>Building Instacart Cart...</span>';
-  }
-
-  try {
-    const payload = {
-      items: selectedItems.map(i => ({ id: i.id, name: i.name, quantity: i.quantity || '' })),
-      title: (window.currentHouseholdName ? window.currentHouseholdName + ' ' : '') + 'Grocery Order'
-    };
-
-    const res = await fetch(API + '/integrations/instacart/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-
-    if (!res.ok || !data.url) {
-      toast('Error: ' + (data.error || 'Failed to generate cart'));
-      return;
-    }
-
-    currentInstacartCartUrl = data.url;
-    const descEl = document.getElementById('instacartReadyModalDesc');
-    if (descEl) {
-      descEl.textContent = `We prepared ${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'}. Tap below to review matches and place your order on Instacart.`;
-    }
-
-    const modal = document.getElementById('instacartReadyModal');
-    if (modal) modal.classList.add('active');
-  } catch (e) {
-    toast('Network error creating cart');
-    console.error(e);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
-    }
-  }
-}
-
-function launchInstacartCart() {
-  if (!currentInstacartCartUrl) return;
-
-  const itemIds = Array.from(instacartSelectedIds);
-  localStorage.setItem('listmate_pending_instacart', JSON.stringify({
-    item_ids: itemIds,
-    launched_at: Date.now(),
-    timestamp: Date.now(),
-    dismissed_modal: false
-  }));
-
-  closeInstacartModals();
-  showScreen('home');
-  renderInstacartPendingBanner();
-
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-    window.Capacitor.Plugins.Browser.open({ url: currentInstacartCartUrl });
-  } else {
-    window.open(currentInstacartCartUrl, '_blank');
-  }
-}
-
-function closeInstacartReadyModal() {
-  const m = document.getElementById('instacartReadyModal');
-  if (m) m.classList.remove('active');
-}
-
-function closeInstacartWelcomeBackModal() {
-  const m = document.getElementById('instacartWelcomeBackModal');
-  if (m) m.classList.remove('active');
-}
-
-function closeInstacartModals() {
-  closeInstacartReadyModal();
-  closeInstacartWelcomeBackModal();
-}
-
-function checkInstacartReturn() {
-  try {
-    const raw = localStorage.getItem('listmate_pending_instacart');
-    if (!raw) return;
-    const pending = JSON.parse(raw);
-    if (!pending || !Array.isArray(pending.item_ids) || pending.item_ids.length === 0) return;
-    if (Date.now() - (pending.timestamp || 0) > 24 * 60 * 60 * 1000) {
-      localStorage.removeItem('listmate_pending_instacart');
-      return;
-    }
-    if (pending.dismissed_modal) {
-      renderInstacartPendingBanner();
-      return;
-    }
-    if (Date.now() - (pending.launched_at || 0) < 4000) {
-      return;
-    }
-    const openPendingIds = pending.item_ids.filter(id => {
-      const it = list.find(item => item.id == id);
-      return it && !it.purchased;
-    });
-    if (openPendingIds.length === 0) {
-      localStorage.removeItem('listmate_pending_instacart');
-      renderInstacartPendingBanner();
-      return;
-    }
-
-    const countEl = document.getElementById('instacartWelcomeBackCount');
-    if (countEl) countEl.textContent = openPendingIds.length;
-    const modal = document.getElementById('instacartWelcomeBackModal');
-    if (modal) modal.classList.add('active');
-  } catch (e) {
-    console.error('checkInstacartReturn error:', e);
-  }
-}
-
-async function confirmInstacartPurchased() {
-  try {
-    const raw = localStorage.getItem('listmate_pending_instacart');
-    if (!raw) {
-      closeInstacartModals();
-      return;
-    }
-    const pending = JSON.parse(raw);
-    const itemIds = pending.item_ids || [];
-
-    const now = new Date();
-    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-    const tz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
-
-    const res = await fetch(API + '/integrations/instacart/complete', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Client-Date': todayStr,
-        'X-Client-Timezone': tz
-      },
-      body: JSON.stringify({ 
-        item_ids: itemIds,
-        client_date: todayStr,
-        timezone: tz
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast('Error: ' + (data.error || 'Failed to complete order'));
-      return;
-    }
-
-    localStorage.removeItem('listmate_pending_instacart');
-    closeInstacartModals();
-    renderInstacartPendingBanner();
-
-    await loadData();
-    if (typeof confetti === 'function') {
-      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
-    }
-    toast(`🎉 ${data.completed_count || itemIds.length} items marked as purchased via Instacart!`);
-    showScreen('home');
-  } catch (e) {
-    toast('Error recording Instacart purchase');
-    console.error(e);
-  }
-}
-
-function dismissInstacartKeepOnList() {
-  try {
-    const raw = localStorage.getItem('listmate_pending_instacart');
-    if (raw) {
-      const pending = JSON.parse(raw);
-      pending.dismissed_modal = true;
-      localStorage.setItem('listmate_pending_instacart', JSON.stringify(pending));
-    }
-  } catch (e) {}
-  closeInstacartModals();
-  renderInstacartPendingBanner();
-}
-
-function startNewInstacartOrder() {
-  localStorage.removeItem('listmate_pending_instacart');
-  closeInstacartModals();
-  renderInstacartPendingBanner();
-  showScreen('instacart');
-}
-
-function dismissInstacartBanner() {
-  localStorage.removeItem('listmate_pending_instacart');
-  renderInstacartPendingBanner();
-}
-
-function renderInstacartPendingBanner() {
-  const banner = document.getElementById('instacartPendingBanner');
-  if (!banner) return;
-  try {
-    const raw = localStorage.getItem('listmate_pending_instacart');
-    if (!raw) {
-      banner.style.display = 'none';
-      return;
-    }
-    const pending = JSON.parse(raw);
-    if (!pending || !Array.isArray(pending.item_ids) || pending.item_ids.length === 0) {
-      banner.style.display = 'none';
-      return;
-    }
-    const openCount = pending.item_ids.filter(id => {
-      const it = list.find(item => item.id == id);
-      return it && !it.purchased;
-    }).length;
-
-    if (openCount === 0) {
-      localStorage.removeItem('listmate_pending_instacart');
-      banner.style.display = 'none';
-      return;
-    }
-
-    const subEl = document.getElementById('instacartPendingBannerSub');
-    if (subEl) subEl.textContent = `${openCount} item${openCount === 1 ? '' : 's'} sent to Instacart`;
-    banner.style.display = 'flex';
-  } catch (e) {
-    banner.style.display = 'none';
-  }
-}
-
-window.addEventListener('focus', checkInstacartReturn);
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    checkInstacartReturn();
-  }
-});
-if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-  window.Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
-    if (isActive) checkInstacartReturn();
-  });
-}
 
 </script>
 <div class="modal-overlay" id="notifyVisitModal">
