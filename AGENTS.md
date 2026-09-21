@@ -1,5 +1,14 @@
 # Project Rules & Custom Instructions
 
+## 0. Development Server & Git Workflow Standards
+- **No Local or Dev Server Maintenance**: Do NOT spend tokens or effort attempting to fix, start, or configure the local dev server. The user does not use the local or dev server at all.
+- **Explorative Inquiries First**: Do NOT jump to writing code unnecessarily. Most questions are explorative, feasibility analysis, and level of effort (LOE) determination. Provide analysis and answer conceptually before making any code modifications.
+- **GitHub-Only Changes**: Any changes must be executed strictly via GitHub:
+  1. Always create a GitHub issue first in `santven/listmate` to link the work.
+  2. Always create a dedicated branch off `staging` to work on.
+  3. Always open a Pull Request (PR) to track the work and link the branch and issue.
+  4. Merge the PR into `staging` upon verification.
+
 ## 1. GitHub Issue & Branching Workflow
 - **Issue First**: Always create an issue in the GitHub project (`santven/listmate`) before beginning work on any new feature, or link work to an existing issue.
 - **Branching Strategy**: Always create feature branches from `staging` (e.g. `feat/<issue-number>-<short-description>`).

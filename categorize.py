@@ -210,7 +210,7 @@ CATEGORY_KEYWORDS = {
         "green tea", "black tea", "herbal tea", "matcha", "chai patti",
         "water", "sparkling water", "soda", "seltzer", "club soda",
         "tonic", "juice", "orange juice", "apple juice", "cranberry juice",
-        "lemonade", "smoothie", "milkshake", "protein shake",
+        "lemonade", "smoothie", "milkshake", "protein shake", "ready protein", "protein water", "protein drink",
         "coconut water",
         "soft drink", "coke", "pepsi", "sprite", "ginger ale",
         "kombucha", "beer", "wine", "liquor", "spirit",
@@ -572,13 +572,25 @@ def categorize_batch_gemini(item_names, api_key=None):
 
     key = api_key or _get_gemini_key()
     if not key:
+        print("[categorize] Tier 3 Gemini skipped: No API key found.")
         return {}
 
     canonical_str = ", ".join(CANONICAL_CATEGORIES)
-    models = [m.strip() for m in os.environ.get(
+    raw_env_models = os.environ.get(
         "GEMINI_MODEL_NAME",
-        "gemini-flash-latest,gemini-3.1-flash-lite-preview,gemini-2.5-flash-lite,gemini-3.1-flash-lite"
-    ).split(",") if m.strip()]
+        "gemini-3.1-flash-lite,gemini-flash-latest,gemini-2.5-flash-lite,gemini-2.5-flash"
+    ).strip().strip("'").strip('"')
+
+    models = []
+    for m in raw_env_models.split(","):
+        clean_m = m.strip().strip("'").strip('"').strip()
+        if clean_m.startswith("models/"):
+            clean_m = clean_m[len("models/"):]
+        if clean_m and clean_m not in models:
+            models.append(clean_m)
+
+    if not models:
+        models = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash-lite"]
 
     results = {}
     batch_size = 50
@@ -588,6 +600,11 @@ def categorize_batch_gemini(item_names, api_key=None):
         prompt = (
             "You are an expert grocery catalog categorizer for ListMate.\n"
             f"Assign each item to EXACTLY ONE of these canonical categories:\n{canonical_str}\n\n"
+            "Important grocery guidelines:\n"
+            "- Ready-to-drink protein shakes, protein waters, smoothies, and drinks belong in \"Beverages\".\n"
+            "- Protein bars belong in \"Snacks & Sweets\".\n"
+            "- Protein powders, workout supplements, vitamins, and collagen belong in \"Health & Personal Care\".\n"
+            "- Only actual butcher meats, poultry, seafood, chicken, beef, pork, and fish belong in \"Meat & Seafood\".\n\n"
             f"Items to categorize:\n{json.dumps(batch, indent=2)}\n\n"
             "Return ONLY a valid JSON object mapping each exact item name to its assigned canonical category.\n"
             'Example format: {"Item Name": "Category"}'
@@ -602,6 +619,7 @@ def categorize_batch_gemini(item_names, api_key=None):
         }
         data_bytes = json.dumps(body).encode("utf-8")
         parsed_batch = None
+        last_error = None
 
         for model in models:
             for api_ver in ("v1beta", "v1"):
@@ -612,30 +630,72 @@ def categorize_batch_gemini(item_names, api_key=None):
                     headers={"Content-Type": "application/json"}
                 )
                 try:
-                    with urllib.request.urlopen(req, timeout=20) as resp:
+                    with urllib.request.urlopen(req, timeout=15) as resp:
                         res_json = json.loads(resp.read().decode("utf-8"))
                         text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        if text.startswith("```json"):
-                            text = text[7:]
-                        if text.startswith("```"):
-                            text = text[3:]
-                        if text.endswith("```"):
-                            text = text[:-3]
-                        parsed_batch = json.loads(text.strip())
-                        break
-                except Exception:
-                    continue
+                        # Extract JSON object even if enclosed in markdown code fences or conversational text
+                        json_match = re.search(r'\{[\s\S]*\}', text)
+                        if json_match:
+                            parsed_batch = json.loads(json_match.group(0))
+                            print(f"[categorize] Tier 3 Gemini matched {len(batch)} items using model '{model}' ({api_ver}).")
+                            break
+                        else:
+                            last_error = f"No JSON object found in response from {model} ({api_ver})"
+                except urllib.error.HTTPError as he:
+                    last_error = f"HTTP {he.code} from {model} ({api_ver})"
+                    # 400 often means invalid model name or syntax; 429/503 is rate limit/overload
+                    print(f"[categorize] Gemini API attempt notice ({model}, {api_ver}): HTTP {he.code}")
+                except Exception as e:
+                    last_error = f"{type(e).__name__}: {e}"
+                    print(f"[categorize] Gemini API attempt notice ({model}, {api_ver}): {e}")
             if parsed_batch:
                 break
 
+        if not parsed_batch:
+            print(f"[categorize] Warning: All Gemini attempts failed for batch of {len(batch)} items. Last error: {last_error}")
+
         if isinstance(parsed_batch, dict):
             canon_map = {c.lower(): c for c in CANONICAL_CATEGORIES}
+            alias_map = {
+                "health": "Health & Personal Care",
+                "personal care": "Health & Personal Care",
+                "supplements": "Health & Personal Care",
+                "supplement": "Health & Personal Care",
+                "vitamins": "Health & Personal Care",
+                "protein": "Health & Personal Care",
+                "sports nutrition": "Health & Personal Care",
+                "beverage": "Beverages",
+                "drink": "Beverages",
+                "drinks": "Beverages",
+                "meat": "Meat & Seafood",
+                "seafood": "Meat & Seafood",
+                "canned": "Canned & Jarred",
+                "canned goods": "Canned & Jarred",
+                "spices": "Spices & Seasonings",
+                "seasonings": "Spices & Seasonings",
+                "dips": "Dips & Spreads",
+                "spreads": "Dips & Spreads",
+                "snacks": "Snacks & Sweets",
+                "sweets": "Snacks & Sweets",
+                "grains": "Legumes & Grains",
+                "legumes": "Legumes & Grains",
+            }
+            batch_lookup = {b.lower().strip(): b for b in batch}
+
             for k, v in parsed_batch.items():
-                clean_v = str(v).strip().title()
-                if clean_v.lower() in canon_map:
-                    results[k] = canon_map[clean_v.lower()]
-                elif clean_v in CANONICAL_CATEGORIES:
-                    results[k] = clean_v
+                k_clean = str(k).strip()
+                v_clean = str(v).strip().lower()
+                target_cat = canon_map.get(v_clean) or alias_map.get(v_clean)
+                if not target_cat:
+                    title_v = str(v).strip().title()
+                    if title_v.lower() in canon_map:
+                        target_cat = canon_map[title_v.lower()]
+                    elif title_v in CANONICAL_CATEGORIES:
+                        target_cat = title_v
+
+                if target_cat:
+                    orig_name = batch_lookup.get(k_clean.lower(), k_clean)
+                    results[orig_name] = target_cat
 
     return results
 
@@ -700,6 +760,8 @@ def backfill_uncategorized_items(use_ai=True, max_ai_items=150):
             if r.get("name") and str(r["name"]).strip():
                 distinct_names.add(str(r["name"]).strip())
 
+        print(f"[categorize] Sweep found {len(store_rows)} uncategorized store_items, {len(list_rows)} list_items, {len(stat_rows)} purchase_stats ({len(distinct_names)} distinct names: {list(distinct_names)[:10]}).")
+
         resolved_categories = {}  # norm_name -> canonical category
         name_to_norm = {name: name.lower().strip() for name in distinct_names}
 
@@ -755,6 +817,8 @@ def backfill_uncategorized_items(use_ai=True, max_ai_items=150):
                             stats["tier3_gemini_matched"] += 1
                 except Exception as ae:
                     print(f"[categorize] Gemini AI sweep notice: {ae}")
+            else:
+                print(f"[categorize] Notice: GEMINI_API_KEY not configured or found. Tier 3 AI sweep skipped for {len(unresolved_names)} items.")
 
         # ── Apply Category Updates to Database ──
 
