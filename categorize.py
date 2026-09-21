@@ -403,141 +403,147 @@ def _match_kw(kw, text):
 
 
 def categorize(name):
-    """Return canonical category string or '' for unmatched."""
-    if not name or not str(name).strip():
-        return ""
+    """Return canonical category string or '' for unmatched.
+    Guaranteed never to raise an exception, preventing any UI or API disruption.
+    """
+    try:
+        if not name or not str(name).strip():
+            return ""
 
-    raw_norm = _normalize(str(name))
-    stemmed_norm = stem_phrase(str(name))
+        raw_norm = _normalize(str(name))
+        stemmed_norm = stem_phrase(str(name))
 
-    # ── Priority 1: Frozen ──
-    if "frozen" in raw_norm or "frozen" in stemmed_norm:
-        for ice_w in ("ice cream", "gelato", "sorbet", "frozen yogurt", "kulfi", "popsicle"):
-            if ice_w in raw_norm or ice_w in stemmed_norm:
-                return "Dairy" if ice_w in ("frozen yogurt", "kulfi", "ice cream") else "Snacks & Sweets"
-        return "Frozen"
+        # ── Priority 1: Frozen ──
+        if "frozen" in raw_norm or "frozen" in stemmed_norm:
+            for ice_w in ("ice cream", "gelato", "sorbet", "frozen yogurt", "kulfi", "popsicle"):
+                if ice_w in raw_norm or ice_w in stemmed_norm:
+                    return "Dairy" if ice_w in ("frozen yogurt", "kulfi", "ice cream") else "Snacks & Sweets"
+            return "Frozen"
 
-    # ── Priority 2: Canned & Jarred (Word-boundary check, avoiding 'tin' in 'claritin') ──
-    if re.search(r'\b(canned|tinned)\b', raw_norm) or re.search(r'\b(canned|tinned)\b', stemmed_norm):
-        return "Canned & Jarred"
-    if re.search(r'\btin\s+of\b', raw_norm):
-        return "Canned & Jarred"
-
-    # ── Priority 3: Produce Overrides ──
-    if "spaghetti squash" in raw_norm or "spaghetti squash" in stemmed_norm:
-        return "Produce"
-    if "curry leaf" in raw_norm or "curry leaves" in raw_norm or "curry leaf" in stemmed_norm:
-        return "Produce"
-    if "romaine" in raw_norm or "romaine" in stemmed_norm:
-        return "Produce"
-    if any(w in raw_norm for w in ("fresh basil", "fresh cilantro", "fresh mint", "tender coconut", "spring mix")):
-        return "Produce"
-
-    # ── Priority 4: Medicine & Allergy Overrides ──
-    if any(re.search(r'\b' + re.escape(med) + r'\b', raw_norm) for med in (
-        "claritin", "zyrtec", "allegra", "benadryl", "flonase", "advil", "tylenol",
-        "motrin", "aleve", "pepto", "pepto bismol", "tums", "sudafed", "mucinex",
-        "robitussin", "dayquil", "nyquil", "nasal spray", "allergy relief", "pain relief"
-    )):
-        return "Health & Personal Care"
-
-    # ── Priority 5: Head-Noun & Compound Resolution (with packaging cleaned) ──
-    cleaned = _clean_packaging(raw_norm)
-    cleaned_stemmed = stem_phrase(cleaned)
-    tokens = cleaned_stemmed.split()
-    last_word = tokens[-1] if tokens else ""
-    last_two = " ".join(tokens[-2:]) if len(tokens) >= 2 else ""
-
-    # Seasoning & spice head nouns
-    if last_word in ("seasoning", "extract") or last_two in ("seasoning blend", "spice blend"):
-        return "Spices & Seasonings"
-
-    # Soup, broth, pasta sauce head nouns
-    if last_word in ("soup", "broth", "stock", "bouillon") or last_two in ("pasta sauce", "marinara sauce", "pizza sauce"):
-        return "Canned & Jarred"
-
-    # Jam & jelly head nouns
-    if last_word in ("jam", "jelly", "preserve", "marmalade"):
-        return "Snacks & Sweets"
-
-    # Bakery head nouns
-    if last_word in ("bread", "bagel", "croissant", "muffin", "cake", "cupcake", "pastry", "pie", "roti", "naan", "tortilla", "bun", "roll", "loaf"):
-        return "Bakery"
-
-    # Beverage head nouns
-    if last_word in ("juice", "soda", "lemonade", "smoothie", "tea", "coffee", "latte", "cappuccino", "kombucha", "cider") or last_two in ("energy drink", "soft drink"):
-        return "Beverages"
-
-    # Snack head nouns
-    if last_word in ("chip", "crisp", "cracker", "popcorn", "cookie", "biscuit", "pretzel"):
-        return "Snacks & Sweets"
-
-    # Grains & Cereal head nouns
-    if last_word in ("cereal", "cheerios", "granola", "muesli", "oatmeal"):
-        return "Legumes & Grains"
-
-    # Vinegar / Oil head nouns
-    if last_word in ("vinegar", "oil"):
-        if "pasta" in stemmed_norm or "marinara" in stemmed_norm or "tomato" in stemmed_norm:
+        # ── Priority 2: Canned & Jarred (Word-boundary check, avoiding 'tin' in 'claritin') ──
+        if re.search(r'\b(canned|tinned)\b', raw_norm) or re.search(r'\b(canned|tinned)\b', stemmed_norm):
             return "Canned & Jarred"
-        return "Spices & Seasonings"
+        if re.search(r'\btin\s+of\b', raw_norm):
+            return "Canned & Jarred"
 
-    # Milk head nouns
-    if last_word == "milk" and not any(w in raw_norm for w in ("milk chocolate", "coconut milk canned")):
-        return "Dairy"
+        # ── Priority 3: Produce Overrides ──
+        if "spaghetti squash" in raw_norm or "spaghetti squash" in stemmed_norm:
+            return "Produce"
+        if "curry leaf" in raw_norm or "curry leaves" in raw_norm or "curry leaf" in stemmed_norm:
+            return "Produce"
+        if "romaine" in raw_norm or "romaine" in stemmed_norm:
+            return "Produce"
+        if any(w in raw_norm for w in ("fresh basil", "fresh cilantro", "fresh mint", "tender coconut", "spring mix")):
+            return "Produce"
 
-    # Nut butter head nouns
-    if last_two in ("peanut butter", "almond butter", "cashew butter", "sun butter", "sunflower butter", "cookie butter"):
-        return "Snacks & Sweets"
+        # ── Priority 4: Medicine & Allergy Overrides ──
+        if any(re.search(r'\b' + re.escape(med) + r'\b', raw_norm) for med in (
+            "claritin", "zyrtec", "allegra", "benadryl", "flonase", "advil", "tylenol",
+            "motrin", "aleve", "pepto", "pepto bismol", "tums", "sudafed", "mucinex",
+            "robitussin", "dayquil", "nyquil", "nasal spray", "allergy relief", "pain relief"
+        )):
+            return "Health & Personal Care"
 
-    # Meat & Seafood head nouns / cuts
-    if last_word in ("thigh", "breast", "wing", "drumstick", "patty", "fillet", "steak") or last_two in ("burger patty", "beef patty"):
-        return "Meat & Seafood"
+        # ── Priority 5: Head-Noun & Compound Resolution (with packaging cleaned) ──
+        cleaned = _clean_packaging(raw_norm)
+        cleaned_stemmed = stem_phrase(cleaned)
+        tokens = cleaned_stemmed.split()
+        last_word = tokens[-1] if tokens else ""
+        last_two = " ".join(tokens[-2:]) if len(tokens) >= 2 else ""
 
-    # ── Priority 6: Dips & Sauces ──
-    if "pasta sauce" in raw_norm or "marinara" in raw_norm or "tomato sauce" in raw_norm:
-        return "Canned & Jarred"
-    if any(w in raw_norm.split() or w in stemmed_norm.split() for w in ("pickle", "achar", "thokku", "chutney", "salsa", "pesto", "tapenade", "hummus", "guacamole", "tzatziki")):
-        return "Dips & Spreads"
+        # Seasoning & spice head nouns
+        if last_word in ("seasoning", "extract") or last_two in ("seasoning blend", "spice blend"):
+            return "Spices & Seasonings"
 
-    # ── Priority 7: Beverages vs Dairy Drinks ──
-    is_dairy_drink = any(w in raw_norm or w in stemmed_norm for w in (
-        "protein yogurt", "protein yoghurt", "yogurt drink", "lassi",
-        "buttermilk", "kefir", "skyr", "milk", "yoghurt drink"
-    ))
-    if not is_dairy_drink and any(_match_kw(w, raw_norm) or _match_kw(w, stemmed_norm) for w in (
-        "juice", "soda", "coke", "pepsi", "sprite", "seltzer",
-        "lemonade", "smoothie", "beer", "wine", "liquor", "kombucha",
-        "coffee", "tea", "chai", "espresso", "latte", "cappuccino",
-        "water", "gatorade", "powerade", "tonic", "ginger ale",
-        "coconut water", "soft drink", "cola", "dr pepper",
-        "mountain dew", "fanta", "coca", "7up", "root beer", "energy drink"
-    )):
-        return "Beverages"
+        # Soup, broth, pasta sauce head nouns
+        if last_word in ("soup", "broth", "stock", "bouillon") or last_two in ("pasta sauce", "marinara sauce", "pizza sauce"):
+            return "Canned & Jarred"
 
-    # ── Global Sorted Keyword Matching (Multi-word & Longest first) ──
-    matchers = get_global_matchers()
+        # Jam & jelly head nouns
+        if last_word in ("jam", "jelly", "preserve", "marmalade"):
+            return "Snacks & Sweets"
 
-    # 1. Match against cleaned text (packaging and count suffixes stripped)
-    if cleaned != raw_norm:
+        # Bakery head nouns
+        if last_word in ("bread", "bagel", "croissant", "muffin", "cake", "cupcake", "pastry", "pie", "roti", "naan", "tortilla", "bun", "roll", "loaf"):
+            return "Bakery"
+
+        # Beverage head nouns
+        if last_word in ("juice", "soda", "lemonade", "smoothie", "tea", "coffee", "latte", "cappuccino", "kombucha", "cider") or last_two in ("energy drink", "soft drink"):
+            return "Beverages"
+
+        # Snack head nouns
+        if last_word in ("chip", "crisp", "cracker", "popcorn", "cookie", "biscuit", "pretzel"):
+            return "Snacks & Sweets"
+
+        # Grains & Cereal head nouns
+        if last_word in ("cereal", "cheerios", "granola", "muesli", "oatmeal"):
+            return "Legumes & Grains"
+
+        # Vinegar / Oil head nouns
+        if last_word in ("vinegar", "oil"):
+            if "pasta" in stemmed_norm or "marinara" in stemmed_norm or "tomato" in stemmed_norm:
+                return "Canned & Jarred"
+            return "Spices & Seasonings"
+
+        # Milk head nouns
+        if last_word == "milk" and not any(w in raw_norm for w in ("milk chocolate", "coconut milk canned")):
+            return "Dairy"
+
+        # Nut butter head nouns
+        if last_two in ("peanut butter", "almond butter", "cashew butter", "sun butter", "sunflower butter", "cookie butter"):
+            return "Snacks & Sweets"
+
+        # Meat & Seafood head nouns / cuts
+        if last_word in ("thigh", "breast", "wing", "drumstick", "patty", "fillet", "steak") or last_two in ("burger patty", "beef patty"):
+            return "Meat & Seafood"
+
+        # ── Priority 6: Dips & Sauces ──
+        if "pasta sauce" in raw_norm or "marinara" in raw_norm or "tomato sauce" in raw_norm:
+            return "Canned & Jarred"
+        if any(w in raw_norm.split() or w in stemmed_norm.split() for w in ("pickle", "achar", "thokku", "chutney", "salsa", "pesto", "tapenade", "hummus", "guacamole", "tzatziki")):
+            return "Dips & Spreads"
+
+        # ── Priority 7: Beverages vs Dairy Drinks ──
+        is_dairy_drink = any(w in raw_norm or w in stemmed_norm for w in (
+            "protein yogurt", "protein yoghurt", "yogurt drink", "lassi",
+            "buttermilk", "kefir", "skyr", "milk", "yoghurt drink"
+        ))
+        if not is_dairy_drink and any(_match_kw(w, raw_norm) or _match_kw(w, stemmed_norm) for w in (
+            "juice", "soda", "coke", "pepsi", "sprite", "seltzer",
+            "lemonade", "smoothie", "beer", "wine", "liquor", "kombucha",
+            "coffee", "tea", "chai", "espresso", "latte", "cappuccino",
+            "water", "gatorade", "powerade", "tonic", "ginger ale",
+            "coconut water", "soft drink", "cola", "dr pepper",
+            "mountain dew", "fanta", "coca", "7up", "root beer", "energy drink"
+        )):
+            return "Beverages"
+
+        # ── Global Sorted Keyword Matching (Multi-word & Longest first) ──
+        matchers = get_global_matchers()
+
+        # 1. Match against cleaned text (packaging and count suffixes stripped)
+        if cleaned != raw_norm:
+            for kw_clean, cat, kw_stem, is_multi in matchers:
+                if _match_kw(kw_clean, cleaned) or _match_kw(kw_stem, cleaned_stemmed):
+                    return cat
+
+        # 2. Match against full raw and stemmed strings
         for kw_clean, cat, kw_stem, is_multi in matchers:
-            if _match_kw(kw_clean, cleaned) or _match_kw(kw_stem, cleaned_stemmed):
+            if _match_kw(kw_clean, raw_norm) or _match_kw(kw_stem, stemmed_norm) or _match_kw(kw_clean, stemmed_norm):
                 return cat
 
-    # 2. Match against full raw and stemmed strings
-    for kw_clean, cat, kw_stem, is_multi in matchers:
-        if _match_kw(kw_clean, raw_norm) or _match_kw(kw_stem, stemmed_norm) or _match_kw(kw_clean, stemmed_norm):
-            return cat
+        # ── Fallback Token-Level Check ──
+        noise_prefixes = r'^(organic|fresh|raw|pure|natural|all natural|whole|sliced|diced|chopped|shredded|crushed|ground|silken|firm|extra firm|soft|jumbo|large|small|medium|mini|baby|swad|deep|laxmi|patak|kellogg|kelloggs|quaker|nestle|heinz|kraft|trader joe|trader joes|kirkland|great value|365|simple truth|good & gather|v patel & sons inc)\s+'
+        stripped_stemmed = re.sub(noise_prefixes, '', cleaned_stemmed).strip()
+        if stripped_stemmed != cleaned_stemmed:
+            for kw_clean, cat, kw_stem, is_multi in matchers:
+                if _match_kw(kw_clean, stripped_stemmed) or _match_kw(kw_stem, stripped_stemmed):
+                    return cat
 
-    # ── Fallback Token-Level Check ──
-    noise_prefixes = r'^(organic|fresh|raw|pure|natural|all natural|whole|sliced|diced|chopped|shredded|crushed|ground|silken|firm|extra firm|soft|jumbo|large|small|medium|mini|baby|swad|deep|laxmi|patak|kellogg|kelloggs|quaker|nestle|heinz|kraft|trader joe|trader joes|kirkland|great value|365|simple truth|good & gather|v patel & sons inc)\s+'
-    stripped_stemmed = re.sub(noise_prefixes, '', cleaned_stemmed).strip()
-    if stripped_stemmed != cleaned_stemmed:
-        for kw_clean, cat, kw_stem, is_multi in matchers:
-            if _match_kw(kw_clean, stripped_stemmed) or _match_kw(kw_stem, stripped_stemmed):
-                return cat
-
-    return ""
+        return ""
+    except Exception:
+        # Categorization is an advisory background feature; never interrupt user actions
+        return ""
 
 
 # ── Gemini AI Helper ──
