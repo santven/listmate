@@ -3,10 +3,17 @@
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps
-from flask import request, jsonify, session, send_from_directory, has_request_context, g
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from google.auth.exceptions import GoogleAuthError
+try:
+    from flask import request, jsonify, session, send_from_directory, has_request_context, g
+except ImportError:
+    request = jsonify = session = send_from_directory = has_request_context = g = None
+
+try:
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+    from google.auth.exceptions import GoogleAuthError
+except ImportError:
+    id_token = google_requests = GoogleAuthError = None
 
 GOOGLE_CLIENT_ID = os.environ.get("SSO_GOOGLE_CLIENT_ID", "").strip() or \
     "526061928190-8si99s2n17u7onf8mo2uapfjphtopnc1.apps.googleusercontent.com"
