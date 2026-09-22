@@ -1977,3 +1977,200 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
     
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     return _send_via_api(api_key, payload)
+
+
+def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: str, stats: dict, user_id: int = 0, household_id: int = 0) -> bool:
+    """Send 30-day recurring Lifetime Premium digest email with dynamic active/inactive states."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    campaign = "lifetime_premium_digest"
+    safe_name = (user_name or "").strip() or "there"
+    safe_hh = (household_name or "").strip() or "your household"
+    
+    app_link = f"{BASE_URL}/open?url={quote('/?source=email_lifetime_digest')}"
+    feedback_link = f"{BASE_URL}/open?url={quote('/requests?source=email_lifetime_digest')}"
+    share_link = f"{BASE_URL}/open?url={quote('/?source=share_email')}"
+
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    is_active = bool(stats.get("is_active", False) or stats.get("recent_items_count", 0) > 0)
+    member_count = stats.get("member_count", 1)
+    store_count = stats.get("store_count", 1)
+    recent_items = stats.get("recent_items_count", 0)
+    total_items = stats.get("total_items_count", 0)
+    top_stores = stats.get("top_stores_list", "") or "General List"
+    recipe_count = stats.get("recipe_count", 0)
+    visit_count = stats.get("visit_count", 0)
+
+    if is_active:
+        subject = f"🌟 Your Monthly Household Grocery Recap + Lifetime Premium Perks"
+        recipes_txt = f"- 🍳 {recipe_count} Saved Recipe(s)\n" if recipe_count > 0 else ""
+        visits_txt = f"- 🚶 {visit_count} Grocery Run(s) Recorded\n" if visit_count > 0 else ""
+        plain_text = (
+            f"Hi {safe_name},\n\n"
+            f"Here is your monthly shopping summary for {safe_hh}. As a Lifetime Premium Member, you have full, permanent access to all ListMate features at zero cost.\n\n"
+            f"YOUR HOUSEHOLD IN NUMBERS:\n"
+            f"- 👨‍👩‍👧‍👦 {member_count} Active Household Member(s)\n"
+            f"- 🏪 {store_count} Store(s) Configured\n"
+            f"- 🛒 {recent_items} Item(s) Added This Month ({total_items} Total)\n"
+            f"- 🏆 Top Store(s): {top_stores}\n"
+            f"{recipes_txt}"
+            f"{visits_txt}\n"
+            f"Open Your Shared List: {app_link}\n\n"
+            f"SHAPE THE FUTURE OF LISTMATE:\n"
+            f"We want to make ListMate the best grocery planner for your home. What is one feature or store integration you would love to see next?\n"
+            f"Share Feedback: {feedback_link} (or reply directly to this email)\n\n"
+            f"SHARE LISTMATE WITH FRIENDS & FAMILY:\n"
+            f"Know another household or friend who could use hassle-free, shared grocery planning? Share ListMate: {share_link}\n\n"
+            f"Warm regards,\nVenkat & The ListMate Team"
+        )
+        
+        stat_rows = []
+        stat_rows.append('<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>👨‍👩‍👧‍👦 Household Members</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(member_count) + ' active</td></tr>')
+        stat_rows.append('<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>🏪 Configured Stores</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(store_count) + ' stores</td></tr>')
+        stat_rows.append('<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>🛒 Items Added This Month</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(recent_items) + ' (' + str(total_items) + ' total)</td></tr>')
+        stat_rows.append('<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>🏆 Top Stores</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(top_stores) + '</td></tr>')
+        if recipe_count > 0:
+            stat_rows.append('<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>🍳 Saved Recipes</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(recipe_count) + '</td></tr>')
+        if visit_count > 0:
+            stat_rows.append('<tr><td style="padding:10px 14px;color:#334155;font-size:14px;"><strong>🚶 Store Trips Completed</strong></td><td style="padding:10px 14px;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">' + str(visit_count) + '</td></tr>')
+
+        stat_rows_html = "".join(stat_rows)
+
+        body_html = (
+            '<div style="font-family:-apple-system,BlinkMacSystemFont,\x27Segoe UI\x27,Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;color:#1e293b;">'
+            '<div style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);padding:24px 28px;text-align:center;color:#ffffff;">'
+            '<div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#d1fae5;margin-bottom:4px;">ListMate VIP</div>'
+            '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px;">⭐ Lifetime Premium Member Recap</h1>'
+            '</div>'
+            '<div style="padding:28px 24px;">'
+            f'<p style="font-size:16px;line-height:1.5;margin-top:0;color:#334155;">Hi {safe_name},</p>'
+            f'<p style="font-size:15px;line-height:1.6;color:#334155;">Here is your monthly shopping summary for <strong>{safe_hh}</strong>. As a <strong>Lifetime Premium Member</strong>, you have permanent access to all current features and upcoming updates at zero cost.</p>'
+            '<div style="margin:24px 0 20px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">'
+            '<div style="background:#f1f5f9;padding:10px 14px;font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;">📊 Your Household in Numbers</div>'
+            '<table style="width:100%;border-collapse:collapse;">'
+            + stat_rows_html +
+            '</table>'
+            '</div>'
+            '<div style="text-align:center;margin:24px 0;">'
+            f'<a href="{app_link}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Open Your Shared List &rarr;</a>'
+            '</div>'
+            '<div style="background:#f0fdf4;border-left:4px solid #10b981;padding:14px 16px;margin:24px 0;border-radius:4px;">'
+            '<strong style="color:#166534;display:block;font-size:14px;margin-bottom:4px;">💡 Shape What We Build Next</strong>'
+            '<span style="color:#274c36;font-size:13px;line-height:1.5;">We want to make ListMate the smoothest shared grocery planner for your home. What is one feature, store integration, or improvement you would love to see?</span>'
+            '<div style="margin-top:10px;">'
+            f'<a href="{feedback_link}" target="_blank" rel="noopener noreferrer" style="color:#166534;font-weight:700;font-size:13px;text-decoration:underline;">Share Feedback & Feature Requests &rarr;</a>'
+            '<span style="color:#4b5563;font-size:12px;margin-left:6px;">(or reply directly to this email)</span>'
+            '</div>'
+            '</div>'
+            '<div style="background:#fafafa;border:1px solid #f1f5f9;border-radius:8px;padding:14px 16px;margin:20px 0;text-align:center;">'
+            '<strong style="color:#334155;font-size:14px;display:block;margin-bottom:4px;">🎁 Share ListMate with Friends & Family</strong>'
+            '<span style="color:#64748b;font-size:13px;line-height:1.4;display:block;margin-bottom:10px;">Know another household or friend who could use stress-free grocery planning?</span>'
+            f'<a href="{share_link}" target="_blank" rel="noopener noreferrer" style="color:#059669;font-weight:700;font-size:13px;text-decoration:underline;">Invite Friends to ListMate &rarr;</a>'
+            '</div>'
+            '<div style="text-align:center;margin:24px 0 10px 0;">'
+            f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+            f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+            '</div>'
+            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">Venkat & The ListMate Team</strong></p>'
+            '</div>'
+            '</div>'
+        )
+    else:
+        subject = f"⭐ Your Lifetime Premium Perks on ListMate"
+        plain_text = (
+            f"Hi {safe_name},\n\n"
+            f"Just a quick reminder that your household, {safe_hh}, has permanent Lifetime Premium Access on ListMate. You will never be charged, and you have unlimited access to every current and upcoming feature.\n\n"
+            f"UNLOCK YOUR PREMIUM PERKS ON YOUR NEXT GROCERY RUN:\n"
+            f"- 🏪 Unlimited Custom Stores: Organize items aisle-by-aisle for your favorite stores.\n"
+            f"- ⚡ Instant Real-Time Sync: Share live lists across your household on iOS, Android, and Web.\n"
+            f"- 🍳 Recipe Importer: Convert recipes into organized grocery ingredients in seconds.\n"
+            f"- 🤖 Smart Aisle Sorting: Keep produce, dairy, bakery, and pantry grouped automatically.\n\n"
+            f"Plan Your Next Shopping Trip: {app_link}\n\n"
+            f"HOW CAN WE MAKE LISTMATE BETTER FOR YOU?\n"
+            f"Was anything missing or difficult to use? Is there a feature or store you need before using ListMate regularly?\n"
+            f"Share Thoughts: {feedback_link} (or reply directly to this email)\n\n"
+            f"SPREAD THE WORD:\n"
+            f"Know someone looking for a cleaner, shared grocery app? Share ListMate: {share_link}\n\n"
+            f"Warm regards,\nVenkat & The ListMate Team"
+        )
+
+        body_html = (
+            '<div style="font-family:-apple-system,BlinkMacSystemFont,\x27Segoe UI\x27,Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;color:#1e293b;">'
+            '<div style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);padding:24px 28px;text-align:center;color:#ffffff;">'
+            '<div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#d1fae5;margin-bottom:4px;">ListMate VIP</div>'
+            '<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.5px;">⭐ Lifetime Premium Member Update</h1>'
+            '</div>'
+            '<div style="padding:28px 24px;">'
+            f'<p style="font-size:16px;line-height:1.5;margin-top:0;color:#334155;">Hi {safe_name},</p>'
+            f'<p style="font-size:15px;line-height:1.6;color:#334155;">Just a quick reminder that your household, <strong>{safe_hh}</strong>, has permanent <strong>Lifetime Premium Access</strong> on ListMate. You will never be charged, and you have unlimited access to every current and upcoming feature.</p>'
+            '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:18px 20px;margin:22px 0;">'
+            '<div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">✨ Unlock Your VIP Perks On Your Next Grocery Run</div>'
+            '<ul style="margin:0;padding-left:18px;color:#334155;font-size:14px;line-height:1.6;">'
+            '<li style="margin-bottom:8px;"><strong>🏪 Unlimited Custom Stores:</strong> Map aisle-by-aisle lists for Costco, Trader Joe\x27s, or local grocers.</li>'
+            '<li style="margin-bottom:8px;"><strong>⚡ Instant Real-Time Sync:</strong> Add items while your partner or family is already in the aisle.</li>'
+            '<li style="margin-bottom:8px;"><strong>🍳 Recipe Importer:</strong> Convert recipes into organized grocery items with one tap.</li>'
+            '<li><strong>🤖 Automatic Aisle Sorting:</strong> Never backtrack across the store again.</li>'
+            '</ul>'
+            '</div>'
+            '<div style="text-align:center;margin:24px 0;">'
+            f'<a href="{app_link}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Plan Your Next Shopping Trip &rarr;</a>'
+            '</div>'
+            '<div style="background:#f0fdf4;border-left:4px solid #10b981;padding:14px 16px;margin:24px 0;border-radius:4px;">'
+            '<strong style="color:#166534;display:block;font-size:14px;margin-bottom:4px;">💡 How Can We Make ListMate Better For You?</strong>'
+            '<span style="color:#274c36;font-size:13px;line-height:1.5;">Was anything confusing during setup? Is there a specific store or feature you need before using ListMate regularly?</span>'
+            '<div style="margin-top:10px;">'
+            f'<a href="{feedback_link}" target="_blank" rel="noopener noreferrer" style="color:#166534;font-weight:700;font-size:13px;text-decoration:underline;">Share Your Thoughts &rarr;</a>'
+            '<span style="color:#4b5563;font-size:12px;margin-left:6px;">(or reply directly to this email)</span>'
+            '</div>'
+            '</div>'
+            '<div style="background:#fafafa;border:1px solid #f1f5f9;border-radius:8px;padding:14px 16px;margin:20px 0;text-align:center;">'
+            '<strong style="color:#334155;font-size:14px;display:block;margin-bottom:4px;">🎁 Spread the Word</strong>'
+            '<span style="color:#64748b;font-size:13px;line-height:1.4;display:block;margin-bottom:10px;">Know someone looking for a cleaner, shared grocery app?</span>'
+            f'<a href="{share_link}" target="_blank" rel="noopener noreferrer" style="color:#059669;font-weight:700;font-size:13px;text-decoration:underline;">Invite Friends to ListMate &rarr;</a>'
+            '</div>'
+            '<div style="text-align:center;margin:24px 0 10px 0;">'
+            f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+            f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+            '</div>'
+            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">Venkat & The ListMate Team</strong></p>'
+            '</div>'
+            '</div>'
+        )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "monthly household updates", "You received this email because your household is a Lifetime Premium Member on ListMate.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": body_html + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
