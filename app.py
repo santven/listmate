@@ -1044,6 +1044,35 @@ def admin_resolve_feedback(fb_id):
     finally:
         close_db(db)
 
+@app.route("/api/admin/cron/test-lifetime-digest", methods=["GET", "POST"])
+@require_admin
+def admin_test_lifetime_digest():
+    """Trigger a test Lifetime Premium Digest email for a specific household (default hhid=1)."""
+    hhid = 1
+    if request.method == "POST" and request.is_json and request.json and "hhid" in request.json:
+        try:
+            hhid = int(request.json["hhid"])
+        except (ValueError, TypeError):
+            hhid = 1
+    elif request.args.get("hhid"):
+        try:
+            hhid = int(request.args.get("hhid"))
+        except (ValueError, TypeError):
+            hhid = 1
+
+    try:
+        from scripts.cron_daily import test_lifetime_digest
+        sent = test_lifetime_digest(target_hhid=hhid)
+        return jsonify({
+            "ok": True,
+            "household_id": hhid,
+            "email_sent": sent
+        })
+    except Exception as e:
+        print(f"Admin test lifetime digest error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():
     """Handle RevenueCat webhooks for cross-platform (iOS, Android, Web/Stripe) subscriptions."""

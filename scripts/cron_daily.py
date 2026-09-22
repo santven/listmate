@@ -1288,8 +1288,142 @@ def cleanup_abandoned_signups():
     return deleted_count
 
 
+def test_lifetime_digest(target_hhid=1):
+    """
+    Test utility to fetch stats for a single household and dispatch
+    the Lifetime Premium Monthly Digest email immediately on demand.
+    """
+    _init_schema()
+    try:
+        target_hhid = int(target_hhid)
+    except (ValueError, TypeError):
+        target_hhid = 1
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Lifetime Premium Digest test for Household #{target_hhid}...")
+
+    query = """
+        SELECT 
+            h.id as household_id,
+            h.name as household_name,
+            h.is_premium,
+            h.subscription_status,
+            h.lifecycle_status,
+            u.id as user_id,
+            u.email,
+            u.name as user_name,
+            COALESCE((SELECT COUNT(*) FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id), 1) as member_count,
+            (SELECT COUNT(*) FROM stores s WHERE s.household_id = h.id) as store_count,
+            (SELECT COUNT(*) FROM list_items l WHERE (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id)) AND l.added_at >= NOW() - INTERVAL '30 days') as recent_items_count,
+            (SELECT COUNT(*) FROM list_items l WHERE l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id)) as total_items_count,
+            (SELECT COUNT(*) FROM store_visits sv WHERE sv.household_id = h.id) as visit_count,
+            (SELECT COUNT(*) FROM recipes r WHERE r.household_id = h.id) as recipe_count,
+            (
+                SELECT ARRAY_TO_STRING(ARRAY(
+                    SELECT s3.name 
+                    FROM stores s3 
+                    LEFT JOIN list_items l3 ON l3.store_id = s3.id 
+                    WHERE s3.household_id = h.id AND TRIM(LOWER(s3.name)) NOT IN ('', 'general', 'general list')
+                    GROUP BY s3.id, s3.name 
+                    ORDER BY COUNT(l3.id) DESC, s3.id ASC 
+                    LIMIT 3
+                ), ', ')
+            ) as top_stores
+        FROM auth_households h
+        JOIN auth_users u ON u.id = COALESCE(
+            h.owner_id,
+            (SELECT ahm_o.user_id FROM auth_household_members ahm_o WHERE ahm_o.household_id = h.id ORDER BY (CASE WHEN ahm_o.role = 'owner' THEN 0 ELSE 1 END), ahm_o.joined_at ASC LIMIT 1),
+            (SELECT u_any.id FROM auth_users u_any WHERE u_any.household_id = h.id ORDER BY u_any.id ASC LIMIT 1)
+        )
+        WHERE h.id = %s
+    """
+    rows = _run(query, (target_hhid,))
+    if not rows:
+        print(f"Error: Household #{target_hhid} not found in database.")
+        return False
+
+    hh = rows[0]
+    email = hh.get("email")
+    user_name = hh.get("user_name") or "there"
+    household_name = hh.get("household_name") or "Your Household"
+    user_id = hh.get("user_id") or 0
+    household_id = hh.get("household_id") or target_hhid
+
+    recent_cnt = int(hh.get("recent_items_count") or 0)
+    total_cnt = int(hh.get("total_items_count") or 0)
+    top_s = hh.get("top_stores") or "General List"
+
+    stats = {
+        "is_active": recent_cnt > 0,
+        "member_count": int(hh.get("member_count") or 1),
+        "store_count": int(hh.get("store_count") or 1),
+        "recent_items_count": recent_cnt,
+        "total_items_count": total_cnt,
+        "top_stores_list": top_s,
+        "recipe_count": int(hh.get("recipe_count") or 0),
+        "visit_count": int(hh.get("visit_count") or 0),
+    }
+
+    print("==================================================")
+    print(f"Target Recipient : {email} ({user_name})")
+    print(f"Household        : #{household_id} ({household_name})")
+    print(f"Subscription     : status='{hh.get('subscription_status')}', is_premium={hh.get('is_premium')}")
+    print(f"Selected Template: {'Template 1 (Active Metrics)' if stats['is_active'] else 'Template 2 (VIP Perks Re-engagement)'}")
+    print("--------------------------------------------------")
+    print(f"  • Members      : {stats['member_count']}")
+    print(f"  • Stores       : {stats['store_count']}")
+    print(f"  • 30-Day Items : {stats['recent_items_count']}")
+    print(f"  • Total Items  : {stats['total_items_count']}")
+    print(f"  • Top Stores   : {stats['top_stores_list']}")
+    print(f"  • Saved Recipes: {stats['recipe_count']}")
+    print(f"  • Store Visits : {stats['visit_count']}")
+    print("==================================================")
+
+    from email_helper import send_lifetime_premium_digest
+    sent = send_lifetime_premium_digest(
+        to_email=email,
+        user_name=user_name,
+        household_name=household_name,
+        stats=stats,
+        user_id=user_id,
+        household_id=household_id
+    )
+
+    if sent:
+        print(f"SUCCESS: Lifetime Premium Digest successfully sent to {email} via SendGrid!")
+        try:
+            _run("UPDATE auth_households SET email_lifetime_digest_sent_at = NOW() WHERE id = %s", (household_id,))
+            _run("""
+                INSERT INTO email_events (
+                    email, event_type, campaign, user_id, household_id, event_timestamp, created_at
+                ) VALUES (%s, 'sent', 'lifetime_premium_digest', %s, %s, NOW(), NOW())
+            """, (email, user_id or None, household_id or None))
+            print(f"Updated email_lifetime_digest_sent_at timestamp and logged to email_events for #{household_id}.")
+        except Exception as e:
+            print(f"Note: DB logging after send warning: {e}")
+    else:
+        print(f"FAILURE / SKIPPED: SendGrid dispatch returned False (verify SENDGRID_API_KEY environment variable).")
+
+    return sent
+
+
 if __name__ == "__main__":
     import sys
+    if any(arg.startswith("--test-lifetime-digest") or arg == "--test-digest" for arg in sys.argv):
+        hhid = 1
+        for i, arg in enumerate(sys.argv):
+            if arg in ("--test-lifetime-digest", "--test-digest") and i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith("-"):
+                try:
+                    hhid = int(sys.argv[i + 1])
+                except ValueError:
+                    pass
+            elif arg.startswith("--test-lifetime-digest="):
+                try:
+                    hhid = int(arg.split("=", 1)[1])
+                except ValueError:
+                    pass
+        test_lifetime_digest(hhid)
+        sys.exit(0)
+
     if any(arg in sys.argv for arg in ("--sweep-only", "--categorize-only", "--backfill")):
         print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running auto-categorization sweep only...")
         try:
