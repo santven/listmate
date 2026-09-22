@@ -26,6 +26,7 @@ from email_helper import (
     send_signup_abandon_day2,
     send_signup_abandon_day5,
     send_signup_abandon_day7,
+    send_lifetime_premium_digest,
 )
 
 def process_email_events(email, user_name, events, user_id=0, household_id=0):
@@ -181,6 +182,16 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                 sent = sent or sent_rem
                 if sent_rem and household_id:
                     db_updates.append(("UPDATE auth_households SET email_breakup_day60_sent_at = NOW(), lifecycle_status = 'sunset_pending' WHERE id = %s", (household_id,)))
+            elif 'lifetime_premium_digest' in events:
+                campaign_names.append('lifetime_premium_digest')
+                ev_data = events['lifetime_premium_digest'] if isinstance(events['lifetime_premium_digest'], dict) else {}
+                hh_name = ev_data.get('household_name', 'your household')
+                stats = ev_data.get('stats', {})
+                print(f"[{email}] Sending 30-day Lifetime Premium digest notice for {hh_name}.")
+                sent_rem = send_lifetime_premium_digest(email, user_name, hh_name, stats, user_id, household_id)
+                sent = sent or sent_rem
+                if sent_rem and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_lifetime_digest_sent_at = NOW() WHERE id = %s", (household_id,)))
         else:
             # If there are multiple events, send the combined template
             print(f"[{email}] Sending COMBINED notice for remaining events: {list(events.keys())}")
@@ -199,6 +210,8 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                     db_updates.append(("UPDATE auth_households SET email_trial_ext_day7_sent_at = NOW() WHERE id = %s", (household_id,)))
                 elif ev_key == 'breakup_day60' and household_id:
                     db_updates.append(("UPDATE auth_households SET email_breakup_day60_sent_at = NOW(), lifecycle_status = 'sunset_pending' WHERE id = %s", (household_id,)))
+                elif ev_key == 'lifetime_premium_digest' and household_id:
+                    db_updates.append(("UPDATE auth_households SET email_lifetime_digest_sent_at = NOW() WHERE id = %s", (household_id,)))
 
     # Record email sent timestamp in the email_events table and execute DB updates
     if sent:
@@ -310,6 +323,89 @@ def run_cron():
     for rh in recent_hhs:
         print(f"  HH #{rh.get('id')} ({rh.get('name')}): user={rh.get('user_email')}, created={rh.get('created_at')}, items={rh.get('item_count')}, custom_stores={rh.get('custom_stores_count')}")
     print("-----------------------")
+
+    # Ensure email_lifetime_digest_sent_at column exists on auth_households
+    try:
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_lifetime_digest_sent_at TIMESTAMP")
+    except Exception as e:
+        print(f"Notice: could not alter auth_households for email_lifetime_digest_sent_at: {e}")
+
+    # --- 0B. Lifetime Premium Member Monthly Digest (30-day recurring, Lifetime cohort only) ---
+    print("Fetching Lifetime Premium Member Digest Candidates (30-Day Recurring)...")
+    query_lifetime_digest = """
+    SELECT DISTINCT ON (h.id)
+        h.id as household_id,
+        h.name as household_name,
+        u.id as user_id,
+        u.email,
+        u.name as user_name,
+        COALESCE((SELECT COUNT(*) FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id), 1) as member_count,
+        (SELECT COUNT(*) FROM stores s WHERE s.household_id = h.id) as store_count,
+        (SELECT COUNT(*) FROM list_items l WHERE (l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id)) AND l.added_at >= NOW() - INTERVAL '30 days') as recent_items_count,
+        (SELECT COUNT(*) FROM list_items l WHERE l.household_id = h.id OR l.store_id IN (SELECT s2.id FROM stores s2 WHERE s2.household_id = h.id)) as total_items_count,
+        (SELECT COUNT(*) FROM store_visits sv WHERE sv.household_id = h.id) as visit_count,
+        (SELECT COUNT(*) FROM recipes r WHERE r.household_id = h.id) as recipe_count,
+        (
+            SELECT ARRAY_TO_STRING(ARRAY(
+                SELECT s3.name 
+                FROM stores s3 
+                LEFT JOIN list_items l3 ON l3.store_id = s3.id 
+                WHERE s3.household_id = h.id AND TRIM(LOWER(s3.name)) NOT IN ('', 'general', 'general list')
+                GROUP BY s3.id, s3.name 
+                ORDER BY COUNT(l3.id) DESC, s3.id ASC 
+                LIMIT 3
+            ), ', ')
+        ) as top_stores
+    FROM auth_households h
+    JOIN auth_users u ON u.id = COALESCE(
+        h.owner_id,
+        (SELECT ahm_o.user_id FROM auth_household_members ahm_o WHERE ahm_o.household_id = h.id ORDER BY (CASE WHEN ahm_o.role = 'owner' THEN 0 ELSE 1 END), ahm_o.joined_at ASC LIMIT 1),
+        (SELECT u_any.id FROM auth_users u_any WHERE u_any.household_id = h.id ORDER BY u_any.id ASC LIMIT 1)
+    )
+    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    WHERE (h.is_premium = TRUE OR h.subscription_status = 'premium')
+      AND (h.email_lifetime_digest_sent_at IS NULL OR h.email_lifetime_digest_sent_at <= NOW() - INTERVAL '30 days')
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_events ee
+          WHERE (ee.household_id = h.id OR ee.email = u.email)
+            AND ee.campaign = 'lifetime_premium_digest'
+            AND ee.event_type = 'sent'
+            AND ee.event_timestamp >= NOW() - INTERVAL '30 days'
+      )
+      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+    ORDER BY h.id, u.id ASC
+    """
+    households_lifetime = _run(query_lifetime_digest)
+    print(f"  -> Found {len(households_lifetime)} household(s) eligible for Lifetime Premium digest.")
+    for hh in households_lifetime:
+        recent_cnt = int(hh.get("recent_items_count") or 0)
+        total_cnt = int(hh.get("total_items_count") or 0)
+        top_s = hh.get("top_stores") or "General List"
+        stats = {
+            'is_active': recent_cnt > 0,
+            'member_count': int(hh.get("member_count") or 1),
+            'store_count': int(hh.get("store_count") or 1),
+            'recent_items_count': recent_cnt,
+            'total_items_count': total_cnt,
+            'top_stores_list': top_s,
+            'recipe_count': int(hh.get("recipe_count") or 0),
+            'visit_count': int(hh.get("visit_count") or 0),
+        }
+        add_user_event(
+            hh.get("email"),
+            hh.get("user_name"),
+            'lifetime_premium_digest',
+            {
+                'household_name': hh.get("household_name"),
+                'stats': stats,
+            },
+            hh.get("user_id"),
+            hh.get("household_id"),
+        )
 
     # --- 1. Expirations (Transactional: Sent to all expiring households with untracked status) ---
     print("Fetching Expirations...")
