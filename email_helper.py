@@ -1991,8 +1991,8 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
     safe_hh = (household_name or "").strip() or "your household"
     
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_lifetime_digest')}"
-    feedback_link = f"{BASE_URL}/open?url={quote('/requests?source=email_lifetime_digest')}"
-    share_link = f"{BASE_URL}/open?url={quote('/?source=share_email')}"
+    feedback_link = f"{BASE_URL}/open?url={quote('/?action=feedback&source=email_lifetime_digest')}"
+    share_link = f"{BASE_URL}/open?url={quote('/?action=invite&source=email_lifetime_digest')}"
 
     app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
     google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
