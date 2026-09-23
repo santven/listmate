@@ -115,6 +115,22 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
         for non_critical in ('reengagement', 'store_nudge', 'solo_nudge', 'activation'):
             events.pop(non_critical, None)
 
+    # Priority 5: Lifetime Premium Monthly Digest (30-day recurring VIP recap & re-engagement)
+    if 'lifetime_premium_digest' in events:
+        ev_data = events['lifetime_premium_digest'] if isinstance(events['lifetime_premium_digest'], dict) else {}
+        hh_name = ev_data.get('household_name', 'your household')
+        stats = ev_data.get('stats', {})
+        campaign_names.append('lifetime_premium_digest')
+        print(f"[{email}] Priority: Sending 30-day Lifetime Premium digest notice for {hh_name}.")
+        sent_lpd = send_lifetime_premium_digest(email, user_name, hh_name, stats, user_id, household_id)
+        sent = sent or sent_lpd
+        if sent_lpd and household_id:
+            db_updates.append(("UPDATE auth_households SET email_lifetime_digest_sent_at = NOW() WHERE id = %s", (household_id,)))
+        events.pop('lifetime_premium_digest')
+        # The Lifetime Digest has dedicated active stats and VIP perks re-engagement; clear generic secondary nudges
+        for non_critical in ('reengagement', 'store_nudge', 'solo_nudge', 'activation'):
+            events.pop(non_critical, None)
+
     # If there are still events left (expiration, trial nudges, store nudges), process them
     if events:
         if len(events) == 1:
@@ -1183,7 +1199,7 @@ def run_cron():
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
 
     if users_to_notify:
-        with ThreadPoolExecutor(max_workers=min(32, len(users_to_notify))) as executor:
+        with ThreadPoolExecutor(max_workers=min(5, len(users_to_notify))) as executor:
             futures = []
             for email, data in users_to_notify.items():
                 futures.append(

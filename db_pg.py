@@ -34,7 +34,17 @@ def _get_pool():
     return _pool_ctx
 
 def get_db():
-    conn = _get_pool().getconn(); conn.autocommit = True; return PgConnection(conn)
+    import time
+    pool = _get_pool()
+    for attempt in range(4):
+        try:
+            conn = pool.getconn()
+            conn.autocommit = True
+            return PgConnection(conn)
+        except _pool.PoolError:
+            if attempt == 3:
+                raise
+            time.sleep(0.15 * (attempt + 1))
 
 def close_db(conn):
     if conn:
