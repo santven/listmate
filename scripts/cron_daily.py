@@ -1295,6 +1295,10 @@ def test_lifetime_digest(target_hhid=1):
     """
     _init_schema()
     try:
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_lifetime_digest_sent_at TIMESTAMP")
+    except Exception as e:
+        print(f"Notice: could not alter auth_households for email_lifetime_digest_sent_at: {e}")
+    try:
         target_hhid = int(target_hhid)
     except (ValueError, TypeError):
         target_hhid = 1
