@@ -1472,16 +1472,54 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             f'</div>'
         )
 
-    action_buttons = (
-        f'<div style="margin:24px 0 16px;">'
-        f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">⭐ Upgrade Household</a>'
-        f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Add Members</a>'
-        f'</div>'
-    )
+    if 'lifetime_premium_digest' in events:
+        ev_data = events['lifetime_premium_digest'] if isinstance(events['lifetime_premium_digest'], dict) else {}
+        hh_name = ev_data.get('household_name', 'your household')
+        text_sections.append(
+            f"Monthly Lifetime Premium Perks ({hh_name}):\n"
+            f"As a Lifetime Premium Member, you have permanent access to all ListMate features with zero monthly or annual fees.\n"
+            f"Open Your Shared List: {app_link}"
+        )
+        html_sections.append(
+            f'<div style="background:#f0fdf4;border-left:4px solid #10b981;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#166534;display:block;margin-bottom:4px;">⭐ Lifetime Premium Member Perks:</strong>'
+            f'<span style="color:#274c36;font-size:14px;line-height:1.5;">Your household (<strong>{hh_name}</strong>) has full permanent access to unlimited custom stores, instant real-time sync, and smart aisle sorting.</span>'
+            f'<div style="margin-top:8px;"><a href="{app_link}" style="color:#166534;font-weight:bold;font-size:13px;text-decoration:underline;">Open Your Shared List &rarr;</a></div>'
+            f'</div>'
+        )
+
+    show_upgrade = any(ev in events for ev in ('expiration', 'trial_lapsed_day2', 'trial_ext_day7', 'trial_week1', 'trial_week3'))
+    if 'lifetime_premium_digest' in events:
+        show_upgrade = False
+    if household_id:
+        try:
+            from shared.auth import _one
+            hh_row = _one("SELECT is_premium, subscription_status FROM auth_households WHERE id = %s", (household_id,))
+            if hh_row and (hh_row.get("is_premium") or hh_row.get("subscription_status") == "premium"):
+                show_upgrade = False
+        except Exception:
+            pass
+
+    if show_upgrade:
+        action_buttons = (
+            f'<div style="margin:24px 0 16px;">'
+            f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">⭐ Upgrade Household</a>'
+            f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Add Members</a>'
+            f'</div>'
+        )
+        footer_links = f"\n\nUpgrade Household: {upgrade_link}\nAdd Members: {add_member_link}"
+    else:
+        action_buttons = (
+            f'<div style="margin:24px 0 16px;">'
+            f'<a href="{app_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">🛒 Open ListMate</a>'
+            f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Add Members</a>'
+            f'</div>'
+        )
+        footer_links = f"\n\nOpen ListMate: {app_link}\nAdd Members: {add_member_link}"
+
     html_sections.append(action_buttons)
 
-    text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + f"\n\nUpgrade Household: {upgrade_link}\nAdd Members: {add_member_link}\n\n— The ListMate Team"
-    html_body = f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;"><p style="font-size:16px;color:#333;margin-top:0;">Hi {user_name},</p>' + "".join(html_sections) + "</div>"
+    text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + footer_links + "\n\n— The ListMate Team"
 
     unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you have an active household on ListMate.")
     payload = {
