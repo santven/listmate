@@ -2028,7 +2028,7 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
             f"Share Feedback: {feedback_link} (or reply directly to this email)\n\n"
             f"SHARE LISTMATE WITH FRIENDS & FAMILY:\n"
             f"Know another household or friend who could use hassle-free, shared grocery planning? Share ListMate: {share_link}\n\n"
-            f"Warm regards,\nVenkat & The ListMate Team"
+            f"Warm regards,\nThe ListMate Team"
         )
         
         stat_rows = []
@@ -2078,7 +2078,7 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
             f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
             f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
             '</div>'
-            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">Venkat & The ListMate Team</strong></p>'
+            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">The ListMate Team</strong></p>'
             '</div>'
             '</div>'
         )
@@ -2098,7 +2098,7 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
             f"Share Thoughts: {feedback_link} (or reply directly to this email)\n\n"
             f"SPREAD THE WORD:\n"
             f"Know someone looking for a cleaner, shared grocery app? Share ListMate: {share_link}\n\n"
-            f"Warm regards,\nVenkat & The ListMate Team"
+            f"Warm regards,\nThe ListMate Team"
         )
 
         body_html = (
@@ -2139,7 +2139,7 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
             f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
             f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
             '</div>'
-            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">Venkat & The ListMate Team</strong></p>'
+            '<p style="font-size:14px;color:#64748b;margin-top:24px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">The ListMate Team</strong></p>'
             '</div>'
             '</div>'
         )
