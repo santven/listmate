@@ -37,9 +37,16 @@ def _connect():
         db_pg._ensure_local_pg()
         db_url = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost:5432/listmate")
         _pool = _pgpool.ThreadedConnectionPool(1, 20, db_url)
-    conn = _pool.getconn()
-    conn.autocommit = True
-    return conn
+    import time
+    for attempt in range(4):
+        try:
+            conn = _pool.getconn()
+            conn.autocommit = True
+            return conn
+        except _pgpool.PoolError:
+            if attempt == 3:
+                raise
+            time.sleep(0.15 * (attempt + 1))
 
 def _put_conn(conn, close=False):
     global _pool
