@@ -331,6 +331,7 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_extension_claimed_at TIMESTAMP",
+        "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_lifetime_digest_sent_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
         "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')",
