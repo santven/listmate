@@ -52,6 +52,51 @@ class TestTrialExtensionsComprehensive(unittest.TestCase):
         self.assertIn("7 extra days", msg)
 
     @patch('shared.auth._one')
+    @patch('shared.auth._run')
+    def test_claim_trial_extension_legacy_30d_capped_to_7d(self, mock_run, mock_one):
+        # Legacy household with 30-day trial span created in the past
+        now = datetime.datetime.now(datetime.timezone.utc)
+        mock_one.return_value = {
+            'id': 105,
+            'subscription_status': 'trial',
+            'created_at': now - datetime.timedelta(days=30),
+            'trial_ends_at': now,
+            'trial_ext_15d_claimed_at': None,
+            'trial_ext_7d_claimed_at': None,
+            'trial_extension_claimed_at': None
+        }
+        mock_run.return_value = 1
+        
+        # Even if tier='15d' or not specified, legacy 30d users receive 7 days to cap at 37d total
+        ok, msg, days = claim_trial_extension(household_id=105, user_id=202, tier='15d')
+        self.assertTrue(ok)
+        self.assertEqual(days, 7)
+        self.assertIn("7 extra days", msg)
+        self.assertTrue(mock_run.called)
+        
+        # Verify SQL update marks both 15d and 7d slots as satisfied
+        update_sql = mock_run.call_args[0][0]
+        self.assertIn("trial_ext_7d_claimed_at = NOW()", update_sql)
+        self.assertIn("trial_ext_15d_claimed_at = COALESCE(trial_ext_15d_claimed_at, NOW())", update_sql)
+
+    @patch('shared.auth._one')
+    def test_claim_trial_extension_legacy_30d_already_claimed_7d(self, mock_one):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        mock_one.return_value = {
+            'id': 105,
+            'subscription_status': 'expired',
+            'created_at': now - datetime.timedelta(days=37),
+            'trial_ends_at': now,
+            'trial_ext_15d_claimed_at': now - datetime.timedelta(days=7),
+            'trial_ext_7d_claimed_at': now - datetime.timedelta(days=7),
+            'trial_extension_claimed_at': now - datetime.timedelta(days=7)
+        }
+        ok, msg, days = claim_trial_extension(household_id=105, user_id=202, tier='7d')
+        self.assertFalse(ok)
+        self.assertEqual(days, 0)
+        self.assertIn("already claimed", msg)
+
+    @patch('shared.auth._one')
     def test_claim_trial_extension_already_claimed(self, mock_one):
         # Household has already claimed both
         mock_one.return_value = {

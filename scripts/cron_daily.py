@@ -449,6 +449,7 @@ def run_cron():
         h.subscription_status,
         h.trial_ends_at,
         h.subscription_ends_at,
+        h.created_at,
         h.trial_extension_claimed_at,
         h.trial_ext_15d_claimed_at,
         h.trial_ext_7d_claimed_at
@@ -525,14 +526,42 @@ def run_cron():
                 if is_trial and days_left == 0:
                     c_15d = hh.get("trial_ext_15d_claimed_at") or hh.get("trial_extension_claimed_at")
                     c_7d = hh.get("trial_ext_7d_claimed_at")
-                    if not c_15d:
-                        can_extend = True
-                        ext_tier = "15d"
-                    elif not c_7d:
-                        can_extend = True
-                        ext_tier = "7d"
+                    created_at = hh.get("created_at")
+                    is_legacy_30d = False
+                    if not c_15d and created_at and trial_ends_at:
+                        try:
+                            c_dt = created_at
+                            if isinstance(c_dt, str):
+                                c_dt = datetime.datetime.fromisoformat(c_dt.replace('Z', '+00:00')) if 'T' in c_dt else datetime.datetime.strptime(c_dt, '%Y-%m-%d %H:%M:%S')
+                            t_dt = trial_ends_at
+                            if isinstance(t_dt, str):
+                                t_dt = datetime.datetime.fromisoformat(t_dt.replace('Z', '+00:00')) if 'T' in t_dt else datetime.datetime.strptime(t_dt, '%Y-%m-%d %H:%M:%S')
+                            if getattr(c_dt, 'tzinfo', None) and getattr(t_dt, 'tzinfo', None) is None:
+                                c_dt = c_dt.replace(tzinfo=None)
+                            elif getattr(t_dt, 'tzinfo', None) and getattr(c_dt, 'tzinfo', None) is None:
+                                t_dt = t_dt.replace(tzinfo=None)
+                            if (t_dt - c_dt).total_seconds() >= 20 * 86400:
+                                is_legacy_30d = True
+                        except Exception:
+                            pass
+
+                    if is_legacy_30d:
+                        # Legacy 30d households already received 30 days of trial (initial 15d + 15d extension).
+                        # Only offer the final 7d extension tier, capping their total at 37 days (30 + 7).
+                        if not c_7d:
+                            can_extend = True
+                            ext_tier = "7d"
+                        else:
+                            can_extend = False
                     else:
-                        can_extend = False
+                        if not c_15d:
+                            can_extend = True
+                            ext_tier = "15d"
+                        elif not c_7d:
+                            can_extend = True
+                            ext_tier = "7d"
+                        else:
+                            can_extend = False
 
                 add_user_event(
                     hh.get("email"),
