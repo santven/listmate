@@ -662,7 +662,7 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
         return False, "No household found for this user.", 0
 
     hh = _one(f"""
-        SELECT id, name, is_premium, subscription_status, trial_ends_at, 
+        SELECT id, name, is_premium, subscription_status, trial_ends_at, created_at,
                trial_extension_claimed_at, trial_ext_15d_claimed_at, trial_ext_7d_claimed_at 
         FROM {_HH} WHERE id = ?
     """, (household_id,))
@@ -690,6 +690,28 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
 
     c_15d = hh.get("trial_ext_15d_claimed_at") or hh.get("trial_extension_claimed_at")
     c_7d = hh.get("trial_ext_7d_claimed_at")
+    created_at = hh.get("created_at")
+    trial_ends_at = hh.get("trial_ends_at")
+
+    # Detect legacy 30-day trial household:
+    # If the household has not claimed a 15d extension yet and had an initial trial span of >= 20 days
+    is_legacy_30d = False
+    if not c_15d and created_at and trial_ends_at:
+        try:
+            c_dt = created_at
+            if isinstance(c_dt, str):
+                c_dt = datetime.datetime.fromisoformat(c_dt.replace('Z', '+00:00')) if 'T' in c_dt else datetime.datetime.strptime(c_dt, '%Y-%m-%d %H:%M:%S')
+            t_dt = trial_ends_at
+            if isinstance(t_dt, str):
+                t_dt = datetime.datetime.fromisoformat(t_dt.replace('Z', '+00:00')) if 'T' in t_dt else datetime.datetime.strptime(t_dt, '%Y-%m-%d %H:%M:%S')
+            if getattr(c_dt, 'tzinfo', None) and getattr(t_dt, 'tzinfo', None) is None:
+                c_dt = c_dt.replace(tzinfo=None)
+            elif getattr(t_dt, 'tzinfo', None) and getattr(c_dt, 'tzinfo', None) is None:
+                t_dt = t_dt.replace(tzinfo=None)
+            if (t_dt - c_dt).total_seconds() >= 20 * 86400:
+                is_legacy_30d = True
+        except Exception:
+            pass
 
     # Normalize tier parameter
     norm_tier = (tier or "").strip().lower()
@@ -700,35 +722,42 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
     else:
         norm_tier = None
 
-    ext_days = 15
-    claim_col = "trial_ext_15d_claimed_at"
-
-    if norm_tier == "7d":
+    if is_legacy_30d:
+        # Legacy 30d households already received 30 days of trial (equivalent to initial 15d + 15d extension).
+        # They only receive the final 7d extension tier, capping their lifetime trial at 37 days (30 + 7).
         if c_7d:
-            return False, "Your household has already claimed the 7-day trial extension offer.", _calc_days_left(hh.get("trial_ends_at"))
+            return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
         ext_days = 7
         claim_col = "trial_ext_7d_claimed_at"
-    elif norm_tier == "15d":
-        if c_15d:
-            if not c_7d:
-                # 15d claimed, offer remaining 7d bonus
+        extra_set = ", trial_ext_15d_claimed_at = COALESCE(trial_ext_15d_claimed_at, NOW())"
+    else:
+        extra_set = ""
+        if norm_tier == "7d":
+            if c_7d:
+                return False, "Your household has already claimed the 7-day trial extension offer.", _calc_days_left(hh.get("trial_ends_at"))
+            ext_days = 7
+            claim_col = "trial_ext_7d_claimed_at"
+        elif norm_tier == "15d":
+            if c_15d:
+                if not c_7d:
+                    # 15d claimed, offer remaining 7d bonus
+                    ext_days = 7
+                    claim_col = "trial_ext_7d_claimed_at"
+                else:
+                    return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
+            else:
+                ext_days = 15
+                claim_col = "trial_ext_15d_claimed_at"
+        else:
+            # Automatic progression
+            if not c_15d:
+                ext_days = 15
+                claim_col = "trial_ext_15d_claimed_at"
+            elif not c_7d:
                 ext_days = 7
                 claim_col = "trial_ext_7d_claimed_at"
             else:
                 return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
-        else:
-            ext_days = 15
-            claim_col = "trial_ext_15d_claimed_at"
-    else:
-        # Automatic progression
-        if not c_15d:
-            ext_days = 15
-            claim_col = "trial_ext_15d_claimed_at"
-        elif not c_7d:
-            ext_days = 7
-            claim_col = "trial_ext_7d_claimed_at"
-        else:
-            return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
 
     # Grant extension from GREATEST(trial_ends_at, NOW())
     _run(f"""
@@ -739,6 +768,7 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
             downgraded_at = NULL,
             trial_extension_claimed_at = NOW(),
             {claim_col} = NOW()
+            {extra_set}
         WHERE id = %s
     """, (household_id,))
 
