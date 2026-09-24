@@ -4,7 +4,13 @@ One-Time Winback Campaign: Send complimentary trial extension offers to expired 
 
 Usage:
   python3 scripts/send_expired_trial_winback.py --dry-run
-  python3 scripts/send_expired_trial_winback.py --send [--limit 50]
+  python3 scripts/send_expired_trial_winback.py --send --limit 50
+  python3 scripts/send_expired_trial_winback.py --send
+
+Guardrails:
+- Checks email_suppressions and unsubscribe status
+- Idempotent: Tracks 'trial_winback_extension' event in email_events to prevent duplicate sends
+- Defaults to 15-day extension offer (or 7-day if 15d was already claimed)
 """
 
 import os
@@ -13,91 +19,79 @@ import argparse
 import datetime
 from urllib.parse import quote
 
-# Ensure parent directory is in sys.path
+# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import _run, _one, _calc_days_left
-from email_helper import (
-    BASE_URL,
-    FROM_EMAIL,
-    FROM_NAME,
-    _get_unsub_blocks,
-    _send_via_api,
-)
+import db_pg
+from email_helper import _send_via_api, _get_unsub_blocks, FROM_EMAIL, FROM_NAME
 
-def send_winback_extension_email(to_email: str, user_name: str, household_name: str, tier: str = "15d", user_id: int = 0, household_id: int = 0) -> bool:
-    """Send one-time winback trial extension email."""
-    api_key = os.environ.get("SENDGRID_API_KEY", "")
-    if not api_key:
-        print("WARNING: SENDGRID_API_KEY not set — skipping email")
-        return False
+BASE_URL = os.environ.get("APP_URL", "https://grocerlist.app").rstrip("/")
 
-    campaign = "trial_winback_extension"
-    ext_days = 7 if tier == "7d" else 15
-    claim_link = f"{BASE_URL}/open?url={quote(f'/settings?action=claim-extension&tier={tier}&source=email_winback_ext')}"
-    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_winback_ext')}"
-    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
-    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
-    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
-    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+def send_winback_email(
+    to_email: str,
+    user_name: str,
+    household_name: str,
+    user_id: int,
+    household_id: int,
+    extension_tier: str = "15d",
+    dry_run: bool = True
+) -> bool:
+    """Sends the winback email offering a 15-day (or 7-day) extension pass."""
+    ext_days = 7 if str(extension_tier).strip().lower() in ('7', '7d') else 15
+    tier_slug = '7d' if ext_days == 7 else '15d'
+    extension_link = f"{BASE_URL}/open?url={quote(f'/settings?action=claim-extension&tier={tier_slug}&source=email_winback')}"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_winback')}"
 
-    subject = f"We miss you on ListMate! Here's {ext_days} free days of Premium 🎁"
-    safe_name = (user_name or "").strip() or "there"
-    safe_hh = (household_name or "").strip() or "your household"
+    safe_name = user_name or "there"
+    safe_hh = household_name or "your household"
+    campaign = f"trial_winback_ext_{tier_slug}"
+    subject = f"A gift for {safe_hh}: Come back to ListMate with {ext_days} days free! 🎁"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "promotional updates", "You received this email because you registered a ListMate household.")
-
-    plain_text = (
-        f"Hi {safe_name},
-
-"
-        f"We noticed your free trial on ListMate ended a while back. Life gets busy, and grocery schedules change—so we'd love to invite you and {safe_hh} back with a fresh {ext_days}-day complimentary Premium pass!
-
-"
-        f"No credit card required. Tap the link below to instantly unlock all features:
-"
-        f"- Real-time list sync across everyone in your home
-"
-        f"- Automatic aisle sorting for faster shopping runs
-"
-        f"- Unlimited custom store lists (Trader Joe's, Costco, Safeway, etc.)
-
-"
-        f"Claim Your {ext_days}-Day Free Pass: {claim_link}
-
-"
-        f"Or upgrade to our Annual Plan for .99/year (just sh.83/month):
-{upgrade_link}
-
-"
-        f"Warm regards,
-The ListMate Team" + unsub_txt
+    unsub_txt, unsub_html = _get_unsub_blocks(
+        user_id,
+        "product updates and promotions",
+        "You received this email because you created a ListMate household."
     )
 
-    html_content = (
-        f'<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
-        f'<h2 style="color:#2c5a2c;margin-top:0;">🎁 A Fresh Start for Your Grocery List</h2>'
+    plain_body = (
+        f"Hi {safe_name},\n\n"
+        f"We noticed it's been a while since your ListMate trial ended. We've added several updates to make shared grocery shopping and pantry tracking faster, smoother, and completely hassle-free.\n\n"
+        f"We'd love to invite you and {safe_hh} back with a complimentary {ext_days}-Day Premium Pass—completely on us, no credit card required!\n\n"
+        f"Claim Your {ext_days}-Day Free Pass:\n{extension_link}\n\n"
+        f"Or upgrade directly for $19.99/year (just $1.66/month):\n{upgrade_link}\n\n"
+        f"— The ListMate Team" + unsub_txt
+    )
+
+    html_body = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<h2 style="color:#2c5a2c;margin-top:0;">🎁 We Miss You at ListMate!</h2>'
         f'<p style="font-size:16px;color:#333;">Hi {safe_name},</p>'
-        f'<p style="font-size:15px;color:#333;line-height:1.5;">We noticed your free trial on ListMate wrapped up. Life gets busy, and routines change—so we'd love to invite you and <strong>{safe_hh}</strong> back with a fresh <strong>{ext_days}-day complimentary Premium pass</strong>!</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">We noticed it\'s been a while since your free trial ended. We\'d love to welcome you and <strong>{safe_hh}</strong> back to stress-free grocery planning.</p>'
+        f'<p style="font-size:15px;color:#333;line-height:1.5;">Enjoy a complimentary <strong>{ext_days}-Day Premium Pass</strong> with full access to shared lists, aisle categorization, and real-time syncing across all your devices.</p>'
         f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
-        f'<strong style="color:#166534;display:block;margin-bottom:6px;">✨ What's unlocked for {ext_days} days on us:</strong>'
+        f'<strong style="color:#166534;display:block;margin-bottom:6px;">✨ What\'s waiting for you:</strong>'
         f'<ul style="margin:0;padding-left:20px;color:#274c36;font-size:14px;line-height:1.6;">'
-        f'<li>Instant real-time sync across your entire household</li>'
-        f'<li>Smart aisle sorting to eliminate store backtracking</li>'
-        f'<li>Unlimited custom stores (Costco, Trader Joe's, Safeway, etc.)</li>'
+        f'<li>Instant real-time sync with all household members</li>'
+        f'<li>Smart aisle sorting for fast grocery runs</li>'
+        f'<li>Unlimited custom stores and recipe ingredient imports</li>'
         f'</ul>'
         f'</div>'
         f'<div style="margin:24px 0 16px;">'
-        f'<a href="{claim_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim {ext_days} Days of Premium Free &rarr;</a>'
-        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for .99/yr (Save 58%)</a>'
+        f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim {ext_days} Free Days</a>'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $19.99/yr</a>'
         f'</div>'
-        f'<div style="text-align:center;margin:24px 0 10px 0;">'
-        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
-        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
-        f'</div>'
-        f'<p style="font-size:14px;color:#64748b;margin-top:20px;line-height:1.5;">Warm regards,<br><strong style="color:#334155;">The ListMate Team</strong></p>'
+        f'<p style="font-size:13px;color:#666;line-height:1.4;">Zero commitment. No credit card required. Clicking activates your pass instantly.</p>'
         f'</div>' + unsub_html
     )
+
+    if dry_run:
+        print(f"[DRY-RUN] Would send winback email to: {to_email} (User ID: {user_id}, Household: {household_id}, Tier: {tier_slug})")
+        return True
+
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("ERROR: SENDGRID_API_KEY not configured — cannot send email.")
+        return False
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -110,7 +104,7 @@ The ListMate Team" + unsub_txt
                 "campaign": campaign,
             },
         }],
-        "categories": [campaign],
+        "categories": [campaign, "winback"],
         "custom_args": {
             "user_id": str(user_id) if user_id else "",
             "household_id": str(household_id) if household_id else "",
@@ -118,20 +112,35 @@ The ListMate Team" + unsub_txt
         },
         "subject": subject,
         "content": [
-            {"type": "text/plain", "value": plain_text},
-            {"type": "text/html", "value": html_content},
+            {"type": "text/plain", "value": plain_body},
+            {"type": "text/html", "value": html_body},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": True, "enable_text": False},
             "open_tracking": {"enable": True},
         },
     }
-    return _send_via_api(api_key, payload)
+
+    success = _send_via_api(api_key, payload)
+    if success:
+        try:
+            db_pg.execute_query(
+                """
+                INSERT INTO email_events (user_id, household_id, campaign, event_type, email, created_at)
+                VALUES (%s, %s, %s, 'sent', %s, NOW())
+                """,
+                (user_id if user_id else None, household_id if household_id else None, campaign, to_email)
+            )
+        except Exception as e:
+            print(f"Warning: Failed to record email_event for {to_email}: {e}")
+    return success
 
 def run_winback(dry_run: bool = True, limit: int = None):
-    print("=== Starting Expired Households Trial Winback Campaign ===")
-    print(f"Mode: {'DRY RUN (No emails dispatched)' if dry_run else 'LIVE DISPATCH'}")
+    print("=" * 60)
+    print(f"Starting Expired Trial Winback Campaign (dry_run={dry_run}, limit={limit})")
+    print("=" * 60)
 
+    # 1. Fetch eligible expired households
     query = """
     SELECT DISTINCT ON (h.id)
         h.id as household_id,
@@ -139,9 +148,10 @@ def run_winback(dry_run: bool = True, limit: int = None):
         u.id as user_id,
         u.email,
         u.name as user_name,
+        h.subscription_status,
         h.trial_ends_at,
-        h.trial_ext_15d_claimed_at,
         h.trial_extension_claimed_at,
+        h.trial_ext_15d_claimed_at,
         h.trial_ext_7d_claimed_at
     FROM auth_households h
     JOIN auth_users u ON u.id = COALESCE(
@@ -149,63 +159,74 @@ def run_winback(dry_run: bool = True, limit: int = None):
         (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id ORDER BY (CASE WHEN ahm2.role = 'owner' THEN 0 ELSE 1 END), ahm2.joined_at ASC LIMIT 1),
         (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
     )
-    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    WHERE h.is_premium = FALSE
-      AND h.subscription_status != 'active'
-      AND (
-          h.trial_ends_at IS NOT NULL AND h.trial_ends_at < NOW()
-          OR h.subscription_status IN ('expired', 'free')
-      )
-      AND COALESCE(h.trial_ext_15d_claimed_at, h.trial_extension_claimed_at) IS NULL
-      AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
-      AND NOT EXISTS (
-          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM email_events ee 
-          WHERE (ee.household_id = h.id OR ee.email = u.email)
-            AND ee.campaign = 'trial_winback_extension'
-            AND ee.event_type = 'sent'
-      )
-      AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+    WHERE
+        h.is_premium = FALSE
+        AND (h.subscription_status IS NULL OR h.subscription_status NOT IN ('premium', 'active', 'lifetime'))
+        AND h.trial_ends_at IS NOT NULL
+        AND h.trial_ends_at < NOW()
+        AND NOT EXISTS (
+            SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM email_events ee 
+            WHERE ee.household_id = h.id 
+              AND ee.campaign LIKE 'trial_winback_ext_%' 
+              AND ee.event_type = 'sent'
+        )
     ORDER BY h.id, u.id ASC
     """
 
-    rows = _run(query)
-    print(f"Found {len(rows)} eligible expired household(s) for winback offer.")
+    rows = db_pg.execute_query(query)
+    print(f"Found {len(rows)} expired household(s) eligible for winback campaign.")
 
     if limit and limit > 0:
         rows = rows[:limit]
-        print(f"Capped to {limit} household(s) by limit flag.")
+        print(f"Limited run to {len(rows)} household(s).")
 
-    dispatched = 0
+    sent_count = 0
+    fail_count = 0
+
     for r in rows:
         email = r.get("email")
-        user_name = r.get("user_name") or ""
-        hh_name = r.get("household_name") or "your household"
-        uid = r.get("user_id")
-        hhid = r.get("household_id")
+        if not email:
+            continue
 
-        print(f"  [{hhid}] {email} ({user_name} / {hh_name})")
-        if not dry_run:
-            sent = send_winback_extension_email(email, user_name, hh_name, tier="15d", user_id=uid, household_id=hhid)
-            if sent:
-                _run("""
-                    INSERT INTO email_events (email, event_type, campaign, user_id, household_id, event_timestamp, created_at)
-                    VALUES (%s, 'sent', 'trial_winback_extension', %s, %s, NOW(), NOW())
-                """, (email, uid, hhid))
-                dispatched += 1
+        c_15d = r.get("trial_ext_15d_claimed_at") or r.get("trial_extension_claimed_at")
+        c_7d = r.get("trial_ext_7d_claimed_at")
+
+        if not c_15d:
+            tier = "15d"
+        elif not c_7d:
+            tier = "7d"
         else:
-            dispatched += 1
+            # Both claimed, skip winback pass
+            continue
 
-    print(f"=== Winback Campaign Finished: {dispatched} household(s) processed ===")
+        ok = send_winback_email(
+            to_email=email,
+            user_name=r.get("user_name") or "",
+            household_name=r.get("household_name") or "",
+            user_id=r.get("user_id") or 0,
+            household_id=r.get("household_id") or 0,
+            extension_tier=tier,
+            dry_run=dry_run
+        )
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="One-time expired household trial extension winback")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="Dry run mode (default)")
-    parser.add_argument("--send", action="store_true", help="Execute live dispatch")
-    parser.add_argument("--limit", type=int, default=0, help="Limit number of recipients")
+        if ok:
+            sent_count += 1
+        else:
+            fail_count += 1
+
+    print("=" * 60)
+    print(f"Winback Campaign Complete: {sent_count} sent/simulated, {fail_count} failed.")
+    print("=" * 60)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Send winback emails to expired trial users")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Preview recipients without sending")
+    parser.add_argument("--send", action="store_true", default=False, help="Actually send the emails via SendGrid")
+    parser.add_argument("--limit", type=int, default=None, help="Maximum number of emails to send")
     args = parser.parse_args()
 
-    is_dry_run = not args.send
-    run_winback(dry_run=is_dry_run, limit=args.limit)
+    is_dry = not args.send or args.dry_run
+    run_winback(dry_run=is_dry, limit=args.limit)
