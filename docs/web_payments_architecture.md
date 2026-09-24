@@ -43,8 +43,8 @@ When a user switches between the Monthly and Yearly plans using the Stripe Custo
 2. **Create Products (Monthly & Yearly):**
    - *Important:* RevenueCat maps to Stripe **Products**, not individual Prices. If you add multiple prices to one Stripe product, RevenueCat will only see one.
    - In the Stripe Dashboard, go to **Product Catalog** -> **Add Product**.
-   - **Product 1:** Name it "ListMate Pro - Monthly". Add a single **Monthly** price (e.g., $2.99 / month). Save the product.
-   - **Product 2:** Click **Add Product** again. Name it "ListMate Pro - Yearly". Add a single **Yearly** price (e.g., $29.99 / year). Save the product.
+   - **Product 1:** Name it "ListMate Pro - Monthly". Add a single **Monthly** price (e.g., $1.99 / month). Save the product.
+   - **Product 2:** Click **Add Product** again. Name it "ListMate Pro - Yearly". Add a single **Yearly** price (e.g., $9.99 / year). Save the product.
 3. **Configure the Customer Portal:**
    - Go to **Settings** -> **Customer Portal**.
    - Enable the portal and configure what customers can do (update payment methods, cancel subscriptions, and switch plans).
