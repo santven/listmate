@@ -647,8 +647,17 @@ def get_household_status():
 def claim_trial_extension(household_id=None, user_id=None, tier=None):
     """Grant a 15-day or 7-day trial extension to an eligible household.
     Returns (success: bool, message: str, days_left: int)."""
+    if household_id == 0:
+        household_id = None
+    if user_id == 0:
+        user_id = None
+
     if not household_id:
-        household_id = get_household_id()
+        try:
+            household_id = get_household_id()
+        except Exception:
+            household_id = None
+            
     if not household_id:
         return False, "No household found for this user.", 0
 
