@@ -58,7 +58,7 @@ def send_winback_email(
         f"We noticed it's been a while since your ListMate trial ended. We've added several updates to make shared grocery shopping and pantry tracking faster, smoother, and completely hassle-free.\n\n"
         f"We'd love to invite you and {safe_hh} back with a complimentary {ext_days}-Day Premium Pass—completely on us, no credit card required!\n\n"
         f"Claim Your {ext_days}-Day Free Pass:\n{extension_link}\n\n"
-        f"Or upgrade directly for $19.99/year (just $1.66/month):\n{upgrade_link}\n\n"
+        f"Or upgrade directly for $9.99/year or $1.99/month:\n{upgrade_link}\n\n"
         f"— The ListMate Team" + unsub_txt
     )
 
@@ -78,7 +78,7 @@ def send_winback_email(
         f'</div>'
         f'<div style="margin:24px 0 16px;">'
         f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim {ext_days} Free Days</a>'
-        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $19.99/yr</a>'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $9.99/yr or $1.99/mo</a>'
         f'</div>'
         f'<p style="font-size:13px;color:#666;line-height:1.4;">Zero commitment. No credit card required. Clicking activates your pass instantly.</p>'
         f'</div>' + unsub_html

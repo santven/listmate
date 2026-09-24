@@ -1581,7 +1581,7 @@ def _fetch_revenuecat_plans():
                     plan_id = pkg.get("platform_product_plan_identifier", plan_type)
                     label = "Annual" if plan_type == "yearly" else "Monthly"
                     
-                    default_price = "$29.99 / yr" if plan_type == "yearly" else "$2.99 / mo"
+                    default_price = "$9.99 / yr" if plan_type == "yearly" else "$1.99 / mo"
                     env_price = os.environ.get(f"STRIPE_PRICE_{plan_type.upper()}_AMOUNT") or os.environ.get(f"PLAN_{plan_type.upper()}_PRICE")
                     price_str = f"${env_price}" if env_price else default_price
 
@@ -1620,8 +1620,8 @@ def billing_plans():
     if rc_plans:
         return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
 
-    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
-    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
+    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "1.99"
+    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "9.99"
     monthly_title = os.environ.get("STRIPE_PRICE_MONTHLY_TITLE") or "Monthly Plan"
     yearly_title = os.environ.get("STRIPE_PRICE_YEARLY_TITLE") or "Annual Plan"
 

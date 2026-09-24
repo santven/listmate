@@ -590,7 +590,7 @@ def send_subscription_notice(
             f"We want to ensure your household has plenty of time to experience hassle-free, shared grocery planning. "
             f"We'd love to give you an extra {ext_days} days of full Premium access—completely on us, no credit card required!\n\n"
             f"Claim Your {ext_days}-Day Free Extension:\n{extension_link}\n\n"
-            f"Or upgrade now for $19.99/year (just $1.66/month):\n{upgrade_link}\n\n"
+            f"Or upgrade now for $9.99/year or $1.99/month:\n{upgrade_link}\n\n"
             f"— The ListMate Team" + unsub_txt
         )
         html_body = (
@@ -609,9 +609,9 @@ def send_subscription_notice(
             f'</div>'
             f'<div style="margin:24px 0 16px;">'
             f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim {ext_days} Extra Days Free</a>'
-            f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $19.99/yr (Save 58%)</a>'
+            f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $9.99/yr or $1.99/mo</a>'
             f'</div>'
-            f'<p style="font-size:13px;color:#666;line-height:1.4;">Only one subscription is needed per household. All invited members sync free!</p>'
+            f'<p style="font-size:13px;color:#666;line-height:1.4;">Only one subscription is needed per household ($9.99/year or $1.99/month). All invited members sync free!</p>'
             f'</div>' + unsub_html
         )
     else:
@@ -633,7 +633,7 @@ def send_subscription_notice(
             f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Upgrade Household Now</a>'
             f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Add Members</a>'
             f'</div>'
-            f'<p style="font-size:13px;color:#666;line-height:1.4;">Remember: Only one subscription is needed per household ($3.99/mo or $19.99/yr). All invited members join and sync free!</p>'
+            f'<p style="font-size:13px;color:#666;line-height:1.4;">Remember: Only one subscription is needed per household ($9.99/year or $1.99/month). All invited members join and sync free!</p>'
             f'</div>' + unsub_html
         )
 
@@ -1153,7 +1153,7 @@ def send_trial_lapsed_day2_notice(to_email: str, user_name: str, partner_name: s
         f'<p style="font-size:15px;color:#333;line-height:1.5;">Shared live sync is the #1 feature couples and families rely on to avoid duplicate shopping trips and keep everyone on the same page at the store.</p>'
         f'<p style="font-size:15px;color:#333;line-height:1.5;">All your aisle categories, custom stores, and past items are completely saved. Plus, <strong>only one subscription is needed per household</strong> ($1.99/mo or $9.99/yr)—all invited members sync completely free!</p>'
         f'<div style="margin:24px 0 16px;">'
-        f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Restore Partner Sync ($1.99/mo)</a>'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Restore Partner Sync ($9.99/yr or $1.99/mo)</a>'
         f'<a href="{settings_link}" style="display:inline-block;background:#f8fafc;color:#475569;border:1px solid #cbd5e1;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Manage Household</a>'
         f'</div>'
         f'</div>' + unsub_html
@@ -1209,7 +1209,7 @@ def send_trial_ext_day7_notice(to_email: str, user_name: str, household_name: st
         f"We'd love to give you an extra 7 days of full Premium access—completely on us, no credit card required!\n\n"
         f"Enjoy unlimited household sync across all family members, automatic store aisle sorting, and custom stores for one more week.\n\n"
         f"Claim Your 7-Day Extension: {extension_link}\n\n"
-        f"Or lock in our Annual Plan for $9.99/year (just $0.83/month):\n{upgrade_link}\n\n"
+        f"Or lock in our Annual Plan for $9.99/year or $1.99/month:\n{upgrade_link}\n\n"
         f"— The ListMate Team" + unsub_txt
     )
 
@@ -1229,7 +1229,7 @@ def send_trial_ext_day7_notice(to_email: str, user_name: str, household_name: st
         f'</div>'
         f'<div style="margin:24px 0 16px;">'
         f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim 7 Days of Premium Free</a>'
-        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $9.99/yr (Save 58%)</a>'
+        f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for $9.99/yr or $1.99/mo</a>'
         f'</div>'
         f'</div>' + unsub_html
     )
@@ -1405,12 +1405,12 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         text_sections.append(
             f"Partner Sync is in Read-Only Mode:\n"
             f"Your household trial wrapped up, so shared real-time sync is currently paused for invited members.\n"
-            f"Upgrade for $1.99/mo to restore instant shared list sync for everyone:\n{upgrade_link}"
+            f"Upgrade for $9.99/yr or $1.99/mo to restore instant shared list sync for everyone:\n{upgrade_link}"
         )
         html_sections.append(
             f'<div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin:14px 0;border-radius:4px;">'
             f'<strong style="color:#991b1b;display:block;margin-bottom:4px;">👥 Partner Sync is in Read-Only Mode:</strong>'
-            f'<span style="color:#7f1d1d;font-size:14px;line-height:1.5;">Your 30-day trial concluded and secondary members can no longer edit list items. Upgrade for $1.99/mo to restore full sync across all members!</span>'
+            f'<span style="color:#7f1d1d;font-size:14px;line-height:1.5;">Your trial concluded and secondary members can no longer edit list items. Upgrade for $9.99/yr or $1.99/mo to restore full sync across all members!</span>'
             f'<div style="margin-top:8px;"><a href="{upgrade_link}" style="color:#991b1b;font-weight:bold;font-size:13px;text-decoration:underline;">Restore Partner Sync &rarr;</a></div>'
             f'</div>'
         )
