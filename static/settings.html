@@ -747,17 +747,19 @@ function checkUrlActions() {
     setTimeout(async () => {
       const extStatus = params.get('extension');
       const extMsg = params.get('msg');
+      const extDays = params.get('days') || '15';
       if (extStatus === 'claimed') {
-        toast('🎉 7-Day Extension Activated! Enjoy 7 extra days of ListMate Premium.');
+        toast(extMsg || );
         if (typeof loadPremium === 'function') loadPremium();
       } else if (extStatus === 'already_claimed') {
-        toast(extMsg || 'ℹ️ Your household has already claimed the 7-day trial extension offer.');
+        toast(extMsg || 'ℹ️ Your household has already claimed this trial extension offer.');
       } else if (params.get('action') === 'claim-extension') {
+        const extTier = params.get('tier') || '';
         try {
-          const res = await fetch('/api/household/claim-extension', { method: 'POST' });
+          const res = await fetch('/api/household/claim-extension' + (extTier ?  : ''), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            toast('🎉 7-Day Extension Activated! Enjoy 7 extra days of ListMate Premium.');
+            toast(data.message || );
             if (typeof loadPremium === 'function') loadPremium();
           } else {
             toast(data.message || 'Trial extension notice.');
@@ -848,7 +850,7 @@ async function loadHousehold() {
                     Your Free plan includes 1 active editor. Additional household members currently have <b>Read-Only</b> access and cannot make live changes.
                   </div>
                   <button type="button" onclick="showPaywall()" style="display:inline-flex; align-items:center; gap:6px; background:var(--green, #5ebe7e); color:#ffffff; border:none; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.1); transition:all 0.15s ease;">
-                    <span>⭐</span> Upgrade to Pro ($1.99/mo)
+                    <span>⭐</span> Upgrade to Pro ($9.99/yr or $1.99/mo)
                   </button>
                 </div>
               </div>

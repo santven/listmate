@@ -464,9 +464,10 @@ def settings_page():
     if action == "claim-extension":
         uid = authmod.get_user_id()
         hhid = authmod.get_household_id()
-        ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+        tier = request.args.get("tier")
+        ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
         status_param = "claimed" if ok else "already_claimed"
-        return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+        return redirect(f"/settings?extension={status_param}&days={days}&msg={quote(msg)}")
     return send_from_directory("static", "settings.html")
 
 @app.route("/claim-extension")
@@ -476,17 +477,22 @@ def direct_claim_extension():
         return redirect("/login?next=" + quote(next_url))
     uid = authmod.get_user_id()
     hhid = authmod.get_household_id()
-    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    tier = request.args.get("tier")
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
     status_param = "claimed" if ok else "already_claimed"
-    return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+    return redirect(f"/settings?extension={status_param}&days={days}&msg={quote(msg)}")
 
 @app.route("/api/household/claim-extension", methods=["POST", "GET"])
 @require_user
 def api_claim_trial_extension():
     uid = authmod.get_user_id()
     hhid = _hh()
-    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
-    return jsonify({"ok": ok, "message": msg, "days_left": days})
+    tier = request.args.get("tier")
+    if not tier and request.is_json:
+        data = request.get_json(silent=True) or {}
+        tier = data.get("tier")
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
+    return jsonify({"ok": ok, "message": msg, "days": days, "days_left": days})
 
 @app.route("/api/household/keep-active", methods=["POST", "GET"])
 @require_user
@@ -1575,7 +1581,7 @@ def _fetch_revenuecat_plans():
                     plan_id = pkg.get("platform_product_plan_identifier", plan_type)
                     label = "Annual" if plan_type == "yearly" else "Monthly"
                     
-                    default_price = "$29.99 / yr" if plan_type == "yearly" else "$2.99 / mo"
+                    default_price = "$9.99 / yr" if plan_type == "yearly" else "$1.99 / mo"
                     env_price = os.environ.get(f"STRIPE_PRICE_{plan_type.upper()}_AMOUNT") or os.environ.get(f"PLAN_{plan_type.upper()}_PRICE")
                     price_str = f"${env_price}" if env_price else default_price
 
@@ -1614,8 +1620,8 @@ def billing_plans():
     if rc_plans:
         return jsonify({"ok": True, "source": "revenuecat_api", "plans": rc_plans})
 
-    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "2.99"
-    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "29.99"
+    monthly_price = os.environ.get("STRIPE_PRICE_MONTHLY_AMOUNT") or os.environ.get("PLAN_MONTHLY_PRICE") or "1.99"
+    yearly_price = os.environ.get("STRIPE_PRICE_YEARLY_AMOUNT") or os.environ.get("PLAN_YEARLY_PRICE") or "9.99"
     monthly_title = os.environ.get("STRIPE_PRICE_MONTHLY_TITLE") or "Monthly Plan"
     yearly_title = os.environ.get("STRIPE_PRICE_YEARLY_TITLE") or "Annual Plan"
 
