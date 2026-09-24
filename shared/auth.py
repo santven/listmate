@@ -338,6 +338,8 @@ def _init_schema():
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_extension_claimed_at TIMESTAMP",
+           "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ext_15d_claimed_at TIMESTAMP",
+           "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ext_7d_claimed_at TIMESTAMP",
         "ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS email_lifetime_digest_sent_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS apple_id TEXT DEFAULT ''",
@@ -642,15 +644,19 @@ def get_household_status():
         "created_at": str(hh.get("created_at")) if hh.get("created_at") else None
     }
 
-def claim_trial_extension(household_id=None, user_id=None):
-    """Grant a 7-day trial extension to an eligible household.
+def claim_trial_extension(household_id=None, user_id=None, tier=None):
+    """Grant a 15-day or 7-day trial extension to an eligible household.
     Returns (success: bool, message: str, days_left: int)."""
     if not household_id:
         household_id = get_household_id()
     if not household_id:
         return False, "No household found for this user.", 0
 
-    hh = _one(f"SELECT id, name, is_premium, subscription_status, trial_ends_at, trial_extension_claimed_at FROM {_HH} WHERE id = ?", (household_id,))
+    hh = _one(f"""
+        SELECT id, name, is_premium, subscription_status, trial_ends_at, 
+               trial_extension_claimed_at, trial_ext_15d_claimed_at, trial_ext_7d_claimed_at 
+        FROM {_HH} WHERE id = ?
+    """, (household_id,))
     if not hh:
         return False, "Household not found.", 0
 
@@ -658,33 +664,72 @@ def claim_trial_extension(household_id=None, user_id=None):
     if hh.get("is_premium") and hh.get("subscription_status") in ("premium", "active"):
         return False, "Your household already has active ListMate Premium access.", 0
 
-    # Check if extension was already claimed
-    if hh.get("trial_extension_claimed_at"):
-        import datetime
-        t_end = hh.get("trial_ends_at")
-        days = 0
-        if t_end:
-            if isinstance(t_end, str):
-                try:
-                    if 'T' in t_end:
-                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
-                    else:
-                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    t_end = None
-            if t_end:
-                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
-                days = max(0, (t_end - now).days)
-        return False, "Your household has already claimed the 7-day trial extension offer.", days
+    import datetime
+    def _calc_days_left(t_end):
+        if not t_end:
+            return 0
+        if isinstance(t_end, str):
+            try:
+                if 'T' in t_end:
+                    t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                else:
+                    t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                return 0
+        now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+        return max(0, (t_end - now).days)
 
-    # Grant 7-day extension from GREATEST(trial_ends_at, NOW())
+    c_15d = hh.get("trial_ext_15d_claimed_at") or hh.get("trial_extension_claimed_at")
+    c_7d = hh.get("trial_ext_7d_claimed_at")
+
+    # Normalize tier parameter
+    norm_tier = (tier or "").strip().lower()
+    if norm_tier in ("7", "7d", "7day", "7days"):
+        norm_tier = "7d"
+    elif norm_tier in ("15", "15d", "15day", "15days"):
+        norm_tier = "15d"
+    else:
+        norm_tier = None
+
+    ext_days = 15
+    claim_col = "trial_ext_15d_claimed_at"
+
+    if norm_tier == "7d":
+        if c_7d:
+            return False, "Your household has already claimed the 7-day trial extension offer.", _calc_days_left(hh.get("trial_ends_at"))
+        ext_days = 7
+        claim_col = "trial_ext_7d_claimed_at"
+    elif norm_tier == "15d":
+        if c_15d:
+            if not c_7d:
+                # 15d claimed, offer remaining 7d bonus
+                ext_days = 7
+                claim_col = "trial_ext_7d_claimed_at"
+            else:
+                return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
+        else:
+            ext_days = 15
+            claim_col = "trial_ext_15d_claimed_at"
+    else:
+        # Automatic progression
+        if not c_15d:
+            ext_days = 15
+            claim_col = "trial_ext_15d_claimed_at"
+        elif not c_7d:
+            ext_days = 7
+            claim_col = "trial_ext_7d_claimed_at"
+        else:
+            return False, "Your household has already claimed all complimentary trial extensions.", _calc_days_left(hh.get("trial_ends_at"))
+
+    # Grant extension from GREATEST(trial_ends_at, NOW())
     _run(f"""
         UPDATE {_HH}
-        SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + INTERVAL '7 days',
+        SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + INTERVAL '{ext_days} days',
             subscription_status = 'trial',
             lifecycle_status = 'active',
             downgraded_at = NULL,
-            trial_extension_claimed_at = NOW()
+            trial_extension_claimed_at = NOW(),
+            {claim_col} = NOW()
         WHERE id = %s
     """, (household_id,))
 
@@ -698,13 +743,12 @@ def claim_trial_extension(household_id=None, user_id=None):
             if email:
                 _run("""
                     INSERT INTO email_events (email, event_type, campaign, user_id, household_id, event_timestamp)
-                    VALUES (%s, 'click', 'trial_ext_claimed', %s, %s, NOW())
-                """, (email, user_id, household_id))
+                    VALUES (%s, 'click', %s, %s, %s, NOW())
+                """, (email, f"trial_ext_{ext_days}d_claimed", user_id, household_id))
     except Exception as ev_err:
         print(f"[claim_trial_extension] Error logging event: {ev_err}")
 
-    return True, "🎉 7 extra days of ListMate Premium have been added to your trial!", 7
-
+    return True, f"🎉 {ext_days} extra days of ListMate Premium have been added to your trial!", ext_days
 
 def keep_household_active(household_id=None, user_id=None):
     """Reactivate a household from sunset_pending back to active or lapsed, resetting sunset timer."""
@@ -892,7 +936,7 @@ def _create_default_household_for_user(uid, email, name, marketing_opt_in=True):
     is_early = existing_cnt < int(os.environ.get("EARLY_ADOPTER_LIMIT", 25))
     prem_val = is_early
     status = 'premium' if is_early else 'trial'
-    trial_days = os.environ.get("TRIAL_PERIOD_DAYS", "30")
+    trial_days = os.environ.get("TRIAL_PERIOD_DAYS", "15")
     trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
 
     clean_name = (name or "").strip()
@@ -1483,7 +1527,7 @@ def register_auth_routes(app):
         is_early = existing_cnt < int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25))
         prem_val = is_early
         status = 'premium' if is_early else 'trial'
-        trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "30")
+        trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "15")
         trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id, is_default) VALUES (?,?,?,?, {trial_expr}, ?, FALSE) RETURNING id", (hname, code, prem_val, status, uid))
         _run("INSERT INTO auth_household_members (user_id, household_id, role, marketing_opt_in) VALUES (?, ?, 'owner', ?) ON CONFLICT (user_id, household_id) DO UPDATE SET marketing_opt_in = EXCLUDED.marketing_opt_in", (uid, hhid, opt_in))
