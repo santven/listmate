@@ -135,12 +135,24 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
     if events:
         if len(events) == 1:
             if 'expiration' in events:
-                is_trial = events['expiration']['is_trial']
-                days_left = events['expiration']['days_left']
+                ev_exp = events['expiration']
+                is_trial = ev_exp.get('is_trial', False)
+                days_left = ev_exp.get('days_left', 0)
+                can_extend = ev_exp.get('can_extend', True)
+                extension_tier = ev_exp.get('extension_tier', '15d')
                 campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}"
                 campaign_names.append(campaign)
-                print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}).")
-                sent_rem = send_subscription_notice(email, user_name, is_trial, days_left, user_id, household_id)
+                print(f"[{email}] Sending specific expiration notice ({days_left} days, campaign: {campaign}, can_extend: {can_extend}, tier: {extension_tier}).")
+                sent_rem = send_subscription_notice(
+                    email, 
+                    user_name, 
+                    is_trial, 
+                    days_left, 
+                    user_id, 
+                    household_id,
+                    can_extend=can_extend,
+                    extension_tier=extension_tier
+                )
                 sent = sent or sent_rem
             elif 'trial_week1' in events:
                 campaign_names.append('trial_week1')
@@ -293,6 +305,8 @@ def run_cron():
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_opened_at TIMESTAMP")
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS last_email_clicked_at TIMESTAMP")
         _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_extension_claimed_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ext_15d_claimed_at TIMESTAMP")
+        _run("ALTER TABLE auth_households ADD COLUMN IF NOT EXISTS trial_ext_7d_claimed_at TIMESTAMP")
         _run("CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status)")
     except Exception as e:
         print(f"Warning: schema initialization check: {e}")
@@ -434,7 +448,10 @@ def run_cron():
         u.name as user_name, 
         h.subscription_status,
         h.trial_ends_at,
-        h.subscription_ends_at
+        h.subscription_ends_at,
+        h.trial_extension_claimed_at,
+        h.trial_ext_15d_claimed_at,
+        h.trial_ext_7d_claimed_at
     FROM auth_households h
     JOIN auth_users u ON u.id = COALESCE(
         h.owner_id, 
@@ -503,11 +520,30 @@ def run_cron():
                 days_left = 3
 
             if days_left is not None:
+                can_extend = False
+                ext_tier = "15d"
+                if is_trial and days_left == 0:
+                    c_15d = hh.get("trial_ext_15d_claimed_at") or hh.get("trial_extension_claimed_at")
+                    c_7d = hh.get("trial_ext_7d_claimed_at")
+                    if not c_15d:
+                        can_extend = True
+                        ext_tier = "15d"
+                    elif not c_7d:
+                        can_extend = True
+                        ext_tier = "7d"
+                    else:
+                        can_extend = False
+
                 add_user_event(
                     hh.get("email"),
                     hh.get("user_name"),
                     'expiration',
-                    {'is_trial': is_trial, 'days_left': days_left},
+                    {
+                        'is_trial': is_trial, 
+                        'days_left': days_left,
+                        'can_extend': can_extend,
+                        'extension_tier': ext_tier
+                    },
                     hh.get("user_id"),
                     hh.get("household_id"),
                 )
@@ -601,7 +637,7 @@ def run_cron():
             AND ee.event_type = 'sent'
       )
       AND h.email_trial_ext_day7_sent_at IS NULL
-      AND h.trial_extension_claimed_at IS NULL
+      AND h.trial_ext_7d_claimed_at IS NULL
       AND COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
     ORDER BY h.id, u.id ASC
     """

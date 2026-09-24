@@ -545,7 +545,16 @@ def _get_unsub_blocks(user_id: int, purpose: str = "marketing emails", context_r
     """Returns (footer_txt, footer_html) for backwards compatibility."""
     return _get_footer_blocks(user_id=user_id, purpose=purpose, context_reason=context_reason)
 
-def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days_left: int, user_id: int = 0, household_id: int = 0) -> bool:
+def send_subscription_notice(
+    to_email: str,
+    user_name: str,
+    is_trial: bool,
+    days_left: int,
+    user_id: int = 0,
+    household_id: int = 0,
+    can_extend: bool = True,
+    extension_tier: str = "15d",
+) -> bool:
     """Send subscription ending notice. Returns True on success."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
@@ -554,17 +563,101 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
 
     term = "trial" if is_trial else "subscription"
     campaign = f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else '3days'}"
+    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_reminder')}"
+    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reminder')}"
+
+    ext_days = 7 if str(extension_tier).strip().lower() in ('7', '7d') else 15
+    tier_slug = '7d' if ext_days == 7 else '15d'
+    extension_link = f"{BASE_URL}/open?url={quote(f'/settings?action=claim-extension&tier={tier_slug}&source=email_trial_exp_today')}"
+
     if days_left == 0:
-        subject = f"Your ListMate {term} ends today"
-        urgency_text = "expires today"
+        if is_trial and can_extend:
+            subject = f"Your ListMate trial ends today — claim {ext_days} extra days on us! 🎁"
+            urgency_text = "ends today"
+        else:
+            subject = f"Your ListMate {term} ends today"
+            urgency_text = "expires today"
     else:
         subject = f"Your ListMate {term} ends in {days_left} days"
         urgency_text = f"expires in {days_left} days"
 
-    upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_reminder')}"
-    add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reminder')}"
-
     unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and billing reminders", "You received this email because you created a ListMate household or manage a household subscription.")
+
+    if is_trial and days_left == 0 and can_extend:
+        plain_body = (
+            f"Hi {user_name},
+
+"
+            f"Your ListMate free trial {urgency_text}.
+
+"
+            f"We want to ensure your household has plenty of time to experience hassle-free, shared grocery planning. "
+            f"We'd love to give you an extra {ext_days} days of full Premium access—completely on us, no credit card required!
+
+"
+            f"Claim Your {ext_days}-Day Free Extension:
+{extension_link}
+
+"
+            f"Or upgrade now for .99/year (just sh.83/month):
+{upgrade_link}
+
+"
+            f"— The ListMate Team" + unsub_txt
+        )
+        html_body = (
+            f'<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+            f'<h2 style="color:#2c5a2c;margin-top:0;">🎁 Need More Time to Shop?</h2>'
+            f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+            f'<p style="font-size:15px;color:#333;line-height:1.5;">Your ListMate free trial <strong>{urgency_text}</strong>.</p>'
+            f'<p style="font-size:15px;color:#333;line-height:1.5;">We want to ensure your household has enough grocery runs to experience the full ease of aisle-sorted, real-time shared lists. Enjoy an <strong>extra {ext_days} days of full Premium access</strong> completely free!</p>'
+            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:14px 16px;margin:16px 0;border-radius:8px;">'
+            f'<strong style="color:#166534;display:block;margin-bottom:6px;">✨ What stays unlocked for {ext_days} more days:</strong>'
+            f'<ul style="margin:0;padding-left:20px;color:#274c36;font-size:14px;line-height:1.6;">'
+            f'<li>Real-time sync across your entire household</li>'
+            f'<li>Automatic aisle categorization for faster store trips</li>'
+            f'<li>Unlimited custom stores (Trader Joe's, Costco, Safeway & more)</li>'
+            f'</ul>'
+            f'</div>'
+            f'<div style="margin:24px 0 16px;">'
+            f'<a href="{extension_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Claim {ext_days} Extra Days Free</a>'
+            f'<a href="{upgrade_link}" style="display:inline-block;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;padding:12px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Upgrade for .99/yr (Save 58%)</a>'
+            f'</div>'
+            f'<p style="font-size:13px;color:#666;line-height:1.4;">Only one subscription is needed per household. All invited members sync free!</p>'
+            f'</div>' + unsub_html
+        )
+    else:
+        plain_body = (
+            f"Hi {user_name},
+
+"
+            f"Your ListMate {term} {urgency_text}.
+
+"
+            f"Don't lose access to your shared grocery lists! Upgrade your household today to keep everything syncing seamlessly across all your household members.
+
+"
+            f"Upgrade Household: {upgrade_link}
+"
+            f"Add Household Members: {add_member_link}
+
+"
+            f"— The ListMate Team" + unsub_txt
+        )
+        html_body = (
+            f'<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+            f'<h2 style="color:#2c5a2c;margin-top:0;">⏳ Action Required</h2>'
+            f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
+            f'<p style="font-size:15px;color:#333;line-height:1.5;">Your ListMate <strong>{term}</strong> {urgency_text}.</p>'
+            f'<p style="font-size:15px;color:#333;line-height:1.5;">Don't lose access to your shared grocery lists! Upgrade your household to keep real-time sync active across all members.</p>'
+            f'<div style="margin:24px 0 16px;">'
+            f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Upgrade Household Now</a>'
+            f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Add Members</a>'
+            f'</div>'
+            f'<p style="font-size:13px;color:#666;line-height:1.4;">Remember: Only one subscription is needed per household (.99/mo or .99/yr). All invited members join and sync free!</p>'
+            f'</div>' + unsub_html
+        )
+
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -584,33 +677,8 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         },
         "subject": subject,
         "content": [
-            {
-                "type": "text/plain",
-                "value": (
-                    f"Hi {user_name},\n\n"
-                    f"Your ListMate {term} {urgency_text}.\n\n"
-                    f"Don't lose access to your shared grocery lists! Upgrade your household today to keep everything syncing seamlessly across all your household members.\n\n"
-                    f"Upgrade Household: {upgrade_link}\n"
-                    f"Add Household Members: {add_member_link}\n\n"
-                    f"— The ListMate Team" + unsub_txt
-                ),
-            },
-            {
-                "type": "text/html",
-                "value": (
-                    f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
-                    f'<h2 style="color:#2c5a2c;margin-top:0;">⏳ Action Required</h2>'
-                    f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
-                    f'<p style="font-size:15px;color:#333;line-height:1.5;">Your ListMate <strong>{term}</strong> {urgency_text}.</p>'
-                    f'<p style="font-size:15px;color:#333;line-height:1.5;">Don\'t lose access to your shared grocery lists! Upgrade your household to keep real-time sync active across all members.</p>'
-                    f'<div style="margin:24px 0 16px;">'
-                    f'<a href="{upgrade_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Upgrade Household Now</a>'
-                    f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">Add Members</a>'
-                    f'</div>'
-                    f'<p style="font-size:13px;color:#666;line-height:1.4;">Remember: Only one subscription is needed per household ($1.99/mo or $9.99/yr). All invited members join and sync free!</p>'
-                    f'</div>' + unsub_html
-                ),
-            },
+            {"type": "text/plain", "value": plain_body},
+            {"type": "text/html", "value": html_body},
         ],
         "tracking_settings": {
             "click_tracking": {"enable": True, "enable_text": False},
@@ -618,7 +686,6 @@ def send_subscription_notice(to_email: str, user_name: str, is_trial: bool, days
         },
     }
     return _send_via_api(api_key, payload)
-
 
 def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
     """Send Day 3 nudge to solo household owners to invite their family/roommates."""
@@ -1150,7 +1217,7 @@ def send_trial_ext_day7_notice(to_email: str, user_name: str, household_name: st
         return False
 
     campaign = "trial_ext_day7"
-    extension_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&source=email_trial_ext_day7')}"
+    extension_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&tier=7d&source=email_trial_ext_day7')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_ext_day7')}"
     subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
 

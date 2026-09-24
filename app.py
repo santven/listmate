@@ -464,9 +464,10 @@ def settings_page():
     if action == "claim-extension":
         uid = authmod.get_user_id()
         hhid = authmod.get_household_id()
-        ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+        tier = request.args.get("tier")
+        ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
         status_param = "claimed" if ok else "already_claimed"
-        return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+        return redirect(f"/settings?extension={status_param}&days={days}&msg={quote(msg)}")
     return send_from_directory("static", "settings.html")
 
 @app.route("/claim-extension")
@@ -476,17 +477,22 @@ def direct_claim_extension():
         return redirect("/login?next=" + quote(next_url))
     uid = authmod.get_user_id()
     hhid = authmod.get_household_id()
-    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
+    tier = request.args.get("tier")
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
     status_param = "claimed" if ok else "already_claimed"
-    return redirect(f"/settings?extension={status_param}&msg={quote(msg)}")
+    return redirect(f"/settings?extension={status_param}&days={days}&msg={quote(msg)}")
 
 @app.route("/api/household/claim-extension", methods=["POST", "GET"])
 @require_user
 def api_claim_trial_extension():
     uid = authmod.get_user_id()
     hhid = _hh()
-    ok, msg, days = authmod.claim_trial_extension(hhid, uid)
-    return jsonify({"ok": ok, "message": msg, "days_left": days})
+    tier = request.args.get("tier")
+    if not tier and request.is_json:
+        data = request.get_json(silent=True) or {}
+        tier = data.get("tier")
+    ok, msg, days = authmod.claim_trial_extension(hhid, uid, tier=tier)
+    return jsonify({"ok": ok, "message": msg, "days": days, "days_left": days})
 
 @app.route("/api/household/keep-active", methods=["POST", "GET"])
 @require_user
