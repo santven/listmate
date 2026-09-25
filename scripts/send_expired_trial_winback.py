@@ -124,12 +124,14 @@ def send_winback_email(
     success = _send_via_api(api_key, payload)
     if success:
         try:
+            u_id = int(user_id) if user_id is not None and str(user_id).isdigit() and int(user_id) != 0 else None
+            hh_id = int(household_id) if household_id is not None and str(household_id).isdigit() and int(household_id) != 0 else None
             db_pg.execute_query(
                 """
                 INSERT INTO email_events (user_id, household_id, campaign, event_type, email, created_at)
                 VALUES (%s, %s, %s, 'sent', %s, NOW())
                 """,
-                (user_id if user_id else None, household_id if household_id else None, campaign, to_email)
+                (u_id, hh_id, campaign, to_email)
             )
         except Exception as e:
             print(f"Warning: Failed to record email_event for {to_email}: {e}")

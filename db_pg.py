@@ -51,6 +51,18 @@ def close_db(conn):
         try: conn.close()
         except Exception: pass
 
+def execute_query(sql, params=None):
+    """Executes a SQL query and returns list of dict rows if result set exists, or commits."""
+    db = get_db()
+    try:
+        db.execute(sql, params)
+        if db._cur and db._cur.description:
+            return db.fetchall()
+        db.commit()
+        return []
+    finally:
+        close_db(db)
+
 class PgConnection:
     def __init__(self, conn):
         self._conn = conn
