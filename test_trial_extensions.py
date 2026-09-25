@@ -177,5 +177,121 @@ class TestTrialExtensionsComprehensive(unittest.TestCase):
             self.assertIn("Extend Free Trial for 15 Days", content_html)
             self.assertIn("Invite Your Household", content_html)
 
+    @patch('shared.auth._one')
+    @patch('shared.auth._run')
+    def test_claim_trial_extension_honors_15d_when_promised_in_email(self, mock_run, mock_one):
+        # Legacy 30d household that was promised 15d in a winback email dispatch
+        now = datetime.datetime.now(datetime.timezone.utc)
+        def side_effect_one(sql, params=None):
+            if "FROM auth_households" in sql or "FROM {_HH}" in sql:
+                return {
+                    'id': 37,
+                    'subscription_status': 'expired',
+                    'created_at': now - datetime.timedelta(days=35),
+                    'trial_ends_at': now - datetime.timedelta(days=5),
+                    'trial_ext_15d_claimed_at': None,
+                    'trial_ext_7d_claimed_at': None,
+                    'trial_extension_claimed_at': None
+                }
+            elif "FROM email_events" in sql:
+                return {'campaign': 'trial_winback_ext_15d'}
+            return None
+
+        mock_one.side_effect = side_effect_one
+        mock_run.return_value = 1
+
+        ok, msg, days = claim_trial_extension(household_id=37, user_id=1, tier='15d')
+        self.assertTrue(ok)
+        self.assertEqual(days, 15)
+        self.assertIn("15 extra days", msg)
+        self.assertTrue(mock_run.called)
+
+        update_sql = mock_run.call_args[0][0]
+        self.assertIn("trial_ext_15d_claimed_at = NOW()", update_sql)
+
+    @patch('scripts.send_expired_trial_winback.send_winback_email')
+    @patch('scripts.send_expired_trial_winback.db_pg.execute_query')
+    def test_send_expired_trial_winback_legacy_30d_tier(self, mock_query, mock_send):
+        from scripts.send_expired_trial_winback import run_winback
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Row 1: Legacy 30d trial user (30-day trial span in past) -> should get 7d
+        # Row 2: Standard 15d trial user (15-day trial span in past) -> should get 15d
+        mock_query.return_value = [
+            {
+                'household_id': 37,
+                'household_name': 'Legacy Household',
+                'user_id': 1,
+                'email': 'legacy@example.com',
+                'user_name': 'Legacy User',
+                'subscription_status': 'expired',
+                'created_at': now - datetime.timedelta(days=35),
+                'trial_ends_at': now - datetime.timedelta(days=5),
+                'trial_ext_15d_claimed_at': None,
+                'trial_ext_7d_claimed_at': None,
+                'trial_extension_claimed_at': None
+            },
+            {
+                'household_id': 50,
+                'household_name': 'Standard Household',
+                'user_id': 2,
+                'email': 'standard@example.com',
+                'user_name': 'Standard User',
+                'subscription_status': 'expired',
+                'created_at': now - datetime.timedelta(days=16),
+                'trial_ends_at': now - datetime.timedelta(days=1),
+                'trial_ext_15d_claimed_at': None,
+                'trial_ext_7d_claimed_at': None,
+                'trial_extension_claimed_at': None
+            }
+        ]
+        mock_send.return_value = True
+
+        run_winback(dry_run=False)
+
+        self.assertEqual(mock_send.call_count, 2)
+        # Check call 1 (legacy 30d) -> 7d
+        call1_kwargs = mock_send.call_args_list[0].kwargs
+        self.assertEqual(call1_kwargs['household_id'], 37)
+        self.assertEqual(call1_kwargs['extension_tier'], '7d')
+
+        # Check call 2 (standard 15d) -> 15d
+        call2_kwargs = mock_send.call_args_list[1].kwargs
+        self.assertEqual(call2_kwargs['household_id'], 50)
+        self.assertEqual(call2_kwargs['extension_tier'], '15d')
+
+    @patch('scripts.send_expired_trial_winback.send_winback_email')
+    @patch('scripts.send_expired_trial_winback.db_pg.execute_query')
+    def test_send_expired_trial_winback_targeted_household_id(self, mock_query, mock_send):
+        from scripts.send_expired_trial_winback import run_winback
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        mock_query.return_value = [
+            {
+                'household_id': 37,
+                'household_name': 'Legacy Household',
+                'user_id': 1,
+                'email': 'legacy@example.com',
+                'user_name': 'Legacy User',
+                'subscription_status': 'expired',
+                'created_at': now - datetime.timedelta(days=35),
+                'trial_ends_at': now - datetime.timedelta(days=5),
+                'trial_ext_15d_claimed_at': None,
+                'trial_ext_7d_claimed_at': None,
+                'trial_extension_claimed_at': None
+            }
+        ]
+        mock_send.return_value = True
+
+        run_winback(dry_run=False, household_id=37)
+
+        self.assertEqual(mock_query.call_count, 1)
+        query_sql, query_params = mock_query.call_args[0]
+        self.assertIn("AND h.id = %s", query_sql)
+        self.assertEqual(query_params, [37])
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_send.call_args.kwargs['household_id'], 37)
+        self.assertEqual(mock_send.call_args.kwargs['extension_tier'], '7d')
+
 if __name__ == '__main__':
     unittest.main()

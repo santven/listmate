@@ -747,7 +747,7 @@ function checkUrlActions() {
     setTimeout(async () => {
       const extStatus = params.get('extension');
       const extMsg = params.get('msg');
-      const extDays = params.get('days') || '15';
+      const extDays = params.get('days') || (params.get('tier') === '7d' ? '7' : '15');
       if (extStatus === 'claimed') {
         toast(extMsg || `🎉 You got ${extDays} extra days of Pro Trial!`);
         if (typeof loadPremium === 'function') loadPremium();
@@ -759,7 +759,8 @@ function checkUrlActions() {
           const res = await fetch('/api/household/claim-extension' + (extTier ? '?tier=' + encodeURIComponent(extTier) : ''), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            toast(data.message || `🎉 You got ${extDays} extra days of Pro Trial!`);
+            const grantedDays = (data && data.days) || (extTier === '7d' ? 7 : 15);
+            toast(data.message || `🎉 You got ${grantedDays} extra days of Pro Trial!`);
             if (typeof loadPremium === 'function') loadPremium();
           } else {
             toast(data.message || 'Trial extension notice.');

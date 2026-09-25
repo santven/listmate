@@ -4,6 +4,8 @@ One-Time Winback Campaign: Send complimentary trial extension offers to expired 
 
 Usage:
   python3 scripts/send_expired_trial_winback.py --dry-run
+  python3 scripts/send_expired_trial_winback.py --household-id 37 --dry-run
+  python3 scripts/send_expired_trial_winback.py --household-id 37 --send
   python3 scripts/send_expired_trial_winback.py --send --limit 50
   python3 scripts/send_expired_trial_winback.py --send
 
@@ -137,13 +139,20 @@ def send_winback_email(
             print(f"Warning: Failed to record email_event for {to_email}: {e}")
     return success
 
-def run_winback(dry_run: bool = True, limit: int = None):
+def run_winback(dry_run: bool = True, limit: int = None, household_id: int = None):
     print("=" * 60)
-    print(f"Starting Expired Trial Winback Campaign (dry_run={dry_run}, limit={limit})")
+    target_info = f", household_id={household_id}" if household_id else ""
+    print(f"Starting Expired Trial Winback Campaign (dry_run={dry_run}, limit={limit}{target_info})")
     print("=" * 60)
 
+    hh_filter = ""
+    params = []
+    if household_id is not None and str(household_id).isdigit() and int(household_id) > 0:
+        hh_filter = "AND h.id = %s"
+        params.append(int(household_id))
+
     # 1. Fetch eligible expired households
-    query = """
+    query = f"""
     SELECT DISTINCT ON (h.id)
         h.id as household_id,
         h.name as household_name,
@@ -152,6 +161,7 @@ def run_winback(dry_run: bool = True, limit: int = None):
         u.name as user_name,
         h.subscription_status,
         h.trial_ends_at,
+        h.created_at,
         h.trial_extension_claimed_at,
         h.trial_ext_15d_claimed_at,
         h.trial_ext_7d_claimed_at
@@ -166,6 +176,7 @@ def run_winback(dry_run: bool = True, limit: int = None):
         AND (h.subscription_status IS NULL OR h.subscription_status NOT IN ('premium', 'active', 'lifetime'))
         AND h.trial_ends_at IS NOT NULL
         AND h.trial_ends_at < NOW()
+        {hh_filter}
         AND NOT EXISTS (
             SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
         )
@@ -178,7 +189,7 @@ def run_winback(dry_run: bool = True, limit: int = None):
     ORDER BY h.id, u.id ASC
     """
 
-    rows = db_pg.execute_query(query)
+    rows = db_pg.execute_query(query, params if params else None)
     print(f"Found {len(rows)} expired household(s) eligible for winback campaign.")
 
     if limit and limit > 0:
@@ -195,14 +206,45 @@ def run_winback(dry_run: bool = True, limit: int = None):
 
         c_15d = r.get("trial_ext_15d_claimed_at") or r.get("trial_extension_claimed_at")
         c_7d = r.get("trial_ext_7d_claimed_at")
+        created_at = r.get("created_at")
+        trial_ends_at = r.get("trial_ends_at")
 
-        if not c_15d:
-            tier = "15d"
-        elif not c_7d:
-            tier = "7d"
+        # Detect legacy 30-day trial household:
+        # If the household has not claimed a 15d extension yet and had an initial trial span of >= 20 days
+        is_legacy_30d = False
+        if not c_15d and created_at and trial_ends_at:
+            try:
+                c_dt = created_at
+                if isinstance(c_dt, str):
+                    c_dt = datetime.datetime.fromisoformat(c_dt.replace('Z', '+00:00')) if 'T' in c_dt else datetime.datetime.strptime(c_dt, '%Y-%m-%d %H:%M:%S')
+                t_dt = trial_ends_at
+                if isinstance(t_dt, str):
+                    t_dt = datetime.datetime.fromisoformat(t_dt.replace('Z', '+00:00')) if 'T' in t_dt else datetime.datetime.strptime(t_dt, '%Y-%m-%d %H:%M:%S')
+                if getattr(c_dt, 'tzinfo', None) and getattr(t_dt, 'tzinfo', None) is None:
+                    c_dt = c_dt.replace(tzinfo=None)
+                elif getattr(t_dt, 'tzinfo', None) and getattr(c_dt, 'tzinfo', None) is None:
+                    t_dt = t_dt.replace(tzinfo=None)
+                if (t_dt - c_dt).total_seconds() >= 20 * 86400:
+                    is_legacy_30d = True
+            except Exception:
+                pass
+
+        if is_legacy_30d:
+            # Legacy 30d households already received 30 days of trial (equivalent to initial 15d + 15d extension).
+            # Offer strictly the 7-day winback extension pass (capping at 37 days total).
+            if not c_7d:
+                tier = "7d"
+            else:
+                # Already claimed 7d extension, no further extensions available
+                continue
         else:
-            # Both claimed, skip winback pass
-            continue
+            if not c_15d:
+                tier = "15d"
+            elif not c_7d:
+                tier = "7d"
+            else:
+                # Both claimed, skip winback pass
+                continue
 
         ok = send_winback_email(
             to_email=email,
@@ -228,7 +270,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", default=False, help="Preview recipients without sending")
     parser.add_argument("--send", action="store_true", default=False, help="Actually send the emails via SendGrid")
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of emails to send")
+    parser.add_argument("--household-id", "--household", type=int, default=None, dest="household_id", help="Target a specific household ID")
     args = parser.parse_args()
 
     is_dry = not args.send or args.dry_run
-    run_winback(dry_run=is_dry, limit=args.limit)
+    run_winback(dry_run=is_dry, limit=args.limit, household_id=args.household_id)

@@ -722,7 +722,25 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
     else:
         norm_tier = None
 
-    if is_legacy_30d:
+    # Check if a 15-day extension was explicitly offered via email to this household
+    # (e.g. winback dispatch that sent 'trial_winback_ext_15d'), in which case we honor
+    # the promised 15 days even for legacy 30d households.
+    was_sent_15d_offer = False
+    if not c_15d:
+        try:
+            ev = _one(f"""
+                SELECT campaign FROM email_events 
+                WHERE household_id = ? 
+                  AND campaign = 'trial_winback_ext_15d' 
+                  AND event_type = 'sent' 
+                LIMIT 1
+            """, (household_id,))
+            if ev and ev.get("campaign") == 'trial_winback_ext_15d':
+                was_sent_15d_offer = True
+        except Exception:
+            pass
+
+    if is_legacy_30d and not was_sent_15d_offer:
         # Legacy 30d households already received 30 days of trial (equivalent to initial 15d + 15d extension).
         # They only receive the final 7d extension tier, capping their lifetime trial at 37 days (30 + 7).
         if c_7d:
