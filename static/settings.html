@@ -749,17 +749,17 @@ function checkUrlActions() {
       const extMsg = params.get('msg');
       const extDays = params.get('days') || '15';
       if (extStatus === 'claimed') {
-        toast(extMsg || );
+        toast(extMsg || `🎉 You got ${extDays} extra days of Pro Trial!`);
         if (typeof loadPremium === 'function') loadPremium();
       } else if (extStatus === 'already_claimed') {
         toast(extMsg || 'ℹ️ Your household has already claimed this trial extension offer.');
       } else if (params.get('action') === 'claim-extension') {
         const extTier = params.get('tier') || '';
         try {
-          const res = await fetch('/api/household/claim-extension' + (extTier ?  : ''), { method: 'POST' });
+          const res = await fetch('/api/household/claim-extension' + (extTier ? '?tier=' + encodeURIComponent(extTier) : ''), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            toast(data.message || );
+            toast(data.message || `🎉 You got ${extDays} extra days of Pro Trial!`);
             if (typeof loadPremium === 'function') loadPremium();
           } else {
             toast(data.message || 'Trial extension notice.');
