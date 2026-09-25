@@ -1,8 +1,10 @@
-# User Lifecycle & Household Status
+# User Lifecycle, Household Status & Tier Transitions (`user_lifecycle.md`)
 
-This document illustrates the lifecycle of a user's household, including Early Adopters, Free Trials, Premium Upgrades, Downgrades, and Secondary Member Spin-offs.
+This document illustrates the complete lifecycle of a user and household in ListMate, covering Early Adopters, Free Trials, Extension Ladders, Premium Upgrades, Downgrades, and Secondary Member Spin-offs.
 
-## Lifecycle Flowchart
+---
+
+## 1. Complete Lifecycle Flowchart
 
 ```mermaid
 flowchart TD
@@ -16,41 +18,70 @@ flowchart TD
     EAPremium --> EAAddMember["Adds Secondary Member"]
     EAAddMember --> EAPremium
     
-    %% Scenarios 2 & 3: Post-25 User
-    CheckEarly -- "No" --> FreeTrial["7-Day Free Trial\n(is_premium=true, sub_status='trial')"]
+    %% Scenario 2: Standard User Signup
+    CheckEarly -- "No" --> FreeTrial["Standard 15-Day Free Trial\n(is_premium=true, sub_status='trial')"]
+    FreeTrial --> TrialUsage["Full Premium Access & Live Sync"]
+    TrialUsage --> AddMember["Adds Secondary Member(s)"]
     
-    FreeTrial --> TrialUsage["Full Premium Access & Sync"]
-    TrialUsage --> AddMember["Adds Secondary Member"]
-    AddMember --> TrialEnd{"Trial Expires"}
+    %% Progression: Trial Ending
+    TrialUsage --> TrialExpCheck{"Trial Reaches Day 15"}
+    TrialExpCheck -- "Upgrades before expiry" --> PremiumUser["Premium Status\n(is_premium=true, sub_status='active')"]
     
-    %% Scenario 2: Upgrade & Renew
-    TrialEnd -- "Upgrades before expiry" --> PremiumUser["Premium Status\n(is_premium=true, sub_status='active')"]
-    PremiumUser --> PremiumUsage["Full Premium Access & Sync"]
+    %% Trial Extension Ladder
+    TrialExpCheck -- "Expires (No Upgrade)" --> Downgrade["Lapsed / Downgrade to Free\n(is_premium=false, downgraded_at=NOW)"]
+    Downgrade --> CheckExt15{"Claims Tier 1 Pass?\n(15-Day Extension)"}
+    CheckExt15 -- "Yes" --> TrialUsage
+    
+    CheckExt15 -- "Lapses Again" --> CheckExt7{"Claims Tier 2 Pass?\n(7-Day Bonus)"}
+    CheckExt7 -- "Yes" --> TrialUsage
+    
+    CheckExt7 -- "All Extensions Claimed" --> FreeRestrictions["Free Mode Restrictions Active"]
+
+    %% Premium Upgrades & Renewals
+    PremiumUser --> PremiumUsage["Full Premium Access & Real-Time Sync"]
     PremiumUsage --> Renews{"Subscription Renews?"}
     Renews -- "Yes" --> PremiumUsage
-    
-    %% Scenario 3: Downgrade & Spin-off
-    TrialEnd -- "Expires (No Upgrade)" --> Downgrade
     Renews -- "Cancels / Payment Fails" --> Downgrade
     
-    Downgrade["Downgraded to Free\n(is_premium=false, downgraded_at=NOW)"] --> FreeRestrictions
+    %% Free Restrictions & Secondary Member Spin-Off
+    FreeRestrictions --> RestrictionsDetail["Restrictions Applied:\n- Recipe generation locked\n- Secondary Members: Read-Only\n- Owner: Retains Edit Rights"]
     
-    FreeRestrictions["Restrictions Applied:\n- Recipe generation locked\n- Secondary Members: Read-Only\n- Owner: Sync paused"]
+    RestrictionsDetail --> SecondaryMemberAction{"Secondary Member Action"}
+    SecondaryMemberAction -- "Stays in Household" --> ReadOnly["Read-Only Access to Household Lists"]
+    SecondaryMemberAction -- "Chooses to Spin Off" --> SpinOff["Spin Off to New Household\n(Generates new Household ID)"]
     
-    FreeRestrictions --> SecondaryMemberAction{"Secondary Member Action"}
-    SecondaryMemberAction -- "Stays in HH" --> ReadOnly["Read-Only Access to HH"]
-    SecondaryMemberAction -- "Chooses to Spin Off" --> SpinOff["Spin Off to New Household\n(Gets new HH ID)"]
+    SpinOff --> MigrateData["Migrates Stores, Items, Recipes\n(Data created BEFORE downgraded_at)"]
+    MigrateData --> NewFreeHH["New Personal Household\n(Eligible for own trial/extension)"]
     
-    SpinOff --> MigrateData["Migrates Stores, Items, Recipes\n(Only those created BEFORE downgraded_at)"]
-    MigrateData --> NewFreeHH["New Personal Household\n(Free Tier)"]
-    
-    FreeRestrictions --> OwnerAction{"Owner Action"}
+    RestrictionsDetail --> OwnerAction{"Owner Action"}
     OwnerAction -- "Upgrades/Restores" --> PremiumUser
-    OwnerAction -- "Stays Free" --> FreeUsage["Local usage, no live sync for members"]
+    OwnerAction -- "Remains Free" --> FreeUsage["Personal list usage, single-user mode"]
 ```
 
-## Explanation of Scenarios
+---
 
-1. **Early Adopter**: The first 25 households get `is_early_adopter` flag via ID checks. They always get Premium features, and secondary members always have sync.
-2. **Standard Premium & Renewal**: After household 25, users get a trial. If they upgrade, they maintain `is_premium = true`. Secondary members get live sync. 
-3. **Downgrade & Spin-Off**: If a standard user's trial or premium expires, `is_premium` becomes `false` and a timestamp `downgraded_at` is set. Secondary members become **Read-Only**. To regain edit access, a secondary member can "Spin Off" to a new personal household. The app migrates items they had access to **before** the `downgraded_at` timestamp so that they don't get data created by the owner while the secondary member was read-only.
+## 2. Explanation of Lifecycle Scenarios
+
+### 1. Early Adopter Tier (Households 1 - 25)
+* Households registered with ID $\le 25$ automatically receive `is_premium = true` and `subscription_status = 'premium'`.
+* They never see paywalls or trial countdowns.
+* They receive the **Lifetime Premium Monthly Digest** on the 1st of every month summarizing their household's activity and top stores.
+
+### 2. Standard Trial & Extension Ladder (Households 26+)
+* Upon signup, households receive a **15-day free trial** with full premium features (live sync, unlimited custom stores, aisle sorting, recipe planner).
+* **Tier 1 Extension (15 Days)**: When the trial lapses, households can activate a 15-day extension pass (`trial_ext_15d_claimed_at`), bringing total trial evaluation time to 30 days.
+* **Tier 2 Extension (7 Days)**: Offered post-trial via the Day 37 cron (`trial_ext_day7`) or winback passes (`trial_winback_ext_7d`), extending access by an additional 7 days (total 37 days lifetime).
+* **Legacy Cohort**: Households that originally received a 30-day initial trial are capped at 37 days by advancing directly to the 7-day bonus tier.
+
+### 3. Active Premium Subscription
+* When an owner purchases either the **$1.99/month** or **$9.99/year** plan via RevenueCat, their household is marked `subscription_status = 'active'`.
+* **Household-Wide Coverage**: All secondary members join and edit completely free without individual subscriptions.
+
+### 4. Downgrade & Free Mode Soft Landing
+* When all trials and extensions lapse without an upgrade, `is_premium` switches to `false` and `downgraded_at` is stamped.
+* **Owner**: Retains full ability to manage and check off personal lists.
+* **Secondary Members**: Transition to `is_read_only = true` (enforcing `FREE_TIER_MEMBER_LIMIT = 1`).
+
+### 5. Secondary Member Spin-Off
+* Secondary members who wish to regain edit privileges can invoke `/api/household/spin-off`.
+* The backend clones stores, items, and recipes created **prior to** `downgraded_at` into a fresh household, allowing them to continue shopping independently on their own trial.
