@@ -152,6 +152,7 @@ def run_winback(dry_run: bool = True, limit: int = None):
         u.name as user_name,
         h.subscription_status,
         h.trial_ends_at,
+        h.created_at,
         h.trial_extension_claimed_at,
         h.trial_ext_15d_claimed_at,
         h.trial_ext_7d_claimed_at
@@ -195,14 +196,45 @@ def run_winback(dry_run: bool = True, limit: int = None):
 
         c_15d = r.get("trial_ext_15d_claimed_at") or r.get("trial_extension_claimed_at")
         c_7d = r.get("trial_ext_7d_claimed_at")
+        created_at = r.get("created_at")
+        trial_ends_at = r.get("trial_ends_at")
 
-        if not c_15d:
-            tier = "15d"
-        elif not c_7d:
-            tier = "7d"
+        # Detect legacy 30-day trial household:
+        # If the household has not claimed a 15d extension yet and had an initial trial span of >= 20 days
+        is_legacy_30d = False
+        if not c_15d and created_at and trial_ends_at:
+            try:
+                c_dt = created_at
+                if isinstance(c_dt, str):
+                    c_dt = datetime.datetime.fromisoformat(c_dt.replace('Z', '+00:00')) if 'T' in c_dt else datetime.datetime.strptime(c_dt, '%Y-%m-%d %H:%M:%S')
+                t_dt = trial_ends_at
+                if isinstance(t_dt, str):
+                    t_dt = datetime.datetime.fromisoformat(t_dt.replace('Z', '+00:00')) if 'T' in t_dt else datetime.datetime.strptime(t_dt, '%Y-%m-%d %H:%M:%S')
+                if getattr(c_dt, 'tzinfo', None) and getattr(t_dt, 'tzinfo', None) is None:
+                    c_dt = c_dt.replace(tzinfo=None)
+                elif getattr(t_dt, 'tzinfo', None) and getattr(c_dt, 'tzinfo', None) is None:
+                    t_dt = t_dt.replace(tzinfo=None)
+                if (t_dt - c_dt).total_seconds() >= 20 * 86400:
+                    is_legacy_30d = True
+            except Exception:
+                pass
+
+        if is_legacy_30d:
+            # Legacy 30d households already received 30 days of trial (equivalent to initial 15d + 15d extension).
+            # Offer strictly the 7-day winback extension pass (capping at 37 days total).
+            if not c_7d:
+                tier = "7d"
+            else:
+                # Already claimed 7d extension, no further extensions available
+                continue
         else:
-            # Both claimed, skip winback pass
-            continue
+            if not c_15d:
+                tier = "15d"
+            elif not c_7d:
+                tier = "7d"
+            else:
+                # Both claimed, skip winback pass
+                continue
 
         ok = send_winback_email(
             to_email=email,
