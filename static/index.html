@@ -5804,7 +5804,7 @@ window.onDay7ShowMeHow = function() {
       window.history.replaceState({}, document.title, cleanUrl);
       setTimeout(async () => {
         try {
-          const res = await fetch('/api/household/claim-extension' + (tier ?  : ''), {
+          const res = await fetch('/api/household/claim-extension' + (tier ? '?tier=' + encodeURIComponent(tier) : ''), {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ tier })
@@ -5812,7 +5812,7 @@ window.onDay7ShowMeHow = function() {
           const data = await res.json();
           if (typeof toast === 'function') {
             const extDays = data.days || (tier === '7d' ? 7 : 15);
-            toast(data.ok ? (data.message || ) : (data.message || 'Trial extension notice.'));
+            toast(data.ok ? (data.message || `🎉 Your Pro Trial has been extended by ${extDays} days!`) : (data.message || 'Trial extension notice.'));
           }
           if (typeof fetchConfig === 'function') fetchConfig();
         } catch (e) {

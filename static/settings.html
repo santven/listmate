@@ -749,17 +749,17 @@ function checkUrlActions() {
       const extMsg = params.get('msg');
       const extDays = params.get('days') || '15';
       if (extStatus === 'claimed') {
-        toast(extMsg || );
+        toast(extMsg || `🎉 You got ${extDays} extra days of Pro Trial!`);
         if (typeof loadPremium === 'function') loadPremium();
       } else if (extStatus === 'already_claimed') {
         toast(extMsg || 'ℹ️ Your household has already claimed this trial extension offer.');
       } else if (params.get('action') === 'claim-extension') {
         const extTier = params.get('tier') || '';
         try {
-          const res = await fetch('/api/household/claim-extension' + (extTier ?  : ''), { method: 'POST' });
+          const res = await fetch('/api/household/claim-extension' + (extTier ? '?tier=' + encodeURIComponent(extTier) : ''), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            toast(data.message || );
+            toast(data.message || `🎉 You got ${extDays} extra days of Pro Trial!`);
             if (typeof loadPremium === 'function') loadPremium();
           } else {
             toast(data.message || 'Trial extension notice.');
@@ -825,9 +825,20 @@ async function saveMarketingOptIn() {
 async function loadHousehold() {
   try {
     const res = await fetch('/api/auth/household');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const list = document.getElementById('memberList');
+      if (list) list.innerHTML = `<div style="color:var(--muted); font-size:13px; padding:6px 0;">${escapeHtml(errData.error || 'Failed to load household.')}</div>`;
+      return;
+    }
     householdData = await res.json();
-    const hh = householdData.household;
-    const members = householdData.members;
+    if (!householdData || !householdData.household) {
+      const list = document.getElementById('memberList');
+      if (list) list.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:6px 0;">No household found.</div>';
+      return;
+    }
+    const hh = householdData.household || {};
+    const members = Array.isArray(householdData.members) ? householdData.members : [];
 
     if (hh) {
       document.getElementById('householdTitle').textContent = '🏡 ' + (hh.name || 'My Household');
@@ -885,30 +896,34 @@ async function loadHousehold() {
 
     // Render members
     const list = document.getElementById('memberList');
-    list.innerHTML = members.map(m => {
-      const isMe = m.user_id === householdData.current_user_id;
-      const canKick = householdData.is_owner && !isMe && m.role !== 'owner';
-      const kickBtn = canKick ? `<button onclick="confirmKickMember(${m.user_id}, '${escapeHtml(m.display_name || m.email || 'Member').replace(/'/g, "\\'")}')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:16px; padding:4px 6px; line-height:1;" title="Remove Member" aria-label="Remove Member">🗑️</button>` : '';
-      const isReadOnlyMember = hh && hh.over_limit && m.role !== 'owner';
-      const roleBadge = isReadOnlyMember
-        ? `<div class="member-role" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a; font-weight:600;">read-only</div>`
-        : `<div class="member-role">${escapeHtml(m.role)}</div>`;
-      return `
-      <div class="member-row" style="display:flex; justify-content:space-between; align-items:center;">
-        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-          <div class="member-avatar">${escapeHtml((String(m.display_name || m.user_id))[0].toUpperCase())}</div>
-          <div class="member-info" style="min-width:0;">
-            <div class="member-name">${escapeHtml(m.display_name)}${isMe ? '<span class="you-badge">you</span>' : ''}</div>
-            <div class="member-email">${escapeHtml(m.email)}</div>
+    if (members.length === 0) {
+      list.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:6px 0;">No members found.</div>';
+    } else {
+      list.innerHTML = members.map(m => {
+        const isMe = m.user_id === householdData.current_user_id;
+        const canKick = householdData.is_owner && !isMe && m.role !== 'owner';
+        const kickBtn = canKick ? `<button onclick="confirmKickMember(${m.user_id}, '${escapeHtml(m.display_name || m.email || 'Member').replace(/'/g, "\\'")}')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:16px; padding:4px 6px; line-height:1;" title="Remove Member" aria-label="Remove Member">🗑️</button>` : '';
+        const isReadOnlyMember = hh && hh.over_limit && m.role !== 'owner';
+        const roleBadge = isReadOnlyMember
+          ? `<div class="member-role" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a; font-weight:600;">read-only</div>`
+          : `<div class="member-role">${escapeHtml(m.role)}</div>`;
+        return `
+        <div class="member-row" style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+            <div class="member-avatar">${escapeHtml((String(m.display_name || m.user_id))[0].toUpperCase())}</div>
+            <div class="member-info" style="min-width:0;">
+              <div class="member-name">${escapeHtml(m.display_name)}${isMe ? '<span class="you-badge">you</span>' : ''}</div>
+              <div class="member-email">${escapeHtml(m.email)}</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${roleBadge}
+            ${kickBtn}
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          ${roleBadge}
-          ${kickBtn}
-        </div>
-      </div>
-    `;
-    }).join('');
+      `;
+      }).join('');
+    }
 
     const leaveSection = document.getElementById('leaveHouseholdSection');
     if (leaveSection) {
@@ -916,7 +931,7 @@ async function loadHousehold() {
     }
 
     // Render pending invites
-    const pending = householdData.pending_invites || [];
+    const pending = Array.isArray(householdData.pending_invites) ? householdData.pending_invites : [];
     if (pending.length > 0) {
       list.innerHTML += '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed #d8e0d0"><div style="font-size:12px;color:#888;margin-bottom:8px;">🕐 Pending Invites</div></div>';
       pending.forEach(p => {
@@ -936,7 +951,7 @@ async function loadHousehold() {
     }
 
     // Show add member form if owner
-    if (householdData.is_owner) {
+    if (householdData.is_owner && householdData.household) {
       document.getElementById('addMemberSection').style.display = 'block';
       const btnAdd = document.getElementById('btnAdd');
       const emailInput = document.getElementById('newMemberEmail');
@@ -957,7 +972,9 @@ async function loadHousehold() {
       }
     }
   } catch(e) {
-    document.getElementById('memberList').textContent = 'Error loading household.';
+    console.error('Error loading household:', e);
+    const list = document.getElementById('memberList');
+    if (list) list.innerHTML = '<div style="color:#ef4444; font-size:13px; padding:6px 0;">Error loading household. <button onclick="loadHousehold()" style="background:none; border:none; color:var(--green, #10b981); text-decoration:underline; cursor:pointer; font-size:13px; margin-left:4px;">Retry</button></div>';
   }
 }
 
