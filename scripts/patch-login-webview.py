@@ -77,6 +77,3 @@ with open('/tmp/listmate/static/login.html', 'w') as f:
     f.write(html)
 
 print("✅ login.html patched for WebView + old Android support")
-PYEOF
-
-python3 /tmp/listmate/scripts/patch-login-webview.py 2>/dev/null || echo "Script didn't exist — inline approach already ran"
