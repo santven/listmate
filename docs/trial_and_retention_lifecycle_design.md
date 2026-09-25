@@ -167,3 +167,16 @@ ALTER TABLE auth_households
 
 CREATE INDEX IF NOT EXISTS idx_households_lifecycle ON auth_households(lifecycle_status);
 ```
+
+---
+
+## 8. Architectural Edge Cases & Tracking Issues
+
+The following active edge cases have been identified through code auditing. Each issue is linked to its GitHub tracking record with a real-time status badge that updates automatically:
+
+| Issue | Title & Description | Dynamic Status | Area |
+| :---: | :--- | :---: | :---: |
+| **[#510](https://github.com/santven/listmate/issues/510)** | **Ensure `downgraded_at` is populated when trial elapses**<br>Dynamic status check in `get_household_status()` does not trigger PostgreSQL `update_downgraded_at` trigger, leaving `downgraded_at` NULL until an external write. | [![Issue 510](https://img.shields.io/github/issues/detail/state/santven/listmate/510?label=Status)](https://github.com/santven/listmate/issues/510) | Database / Lifecycle |
+| **[#511](https://github.com/santven/listmate/issues/511)** | **Replace strict date equality with bounded window for lifecycle emails**<br>Strict equality `DATE(...) = CURRENT_DATE - INTERVAL 'X days'` in `cron_daily.py` causes emails to be permanently skipped if a single daily run is missed or delayed. | [![Issue 511](https://img.shields.io/github/issues/detail/state/santven/listmate/511?label=Status)](https://github.com/santven/listmate/issues/511) | Cron Engine |
+| **[#512](https://github.com/santven/listmate/issues/512)** | **Clarify and scope extension claim permissions for multi-member households**<br>Non-owner members can trigger `/api/household/claim-extension`, which consumes the household's one-time bonus extension pass without owner approval. | [![Issue 512](https://img.shields.io/github/issues/detail/state/santven/listmate/512?label=Status)](https://github.com/santven/listmate/issues/512) | Auth & Permissions |
+| **[#513](https://github.com/santven/listmate/issues/513)** | **Make `send_expired_trial_winback.py` email check tier-aware**<br>`STARTS_WITH(ee.campaign, 'trial_winback_ext_')` in the winback script permanently blocks a lapsed household from getting the 7d winback pass if they received the 15d pass in the past. | [![Issue 513](https://img.shields.io/github/issues/detail/state/santven/listmate/513?label=Status)](https://github.com/santven/listmate/issues/513) | Winback Script |
