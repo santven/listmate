@@ -144,3 +144,12 @@ RevenueCat webhooks (`/api/revenuecat/webhook`) maintain real-time sync with Goo
 
 ### Webhook Idempotency:
 Webhook payloads verify the authorization header and record transaction tokens to prevent duplicate activations or race conditions.
+
+---
+
+## 7. Known Edge Cases & Tracking Issues
+
+| Issue | Title & Description | Dynamic Status | Area |
+| :---: | :--- | :---: | :---: |
+| **[#510](https://github.com/santven/listmate/issues/510)** | **Ensure `downgraded_at` is populated when trial elapses**<br>Trial expiration computed in memory doesn't trigger database update, so `downgraded_at` remains NULL in PostgreSQL until written. | [![Issue 510](https://img.shields.io/github/issues/detail/state/santven/listmate/510?label=Status)](https://github.com/santven/listmate/issues/510) | Database / Lifecycle |
+| **[#512](https://github.com/santven/listmate/issues/512)** | **Clarify and scope extension claim permissions for multi-member households**<br>Secondary members can trigger `/api/household/claim-extension`, which consumes the household's one-time bonus extension pass without owner approval. | [![Issue 512](https://img.shields.io/github/issues/detail/state/santven/listmate/512?label=Status)](https://github.com/santven/listmate/issues/512) | Auth & Permissions |
