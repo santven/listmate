@@ -289,6 +289,13 @@ class TestTrialExtensionsComprehensive(unittest.TestCase):
         query_sql, query_params = mock_query.call_args[0]
         self.assertIn("AND h.id = %s", query_sql)
         self.assertEqual(query_params, [37])
+        # Verify query SQL does not have literal % characters that would break psycopg2 execution with params
+        import re
+        cleaned_sql = query_sql.replace('%%', '')
+        all_placeholders = re.findall(r'%s', cleaned_sql)
+        invalid_percents = re.findall(r'%[^s]', cleaned_sql)
+        self.assertEqual(len(all_placeholders), len(query_params))
+        self.assertEqual(len(invalid_percents), 0, f"Found raw unescaped % that breaks psycopg2: {invalid_percents}")
         self.assertEqual(mock_send.call_count, 1)
         self.assertEqual(mock_send.call_args.kwargs['household_id'], 37)
         self.assertEqual(mock_send.call_args.kwargs['extension_tier'], '7d')
