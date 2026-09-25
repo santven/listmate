@@ -1415,7 +1415,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             f'</div>'
         )
     if 'trial_ext_day7' in events:
-        ext_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&source=email_combined')}"
+        ext_link = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&tier=7d&source=email_combined')}"
         text_sections.append(
             f"Enjoy 7 Extra Days of Premium on Us:\n"
             f"Need a little more time to organize your household grocery runs? Claim 7 extra days of full Premium access free:\n{ext_link}"
