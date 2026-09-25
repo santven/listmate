@@ -183,7 +183,7 @@ def run_winback(dry_run: bool = True, limit: int = None, household_id: int = Non
         AND NOT EXISTS (
             SELECT 1 FROM email_events ee 
             WHERE ee.household_id = h.id 
-              AND ee.campaign LIKE 'trial_winback_ext_%' 
+              AND (STARTS_WITH(ee.campaign, 'trial_winback_ext_') OR ee.campaign = 'trial_winback') 
               AND ee.event_type = 'sent'
         )
     ORDER BY h.id, u.id ASC
