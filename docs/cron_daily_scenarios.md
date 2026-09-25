@@ -209,3 +209,13 @@ python scripts/cron_daily.py
 # Execute specific target tests
 python -c "import scripts.cron_daily as cd; cd.test_lifetime_digest(target_hhid=1)"
 ```
+
+---
+
+## 6. Known Edge Cases & Tracking Issues
+
+| Issue | Title & Description | Dynamic Status | Area |
+| :---: | :--- | :---: | :---: |
+| **[#510](https://github.com/santven/listmate/issues/510)** | **Ensure `downgraded_at` is populated when trial elapses**<br>Dynamic status check in `get_household_status()` does not fire PostgreSQL trigger, leaving `downgraded_at` NULL until an external write. | [![Issue 510](https://img.shields.io/github/issues/detail/state/santven/listmate/510?label=Status)](https://github.com/santven/listmate/issues/510) | Database / Lifecycle |
+| **[#511](https://github.com/santven/listmate/issues/511)** | **Replace strict date equality with bounded window for lifecycle emails**<br>Strict equality `DATE(...) = CURRENT_DATE - INTERVAL 'X days'` causes emails to be permanently skipped if a single daily run is missed or delayed. | [![Issue 511](https://img.shields.io/github/issues/detail/state/santven/listmate/511?label=Status)](https://github.com/santven/listmate/issues/511) | Cron Engine |
+| **[#513](https://github.com/santven/listmate/issues/513)** | **Make `send_expired_trial_winback.py` email check tier-aware**<br>`STARTS_WITH(ee.campaign, 'trial_winback_ext_')` in the winback script permanently blocks a lapsed household from getting the 7d winback pass if they received the 15d pass in the past. | [![Issue 513](https://img.shields.io/github/issues/detail/state/santven/listmate/513?label=Status)](https://github.com/santven/listmate/issues/513) | Winback Script |
