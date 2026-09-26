@@ -8,6 +8,46 @@ import os
 import sys
 import json
 import urllib.request
+from functools import lru_cache
+
+# In-memory LRU cache for taxonomy lookups to guarantee sub-millisecond lookups
+_TAXONOMY_CACHE = {}
+
+def get_taxonomy_category(name, db=None):
+    """Query item_taxonomy table in PostgreSQL for an exact normalized match.
+    Returns category string if found, otherwise None.
+    Uses in-memory cache to minimize database roundtrips.
+    """
+    if not name or not str(name).strip():
+        return None
+    cleaned = str(name).strip().lower()
+    if cleaned in _TAXONOMY_CACHE:
+        return _TAXONOMY_CACHE[cleaned]
+
+    should_close = False
+    try:
+        if db is None:
+            import db_pg
+            db = db_pg.get_db()
+            should_close = True
+        try:
+            row = db.execute("SELECT category FROM item_taxonomy WHERE normalized_name = ? LIMIT 1", (cleaned,)).fetchone()
+            if isinstance(row, dict) and row.get("category"):
+                cat = str(row["category"]).strip()
+                _TAXONOMY_CACHE[cleaned] = cat
+                return cat
+            _TAXONOMY_CACHE[cleaned] = None
+        finally:
+            if should_close:
+                db.close()
+    except Exception:
+        pass
+    return None
+
+def clear_taxonomy_cache():
+    """Clear in-memory cache when new entries are added."""
+    global _TAXONOMY_CACHE
+    _TAXONOMY_CACHE.clear()
 
 CANONICAL_CATEGORIES = [
     "Produce", "Dairy", "Bakery", "Meat & Seafood", "Deli",
@@ -402,13 +442,20 @@ def _match_kw(kw, text):
     return bool(re.search(r'\b' + re.escape(kw), text)) or (kw in text)
 
 
-def categorize(name):
+def categorize(name, db=None, check_db=True):
     """Return canonical category string or '' for unmatched.
     Guaranteed never to raise an exception, preventing any UI or API disruption.
+    First checks database taxonomy (item_taxonomy). Falls back to heuristic rules.
     """
     try:
         if not name or not str(name).strip():
             return ""
+
+        # ── Priority 0: Database Taxonomy Lookup (item_taxonomy) ──
+        if check_db:
+            db_cat = get_taxonomy_category(name, db=db)
+            if db_cat:
+                return db_cat
 
         raw_norm = _normalize(str(name))
         stemmed_norm = stem_phrase(str(name))
@@ -427,6 +474,8 @@ def categorize(name):
             return "Canned & Jarred"
 
         # ── Priority 3: Produce Overrides ──
+        if "egg plant" in raw_norm or "eggplant" in raw_norm or "egg plant" in stemmed_norm or "eggplant" in stemmed_norm:
+            return "Produce"
         if "spaghetti squash" in raw_norm or "spaghetti squash" in stemmed_norm:
             return "Produce"
         if "curry leaf" in raw_norm or "curry leaves" in raw_norm or "curry leaf" in stemmed_norm:
@@ -721,6 +770,7 @@ def backfill_uncategorized_items(use_ai=True, max_ai_items=150):
         "store_items_updated": 0,
         "list_items_updated": 0,
         "purchase_stats_updated": 0,
+        "taxonomy_items_learned": 0,
         "tier1_rule_matched": 0,
         "tier2_peer_matched": 0,
         "tier3_gemini_matched": 0,
@@ -774,7 +824,7 @@ def backfill_uncategorized_items(use_ai=True, max_ai_items=150):
         # ── Tier 1: Local Rule & Head-Noun Matching ──
         for name in distinct_names:
             norm = name_to_norm[name]
-            cat = categorize(name)
+            cat = categorize(name, check_db=False)
             if cat and cat in CANONICAL_CATEGORIES:
                 resolved_categories[norm] = cat
                 stats["tier1_rule_matched"] += 1
@@ -864,6 +914,21 @@ def backfill_uncategorized_items(use_ai=True, max_ai_items=150):
                 except Exception:
                     pass
 
+        # 4. Self-Learning Loop: Persist newly resolved categories to item_taxonomy
+        for norm_name, cat in resolved_categories.items():
+            if norm_name and cat and cat in CANONICAL_CATEGORIES:
+                try:
+                    db.execute("""
+                        INSERT INTO item_taxonomy (normalized_name, category, source)
+                        VALUES (?, ?, 'cron_sweep')
+                        ON CONFLICT (normalized_name)
+                        DO UPDATE SET category = EXCLUDED.category, updated_at = NOW()
+                    """, (norm_name, cat))
+                    stats["taxonomy_items_learned"] += 1
+                except Exception as tax_err:
+                    print(f"[categorize] item_taxonomy upsert notice for '{norm_name}': {tax_err}")
+        clear_taxonomy_cache()
+
         db.commit()
     except Exception as e:
         print(f"[categorize] Error running backfill_uncategorized_items: {e}")
@@ -891,6 +956,9 @@ if __name__ == "__main__":
         ("Egg", "Dairy"),
         ("Eggs", "Dairy"),
         ("Egg Whites", "Dairy"),
+        ("Egg plant", "Produce"),
+        ("Egg Plant", "Produce"),
+        ("eggplants", "Produce"),
         ("Onion", "Produce"),
         ("Spinach", "Produce"),
         ("Avocado", "Produce"),

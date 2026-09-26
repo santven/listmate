@@ -123,5 +123,19 @@ class TestCategorizeEngine(unittest.TestCase):
             self.assertEqual(res.get("Unknown Exotic Fruit"), "Produce")
             self.assertEqual(res.get("Special Artisan Cookie"), "Snacks & Sweets")
 
+    def test_taxonomy_db_lookup_and_override(self):
+        # When item_taxonomy has an entry, categorize returns the DB entry directly
+        mock_db = MagicMock()
+        mock_db.execute.return_value.fetchone.return_value = {"category": "Produce"}
+        import sys
+        mock_db_pg = MagicMock()
+        mock_db_pg.get_db.return_value = mock_db
+        with patch.dict(sys.modules, {"db_pg": mock_db_pg}):
+            categorize.clear_taxonomy_cache()
+            cat = categorize.categorize("Special Custom Item")
+            self.assertEqual(cat, "Produce")
+            mock_db.close.assert_called_once()
+            categorize.clear_taxonomy_cache()
+
 if __name__ == "__main__":
     unittest.main()
