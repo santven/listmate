@@ -1393,6 +1393,16 @@ def register_auth_routes(app):
         eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
         resp["geo"] = {"country": country, "is_eu": country in eu_countries}
 
+        # App Store & Google Play latest release version metadata
+        latest_version = os.environ.get("LATEST_APP_VERSION", "1.0.1")
+        resp["app_update"] = {
+            "latest_version": latest_version,
+            "play_store_url": "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate",
+            "app_store_url": "https://apps.apple.com/app/listmate/id6742337651",
+            "title": "A new version of ListMate is available!",
+            "message": "Update to the latest version to enjoy the newest improvements, speed enhancements, and bug fixes."
+        }
+
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()
