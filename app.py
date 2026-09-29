@@ -3941,7 +3941,7 @@ def api_push_unregister():
 @app.route("/api/admin/push/subscriptions", methods=["GET"])
 @require_admin
 def api_admin_push_subscriptions():
-    """Admin inspect active subscriptions."""
+    """Admin inspect active subscriptions (strictly active devices only)."""
     try:
         authmod._init_schema()
         rows = authmod._run("""
@@ -3950,12 +3950,26 @@ def api_admin_push_subscriptions():
             FROM push_subscriptions ps
             JOIN auth_users u ON u.id = ps.user_id
             JOIN auth_households h ON h.id = ps.household_id
+            WHERE ps.is_active = TRUE
             ORDER BY ps.last_seen_at DESC
             LIMIT 50
         """)
         return jsonify({"ok": True, "subscriptions": rows})
     except Exception as e:
         print(f"[/api/admin/push/subscriptions error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/push/history", methods=["GET"])
+@require_admin
+def api_admin_push_history():
+    """Admin inspect recent push notification dispatch history."""
+    try:
+        limit = request.args.get("limit", 20)
+        logs = authmod.get_recent_push_logs(limit=int(limit))
+        return jsonify({"ok": True, "history": logs})
+    except Exception as e:
+        print(f"[/api/admin/push/history error]: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 

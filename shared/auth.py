@@ -296,6 +296,23 @@ def _init_schema():
         """CREATE INDEX IF NOT EXISTS idx_push_sub_user_id ON push_subscriptions(user_id) WHERE is_active = TRUE""",
         """CREATE INDEX IF NOT EXISTS idx_push_sub_hh_id ON push_subscriptions(household_id) WHERE is_active = TRUE""",
         """CREATE INDEX IF NOT EXISTS idx_push_sub_token ON push_subscriptions(token)""",
+        """CREATE TABLE IF NOT EXISTS push_notifications_log (
+            id SERIAL PRIMARY KEY,
+            target_type VARCHAR(50) NOT NULL,
+            target_id INTEGER,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            url TEXT DEFAULT '/',
+            custom_data JSONB,
+            tokens_count INTEGER NOT NULL DEFAULT 0,
+            sent_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            errors TEXT[],
+            is_mock BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_push_log_created_at ON push_notifications_log(created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS idx_push_log_target ON push_notifications_log(target_type, target_id)""",
     ]:
         _run(stmt)
     for stmt in [
@@ -603,6 +620,77 @@ def mark_tokens_inactive(tokens: list) -> bool:
     except Exception as e:
         print(f"[mark_tokens_inactive error] {e}", flush=True)
         return False
+
+
+def log_push_dispatch(target_type: str, target_id: Optional[int], title: str, body: str,
+                      url: str = '/', custom_data: Optional[dict] = None,
+                      tokens_count: int = 0, sent_count: int = 0, failed_count: int = 0,
+                      errors: Optional[list] = None, is_mock: bool = False) -> bool:
+    """Store push notification dispatch record into push_notifications_log for audit and visibility."""
+    try:
+        _init_schema()
+        import json
+        tid = int(target_id) if target_id and int(target_id) != 0 else None
+        clean_errors = [str(e) for e in (errors or [])]
+        data_json = json.dumps(custom_data or {})
+        _run("""
+            INSERT INTO push_notifications_log (
+                target_type, target_id, title, body, url, custom_data,
+                tokens_count, sent_count, failed_count, errors, is_mock, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, NOW())
+        """, (
+            str(target_type or 'unknown')[:50],
+            tid,
+            str(title or '')[:500],
+            str(body or '')[:2000],
+            str(url or '/')[:500],
+            data_json,
+            int(tokens_count or 0),
+            int(sent_count or 0),
+            int(failed_count or 0),
+            clean_errors,
+            bool(is_mock)
+        ))
+        return True
+    except Exception as e:
+        print(f"[log_push_dispatch error]: {e}", flush=True)
+        return False
+
+
+def get_recent_push_logs(limit: int = 20):
+    """Retrieve recent push notification dispatches for the admin console."""
+    try:
+        _init_schema()
+        safe_limit = min(max(1, int(limit)), 100)
+        rows = _run("""
+            SELECT id, target_type, target_id, title, body, url,
+                   tokens_count, sent_count, failed_count, errors, is_mock, created_at
+            FROM push_notifications_log
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (safe_limit,))
+        return rows
+    except Exception as e:
+        print(f"[get_recent_push_logs error]: {e}", flush=True)
+        return []
+
+
+def prune_push_notifications_log(retention_days: int = 30) -> int:
+    """Prune push notification audit logs older than retention_days (called by unified cron)."""
+    try:
+        _init_schema()
+        days = max(1, int(retention_days))
+        # Use PostgreSQL interval syntax safely with parameter
+        res = _run("""
+            DELETE FROM push_notifications_log
+            WHERE created_at < NOW() - (%s || ' days')::INTERVAL
+            RETURNING id
+        """, (str(days),))
+        deleted_count = len(res) if res else 0
+        return deleted_count
+    except Exception as e:
+        print(f"[prune_push_notifications_log error]: {e}", flush=True)
+        return 0
 
 
 # ── Session ─────────────────────────────────────────────────

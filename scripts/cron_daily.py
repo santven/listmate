@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add parent directory to path to import shared modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import _run, _init_schema, is_email_suppressed
+from shared.auth import _run, _init_schema, is_email_suppressed, prune_push_notifications_log
 from email_helper import (
     BASE_URL,
     send_subscription_notice,
@@ -1293,6 +1293,13 @@ def run_cron():
         cleanup_abandoned_signups()
     except Exception as exc:
         print(f"Signup abandonment cleanup routine failed: {exc}")
+
+    # 11. Push Notification Logs Retention Pruning (30+ days)
+    try:
+        pruned_pushes = prune_push_notifications_log(retention_days=30)
+        print(f"Push notification audit logs cleanup complete: {pruned_pushes} record(s) pruned.")
+    except Exception as exc:
+        print(f"Push notifications log pruning routine failed: {exc}")
 
     # Auto-categorize any uncategorized items
     try:

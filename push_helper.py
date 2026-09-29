@@ -160,8 +160,9 @@ def resolve_fcm_tokens(tokens: List[str]) -> List[str]:
     return resolved
 
 
-def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    """Send multicast notification via Firebase Cloud Messaging with dead token collection."""
+def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional[Dict[str, str]] = None,
+                        target_type: str = "broadcast", target_id: Optional[int] = None) -> Dict[str, Any]:
+    """Send multicast notification via Firebase Cloud Messaging with dead token collection and audit logging."""
     if not tokens:
         return {"sent": 0, "failed": 0, "unregistered": []}
 
@@ -175,6 +176,19 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
     if not app_ready:
         # Mock/development fallback: log delivery payload safely
         print(f"[PushHelper:MockDispatch] Would push to {len(tokens)} token(s) | Title: '{title}' | Body: '{body}' | Data: {clean_data}")
+        authmod.log_push_dispatch(
+            target_type=target_type,
+            target_id=target_id,
+            title=title,
+            body=body,
+            url=clean_data.get('url', '/'),
+            custom_data=clean_data,
+            tokens_count=len(tokens),
+            sent_count=len(tokens),
+            failed_count=0,
+            errors=[],
+            is_mock=True
+        )
         return {"sent": len(tokens), "failed": 0, "unregistered": [], "mock": True}
 
     try:
@@ -267,6 +281,24 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
             logger.info(f"[PushHelper] Pruning {len(dead_tokens)} inactive/unregistered token(s).")
             authmod.mark_tokens_inactive(dead_tokens)
 
+        # Log push dispatch result to database
+        try:
+            authmod.log_push_dispatch(
+                target_type=target_type,
+                target_id=target_id,
+                title=title,
+                body=body,
+                url=clean_data.get('url', '/'),
+                custom_data=clean_data,
+                tokens_count=len(tokens),
+                sent_count=success_count,
+                failed_count=failure_count,
+                errors=errors,
+                is_mock=False
+            )
+        except Exception as log_err:
+            logger.warning(f"[PushHelper] Failed to log push dispatch: {log_err}")
+
         return {
             "sent": success_count,
             "failed": failure_count,
@@ -277,6 +309,22 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
     except Exception as e:
         print(f"[PushHelper:Exception] Multicast dispatch error: {e}", flush=True)
         logger.error(f"[PushHelper] Multicast dispatch error: {e}")
+        try:
+            authmod.log_push_dispatch(
+                target_type=target_type,
+                target_id=target_id,
+                title=title,
+                body=body,
+                url=clean_data.get('url', '/'),
+                custom_data=clean_data,
+                tokens_count=len(tokens),
+                sent_count=0,
+                failed_count=len(tokens),
+                errors=[str(e)],
+                is_mock=False
+            )
+        except Exception:
+            pass
         return {"sent": 0, "failed": len(tokens), "error": str(e), "errors": [str(e)], "unregistered": []}
 
 
@@ -292,7 +340,7 @@ def send_push_to_user(user_id: int, title: str, body: str, data: Optional[Dict[s
         return {"sent": 0, "failed": 0, "message": "No active tokens for user"}
 
     tokens = [r["token"] for r in token_rows if r.get("token")]
-    return _send_fcm_multicast(tokens, title, body, data)
+    return _send_fcm_multicast(tokens, title, body, data, target_type="user", target_id=int(user_id))
 
 
 def send_push_to_household(household_id: int, title: str, body: str, data: Optional[Dict[str, str]] = None, exclude_user_id: Optional[int] = None) -> Dict[str, Any]:
@@ -308,7 +356,7 @@ def send_push_to_household(household_id: int, title: str, body: str, data: Optio
         return {"sent": 0, "failed": 0, "message": "No active tokens for household"}
 
     tokens = [r["token"] for r in token_rows if r.get("token")]
-    return _send_fcm_multicast(tokens, title, body, data)
+    return _send_fcm_multicast(tokens, title, body, data, target_type="household", target_id=int(household_id))
 
 
 def send_push_broadcast(title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -319,7 +367,7 @@ def send_push_broadcast(title: str, body: str, data: Optional[Dict[str, str]] = 
         tokens = [r["token"] for r in rows if r.get("token")]
         if not tokens:
             return {"sent": 0, "failed": 0, "message": "No active tokens"}
-        return _send_fcm_multicast(tokens, title, body, data)
+        return _send_fcm_multicast(tokens, title, body, data, target_type="broadcast", target_id=None)
     except Exception as e:
         logger.error(f"[PushHelper] Broadcast error: {e}")
         return {"sent": 0, "failed": 0, "error": str(e)}
