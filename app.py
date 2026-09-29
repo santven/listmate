@@ -144,8 +144,6 @@ def _ensure_schema():
         try:
             from db_pg import init_db as init_store_db
             init_store_db()
-            from categorize import backfill_uncategorized_items
-            backfill_uncategorized_items()
         except Exception:
             pass
     except Exception:
@@ -3965,8 +3963,12 @@ def api_admin_push_subscriptions():
 def api_admin_push_history():
     """Admin inspect recent push notification dispatch history."""
     try:
-        limit = request.args.get("limit", 20)
-        logs = authmod.get_recent_push_logs(limit=int(limit))
+        raw_limit = request.args.get("limit", 20)
+        try:
+            limit = int(raw_limit)
+        except (ValueError, TypeError):
+            limit = 20
+        logs = authmod.get_recent_push_logs(limit=limit)
         return jsonify({"ok": True, "history": logs})
     except Exception as e:
         print(f"[/api/admin/push/history error]: {e}", flush=True)
@@ -3982,8 +3984,19 @@ def api_admin_push_test():
         title = str(data.get("title") or "ListMate Test Notification").strip()
         body = str(data.get("body") or "This is a test notification from ListMate.").strip()
         target_type = str(data.get("target_type") or "me").strip().lower()
-        target_id = data.get("target_id")
+        target_id_raw = data.get("target_id")
         deep_link = str(data.get("url") or "/").strip()
+
+        parsed_target_id = None
+        if target_type in ("user", "household"):
+            if not target_id_raw:
+                return jsonify({"error": f"target_id required for {target_type} dispatch"}), 400
+            try:
+                parsed_target_id = int(target_id_raw)
+            except (ValueError, TypeError):
+                return jsonify({"error": f"target_id must be a valid integer, received: {target_id_raw}"}), 400
+            if parsed_target_id == 0:
+                return jsonify({"error": "target_id cannot be 0"}), 400
 
         import push_helper
 
@@ -3993,13 +4006,9 @@ def api_admin_push_test():
             uid = authmod.get_user_id()
             res = push_helper.send_push_to_user(uid, title, body, payload_data)
         elif target_type == "user":
-            if not target_id:
-                return jsonify({"error": "target_id required for user dispatch"}), 400
-            res = push_helper.send_push_to_user(int(target_id), title, body, payload_data)
+            res = push_helper.send_push_to_user(parsed_target_id, title, body, payload_data)
         elif target_type == "household":
-            if not target_id:
-                return jsonify({"error": "target_id required for household dispatch"}), 400
-            res = push_helper.send_push_to_household(int(target_id), title, body, payload_data)
+            res = push_helper.send_push_to_household(parsed_target_id, title, body, payload_data)
         elif target_type == "broadcast":
             res = push_helper.send_push_broadcast(title, body, payload_data)
         else:

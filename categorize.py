@@ -38,10 +38,10 @@ def get_taxonomy_category(name, db=None):
                 return cat
             _TAXONOMY_CACHE[cleaned] = None
         finally:
-            if should_close:
+            if should_close and db:
                 db.close()
     except Exception:
-        pass
+        _TAXONOMY_CACHE[cleaned] = None
     return None
 
 def clear_taxonomy_cache():

@@ -76,9 +76,12 @@ def _get_google_access_token() -> Optional[str]:
     try:
         # Certificate object implements get_access_token()
         token_obj = _firebase_credential.get_access_token()
-        if hasattr(token_obj, 'access_token'):
-            return token_obj.access_token
-        return str(token_obj)
+        if not token_obj:
+            return None
+        if hasattr(token_obj, 'access_token') and token_obj.access_token:
+            return str(token_obj.access_token)
+        val = str(token_obj).strip()
+        return val if val and val.lower() != 'none' else None
     except Exception as e:
         logger.error(f"[PushHelper] Error obtaining Google access token: {e}")
         return None
@@ -114,7 +117,7 @@ def exchange_apns_to_fcm(apns_token: str, bundle_id: str = "com.pvkslabs.listmat
             "apns_tokens": [clean_apns],
         }
         try:
-            resp = requests.post(url, json=body, headers=headers, timeout=5)
+            resp = requests.post(url, json=body, headers=headers, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 results = data.get("results", [])
@@ -137,12 +140,14 @@ def exchange_apns_to_fcm(apns_token: str, bundle_id: str = "com.pvkslabs.listmat
 def resolve_fcm_tokens(tokens: List[str]) -> List[str]:
     """Inspect a list of tokens. If any are raw 64-hex APNs tokens, exchange them for FCM tokens
     and update them in the database for future dispatches.
+    Preserves 1-to-1 array length matching input.
     """
     resolved = []
     for token in tokens:
-        if not token:
+        clean_tok = str(token or "").strip()
+        if not clean_tok:
+            resolved.append("")
             continue
-        clean_tok = str(token).strip()
         if _APNS_HEX_REGEX.match(clean_tok):
             fcm_token = exchange_apns_to_fcm(clean_tok)
             if fcm_token:
@@ -162,9 +167,13 @@ def resolve_fcm_tokens(tokens: List[str]) -> List[str]:
 
 def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional[Dict[str, str]] = None,
                         target_type: str = "broadcast", target_id: Optional[int] = None) -> Dict[str, Any]:
-    """Send multicast notification via Firebase Cloud Messaging with dead token collection and audit logging."""
-    if not tokens:
-        return {"sent": 0, "failed": 0, "unregistered": []}
+    """Send multicast notification via Firebase Cloud Messaging with dead token collection and audit logging.
+    Enforces FCM 500-token batching, strict 1-to-1 token alignment, and robust dead token pruning.
+    """
+    # 1. Defensively clean input tokens
+    clean_tokens = [str(t).strip() for t in (tokens or []) if t and str(t).strip()]
+    if not clean_tokens:
+        return {"sent": 0, "failed": 0, "unregistered": [], "errors": []}
 
     # Format custom data as strings
     clean_data = {}
@@ -175,7 +184,7 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
     app_ready = _get_firebase_app()
     if not app_ready:
         # Mock/development fallback: log delivery payload safely
-        print(f"[PushHelper:MockDispatch] Would push to {len(tokens)} token(s) | Title: '{title}' | Body: '{body}' | Data: {clean_data}")
+        print(f"[PushHelper:MockDispatch] Would push to {len(clean_tokens)} token(s) | Title: '{title}' | Body: '{body}' | Data: {clean_data}")
         authmod.log_push_dispatch(
             target_type=target_type,
             target_id=target_id,
@@ -183,13 +192,13 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
             body=body,
             url=clean_data.get('url', '/'),
             custom_data=clean_data,
-            tokens_count=len(tokens),
-            sent_count=len(tokens),
+            tokens_count=len(clean_tokens),
+            sent_count=len(clean_tokens),
             failed_count=0,
             errors=[],
             is_mock=True
         )
-        return {"sent": len(tokens), "failed": 0, "unregistered": [], "mock": True}
+        return {"sent": len(clean_tokens), "failed": 0, "unregistered": [], "mock": True}
 
     try:
         from firebase_admin import messaging
@@ -235,51 +244,69 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
         except Exception as apns_err:
             logger.warning(f"[PushHelper] Failed to build APNSConfig: {apns_err}")
 
-        # Resolve any raw APNs device tokens to FCM registration tokens
-        effective_tokens = resolve_fcm_tokens(tokens)
+        # FCM enforces max 500 tokens per multicast message
+        FCM_BATCH_SIZE = 500
+        total_sent = 0
+        total_failed = 0
+        all_dead_tokens = []
+        all_errors = []
 
-        multicast_kwargs = {
-            "tokens": effective_tokens,
-            "notification": notification,
-            "data": clean_data,
-        }
-        if android_config:
-            multicast_kwargs["android"] = android_config
-        if apns_config:
-            multicast_kwargs["apns"] = apns_config
+        for i in range(0, len(clean_tokens), FCM_BATCH_SIZE):
+            batch_orig_tokens = clean_tokens[i:i + FCM_BATCH_SIZE]
+            # Resolve APNs tokens to FCM tokens 1-to-1
+            batch_effective_tokens = resolve_fcm_tokens(batch_orig_tokens)
 
-        message = messaging.MulticastMessage(**multicast_kwargs)
+            # Pair original and effective tokens to maintain perfect alignment
+            paired_tokens = list(zip(batch_orig_tokens, batch_effective_tokens))
+            valid_pairs = [p for p in paired_tokens if p[1]]
+            if not valid_pairs:
+                continue
 
-        response = messaging.send_each_for_multicast(message)
+            multicast_kwargs = {
+                "tokens": [p[1] for p in valid_pairs],
+                "notification": notification,
+                "data": clean_data,
+            }
+            if android_config:
+                multicast_kwargs["android"] = android_config
+            if apns_config:
+                multicast_kwargs["apns"] = apns_config
 
-        dead_tokens = []
-        errors = []
-        success_count = response.success_count
-        failure_count = response.failure_count
+            message = messaging.MulticastMessage(**multicast_kwargs)
+            response = messaging.send_each_for_multicast(message)
 
-        for idx, resp in enumerate(response.responses):
-            token = tokens[idx]
-            if not resp.success:
-                err = resp.exception
-                err_str = str(err)
-                err_code = getattr(err, 'code', 'UNKNOWN')
-                print(f"[PushHelper:Failure] Token {token[:12]}... ErrorCode={err_code} Exception={err_str}", flush=True)
-                logger.error(f"[PushHelper:Failure] Token {token[:12]}... ErrorCode={err_code} Exception={err_str}")
-                errors.append(f"{err_code}: {err_str}")
+            total_sent += response.success_count
+            total_failed += response.failure_count
 
-                # Check for dead/unregistered tokens
-                if err and hasattr(err, 'code') and err.code in ('UNREGISTERED', 'INVALID_ARGUMENT'):
-                    dead_tokens.append(token)
-                elif 'registration-token-not-registered' in err_str.lower():
-                    dead_tokens.append(token)
-            else:
-                msg_id = getattr(resp, 'message_id', 'ok')
-                print(f"[PushHelper:Success] Token {token[:12]}... MessageId={msg_id}", flush=True)
+            batch_dead = []
+            for idx, resp in enumerate(response.responses):
+                orig_tok, eff_tok = valid_pairs[idx]
+                if not resp.success:
+                    err = resp.exception
+                    err_str = str(err)
+                    err_code = getattr(err, 'code', 'UNKNOWN')
+                    print(f"[PushHelper:Failure] Token {eff_tok[:12]}... ErrorCode={err_code} Exception={err_str}", flush=True)
+                    all_errors.append(f"{err_code}: {err_str}")
 
-        if dead_tokens:
-            print(f"[PushHelper] Pruning {len(dead_tokens)} inactive/unregistered token(s).", flush=True)
-            logger.info(f"[PushHelper] Pruning {len(dead_tokens)} inactive/unregistered token(s).")
-            authmod.mark_tokens_inactive(dead_tokens)
+                    # Check for dead/unregistered tokens
+                    is_unregistered = (
+                        (err and hasattr(err, 'code') and err.code in ('UNREGISTERED', 'INVALID_ARGUMENT'))
+                        or 'registration-token-not-registered' in err_str.lower()
+                        or 'unregistered' in err_str.lower()
+                    )
+                    if is_unregistered:
+                        # Append both so whichever is currently in the DB row gets deactivated
+                        batch_dead.append(orig_tok)
+                        batch_dead.append(eff_tok)
+                        all_dead_tokens.append(eff_tok)
+                else:
+                    msg_id = getattr(resp, 'message_id', 'ok')
+                    print(f"[PushHelper:Success] Token {eff_tok[:12]}... MessageId={msg_id}", flush=True)
+
+            if batch_dead:
+                unique_dead = list(set([t for t in batch_dead if t]))
+                print(f"[PushHelper] Pruning {len(unique_dead)} inactive/unregistered token(s).", flush=True)
+                authmod.mark_tokens_inactive(unique_dead)
 
         # Log push dispatch result to database
         try:
@@ -290,20 +317,20 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
                 body=body,
                 url=clean_data.get('url', '/'),
                 custom_data=clean_data,
-                tokens_count=len(tokens),
-                sent_count=success_count,
-                failed_count=failure_count,
-                errors=errors,
+                tokens_count=len(clean_tokens),
+                sent_count=total_sent,
+                failed_count=total_failed,
+                errors=all_errors,
                 is_mock=False
             )
         except Exception as log_err:
             logger.warning(f"[PushHelper] Failed to log push dispatch: {log_err}")
 
         return {
-            "sent": success_count,
-            "failed": failure_count,
-            "unregistered": dead_tokens,
-            "errors": errors,
+            "sent": total_sent,
+            "failed": total_failed,
+            "unregistered": list(set(all_dead_tokens)),
+            "errors": all_errors,
             "mock": False,
         }
     except Exception as e:
@@ -317,15 +344,15 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
                 body=body,
                 url=clean_data.get('url', '/'),
                 custom_data=clean_data,
-                tokens_count=len(tokens),
+                tokens_count=len(clean_tokens),
                 sent_count=0,
-                failed_count=len(tokens),
+                failed_count=len(clean_tokens),
                 errors=[str(e)],
                 is_mock=False
             )
         except Exception:
             pass
-        return {"sent": 0, "failed": len(tokens), "error": str(e), "errors": [str(e)], "unregistered": []}
+        return {"sent": 0, "failed": len(clean_tokens), "error": str(e), "errors": [str(e)], "unregistered": []}
 
 
 def send_push_to_user(user_id: int, title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:

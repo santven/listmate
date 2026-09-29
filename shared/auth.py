@@ -549,11 +549,24 @@ def replace_push_token(old_token: str, new_token: str) -> bool:
         return False
     try:
         _init_schema()
-        # If new_token already exists, deactivate old_token; otherwise update old_token in place
+        # Retrieve original ownership details
+        old_row = _one("SELECT user_id, household_id, platform, device_model, app_version FROM push_subscriptions WHERE token = %s", (old_token,))
+        if not old_row:
+            return False
+
         existing = _one("SELECT id FROM push_subscriptions WHERE token = %s", (new_token,))
         if existing:
+            # Synchronize ownership and activate new token, deactivate old token
+            _run("""
+                UPDATE push_subscriptions
+                SET user_id = %s, household_id = %s, platform = %s,
+                    device_model = COALESCE(NULLIF(%s, ''), device_model),
+                    app_version = COALESCE(NULLIF(%s, ''), app_version),
+                    is_active = TRUE, updated_at = NOW()
+                WHERE id = %s
+            """, (old_row.get("user_id"), old_row.get("household_id"), old_row.get("platform") or "ios",
+                  old_row.get("device_model") or "", old_row.get("app_version") or "", existing["id"]))
             _run("UPDATE push_subscriptions SET is_active = FALSE, updated_at = NOW() WHERE token = %s", (old_token,))
-            _run("UPDATE push_subscriptions SET is_active = TRUE, updated_at = NOW() WHERE token = %s", (new_token,))
         else:
             _run("UPDATE push_subscriptions SET token = %s, updated_at = NOW(), is_active = TRUE WHERE token = %s", (new_token, old_token))
         return True
@@ -681,14 +694,22 @@ def prune_push_notifications_log(retention_days: int = 30) -> int:
     try:
         _init_schema()
         days = max(1, int(retention_days))
-        # Use PostgreSQL interval syntax safely with parameter
-        res = _run("""
-            DELETE FROM push_notifications_log
-            WHERE created_at < NOW() - (%s || ' days')::INTERVAL
-            RETURNING id
-        """, (str(days),))
-        deleted_count = len(res) if res else 0
-        return deleted_count
+        # Execute deletion without retrieving full result set into memory
+        conn = _connect()
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM push_notifications_log
+                WHERE created_at < NOW() - (%s || ' days')::INTERVAL
+            """, (str(days),))
+            deleted_count = cur.rowcount
+            return max(0, deleted_count)
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
     except Exception as e:
         print(f"[prune_push_notifications_log error]: {e}", flush=True)
         return 0
