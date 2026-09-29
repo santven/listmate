@@ -5965,11 +5965,11 @@ window.checkAppUpdatePrompt = async function() {
     const appUpdateCfg = (window.currentCfg && window.currentCfg.app_update) ? window.currentCfg.app_update : null;
     if (!appUpdateCfg || !appUpdateCfg.latest_version) return;
 
-    // Cooldown check (don't nag more than once every 48 hours if dismissed)
+    // Cooldown check (don't nag more than once a day / 24 hours if dismissed)
     const lastDismissed = localStorage.getItem('listmate_update_dismissed_at');
     if (lastDismissed) {
       const hoursSinceDismiss = (Date.now() - parseInt(lastDismissed, 10)) / (1000 * 60 * 60);
-      if (hoursSinceDismiss < 48) {
+      if (hoursSinceDismiss < 24) {
         return;
       }
     }
@@ -6002,7 +6002,8 @@ window.checkAppUpdatePrompt = async function() {
 
     if (isOlderVersion(installedVersion, appUpdateCfg.latest_version)) {
       const platform = (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') ? window.Capacitor.getPlatform() : 'android';
-      const storeUrl = platform === 'ios'
+      const isIOS = platform === 'ios';
+      const storeUrl = isIOS
         ? (appUpdateCfg.app_store_url || 'https://apps.apple.com/app/listmate/id6742337651')
         : (appUpdateCfg.play_store_url || 'https://play.google.com/store/apps/details?id=com.pvkslabs.listmate');
 
@@ -6017,11 +6018,26 @@ window.checkAppUpdatePrompt = async function() {
       if (titleEl && appUpdateCfg.title) titleEl.textContent = appUpdateCfg.title;
       if (bodyEl && appUpdateCfg.message) bodyEl.textContent = appUpdateCfg.message;
 
+      // Update button text to clearly indicate target store
+      btnUpdate.textContent = isIOS ? 'Update on App Store' : 'Update on Google Play';
+
       btnUpdate.onclick = () => {
-        if (window.Capacitor?.Plugins?.Browser) {
-          window.Capacitor.Plugins.Browser.open({ url: storeUrl });
-        } else {
-          window.open(storeUrl, '_system');
+        // Prefer native store scheme if possible (market:// or itms-apps://)
+        let targetUri = storeUrl;
+        if (isIOS && storeUrl.includes('id6742337651')) {
+          targetUri = 'itms-apps://apps.apple.com/app/id6742337651';
+        } else if (!isIOS && storeUrl.includes('com.pvkslabs.listmate')) {
+          targetUri = 'market://details?id=com.pvkslabs.listmate';
+        }
+
+        try {
+          if (window.Capacitor?.Plugins?.Browser) {
+            window.Capacitor.Plugins.Browser.open({ url: targetUri });
+          } else {
+            window.location.href = targetUri;
+          }
+        } catch (e) {
+          window.location.href = storeUrl;
         }
         modal.classList.remove('open');
       };
