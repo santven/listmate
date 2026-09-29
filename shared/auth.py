@@ -3,6 +3,7 @@
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps
+from typing import Optional, List, Dict, Any
 try:
     from flask import request, jsonify, session, send_from_directory, has_request_context, g
 except ImportError:
