@@ -1,14 +1,18 @@
 import os
+import re
 import json
 import logging
+import requests
 from typing import List, Dict, Any, Optional
 
 import shared.auth as authmod
 
 logger = logging.getLogger(__name__)
 
-# Cache for initialized Firebase App
+# Cache for initialized Firebase App and Credential
 _firebase_initialized = False
+_firebase_credential = None
+_APNS_HEX_REGEX = re.compile(r'^[0-9a-fA-F]{64}$')
 
 
 def _get_firebase_app():
@@ -17,7 +21,7 @@ def _get_firebase_app():
     1. FIREBASE_SERVICE_ACCOUNT_JSON (raw JSON string or filepath)
     2. GOOGLE_APPLICATION_CREDENTIALS (filepath)
     """
-    global _firebase_initialized
+    global _firebase_initialized, _firebase_credential
     if _firebase_initialized:
         return True
 
@@ -28,6 +32,10 @@ def _get_firebase_app():
         # Check if already initialized in another module
         if firebase_admin._apps:
             _firebase_initialized = True
+            try:
+                _firebase_credential = firebase_admin.get_app().credential
+            except Exception:
+                pass
             return True
 
         cred_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
@@ -40,12 +48,14 @@ def _get_firebase_app():
             else:
                 cred = credentials.Certificate(cred_json)
             firebase_admin.initialize_app(cred)
+            _firebase_credential = cred
             _firebase_initialized = True
             logger.info("[PushHelper] Firebase Admin initialized with FIREBASE_SERVICE_ACCOUNT_JSON.")
             return True
         elif google_app_cred and os.path.exists(google_app_cred):
             cred = credentials.Certificate(google_app_cred)
             firebase_admin.initialize_app(cred)
+            _firebase_credential = cred
             _firebase_initialized = True
             logger.info("[PushHelper] Firebase Admin initialized with GOOGLE_APPLICATION_CREDENTIALS.")
             return True
@@ -55,6 +65,99 @@ def _get_firebase_app():
     except Exception as e:
         logger.error(f"[PushHelper] Failed to initialize Firebase Admin: {e}")
         return False
+
+
+def _get_google_access_token() -> Optional[str]:
+    """Retrieve an OAuth2 Bearer token using the Firebase Admin credentials."""
+    global _firebase_credential
+    _get_firebase_app()
+    if not _firebase_credential:
+        return None
+    try:
+        # Certificate object implements get_access_token()
+        token_obj = _firebase_credential.get_access_token()
+        if hasattr(token_obj, 'access_token'):
+            return token_obj.access_token
+        return str(token_obj)
+    except Exception as e:
+        logger.error(f"[PushHelper] Error obtaining Google access token: {e}")
+        return None
+
+
+def exchange_apns_to_fcm(apns_token: str, bundle_id: str = "com.pvkslabs.listmate") -> Optional[str]:
+    """Exchange a native 64-char Apple APNs hex token for a Firebase FCM registration token
+    using the Google Instance ID batchImport API.
+    Tries Production first (TestFlight / AppStore), then Sandbox (local dev).
+    """
+    clean_apns = str(apns_token or "").strip()
+    if not _APNS_HEX_REGEX.match(clean_apns):
+        return clean_apns
+
+    access_token = _get_google_access_token()
+    if not access_token:
+        logger.warning(f"[PushHelper] Cannot exchange APNs token: Google access token unavailable.")
+        return None
+
+    url = "https://iid.googleapis.com/iid/v1:batchImport"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "access_token_auth": "true",
+    }
+
+    # TestFlight and AppStore builds use production APNs environment (sandbox=False)
+    # Xcode local debug builds use development APNs environment (sandbox=True)
+    for is_sandbox in [False, True]:
+        body = {
+            "application": bundle_id,
+            "sandbox": is_sandbox,
+            "apns_tokens": [clean_apns],
+        }
+        try:
+            resp = requests.post(url, json=body, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("results", [])
+                if results and results[0].get("status") == "OK" and results[0].get("registration_token"):
+                    fcm_token = results[0]["registration_token"]
+                    env_name = "sandbox" if is_sandbox else "production"
+                    print(f"[PushHelper] Successfully exchanged APNs token ({clean_apns[:10]}...) to FCM token ({fcm_token[:14]}...) via {env_name}.", flush=True)
+                    return fcm_token
+                else:
+                    err_status = results[0].get("status") if results else "EMPTY_RESULTS"
+                    print(f"[PushHelper] APNs exchange attempt (sandbox={is_sandbox}) returned: {err_status}", flush=True)
+            else:
+                print(f"[PushHelper] APNs exchange HTTP {resp.status_code} (sandbox={is_sandbox}): {resp.text}", flush=True)
+        except Exception as e:
+            print(f"[PushHelper] Exception exchanging APNs token: {e}", flush=True)
+
+    return None
+
+
+def resolve_fcm_tokens(tokens: List[str]) -> List[str]:
+    """Inspect a list of tokens. If any are raw 64-hex APNs tokens, exchange them for FCM tokens
+    and update them in the database for future dispatches.
+    """
+    resolved = []
+    for token in tokens:
+        if not token:
+            continue
+        clean_tok = str(token).strip()
+        if _APNS_HEX_REGEX.match(clean_tok):
+            fcm_token = exchange_apns_to_fcm(clean_tok)
+            if fcm_token:
+                # Update database so subsequent pushes use the FCM token directly
+                try:
+                    authmod.replace_push_token(clean_tok, fcm_token)
+                except Exception as update_err:
+                    logger.warning(f"[PushHelper] Failed to update replaced token in DB: {update_err}")
+                resolved.append(fcm_token)
+            else:
+                # Keep original token so it can still report failure if exchange failed
+                resolved.append(clean_tok)
+        else:
+            resolved.append(clean_tok)
+    return resolved
 
 
 def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -118,8 +221,11 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
         except Exception as apns_err:
             logger.warning(f"[PushHelper] Failed to build APNSConfig: {apns_err}")
 
+        # Resolve any raw APNs device tokens to FCM registration tokens
+        effective_tokens = resolve_fcm_tokens(tokens)
+
         multicast_kwargs = {
-            "tokens": tokens,
+            "tokens": effective_tokens,
             "notification": notification,
             "data": clean_data,
         }

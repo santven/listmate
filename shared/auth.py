@@ -525,6 +525,25 @@ def unregister_push_token(token: str) -> bool:
         return False
 
 
+def replace_push_token(old_token: str, new_token: str) -> bool:
+    """Replace an APNs raw device token with an exchanged FCM registration token."""
+    if not old_token or not new_token or old_token == new_token:
+        return False
+    try:
+        _init_schema()
+        # If new_token already exists, deactivate old_token; otherwise update old_token in place
+        existing = _one("SELECT id FROM push_subscriptions WHERE token = %s", (new_token,))
+        if existing:
+            _run("UPDATE push_subscriptions SET is_active = FALSE, updated_at = NOW() WHERE token = %s", (old_token,))
+            _run("UPDATE push_subscriptions SET is_active = TRUE, updated_at = NOW() WHERE token = %s", (new_token,))
+        else:
+            _run("UPDATE push_subscriptions SET token = %s, updated_at = NOW(), is_active = TRUE WHERE token = %s", (new_token, old_token))
+        return True
+    except Exception as e:
+        print(f"[replace_push_token error] {old_token[:12]} -> {new_token[:12]}: {e}", flush=True)
+        return False
+
+
 def get_active_tokens_for_user(user_id: int):
     """Retrieve all active push tokens for a given user."""
     if not user_id or user_id == 0:
