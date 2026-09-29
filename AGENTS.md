@@ -38,6 +38,7 @@ When creating or generating release notes for ListMate:
 ### Branch Management & Production Safety
 *   **CRITICAL:** The `main` branch is treated as production-ready (in app review/release stage). 
 *   **NEVER** merge the entire `staging` branch into `main` via PRs or direct merges unless explicitly commanded by the user with "merge staging into main".
+*   **NEVER OVERWRITE capacitor.config.json**: The `capacitor.config.json` on `main` must **ALWAYS** point to `https://grocerlist.app`. Under no circumstances should `capacitor.config.json` containing the staging URL ever be merged or committed to `main`. `.gitattributes` enforces `merge=ours`, and `.git/hooks/pre-push` actively blocks pushes with staging capacitor configurations.
 *   To push a specific feature or bug fix to `main`, **ONLY** cherry-pick the specific commits, or apply the specific file changes as a targeted commit directly to `main`. Do not pull in unrelated changes sitting in `staging` (like experimental features or geolocation).
 
 ### Hard Guardrails for Main Branch Pushes
