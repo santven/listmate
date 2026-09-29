@@ -486,6 +486,63 @@
     </div>
   </div>
 
+  <!-- Admin Push Notification Management & Testing -->
+  <div class="card" id="adminPushCard" style="display:none; border:2px solid #3b82f6; background:#f8faff; margin-top:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0; color:#1d4ed8; display:flex; align-items:center; gap:8px; font-size:18px;">
+        <span>🔔 Push Notification Console</span>
+      </h2>
+      <span style="background:#2563eb; color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.5px;">ADMIN ONLY</span>
+    </div>
+    <p style="font-size:13px; color:var(--muted); line-height:1.45; margin-bottom:14px;">
+      Inspect registered mobile devices (Android/iOS) and dispatch test push alerts across users or entire households.
+    </p>
+
+    <div style="background:#fff; border:1px solid #dbeafe; border-radius:10px; padding:14px; margin-bottom:14px;">
+      <div style="font-weight:700; font-size:14px; color:#1e3a8a; margin-bottom:10px;">🚀 Send Test Push</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Target</label>
+          <select id="adminPushTargetType" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; outline:none; font-size:15px; background:#fff;" onchange="handlePushTargetChange()">
+            <option value="me">My Current Device (Logged in user)</option>
+            <option value="user">Specific User ID</option>
+            <option value="household">Specific Household ID</option>
+            <option value="broadcast">Broadcast (All Registered Devices)</option>
+          </select>
+        </div>
+        <div id="adminPushTargetIdWrap" style="display:none;">
+          <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;" id="adminPushTargetIdLabel">Target ID</label>
+          <input type="number" id="adminPushTargetId" placeholder="e.g. 1" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; outline:none; font-size:15px; background:#fff;">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Notification Title</label>
+          <input type="text" id="adminPushTitle" value="ListMate Test Notification" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; outline:none; font-size:15px; background:#fff;">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Notification Message</label>
+          <input type="text" id="adminPushBody" value="Your partner checked off Milk at Trader Joe's!" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; outline:none; font-size:15px; background:#fff;">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Target URL / Action</label>
+          <input type="text" id="adminPushUrl" value="/" style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; outline:none; font-size:15px; background:#fff;">
+        </div>
+        <button id="btnAdminSendPush" onclick="submitAdminTestPush()" style="background:#2563eb; color:#fff; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; margin-top:4px;">
+          📲 Dispatch Push Alert
+        </button>
+        <div id="adminPushResult" style="display:none; font-size:13px; padding:10px; border-radius:8px;"></div>
+      </div>
+    </div>
+
+    <!-- Active Device Subscriptions Table -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-weight:700; font-size:14px; color:#1e3a8a;">📱 Registered Active Devices</div>
+      <button onclick="loadAdminPushSubscriptions()" style="background:#fff; border:1px solid #cbd5e1; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">🔄 Refresh</button>
+    </div>
+    <div id="adminPushSubsList" style="max-height:220px; overflow-y:auto; font-size:12px; background:#fff; border:1px solid #dbeafe; border-radius:8px; padding:8px;">
+      <div style="color:var(--muted); text-align:center; padding:12px;">Loading registered devices...</div>
+    </div>
+  </div>
+
   <!-- Marketing Emails -->
   <div class="card">
     <h2>📧 Marketing Emails</h2>
@@ -540,6 +597,11 @@ var householdData = null;
     const adminCard = document.getElementById('adminFeedbackCard');
     if (adminCard) adminCard.style.display = 'block';
     loadAdminFeedback();
+    const adminPushCard = document.getElementById('adminPushCard');
+    if (adminPushCard) {
+      adminPushCard.style.display = 'block';
+      loadAdminPushSubscriptions();
+    }
   }
 
   // Load household data
@@ -2805,6 +2867,141 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
         }
     };
     modal.classList.add('active');
+}
+
+/* ── Admin Push Management Helpers ── */
+function handlePushTargetChange() {
+  const targetType = document.getElementById('adminPushTargetType')?.value || 'me';
+  const wrap = document.getElementById('adminPushTargetIdWrap');
+  const label = document.getElementById('adminPushTargetIdLabel');
+  if (!wrap) return;
+
+  if (targetType === 'user') {
+    wrap.style.display = 'block';
+    if (label) label.textContent = 'User ID';
+  } else if (targetType === 'household') {
+    wrap.style.display = 'block';
+    if (label) label.textContent = 'Household ID';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+async function loadAdminPushSubscriptions() {
+  const listEl = document.getElementById('adminPushSubsList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">Refreshing devices...</div>';
+
+  try {
+    const res = await fetch('/api/admin/push/subscriptions', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok) {
+      listEl.innerHTML = `<div style="color:#ef4444; padding:8px;">${escapeHtml(data.error || 'Failed to load devices')}</div>`;
+      return;
+    }
+
+    const subs = data.subscriptions || [];
+    if (subs.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">No active device push tokens registered yet.</div>';
+      return;
+    }
+
+    listEl.innerHTML = subs.map(s => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9;">
+        <div>
+          <span style="font-weight:700; color:#1e293b;">${escapeHtml(s.email)}</span>
+          <span style="color:#64748b; font-size:11px; margin-left:4px;">(User #${s.user_id}, HH #${s.household_id})</span>
+          <div style="color:#94a3b8; font-size:11px;">${escapeHtml(s.platform.toUpperCase())} ${escapeHtml(s.device_model || '')} • v${escapeHtml(s.app_version || '1.0')}</div>
+        </div>
+        <button onclick="quickTestUserPush(${s.user_id}, '${escapeHtml(s.email).replace(/'/g, "\\'")}')" style="background:#e0e7ff; color:#3730a3; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
+          Send Test
+        </button>
+      </div>
+    `).join('');
+  } catch(e) {
+    listEl.innerHTML = '<div style="color:#ef4444; padding:8px;">Network error loading devices.</div>';
+  }
+}
+
+function quickTestUserPush(userId, userEmail) {
+  const targetSelect = document.getElementById('adminPushTargetType');
+  const targetIdInput = document.getElementById('adminPushTargetId');
+  if (targetSelect) {
+    targetSelect.value = 'user';
+    handlePushTargetChange();
+  }
+  if (targetIdInput) {
+    targetIdInput.value = userId;
+  }
+  const bodyInput = document.getElementById('adminPushBody');
+  if (bodyInput) {
+    bodyInput.value = `Test alert dispatched to ${userEmail}!`;
+  }
+  toast(`Selected User #${userId} (${userEmail}) for push.`);
+}
+
+async function submitAdminTestPush() {
+  const btn = document.getElementById('btnAdminSendPush');
+  const resDiv = document.getElementById('adminPushResult');
+  const targetType = document.getElementById('adminPushTargetType')?.value || 'me';
+  const targetId = document.getElementById('adminPushTargetId')?.value || '';
+  const title = document.getElementById('adminPushTitle')?.value || '';
+  const body = document.getElementById('adminPushBody')?.value || '';
+  const url = document.getElementById('adminPushUrl')?.value || '/';
+
+  if ((targetType === 'user' || targetType === 'household') && !targetId) {
+    alert('Please enter a target ID.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+  }
+  if (resDiv) {
+    resDiv.style.display = 'none';
+  }
+
+  try {
+    const res = await fetch('/api/admin/push/test', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_type: targetType,
+        target_id: targetId,
+        title: title,
+        body: body,
+        url: url
+      })
+    });
+    const data = await res.json();
+    if (resDiv) {
+      resDiv.style.display = 'block';
+      if (res.ok && data.ok) {
+        resDiv.style.background = '#dcfce7';
+        resDiv.style.color = '#15803d';
+        const r = data.result || {};
+        resDiv.innerHTML = `✅ <b>Dispatched successfully!</b> Sent: ${r.sent ?? 0}, Failed: ${r.failed ?? 0} ${r.mock ? '(Mock Mode - credentials pending)' : ''}`;
+      } else {
+        resDiv.style.background = '#fee2e2';
+        resDiv.style.color = '#b91c1c';
+        resDiv.innerHTML = `❌ <b>Dispatch failed:</b> ${escapeHtml(data.error || 'Unknown error')}`;
+      }
+    }
+  } catch(e) {
+    if (resDiv) {
+      resDiv.style.display = 'block';
+      resDiv.style.background = '#fee2e2';
+      resDiv.style.color = '#b91c1c';
+      resDiv.innerHTML = '❌ Network error sending test push.';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '📲 Dispatch Push Alert';
+    }
+  }
 }
 </script>
 <div class="ad-banner-bottom">

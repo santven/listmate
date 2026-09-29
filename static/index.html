@@ -1445,6 +1445,9 @@ async function loadData() {
       if (typeof checkDay7StoreDrawer === 'function') {
         checkDay7StoreDrawer();
       }
+      if (typeof initPushNotifications === 'function') {
+        initPushNotifications();
+      }
       if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
         const uInfo = (window.currentCfg && window.currentCfg.user_info) ? window.currentCfg.user_info : null;
         window.dailyInspirationEngine.initCadence(750, uInfo);
@@ -5870,6 +5873,82 @@ window.onDay7ShowMeHow = function() {
     }
   } catch(e) {}
 })();
+
+/* ── Capacitor Push Notifications Manager ───────────────────────── */
+window.initPushNotifications = async function() {
+  try {
+    const isCapacitor = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform();
+    const PushPlugin = window.Capacitor?.Plugins?.PushNotifications;
+
+    if (!isCapacitor || !PushPlugin) {
+      // In web browser or desktop development preview
+      return;
+    }
+
+    // Check existing notification permissions
+    let permStatus = await PushPlugin.checkPermissions();
+    if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
+      permStatus = await PushPlugin.requestPermissions();
+    }
+
+    if (permStatus.receive !== 'granted') {
+      console.log('[Push] Notification permission not granted:', permStatus.receive);
+      return;
+    }
+
+    // Register with Apple APNs / Google FCM
+    await PushPlugin.register();
+
+    // Listen for registration token
+    PushPlugin.removeAllListeners().then(() => {
+      PushPlugin.addListener('registration', async (token) => {
+        console.log('[Push] Device push token received:', token.value);
+        try {
+          const platform = window.Capacitor.getPlatform() || 'android';
+          await fetch('/api/push/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: token.value,
+              platform: platform,
+              app_version: '1.0.1'
+            })
+          });
+        } catch (err) {
+          console.error('[Push] Failed to register push token with backend:', err);
+        }
+      });
+
+      PushPlugin.addListener('registrationError', (error) => {
+        console.error('[Push] Push registration error:', error);
+      });
+
+      // Handle push received while app is in foreground
+      PushPlugin.addListener('pushNotificationReceived', (notification) => {
+        console.log('[Push] Foreground notification received:', notification);
+        if (typeof toast === 'function' && notification.title) {
+          toast(`🔔 ${notification.title}: ${notification.body || ''}`);
+        }
+      });
+
+      // Handle user tapping on notification banner
+      PushPlugin.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('[Push] Action performed on notification:', notification);
+        const data = notification.notification?.data || {};
+        const targetUrl = data.url || '/';
+        if (targetUrl && targetUrl !== '/') {
+          if (targetUrl.startsWith('#')) {
+            window.location.hash = targetUrl;
+          } else if (targetUrl.startsWith('/')) {
+            window.location.href = targetUrl;
+          }
+        }
+      });
+    });
+  } catch (e) {
+    console.error('[Push] Initialization exception:', e);
+  }
+};
 </script>
 
 <!-- Cleanup Modal -->

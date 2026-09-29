@@ -280,6 +280,22 @@ def _init_schema():
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )""",
         """CREATE INDEX IF NOT EXISTS idx_email_suppressions_email ON email_suppressions(LOWER(email))""",
+        """CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+            household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE,
+            token TEXT UNIQUE NOT NULL,
+            platform TEXT NOT NULL,
+            device_model TEXT DEFAULT '',
+            app_version TEXT DEFAULT '',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_user_id ON push_subscriptions(user_id) WHERE is_active = TRUE""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_hh_id ON push_subscriptions(household_id) WHERE is_active = TRUE""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_token ON push_subscriptions(token)""",
     ]:
         _run(stmt)
     for stmt in [
@@ -449,6 +465,124 @@ def unsuppress_email(email: str) -> bool:
         return True
     except Exception as e:
         print(f"[unsuppress_email error] {clean}: {e}", flush=True)
+        return False
+
+
+# ── Push Subscription Helpers ─────────────────────────────────
+
+def register_push_token(user_id: int, household_id: int, token: str, platform: str = 'android', device_model: str = '', app_version: str = '') -> bool:
+    """Register or update a device push token in push_subscriptions."""
+    if not token or not str(token).strip():
+        return False
+    clean_token = str(token).strip()
+    clean_platform = str(platform).strip().lower() if platform else 'unknown'
+    clean_model = str(device_model or '').strip()[:100]
+    clean_version = str(app_version or '').strip()[:50]
+
+    # Zero vs None defense (per Project Rules & Gemini guidelines)
+    uid = None if (user_id is None or user_id == 0) else int(user_id)
+    hhid = None if (household_id is None or household_id == 0) else int(household_id)
+
+    if not uid or not hhid:
+        return False
+
+    try:
+        _init_schema()
+        _run("""
+            INSERT INTO push_subscriptions (user_id, household_id, token, platform, device_model, app_version, is_active, last_seen_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW(), NOW())
+            ON CONFLICT (token) DO UPDATE SET
+                user_id = EXCLUDED.user_id,
+                household_id = EXCLUDED.household_id,
+                platform = EXCLUDED.platform,
+                device_model = CASE WHEN EXCLUDED.device_model <> '' THEN EXCLUDED.device_model ELSE push_subscriptions.device_model END,
+                app_version = CASE WHEN EXCLUDED.app_version <> '' THEN EXCLUDED.app_version ELSE push_subscriptions.app_version END,
+                is_active = TRUE,
+                last_seen_at = NOW(),
+                updated_at = NOW()
+        """, (uid, hhid, clean_token, clean_platform, clean_model, clean_version))
+        return True
+    except Exception as e:
+        print(f"[register_push_token error] user={uid} hh={hhid}: {e}", flush=True)
+        return False
+
+
+def unregister_push_token(token: str) -> bool:
+    """Deactivate a device push token (e.g. upon logout or disabling notifications)."""
+    if not token or not str(token).strip():
+        return False
+    clean_token = str(token).strip()
+    try:
+        _init_schema()
+        _run("""
+            UPDATE push_subscriptions
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE token = %s
+        """, (clean_token,))
+        return True
+    except Exception as e:
+        print(f"[unregister_push_token error] {e}", flush=True)
+        return False
+
+
+def get_active_tokens_for_user(user_id: int):
+    """Retrieve all active push tokens for a given user."""
+    if not user_id or user_id == 0:
+        return []
+    try:
+        _init_schema()
+        rows = _run("""
+            SELECT token, platform, device_model, app_version
+            FROM push_subscriptions
+            WHERE user_id = %s AND is_active = TRUE
+        """, (int(user_id),))
+        return rows
+    except Exception as e:
+        print(f"[get_active_tokens_for_user error] {e}", flush=True)
+        return []
+
+
+def get_active_tokens_for_household(household_id: int, exclude_user_id: int = None):
+    """Retrieve all active push tokens for members of a household."""
+    if not household_id or household_id == 0:
+        return []
+    try:
+        _init_schema()
+        if exclude_user_id and exclude_user_id != 0:
+            rows = _run("""
+                SELECT token, platform, device_model, app_version, user_id
+                FROM push_subscriptions
+                WHERE household_id = %s AND user_id != %s AND is_active = TRUE
+            """, (int(household_id), int(exclude_user_id)))
+        else:
+            rows = _run("""
+                SELECT token, platform, device_model, app_version, user_id
+                FROM push_subscriptions
+                WHERE household_id = %s AND is_active = TRUE
+            """, (int(household_id),))
+        return rows
+    except Exception as e:
+        print(f"[get_active_tokens_for_household error] {e}", flush=True)
+        return []
+
+
+def mark_tokens_inactive(tokens: list) -> bool:
+    """Mark a batch of tokens as inactive (e.g. after receiving UNREGISTERED / BadDeviceToken)."""
+    if not tokens:
+        return True
+    clean_tokens = [str(t).strip() for t in tokens if t and str(t).strip()]
+    if not clean_tokens:
+        return True
+    try:
+        _init_schema()
+        _run("""
+            UPDATE push_subscriptions
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE token = ANY(%s)
+        """, (clean_tokens,))
+        return True
+    except Exception as e:
+        print(f"[mark_tokens_inactive error] {e}", flush=True)
         return False
 
 
