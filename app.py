@@ -688,7 +688,7 @@ def submit_feedback():
 
 # ── Feedback Loop & Roadmap APIs ──────────────────────────
 
-ADMIN_EMAILS = {"venragh@gmail.com"}
+ADMIN_EMAILS = {"venragh@gmail.com", "preeven.raghav@gmail.com"}
 
 def is_admin_user():
     email = (get_email() or "").strip().lower()
