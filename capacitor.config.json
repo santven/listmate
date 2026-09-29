@@ -3,7 +3,7 @@
   "appName": "Listmate",
   "webDir": "static",
   "server": {
-    "url": "https://grocerlist.app",
+    "url": "https://listmate-staging.onrender.com",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [
