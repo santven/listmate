@@ -2923,7 +2923,7 @@ async function loadAdminPushSubscriptions() {
           <span style="color:#64748b; font-size:11px; margin-left:4px;">(User #${s.user_id}, HH #${s.household_id})</span>
           <div style="color:#94a3b8; font-size:11px;">${escapeHtml(s.platform.toUpperCase())} ${escapeHtml(s.device_model || '')} • v${escapeHtml(s.app_version || '1.0')}</div>
         </div>
-        <button onclick="quickTestUserPush(${s.user_id}, '${escapeHtml(s.email).replace(/'/g, "\\'")}')" style="background:#e0e7ff; color:#3730a3; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
+        <button data-user-id="${s.user_id}" data-user-email="${encodeURIComponent(s.email || '')}" onclick="quickTestUserPush(this.getAttribute('data-user-id'), decodeURIComponent(this.getAttribute('data-user-email')))" style="background:#e0e7ff; color:#3730a3; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
           Send Test
         </button>
       </div>

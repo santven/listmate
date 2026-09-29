@@ -5888,6 +5888,63 @@ window.initPushNotifications = async function() {
       return;
     }
 
+    // Attach listeners BEFORE registering to prevent race conditions on fast token generation
+    await PushPlugin.removeAllListeners();
+
+    PushPlugin.addListener('registration', async (token) => {
+      console.log('[Push] Device push token received:', token.value);
+      try {
+        const platform = (typeof window.Capacitor.getPlatform === 'function') ? window.Capacitor.getPlatform() : 'android';
+        let deviceModel = '';
+        try {
+          if (window.Capacitor?.Plugins?.Device?.getInfo) {
+            const devInfo = await window.Capacitor.Plugins.Device.getInfo();
+            deviceModel = devInfo.model || devInfo.name || '';
+          }
+        } catch (_) {}
+
+        await fetch('/api/push/register', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: token.value,
+            platform: platform,
+            device_model: deviceModel,
+            app_version: '1.0.1'
+          })
+        });
+      } catch (err) {
+        console.error('[Push] Failed to register push token with backend:', err);
+      }
+    });
+
+    PushPlugin.addListener('registrationError', (error) => {
+      console.error('[Push] Push registration error:', error);
+    });
+
+    // Handle push received while app is in foreground
+    PushPlugin.addListener('pushNotificationReceived', (notification) => {
+      console.log('[Push] Foreground notification received:', notification);
+      if (typeof toast === 'function' && notification.title) {
+        toast(`🔔 ${notification.title}: ${notification.body || ''}`);
+      }
+    });
+
+    // Handle user tapping on notification banner
+    PushPlugin.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('[Push] Action performed on notification:', notification);
+      const data = notification.notification?.data || {};
+      const targetUrl = data.url || '/';
+      if (targetUrl && targetUrl !== '/') {
+        if (targetUrl.startsWith('#')) {
+          window.location.hash = targetUrl;
+        } else if (targetUrl.startsWith('/')) {
+          window.location.href = targetUrl;
+        }
+      }
+    });
+
     // Check existing notification permissions
     let permStatus = await PushPlugin.checkPermissions();
     if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
@@ -5899,55 +5956,8 @@ window.initPushNotifications = async function() {
       return;
     }
 
-    // Register with Apple APNs / Google FCM
+    // Register with Apple APNs / Google FCM now that listeners are primed
     await PushPlugin.register();
-
-    // Listen for registration token
-    PushPlugin.removeAllListeners().then(() => {
-      PushPlugin.addListener('registration', async (token) => {
-        console.log('[Push] Device push token received:', token.value);
-        try {
-          const platform = window.Capacitor.getPlatform() || 'android';
-          await fetch('/api/push/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token: token.value,
-              platform: platform,
-              app_version: '1.0.1'
-            })
-          });
-        } catch (err) {
-          console.error('[Push] Failed to register push token with backend:', err);
-        }
-      });
-
-      PushPlugin.addListener('registrationError', (error) => {
-        console.error('[Push] Push registration error:', error);
-      });
-
-      // Handle push received while app is in foreground
-      PushPlugin.addListener('pushNotificationReceived', (notification) => {
-        console.log('[Push] Foreground notification received:', notification);
-        if (typeof toast === 'function' && notification.title) {
-          toast(`🔔 ${notification.title}: ${notification.body || ''}`);
-        }
-      });
-
-      // Handle user tapping on notification banner
-      PushPlugin.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('[Push] Action performed on notification:', notification);
-        const data = notification.notification?.data || {};
-        const targetUrl = data.url || '/';
-        if (targetUrl && targetUrl !== '/') {
-          if (targetUrl.startsWith('#')) {
-            window.location.hash = targetUrl;
-          } else if (targetUrl.startsWith('/')) {
-            window.location.href = targetUrl;
-          }
-        }
-      });
-    });
   } catch (e) {
     console.error('[Push] Initialization exception:', e);
   }
