@@ -1,0 +1,2 @@
+# Ensure capacitor.config.json is never overwritten by merges into main or other branches
+capacitor.config.json merge=ours
