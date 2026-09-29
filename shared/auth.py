@@ -1523,7 +1523,9 @@ def register_auth_routes(app):
         resp["geo"] = {"country": country, "is_eu": country in eu_countries}
 
         # App Store & Google Play latest release version metadata
-        latest_version = os.environ.get("LATEST_APP_VERSION", "1.0.1")
+        # Defaults to 1.0.0 (currently distributed version). Set LATEST_APP_VERSION=1.0.1 in production
+        # once the new build is approved and live on the App Store and Google Play Store.
+        latest_version = os.environ.get("LATEST_APP_VERSION", "1.0.0").strip()
         resp["app_update"] = {
             "latest_version": latest_version,
             "play_store_url": "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate",
