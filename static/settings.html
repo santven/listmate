@@ -592,7 +592,7 @@ var householdData = null;
   window.currentCfg = cfg;
 
   // Check admin access (strictly guarded)
-  const isAdm = Boolean(cfg.is_admin || (cfg.user_info && (cfg.user_info.email || '').trim().toLowerCase() === 'venragh@gmail.com'));
+  const isAdm = Boolean(cfg.is_admin || (cfg.user_info && ['venragh@gmail.com', 'preeven.raghav@gmail.com'].includes((cfg.user_info.email || '').trim().toLowerCase())));
   if (isAdm) {
     const adminCard = document.getElementById('adminFeedbackCard');
     if (adminCard) adminCard.style.display = 'block';
