@@ -144,8 +144,6 @@ def _ensure_schema():
         try:
             from db_pg import init_db as init_store_db
             init_store_db()
-            from categorize import backfill_uncategorized_items
-            backfill_uncategorized_items()
         except Exception:
             pass
     except Exception:
@@ -688,7 +686,7 @@ def submit_feedback():
 
 # ── Feedback Loop & Roadmap APIs ──────────────────────────
 
-ADMIN_EMAILS = {"venragh@gmail.com"}
+ADMIN_EMAILS = {"venragh@gmail.com", "preeven.raghav@gmail.com"}
 
 def is_admin_user():
     email = (get_email() or "").strip().lower()
@@ -3867,6 +3865,160 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
         return jsonify({"error": "AI generation failed: " + str(e)}), 500
     finally:
         db.close()
+
+
+# ── Push Notification API Routes ───────────────────────────────────
+
+@app.route("/api/push/register", methods=["POST"])
+@authmod.require_user
+def api_push_register():
+    """Register or update a device push token for the current user and household."""
+    try:
+        data = request.get_json(silent=True) or {}
+        token = str(data.get("token") or "").strip()
+        if not token:
+            return jsonify({"error": "Device token is required"}), 400
+
+        platform = str(data.get("platform") or "android").strip().lower()
+        device_model = str(data.get("device_model") or "").strip()
+        app_version = str(data.get("app_version") or "").strip()
+
+        uid = authmod.get_user_id()
+        hhid = authmod.get_household_id()
+
+        # Defensive 0 vs None handling
+        if not uid or uid == 0 or not hhid or hhid == 0:
+            return jsonify({"error": "User or household not authenticated"}), 401
+
+        # If iOS APNs raw 64-hex token, attempt immediate exchange to FCM token
+        if platform == "ios" and len(token) == 64:
+            try:
+                import push_helper
+                fcm_token = push_helper.exchange_apns_to_fcm(token)
+                if fcm_token:
+                    print(f"[/api/push/register] Exchanged APNs token to FCM token on registration for user {uid}", flush=True)
+                    token = fcm_token
+            except Exception as ex_err:
+                print(f"[/api/push/register exchange error]: {ex_err}", flush=True)
+
+        success = authmod.register_push_token(
+            user_id=uid,
+            household_id=hhid,
+            token=token,
+            platform=platform,
+            device_model=device_model,
+            app_version=app_version
+        )
+
+        if success:
+            return jsonify({"ok": True, "message": "Push token registered successfully."})
+        else:
+            return jsonify({"error": "Failed to store push subscription"}), 500
+    except Exception as e:
+        print(f"[/api/push/register error]: {e}", flush=True)
+        return jsonify({"error": "Internal error registering push subscription"}), 500
+
+
+@app.route("/api/push/unregister", methods=["POST"])
+@authmod.require_user
+def api_push_unregister():
+    """Deactivate a device push token (e.g. on logout or disabling notifications)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        token = str(data.get("token") or "").strip()
+        if not token:
+            return jsonify({"error": "Device token is required"}), 400
+
+        authmod.unregister_push_token(token)
+        return jsonify({"ok": True, "message": "Push token unregistered."})
+    except Exception as e:
+        print(f"[/api/push/unregister error]: {e}", flush=True)
+        return jsonify({"error": "Internal error unregistering push token"}), 500
+
+
+@app.route("/api/admin/push/subscriptions", methods=["GET"])
+@require_admin
+def api_admin_push_subscriptions():
+    """Admin inspect active subscriptions (strictly active devices only)."""
+    try:
+        authmod._init_schema()
+        rows = authmod._run("""
+            SELECT ps.id, ps.user_id, u.email, ps.household_id, h.name as household_name,
+                   ps.platform, ps.device_model, ps.app_version, ps.is_active, ps.last_seen_at
+            FROM push_subscriptions ps
+            JOIN auth_users u ON u.id = ps.user_id
+            JOIN auth_households h ON h.id = ps.household_id
+            WHERE ps.is_active = TRUE
+            ORDER BY ps.last_seen_at DESC
+            LIMIT 50
+        """)
+        return jsonify({"ok": True, "subscriptions": rows})
+    except Exception as e:
+        print(f"[/api/admin/push/subscriptions error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/push/history", methods=["GET"])
+@require_admin
+def api_admin_push_history():
+    """Admin inspect recent push notification dispatch history."""
+    try:
+        raw_limit = request.args.get("limit", 20)
+        try:
+            limit = int(raw_limit)
+        except (ValueError, TypeError):
+            limit = 20
+        logs = authmod.get_recent_push_logs(limit=limit)
+        return jsonify({"ok": True, "history": logs})
+    except Exception as e:
+        print(f"[/api/admin/push/history error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/push/test", methods=["POST"])
+@require_admin
+def api_admin_push_test():
+    """Send a test push notification to user, household, or current device."""
+    try:
+        data = request.get_json(silent=True) or {}
+        title = str(data.get("title") or "ListMate Test Notification").strip()
+        body = str(data.get("body") or "This is a test notification from ListMate.").strip()
+        target_type = str(data.get("target_type") or "me").strip().lower()
+        target_id_raw = data.get("target_id")
+        deep_link = str(data.get("url") or "/").strip()
+
+        parsed_target_id = None
+        if target_type in ("user", "household"):
+            if not target_id_raw:
+                return jsonify({"error": f"target_id required for {target_type} dispatch"}), 400
+            try:
+                parsed_target_id = int(target_id_raw)
+            except (ValueError, TypeError):
+                return jsonify({"error": f"target_id must be a valid integer, received: {target_id_raw}"}), 400
+            if parsed_target_id == 0:
+                return jsonify({"error": "target_id cannot be 0"}), 400
+
+        import push_helper
+
+        payload_data = {"url": deep_link}
+
+        if target_type == "me":
+            uid = authmod.get_user_id()
+            res = push_helper.send_push_to_user(uid, title, body, payload_data)
+        elif target_type == "user":
+            res = push_helper.send_push_to_user(parsed_target_id, title, body, payload_data)
+        elif target_type == "household":
+            res = push_helper.send_push_to_household(parsed_target_id, title, body, payload_data)
+        elif target_type == "broadcast":
+            res = push_helper.send_push_broadcast(title, body, payload_data)
+        else:
+            return jsonify({"error": f"Unknown target_type: {target_type}"}), 400
+
+        return jsonify({"ok": True, "result": res})
+    except Exception as e:
+        print(f"[/api/admin/push/test error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     from db_pg import init_db

@@ -3,6 +3,7 @@
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
 from functools import wraps
+from typing import Optional, List, Dict, Any
 try:
     from flask import request, jsonify, session, send_from_directory, has_request_context, g
 except ImportError:
@@ -280,6 +281,39 @@ def _init_schema():
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )""",
         """CREATE INDEX IF NOT EXISTS idx_email_suppressions_email ON email_suppressions(LOWER(email))""",
+        """CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+            household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE,
+            token TEXT UNIQUE NOT NULL,
+            platform TEXT NOT NULL,
+            device_model TEXT DEFAULT '',
+            app_version TEXT DEFAULT '',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_user_id ON push_subscriptions(user_id) WHERE is_active = TRUE""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_hh_id ON push_subscriptions(household_id) WHERE is_active = TRUE""",
+        """CREATE INDEX IF NOT EXISTS idx_push_sub_token ON push_subscriptions(token)""",
+        """CREATE TABLE IF NOT EXISTS push_notifications_log (
+            id SERIAL PRIMARY KEY,
+            target_type VARCHAR(50) NOT NULL,
+            target_id INTEGER,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            url TEXT DEFAULT '/',
+            custom_data JSONB,
+            tokens_count INTEGER NOT NULL DEFAULT 0,
+            sent_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            errors TEXT[],
+            is_mock BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_push_log_created_at ON push_notifications_log(created_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS idx_push_log_target ON push_notifications_log(target_type, target_id)""",
     ]:
         _run(stmt)
     for stmt in [
@@ -450,6 +484,235 @@ def unsuppress_email(email: str) -> bool:
     except Exception as e:
         print(f"[unsuppress_email error] {clean}: {e}", flush=True)
         return False
+
+
+# ── Push Subscription Helpers ─────────────────────────────────
+
+def register_push_token(user_id: int, household_id: int, token: str, platform: str = 'android', device_model: str = '', app_version: str = '') -> bool:
+    """Register or update a device push token in push_subscriptions."""
+    if not token or not str(token).strip():
+        return False
+    clean_token = str(token).strip()
+    clean_platform = str(platform).strip().lower() if platform else 'unknown'
+    clean_model = str(device_model or '').strip()[:100]
+    clean_version = str(app_version or '').strip()[:50]
+
+    # Zero vs None defense (per Project Rules & Gemini guidelines)
+    uid = None if (user_id is None or user_id == 0) else int(user_id)
+    hhid = None if (household_id is None or household_id == 0) else int(household_id)
+
+    if not uid or not hhid:
+        return False
+
+    try:
+        _init_schema()
+        _run("""
+            INSERT INTO push_subscriptions (user_id, household_id, token, platform, device_model, app_version, is_active, last_seen_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW(), NOW())
+            ON CONFLICT (token) DO UPDATE SET
+                user_id = EXCLUDED.user_id,
+                household_id = EXCLUDED.household_id,
+                platform = EXCLUDED.platform,
+                device_model = CASE WHEN EXCLUDED.device_model <> '' THEN EXCLUDED.device_model ELSE push_subscriptions.device_model END,
+                app_version = CASE WHEN EXCLUDED.app_version <> '' THEN EXCLUDED.app_version ELSE push_subscriptions.app_version END,
+                is_active = TRUE,
+                last_seen_at = NOW(),
+                updated_at = NOW()
+        """, (uid, hhid, clean_token, clean_platform, clean_model, clean_version))
+        return True
+    except Exception as e:
+        print(f"[register_push_token error] user={uid} hh={hhid}: {e}", flush=True)
+        return False
+
+
+def unregister_push_token(token: str) -> bool:
+    """Deactivate a device push token (e.g. upon logout or disabling notifications)."""
+    if not token or not str(token).strip():
+        return False
+    clean_token = str(token).strip()
+    try:
+        _init_schema()
+        _run("""
+            UPDATE push_subscriptions
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE token = %s
+        """, (clean_token,))
+        return True
+    except Exception as e:
+        print(f"[unregister_push_token error] {e}", flush=True)
+        return False
+
+
+def replace_push_token(old_token: str, new_token: str) -> bool:
+    """Replace an APNs raw device token with an exchanged FCM registration token."""
+    if not old_token or not new_token or old_token == new_token:
+        return False
+    try:
+        _init_schema()
+        # Retrieve original ownership details
+        old_row = _one("SELECT user_id, household_id, platform, device_model, app_version FROM push_subscriptions WHERE token = %s", (old_token,))
+        if not old_row:
+            return False
+
+        existing = _one("SELECT id FROM push_subscriptions WHERE token = %s", (new_token,))
+        if existing:
+            # Synchronize ownership and activate new token, deactivate old token
+            _run("""
+                UPDATE push_subscriptions
+                SET user_id = %s, household_id = %s, platform = %s,
+                    device_model = COALESCE(NULLIF(%s, ''), device_model),
+                    app_version = COALESCE(NULLIF(%s, ''), app_version),
+                    is_active = TRUE, updated_at = NOW()
+                WHERE id = %s
+            """, (old_row.get("user_id"), old_row.get("household_id"), old_row.get("platform") or "ios",
+                  old_row.get("device_model") or "", old_row.get("app_version") or "", existing["id"]))
+            _run("UPDATE push_subscriptions SET is_active = FALSE, updated_at = NOW() WHERE token = %s", (old_token,))
+        else:
+            _run("UPDATE push_subscriptions SET token = %s, updated_at = NOW(), is_active = TRUE WHERE token = %s", (new_token, old_token))
+        return True
+    except Exception as e:
+        print(f"[replace_push_token error] {old_token[:12]} -> {new_token[:12]}: {e}", flush=True)
+        return False
+
+
+def get_active_tokens_for_user(user_id: int):
+    """Retrieve all active push tokens for a given user."""
+    if not user_id or user_id == 0:
+        return []
+    try:
+        _init_schema()
+        rows = _run("""
+            SELECT token, platform, device_model, app_version
+            FROM push_subscriptions
+            WHERE user_id = %s AND is_active = TRUE
+        """, (int(user_id),))
+        return rows
+    except Exception as e:
+        print(f"[get_active_tokens_for_user error] {e}", flush=True)
+        return []
+
+
+def get_active_tokens_for_household(household_id: int, exclude_user_id: int = None):
+    """Retrieve all active push tokens for members of a household."""
+    if not household_id or household_id == 0:
+        return []
+    try:
+        _init_schema()
+        if exclude_user_id and exclude_user_id != 0:
+            rows = _run("""
+                SELECT token, platform, device_model, app_version, user_id
+                FROM push_subscriptions
+                WHERE household_id = %s AND user_id != %s AND is_active = TRUE
+            """, (int(household_id), int(exclude_user_id)))
+        else:
+            rows = _run("""
+                SELECT token, platform, device_model, app_version, user_id
+                FROM push_subscriptions
+                WHERE household_id = %s AND is_active = TRUE
+            """, (int(household_id),))
+        return rows
+    except Exception as e:
+        print(f"[get_active_tokens_for_household error] {e}", flush=True)
+        return []
+
+
+def mark_tokens_inactive(tokens: list) -> bool:
+    """Mark a batch of tokens as inactive (e.g. after receiving UNREGISTERED / BadDeviceToken)."""
+    if not tokens:
+        return True
+    clean_tokens = [str(t).strip() for t in tokens if t and str(t).strip()]
+    if not clean_tokens:
+        return True
+    try:
+        _init_schema()
+        _run("""
+            UPDATE push_subscriptions
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE token = ANY(%s)
+        """, (clean_tokens,))
+        return True
+    except Exception as e:
+        print(f"[mark_tokens_inactive error] {e}", flush=True)
+        return False
+
+
+def log_push_dispatch(target_type: str, target_id: Optional[int], title: str, body: str,
+                      url: str = '/', custom_data: Optional[dict] = None,
+                      tokens_count: int = 0, sent_count: int = 0, failed_count: int = 0,
+                      errors: Optional[list] = None, is_mock: bool = False) -> bool:
+    """Store push notification dispatch record into push_notifications_log for audit and visibility."""
+    try:
+        _init_schema()
+        import json
+        tid = int(target_id) if target_id and int(target_id) != 0 else None
+        clean_errors = [str(e) for e in (errors or [])]
+        data_json = json.dumps(custom_data or {})
+        _run("""
+            INSERT INTO push_notifications_log (
+                target_type, target_id, title, body, url, custom_data,
+                tokens_count, sent_count, failed_count, errors, is_mock, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, NOW())
+        """, (
+            str(target_type or 'unknown')[:50],
+            tid,
+            str(title or '')[:500],
+            str(body or '')[:2000],
+            str(url or '/')[:500],
+            data_json,
+            int(tokens_count or 0),
+            int(sent_count or 0),
+            int(failed_count or 0),
+            clean_errors,
+            bool(is_mock)
+        ))
+        return True
+    except Exception as e:
+        print(f"[log_push_dispatch error]: {e}", flush=True)
+        return False
+
+
+def get_recent_push_logs(limit: int = 20):
+    """Retrieve recent push notification dispatches for the admin console."""
+    try:
+        _init_schema()
+        safe_limit = min(max(1, int(limit)), 100)
+        rows = _run("""
+            SELECT id, target_type, target_id, title, body, url,
+                   tokens_count, sent_count, failed_count, errors, is_mock, created_at
+            FROM push_notifications_log
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (safe_limit,))
+        return rows
+    except Exception as e:
+        print(f"[get_recent_push_logs error]: {e}", flush=True)
+        return []
+
+
+def prune_push_notifications_log(retention_days: int = 30) -> int:
+    """Prune push notification audit logs older than retention_days (called by unified cron)."""
+    try:
+        _init_schema()
+        days = max(1, int(retention_days))
+        # Execute deletion without retrieving full result set into memory
+        conn = _connect()
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM push_notifications_log
+                WHERE created_at < NOW() - (%s || ' days')::INTERVAL
+            """, (str(days),))
+            deleted_count = cur.rowcount
+            return max(0, deleted_count)
+        finally:
+            if cur:
+                try: cur.close()
+                except Exception: pass
+            _put_conn(conn)
+    except Exception as e:
+        print(f"[prune_push_notifications_log error]: {e}", flush=True)
+        return 0
 
 
 # ── Session ─────────────────────────────────────────────────
@@ -1259,6 +1522,18 @@ def register_auth_routes(app):
         eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
         resp["geo"] = {"country": country, "is_eu": country in eu_countries}
 
+        # App Store & Google Play latest release version metadata
+        # Defaults to 1.0.0 (currently distributed version). Set LATEST_APP_VERSION=1.0.1 in production
+        # once the new build is approved and live on the App Store and Google Play Store.
+        latest_version = os.environ.get("LATEST_APP_VERSION", "1.0.0").strip()
+        resp["app_update"] = {
+            "latest_version": latest_version,
+            "play_store_url": "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate",
+            "app_store_url": "https://apps.apple.com/app/listmate/id6742337651",
+            "title": "A new version of ListMate is available!",
+            "message": "Update to the latest version to enjoy the newest improvements, speed enhancements, and bug fixes."
+        }
+
         if is_logged_in():
             resp["display_name"] = get_display_name()
             resp["user"] = get_display_name().split(" ")[0].lower()
@@ -1317,7 +1592,7 @@ def register_auth_routes(app):
             mem_opt_in = _one("SELECT marketing_opt_in FROM auth_household_members WHERE user_id = ? AND household_id = ?", (uid, hh_id)) if hh_id else None
             opt_in_val = bool(mem_opt_in['marketing_opt_in']) if mem_opt_in and mem_opt_in.get('marketing_opt_in') is not None else True
             user_email = (get_email() or "").strip().lower()
-            is_adm = bool(user_email == "venragh@gmail.com" or uid == 1)
+            is_adm = bool(user_email in {"venragh@gmail.com", "preeven.raghav@gmail.com"} or uid == 1)
             resp["is_admin"] = is_adm
             
             u_pref = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))

@@ -165,6 +165,8 @@ _SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_recipe_gen_hh ON recipe_generations(household_id, created_at)",
     "CREATE TABLE IF NOT EXISTS app_feedback (id SERIAL PRIMARY KEY, household_id INTEGER, user_email TEXT, user_name TEXT, feedback_type TEXT, rating INTEGER, message TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS app_invites (id SERIAL PRIMARY KEY, sender_email TEXT, household_id INTEGER, recipient_email TEXT NOT NULL, sent_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS item_taxonomy (id SERIAL PRIMARY KEY, normalized_name VARCHAR(120) UNIQUE NOT NULL, category VARCHAR(60) NOT NULL, source VARCHAR(30) DEFAULT 'manual', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS idx_item_taxonomy_norm ON item_taxonomy(normalized_name)",
 ]
 
 def init_db():

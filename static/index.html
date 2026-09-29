@@ -1445,6 +1445,12 @@ async function loadData() {
       if (typeof checkDay7StoreDrawer === 'function') {
         checkDay7StoreDrawer();
       }
+      if (typeof initPushNotifications === 'function') {
+        initPushNotifications();
+      }
+      if (typeof checkAppUpdatePrompt === 'function') {
+        checkAppUpdatePrompt();
+      }
       if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
         const uInfo = (window.currentCfg && window.currentCfg.user_info) ? window.currentCfg.user_info : null;
         window.dailyInspirationEngine.initCadence(750, uInfo);
@@ -5870,7 +5876,212 @@ window.onDay7ShowMeHow = function() {
     }
   } catch(e) {}
 })();
+
+/* ── Capacitor Push Notifications Manager ───────────────────────── */
+window.initPushNotifications = async function() {
+  try {
+    const isCapacitor = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform();
+    const PushPlugin = window.Capacitor?.Plugins?.PushNotifications;
+
+    if (!isCapacitor || !PushPlugin) {
+      // In web browser or desktop development preview
+      return;
+    }
+
+    // Attach listeners BEFORE registering to prevent race conditions on fast token generation
+    await PushPlugin.removeAllListeners();
+
+    PushPlugin.addListener('registration', async (token) => {
+      console.log('[Push] Device push token received:', token.value);
+      try {
+        const platform = (typeof window.Capacitor.getPlatform === 'function') ? window.Capacitor.getPlatform() : 'android';
+        let deviceModel = '';
+        try {
+          if (window.Capacitor?.Plugins?.Device?.getInfo) {
+            const devInfo = await window.Capacitor.Plugins.Device.getInfo();
+            deviceModel = devInfo.model || devInfo.name || '';
+          }
+        } catch (_) {}
+
+        await fetch('/api/push/register', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: token.value,
+            platform: platform,
+            device_model: deviceModel,
+            app_version: '1.0.1'
+          })
+        });
+      } catch (err) {
+        console.error('[Push] Failed to register push token with backend:', err);
+      }
+    });
+
+    PushPlugin.addListener('registrationError', (error) => {
+      console.error('[Push] Push registration error:', error);
+    });
+
+    // Handle push received while app is in foreground
+    PushPlugin.addListener('pushNotificationReceived', (notification) => {
+      console.log('[Push] Foreground notification received:', notification);
+      if (typeof toast === 'function' && notification.title) {
+        toast(`🔔 ${notification.title}: ${notification.body || ''}`);
+      }
+    });
+
+    // Handle user tapping on notification banner
+    PushPlugin.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('[Push] Action performed on notification:', notification);
+      const data = notification.notification?.data || {};
+      const targetUrl = data.url || '/';
+      if (targetUrl && targetUrl !== '/') {
+        if (targetUrl.startsWith('#')) {
+          window.location.hash = targetUrl;
+        } else if (targetUrl.startsWith('/')) {
+          window.location.href = targetUrl;
+        }
+      }
+    });
+
+    // Check existing notification permissions
+    let permStatus = await PushPlugin.checkPermissions();
+    if (permStatus.receive === 'prompt' || permStatus.receive === 'prompt-with-rationale') {
+      permStatus = await PushPlugin.requestPermissions();
+    }
+
+    if (permStatus.receive !== 'granted') {
+      console.log('[Push] Notification permission not granted:', permStatus.receive);
+      return;
+    }
+
+    // Register with Apple APNs / Google FCM now that listeners are primed
+    await PushPlugin.register();
+  } catch (e) {
+    console.error('[Push] Initialization exception:', e);
+  }
+};
+
+/* ── In-App Update Bottom Drawer Manager ─────────────────────────── */
+window.checkAppUpdatePrompt = async function() {
+  try {
+    const isCapacitor = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform();
+    if (!isCapacitor) {
+      // Don't show update prompts on desktop or mobile web browsers
+      return;
+    }
+
+    const appUpdateCfg = (window.currentCfg && window.currentCfg.app_update) ? window.currentCfg.app_update : null;
+    if (!appUpdateCfg || !appUpdateCfg.latest_version) return;
+
+    // Cooldown check (don't nag more than once a day / 24 hours if dismissed)
+    const lastDismissed = localStorage.getItem('listmate_update_dismissed_at');
+    if (lastDismissed) {
+      const hoursSinceDismiss = (Date.now() - parseInt(lastDismissed, 10)) / (1000 * 60 * 60);
+      if (hoursSinceDismiss < 24) {
+        return;
+      }
+    }
+
+    let installedVersion = null;
+    if (window.Capacitor?.Plugins?.App) {
+      try {
+        const info = await window.Capacitor.Plugins.App.getInfo();
+        installedVersion = info.version;
+      } catch (appErr) {
+        console.warn('[AppUpdate] Unable to fetch app info:', appErr);
+      }
+    }
+
+    if (!installedVersion) return;
+
+    // Compare semver (e.g., '1.0.0' vs '1.0.1')
+    function isOlderVersion(current, target) {
+      const cParts = String(current).split('.').map(n => parseInt(n, 10) || 0);
+      const tParts = String(target).split('.').map(n => parseInt(n, 10) || 0);
+      const len = Math.max(cParts.length, tParts.length);
+      for (let i = 0; i < len; i++) {
+        const c = cParts[i] || 0;
+        const t = tParts[i] || 0;
+        if (c < t) return true;
+        if (c > t) return false;
+      }
+      return false;
+    }
+
+    if (isOlderVersion(installedVersion, appUpdateCfg.latest_version)) {
+      const platform = (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') ? window.Capacitor.getPlatform() : 'android';
+      const isIOS = platform === 'ios';
+      const storeUrl = isIOS
+        ? (appUpdateCfg.app_store_url || 'https://apps.apple.com/app/listmate/id6742337651')
+        : (appUpdateCfg.play_store_url || 'https://play.google.com/store/apps/details?id=com.pvkslabs.listmate');
+
+      const modal = document.getElementById('appUpdateDrawerModal');
+      const titleEl = document.getElementById('appUpdateTitle');
+      const bodyEl = document.getElementById('appUpdateBody');
+      const btnUpdate = document.getElementById('btnAppUpdateNow');
+      const btnDismiss = document.getElementById('btnAppUpdateDismiss');
+
+      if (!modal || !btnUpdate || !btnDismiss) return;
+
+      if (titleEl && appUpdateCfg.title) titleEl.textContent = appUpdateCfg.title;
+      if (bodyEl && appUpdateCfg.message) bodyEl.textContent = appUpdateCfg.message;
+
+      // Update button text to clearly indicate target store
+      btnUpdate.textContent = isIOS ? 'Update on App Store' : 'Update on Google Play';
+
+      btnUpdate.onclick = () => {
+        // Prefer native store scheme if possible (market:// or itms-apps://)
+        let targetUri = storeUrl;
+        if (isIOS && storeUrl.includes('id6742337651')) {
+          targetUri = 'itms-apps://apps.apple.com/app/id6742337651';
+        } else if (!isIOS && storeUrl.includes('com.pvkslabs.listmate')) {
+          targetUri = 'market://details?id=com.pvkslabs.listmate';
+        }
+
+        try {
+          if (window.Capacitor?.Plugins?.Browser) {
+            window.Capacitor.Plugins.Browser.open({ url: targetUri });
+          } else {
+            window.location.href = targetUri;
+          }
+        } catch (e) {
+          window.location.href = storeUrl;
+        }
+        modal.classList.remove('open');
+      };
+
+      btnDismiss.onclick = () => {
+        localStorage.setItem('listmate_update_dismissed_at', String(Date.now()));
+        modal.classList.remove('open');
+      };
+
+      modal.classList.add('open');
+    }
+  } catch (err) {
+    console.error('[AppUpdate] Check exception:', err);
+  }
+};
 </script>
+
+<!-- In-App Update Bottom Drawer -->
+<div class="modal-overlay" id="appUpdateDrawerModal" style="z-index: 10060;">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:24px 24px 0 0; position: relative; z-index: 10061; box-shadow: 0 -8px 30px rgba(0,0,0,0.25);">
+    <div style="width:40px; height:4px; background:#d1d5db; border-radius:2px; margin:0 auto 18px auto;"></div>
+    <div style="text-align:center; margin-bottom:16px;">
+      <div style="width:56px; height:56px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:16px; display:inline-flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:12px;">
+        🚀
+      </div>
+      <h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:var(--text);" id="appUpdateTitle">A new version of ListMate is available!</h3>
+      <p style="font-size:14px; color:var(--muted); line-height:1.5; margin:0; padding:0 8px;" id="appUpdateBody">Update to the latest version to enjoy the newest improvements, speed enhancements, and bug fixes.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+      <button id="btnAppUpdateNow" style="width:100%; background:var(--green); color:#fff; padding:15px; border:none; border-radius:14px; font-size:16px; font-weight:600; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.3); transition:transform 0.15s;">Update Now</button>
+      <button id="btnAppUpdateDismiss" style="width:100%; background:transparent; border:none; color:var(--muted); padding:12px; font-size:14px; font-weight:500; cursor:pointer;">Not Now</button>
+    </div>
+  </div>
+</div>
 
 <!-- Cleanup Modal -->
 <div class="modal-overlay" id="cleanupModal">
