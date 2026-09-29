@@ -3892,6 +3892,17 @@ def api_push_register():
         if not uid or uid == 0 or not hhid or hhid == 0:
             return jsonify({"error": "User or household not authenticated"}), 401
 
+        # If iOS APNs raw 64-hex token, attempt immediate exchange to FCM token
+        if platform == "ios" and len(token) == 64:
+            try:
+                import push_helper
+                fcm_token = push_helper.exchange_apns_to_fcm(token)
+                if fcm_token:
+                    print(f"[/api/push/register] Exchanged APNs token to FCM token on registration for user {uid}", flush=True)
+                    token = fcm_token
+            except Exception as ex_err:
+                print(f"[/api/push/register exchange error]: {ex_err}", flush=True)
+
         success = authmod.register_push_token(
             user_id=uid,
             household_id=hhid,
