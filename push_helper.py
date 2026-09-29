@@ -133,20 +133,31 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
         response = messaging.send_each_for_multicast(message)
 
         dead_tokens = []
+        errors = []
         success_count = response.success_count
         failure_count = response.failure_count
 
         for idx, resp in enumerate(response.responses):
+            token = tokens[idx]
             if not resp.success:
                 err = resp.exception
-                token = tokens[idx]
+                err_str = str(err)
+                err_code = getattr(err, 'code', 'UNKNOWN')
+                print(f"[PushHelper:Failure] Token {token[:12]}... ErrorCode={err_code} Exception={err_str}", flush=True)
+                logger.error(f"[PushHelper:Failure] Token {token[:12]}... ErrorCode={err_code} Exception={err_str}")
+                errors.append(f"{err_code}: {err_str}")
+
                 # Check for dead/unregistered tokens
                 if err and hasattr(err, 'code') and err.code in ('UNREGISTERED', 'INVALID_ARGUMENT'):
                     dead_tokens.append(token)
-                elif 'registration-token-not-registered' in str(err).lower():
+                elif 'registration-token-not-registered' in err_str.lower():
                     dead_tokens.append(token)
+            else:
+                msg_id = getattr(resp, 'message_id', 'ok')
+                print(f"[PushHelper:Success] Token {token[:12]}... MessageId={msg_id}", flush=True)
 
         if dead_tokens:
+            print(f"[PushHelper] Pruning {len(dead_tokens)} inactive/unregistered token(s).", flush=True)
             logger.info(f"[PushHelper] Pruning {len(dead_tokens)} inactive/unregistered token(s).")
             authmod.mark_tokens_inactive(dead_tokens)
 
@@ -154,11 +165,13 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
             "sent": success_count,
             "failed": failure_count,
             "unregistered": dead_tokens,
+            "errors": errors,
             "mock": False,
         }
     except Exception as e:
+        print(f"[PushHelper:Exception] Multicast dispatch error: {e}", flush=True)
         logger.error(f"[PushHelper] Multicast dispatch error: {e}")
-        return {"sent": 0, "failed": len(tokens), "error": str(e), "unregistered": []}
+        return {"sent": 0, "failed": len(tokens), "error": str(e), "errors": [str(e)], "unregistered": []}
 
 
 def send_push_to_user(user_id: int, title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
