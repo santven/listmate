@@ -82,34 +82,53 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
             body=body,
         )
 
-        # Build APNs and Android config for native parity
-        android_config = messaging.AndroidConfig(
-            priority='high',
-            notification=messaging.AndroidNotification(
-                sound='default',
-                click_action=clean_data.get('url', '/'),
-                channel_id='listmate_notifications',
-            )
-        )
+        # Build Android config
+        android_config = None
+        try:
+            if hasattr(messaging, 'AndroidConfig') and hasattr(messaging, 'AndroidNotification'):
+                android_config = messaging.AndroidConfig(
+                    priority='high',
+                    notification=messaging.AndroidNotification(
+                        sound='default',
+                        click_action=clean_data.get('url', '/'),
+                        channel_id='listmate_notifications',
+                    )
+                )
+        except Exception as ac_err:
+            logger.warning(f"[PushHelper] Failed to build AndroidConfig: {ac_err}")
 
-        apns_config = messaging.ApnsConfig(
-            headers={'apns-priority': '10'},
-            payload=messaging.APNSPayload(
-                aps=messaging.Aps(
-                    sound='default',
-                    badge=1,
-                ),
-                custom_data=clean_data,
-            )
-        )
+        # Build APNs config (Python SDK uses APNSConfig, APNSPayload, Aps)
+        apns_config = None
+        try:
+            apns_cls = getattr(messaging, 'APNSConfig', getattr(messaging, 'ApnsConfig', None))
+            apns_payload_cls = getattr(messaging, 'APNSPayload', getattr(messaging, 'ApnsPayload', None))
+            aps_cls = getattr(messaging, 'Aps', None)
 
-        message = messaging.MulticastMessage(
-            tokens=tokens,
-            notification=notification,
-            data=clean_data,
-            android=android_config,
-            apns=apns_config,
-        )
+            if apns_cls and apns_payload_cls and aps_cls:
+                apns_config = apns_cls(
+                    headers={'apns-priority': '10'},
+                    payload=apns_payload_cls(
+                        aps=aps_cls(
+                            sound='default',
+                            badge=1,
+                        ),
+                        custom_data=clean_data,
+                    )
+                )
+        except Exception as apns_err:
+            logger.warning(f"[PushHelper] Failed to build APNSConfig: {apns_err}")
+
+        multicast_kwargs = {
+            "tokens": tokens,
+            "notification": notification,
+            "data": clean_data,
+        }
+        if android_config:
+            multicast_kwargs["android"] = android_config
+        if apns_config:
+            multicast_kwargs["apns"] = apns_config
+
+        message = messaging.MulticastMessage(**multicast_kwargs)
 
         response = messaging.send_each_for_multicast(message)
 
