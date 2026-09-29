@@ -2982,7 +2982,14 @@ async function submitAdminTestPush() {
         resDiv.style.background = '#dcfce7';
         resDiv.style.color = '#15803d';
         const r = data.result || {};
-        resDiv.innerHTML = `✅ <b>Dispatched successfully!</b> Sent: ${r.sent ?? 0}, Failed: ${r.failed ?? 0} ${r.mock ? '(Mock Mode - credentials pending)' : ''}`;
+        if (r.failed && r.failed > 0) {
+          const errList = (r.errors && r.errors.length) ? `<br><small style="color:#b91c1c;display:block;margin-top:4px;"><b>Reason:</b> ${escapeHtml(r.errors.join(' | '))}</small>` : '';
+          resDiv.style.background = '#fef3c7';
+          resDiv.style.color = '#92400e';
+          resDiv.innerHTML = `⚠️ <b>Dispatched with failures.</b> Sent: ${r.sent ?? 0}, Failed: ${r.failed ?? 0} ${r.mock ? '(Mock Mode)' : ''}${errList}`;
+        } else {
+          resDiv.innerHTML = `✅ <b>Dispatched successfully!</b> Sent: ${r.sent ?? 0}, Failed: ${r.failed ?? 0} ${r.mock ? '(Mock Mode - credentials pending)' : ''}`;
+        }
       } else {
         resDiv.style.background = '#fee2e2';
         resDiv.style.color = '#b91c1c';
