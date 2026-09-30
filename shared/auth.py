@@ -380,6 +380,10 @@ def _init_schema():
         "UPDATE auth_users SET apple_id = SUBSTRING(google_id FROM 7) WHERE google_id LIKE 'apple_%' AND (apple_id IS NULL OR apple_id = '')",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE",
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''",
+        "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMP",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS inviter_notified_at TIMESTAMP"
@@ -1539,6 +1543,26 @@ def register_auth_routes(app):
             resp["user"] = get_display_name().split(" ")[0].lower()
             uid = get_user_id()
             hh_id = get_household_id()
+
+            # Record client telemetry (app version, platform, build, last active)
+            if uid and uid != 0:
+                app_ver = (request.headers.get("X-App-Version") or request.args.get("app_version") or "").strip()[:32]
+                app_plat = (request.headers.get("X-App-Platform") or request.args.get("app_platform") or "").strip()[:32]
+                app_bld = (request.headers.get("X-App-Build") or request.args.get("app_build") or "").strip()[:32]
+                try:
+                    if app_ver != "" or app_plat != "":
+                        _exec(
+                            f"UPDATE {_USERS} SET "
+                            f"last_app_version = CASE WHEN ? <> '' THEN ? ELSE last_app_version END, "
+                            f"last_app_platform = CASE WHEN ? <> '' THEN ? ELSE last_app_platform END, "
+                            f"last_app_build = CASE WHEN ? <> '' THEN ? ELSE last_app_build END, "
+                            f"last_active_at = NOW() WHERE id = ?",
+                            (app_ver, app_ver, app_plat, app_plat, app_bld, app_bld, uid)
+                        )
+                    else:
+                        _exec(f"UPDATE {_USERS} SET last_active_at = NOW() WHERE id = ?", (uid,))
+                except Exception as tele_err:
+                    print(f"[Telemetry] Non-fatal error recording user telemetry: {tele_err}", flush=True)
             
             # Auto-heal household_id if zero or not set
             if (not hh_id or hh_id == 0) and uid:
@@ -1595,7 +1619,7 @@ def register_auth_routes(app):
             is_adm = bool(user_email in {"venragh@gmail.com", "preeven.raghav@gmail.com"} or uid == 1)
             resp["is_admin"] = is_adm
             
-            u_pref = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled FROM auth_users WHERE id = ?", (uid,))
+            u_pref = _one("SELECT last_inspiration_seen_date, daily_inspiration_enabled, last_app_version, last_app_platform, last_app_build FROM auth_users WHERE id = ?", (uid,))
             last_insp_seen = None
             insp_enabled = True
             if u_pref:
@@ -1608,7 +1632,10 @@ def register_auth_routes(app):
                 "email": get_email(), "is_admin": is_adm, "household_id": hh_id,
                 "household_name": get_household_name(), "is_premium": is_prem, "subscription_status": sub_status if hh_id else "free", "trial_ends_at": trial_ends_at if hh_id else None, "subscription_ends_at": subscription_ends_at if hh_id else None,
                 "last_inspiration_seen_date": last_insp_seen,
-                "daily_inspiration_enabled": insp_enabled}
+                "daily_inspiration_enabled": insp_enabled,
+                "last_app_version": u_pref.get("last_app_version", "") if u_pref else "",
+                "last_app_platform": u_pref.get("last_app_platform", "") if u_pref else "",
+                "last_app_build": u_pref.get("last_app_build", "") if u_pref else ""}
             if uid:
                 _init_schema()
                 flags = _run(f"SELECT feature, enabled FROM {_FLAGS} WHERE user_id = ?", (uid,))

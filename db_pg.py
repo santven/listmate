@@ -221,6 +221,14 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE")
         except Exception: pass
+        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''")
+        except Exception: pass
+        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+        except Exception: pass
 
         default_aisle_patterns = [
             ("%patel%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),

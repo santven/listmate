@@ -1147,7 +1147,32 @@ async function checkAuth() {
   }
 
   try {
-    const cfg = await (await fetch(API+'/auth/config?_='+Date.now())).json(); 
+    let clientPlatform = 'web';
+    if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') {
+      clientPlatform = window.Capacitor.getPlatform();
+    }
+    let clientVer = '';
+    let clientBld = '';
+    try {
+      clientVer = localStorage.getItem('listmate_client_ver') || '';
+      clientBld = localStorage.getItem('listmate_client_bld') || '';
+      if (window.Capacitor?.Plugins?.App?.getInfo) {
+        const appInf = await window.Capacitor.Plugins.App.getInfo();
+        if (appInf) {
+          if (appInf.version) { clientVer = appInf.version; localStorage.setItem('listmate_client_ver', clientVer); }
+          if (appInf.build) { clientBld = appInf.build; localStorage.setItem('listmate_client_bld', clientBld); }
+        }
+      }
+    } catch (_) {}
+    const cfgHeaders = {};
+    if (clientVer) cfgHeaders['X-App-Version'] = clientVer;
+    if (clientPlatform) cfgHeaders['X-App-Platform'] = clientPlatform;
+    if (clientBld) cfgHeaders['X-App-Build'] = clientBld;
+
+    const cfg = await (await fetch(API+'/auth/config?_='+Date.now(), {
+      credentials: 'include',
+      headers: cfgHeaders
+    })).json(); 
     window.currentCfg = cfg;
     if (cfg.household_id) {
       if (window.currentHouseholdId && window.currentHouseholdId !== cfg.household_id) {
@@ -5903,6 +5928,14 @@ window.initPushNotifications = async function() {
           }
         } catch (_) {}
 
+        let reportedVer = '1.0.1';
+        try {
+          if (window.Capacitor?.Plugins?.App?.getInfo) {
+            const appInf = await window.Capacitor.Plugins.App.getInfo();
+            if (appInf && appInf.version) reportedVer = appInf.version;
+          }
+        } catch (_) {}
+
         await fetch('/api/push/register', {
           method: 'POST',
           credentials: 'include',
@@ -5911,7 +5944,7 @@ window.initPushNotifications = async function() {
             token: token.value,
             platform: platform,
             device_model: deviceModel,
-            app_version: '1.0.1'
+            app_version: reportedVer
           })
         });
       } catch (err) {

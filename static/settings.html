@@ -486,6 +486,46 @@
     </div>
   </div>
 
+  <!-- Admin App Versions & Adoption Console -->
+  <div class="card" id="adminAppVersionsCard" style="display:none; border:2px solid #8b5cf6; background:#faf5ff; margin-top:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0; color:#6d28d9; display:flex; align-items:center; gap:8px; font-size:18px;">
+        <span>📊 App Versions & Adoption</span>
+      </h2>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <span style="background:#7c3aed; color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.5px;">ADMIN ONLY</span>
+        <button onclick="loadAdminAppVersions()" style="background:#fff; border:1px solid #c4b5fd; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">🔄 Refresh</button>
+      </div>
+    </div>
+    <p style="font-size:13px; color:var(--muted); line-height:1.45; margin-bottom:14px;">
+      Live telemetry of installed native client versions (iOS / Android) and active web sessions across all users.
+    </p>
+
+    <!-- Version Summary Grid -->
+    <div id="adminVersionStatsGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:14px;">
+      <div style="background:#fff; border:1px solid #e9d5ff; border-radius:8px; padding:10px; text-align:center;">
+        <div style="font-size:11px; color:#6b7280; font-weight:600;">ACTIVE (30D)</div>
+        <div id="statActiveUsers30d" style="font-size:20px; font-weight:800; color:#6d28d9;">--</div>
+      </div>
+      <div style="background:#fff; border:1px solid #e9d5ff; border-radius:8px; padding:10px; text-align:center;">
+        <div style="font-size:11px; color:#6b7280; font-weight:600;">LATEST STORE VER</div>
+        <div id="statLatestVersion" style="font-size:20px; font-weight:800; color:#059669;">--</div>
+      </div>
+    </div>
+
+    <!-- Version Breakdown Table -->
+    <div style="font-weight:700; font-size:13px; color:#5b21b6; margin-bottom:8px;">📱 Platform & Version Breakdown</div>
+    <div id="adminVersionBreakdownList" style="max-height:220px; overflow-y:auto; font-size:12px; background:#fff; border:1px solid #e9d5ff; border-radius:8px; padding:8px; margin-bottom:14px;">
+      <div style="color:var(--muted); text-align:center; padding:12px;">Loading version breakdown...</div>
+    </div>
+
+    <!-- Recent Active User Sessions -->
+    <div style="font-weight:700; font-size:13px; color:#5b21b6; margin-bottom:8px;">⏱️ Recent Active Sessions</div>
+    <div id="adminRecentUsersList" style="max-height:220px; overflow-y:auto; font-size:12px; background:#fff; border:1px solid #e9d5ff; border-radius:8px; padding:8px;">
+      <div style="color:var(--muted); text-align:center; padding:12px;">Loading recent users...</div>
+    </div>
+  </div>
+
   <!-- Admin Push Notification Management & Testing -->
   <div class="card" id="adminPushCard" style="display:none; border:2px solid #3b82f6; background:#f8faff; margin-top:20px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
@@ -596,7 +636,29 @@ var householdData = null;
 
 (async function init() {
   // Check auth
-  const cfg = await (await fetch('/api/auth/config')).json();
+  let clientPlatform = 'web';
+  if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') {
+    clientPlatform = window.Capacitor.getPlatform();
+  }
+  let clientVer = '';
+  let clientBld = '';
+  try {
+    clientVer = localStorage.getItem('listmate_client_ver') || '';
+    clientBld = localStorage.getItem('listmate_client_bld') || '';
+    if (window.Capacitor?.Plugins?.App?.getInfo) {
+      const appInf = await window.Capacitor.Plugins.App.getInfo();
+      if (appInf) {
+        if (appInf.version) { clientVer = appInf.version; localStorage.setItem('listmate_client_ver', clientVer); }
+        if (appInf.build) { clientBld = appInf.build; localStorage.setItem('listmate_client_bld', clientBld); }
+      }
+    }
+  } catch (_) {}
+  const cfgHeaders = {};
+  if (clientVer) cfgHeaders['X-App-Version'] = clientVer;
+  if (clientPlatform) cfgHeaders['X-App-Platform'] = clientPlatform;
+  if (clientBld) cfgHeaders['X-App-Build'] = clientBld;
+
+  const cfg = await (await fetch('/api/auth/config', { credentials: 'include', headers: cfgHeaders })).json();
   if (!cfg.user) { window.location.href = '/login'; return; }
   window.currentCfg = cfg;
 
@@ -606,6 +668,11 @@ var householdData = null;
     const adminCard = document.getElementById('adminFeedbackCard');
     if (adminCard) adminCard.style.display = 'block';
     loadAdminFeedback();
+    const adminAppVersionsCard = document.getElementById('adminAppVersionsCard');
+    if (adminAppVersionsCard) {
+      adminAppVersionsCard.style.display = 'block';
+      loadAdminAppVersions();
+    }
     const adminPushCard = document.getElementById('adminPushCard');
     if (adminPushCard) {
       adminPushCard.style.display = 'block';
@@ -2894,6 +2961,78 @@ function handlePushTargetChange() {
     if (label) label.textContent = 'Household ID';
   } else {
     wrap.style.display = 'none';
+  }
+}
+
+async function loadAdminAppVersions() {
+  const breakdownEl = document.getElementById('adminVersionBreakdownList');
+  const recentEl = document.getElementById('adminRecentUsersList');
+  const statActiveEl = document.getElementById('statActiveUsers30d');
+  const statLatestEl = document.getElementById('statLatestVersion');
+  if (breakdownEl) breakdownEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">Refreshing version stats...</div>';
+  if (recentEl) recentEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">Refreshing recent users...</div>';
+  try {
+    const res = await fetch('/api/admin/app-versions', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok) {
+      if (breakdownEl) breakdownEl.innerHTML = `<div style="color:#ef4444; padding:8px;">${escapeHtml(data.error || 'Failed to load telemetry')}</div>`;
+      return;
+    }
+    if (statActiveEl) statActiveEl.textContent = data.total_active_30d !== undefined ? data.total_active_30d : '--';
+    if (statLatestEl) statLatestEl.textContent = data.latest_version ? 'v' + data.latest_version : '--';
+
+    const breakdown = data.breakdown || [];
+    if (breakdown.length === 0) {
+      if (breakdownEl) breakdownEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">No telemetry logged yet.</div>';
+    } else {
+      if (breakdownEl) {
+        breakdownEl.innerHTML = breakdown.map(b => {
+          const isLatest = b.app_version === data.latest_version;
+          const badgeStyle = isLatest
+            ? 'background:#dcfce7; color:#166534; border:1px solid #bbf7d0;'
+            : (b.platform === 'web' ? 'background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;' : 'background:#fee2e2; color:#991b1b; border:1px solid #fecaca;');
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f3e8ff;">
+              <div>
+                <span style="font-weight:700; color:#4c1d95;">${escapeHtml(b.platform.toUpperCase())}</span>
+                <span style="display:inline-block; font-size:11px; font-weight:700; padding:1px 6px; border-radius:4px; margin-left:6px; ${badgeStyle}">
+                  v${escapeHtml(b.app_version)} ${isLatest ? '★ Latest' : ''}
+                </span>
+              </div>
+              <div style="font-weight:700; color:#5b21b6; font-size:13px;">
+                ${b.count} user${b.count === 1 ? '' : 's'}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    const recents = data.recent_users || [];
+    if (recents.length === 0) {
+      if (recentEl) recentEl.innerHTML = '<div style="color:var(--muted); text-align:center; padding:12px;">No recent sessions found.</div>';
+    } else {
+      if (recentEl) {
+        recentEl.innerHTML = recents.map(u => {
+          const timeStr = u.last_active_at ? new Date(u.last_active_at).toLocaleString() : 'Recently';
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f3e8ff;">
+              <div>
+                <div style="font-weight:600; color:#1e293b;">${escapeHtml(u.email || u.name || 'User #' + u.id)}</div>
+                <div style="color:#6b7280; font-size:11px;">
+                  ${escapeHtml(u.platform.toUpperCase())} • v${escapeHtml(u.app_version)}${u.app_build ? ' (b' + escapeHtml(u.app_build) + ')' : ''}
+                </div>
+              </div>
+              <div style="color:#9ca3af; font-size:11px; text-align:right;">
+                ${escapeHtml(timeStr)}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  } catch(e) {
+    if (breakdownEl) breakdownEl.innerHTML = '<div style="color:#ef4444; padding:8px;">Network error loading telemetry.</div>';
   }
 }
 
