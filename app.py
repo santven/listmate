@@ -3958,6 +3958,68 @@ def api_admin_push_subscriptions():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/admin/app-versions", methods=["GET"])
+@require_admin
+def api_admin_app_versions():
+    """Admin inspect client app versions, platforms, and adoption metrics."""
+    try:
+        authmod._init_schema()
+        latest_ver = os.environ.get("LATEST_APP_VERSION", "1.0.0").strip()
+
+        # Breakdown by platform and version
+        breakdown_rows = authmod._run("""
+            SELECT 
+                COALESCE(NULLIF(last_app_platform, ''), 'web') as platform,
+                COALESCE(NULLIF(last_app_version, ''), 'web/legacy') as app_version,
+                COUNT(*) as count,
+                MAX(last_active_at) as last_seen_at
+            FROM auth_users
+            WHERE last_active_at IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY count DESC, 1 ASC
+        """)
+
+        # Total active in past 30 days
+        total_30d_row = authmod._one("""
+            SELECT COUNT(*) as count 
+            FROM auth_users 
+            WHERE last_active_at >= NOW() - INTERVAL '30 days'
+        """)
+        total_30d = total_30d_row.get("count", 0) if total_30d_row else 0
+
+        # Recent 30 active users
+        recent_users = authmod._run("""
+            SELECT id, email, name, 
+                   COALESCE(NULLIF(last_app_platform, ''), 'web') as platform,
+                   COALESCE(NULLIF(last_app_version, ''), 'web/legacy') as app_version,
+                   COALESCE(last_app_build, '') as app_build,
+                   last_active_at
+            FROM auth_users
+            WHERE last_active_at IS NOT NULL
+            ORDER BY last_active_at DESC
+            LIMIT 30
+        """)
+
+        # Format timestamps
+        for r in (breakdown_rows or []):
+            if r.get("last_seen_at") and hasattr(r["last_seen_at"], "isoformat"):
+                r["last_seen_at"] = r["last_seen_at"].isoformat()
+        for u in (recent_users or []):
+            if u.get("last_active_at") and hasattr(u["last_active_at"], "isoformat"):
+                u["last_active_at"] = u["last_active_at"].isoformat()
+
+        return jsonify({
+            "ok": True,
+            "latest_version": latest_ver,
+            "total_active_30d": total_30d,
+            "breakdown": breakdown_rows or [],
+            "recent_users": recent_users or []
+        })
+    except Exception as e:
+        print(f"[/api/admin/app-versions error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/admin/push/history", methods=["GET"])
 @require_admin
 def api_admin_push_history():
