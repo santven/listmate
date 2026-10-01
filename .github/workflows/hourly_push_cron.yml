@@ -2,8 +2,8 @@ name: Hourly Push Notification Cron
 
 on:
   schedule:
-    # Runs at the top of every hour (00 minutes UTC)
-    - cron: '0 * * * *'
+    # Runs at 15 minutes past every hour (off-peak to avoid GitHub Actions :00 queue delays)
+    - cron: '15 * * * *'
   workflow_dispatch:
     inputs:
       environment:

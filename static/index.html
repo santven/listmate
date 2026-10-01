@@ -545,8 +545,23 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
     const screenParam = urlParams.get('screen');
     const actionParam = urlParams.get('action');
-    if (actionParam === 'upgrade' || actionParam === 'paywall' || screenParam === 'upgrade') {
-      setTimeout(() => { if (typeof showPaywall === 'function') showPaywall(); }, 400);
+    const modalParam = urlParams.get('modal');
+    if (actionParam === 'upgrade' || actionParam === 'paywall' || screenParam === 'upgrade' || modalParam === 'upgrade') {
+      setTimeout(() => {
+        if (typeof showPaywall === 'function') {
+          showPaywall();
+        } else {
+          const pModal = document.getElementById('paywallModal') || document.getElementById('premiumModal');
+          if (pModal) pModal.classList.add('active');
+        }
+      }, 400);
+      setTimeout(() => {
+        const pModal = document.getElementById('paywallModal') || document.getElementById('premiumModal');
+        if (pModal && !pModal.classList.contains('active')) {
+          if (typeof showPaywall === 'function') showPaywall();
+          else pModal.classList.add('active');
+        }
+      }, 1200);
     } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
@@ -4013,18 +4028,18 @@ async function showPaywall() {
             }
 
             if (platform === 'ios' && !rcKey.startsWith('appl_')) {
-                const msg = 'iOS in-app purchases require setting REVENUECAT_APPLE_KEY (appl_...) in Render environment variables.';
-                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+                console.warn('[RevenueCat] REVENUECAT_APPLE_KEY not configured with appl_ prefix. Falling back to web paywall.');
+                loadAndRenderWebPaywall();
                 return;
             }
             if (platform === 'android' && !rcKey.startsWith('goog_')) {
-                const msg = 'Android in-app purchases require setting REVENUECAT_PUBLIC_KEY (goog_...) in Render environment variables.';
-                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+                console.warn('[RevenueCat] REVENUECAT_PUBLIC_KEY not configured with goog_ prefix. Falling back to web paywall.');
+                loadAndRenderWebPaywall();
                 return;
             }
             if (rcKey.startsWith('test_')) {
-                const msg = 'In-app purchases require configuring REVENUECAT_PUBLIC_KEY (goog_...) or REVENUECAT_APPLE_KEY (appl_...) in Render.';
-                if (typeof toast !== 'undefined') toast(msg); else alert(msg);
+                console.warn('[RevenueCat] Test key configured. Falling back to web paywall.');
+                loadAndRenderWebPaywall();
                 return;
             }
             console.log("[RevenueCat] Configuring SDK with key:", rcKey);
@@ -5975,9 +5990,34 @@ window.initPushNotifications = async function() {
 
     // Handle user tapping on notification banner
     PushPlugin.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('[Push] Action performed on notification:', notification);
-      const data = notification.notification?.data || {};
-      const targetUrl = data.url || '/';
+      console.log('[Push] Action performed on notification:', JSON.stringify(notification));
+      const notifObj = (notification && notification.notification) || notification || {};
+      const data = notifObj.data || notification.data || notifObj;
+      const action = (data && data.action) || notifObj.action || '';
+      const modal = (data && data.modal) || notifObj.modal || '';
+      const targetUrl = (data && data.url) || notifObj.url || '';
+
+      const isUpgrade = action === 'open_upgrade_modal' || 
+                        action === 'upgrade' || 
+                        modal === 'upgrade' || 
+                        targetUrl.includes('modal=upgrade') || 
+                        targetUrl.includes('action=upgrade') ||
+                        (notifObj.title && notifObj.title.includes('Pro Trial')) ||
+                        (notifObj.body && notifObj.body.includes('Pro trial'));
+
+      if (isUpgrade) {
+        console.log('[Push] Handled upgrade push tap. Opening paywall directly in SPA.');
+        setTimeout(() => {
+          if (typeof showPaywall === 'function') {
+            showPaywall();
+          } else {
+            const pModal = document.getElementById('paywallModal') || document.getElementById('premiumModal');
+            if (pModal) pModal.classList.add('active');
+          }
+        }, 150);
+        return;
+      }
+
       if (targetUrl && targetUrl !== '/') {
         if (targetUrl.startsWith('#')) {
           window.location.hash = targetUrl;
