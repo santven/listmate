@@ -1154,27 +1154,43 @@ def internal_cron_hourly_push():
 
     try:
         from scripts.cron_daily import check_trial_expiration_pushes
+        force_send = request.args.get("force", "").lower() in ("1", "true")
         target_hour = 8
-        if request.is_json and request.json and "target_hour" in request.json:
-            try:
-                target_hour = int(request.json["target_hour"])
-            except (ValueError, TypeError):
-                target_hour = 8
+
+        if request.is_json and request.json:
+            if "force" in request.json:
+                force_send = bool(request.json["force"])
+            if "target_hour" in request.json:
+                raw_th = request.json["target_hour"]
+                if raw_th in (None, "", "all", "any", -1, "-1"):
+                    target_hour = None
+                    force_send = True
+                else:
+                    try:
+                        target_hour = int(raw_th)
+                    except (ValueError, TypeError):
+                        target_hour = 8
         elif request.args.get("target_hour"):
-            try:
-                target_hour = int(request.args.get("target_hour"))
-            except (ValueError, TypeError):
-                target_hour = 8
+            raw_th = request.args.get("target_hour")
+            if raw_th in (None, "", "all", "any", -1, "-1"):
+                target_hour = None
+                force_send = True
+            else:
+                try:
+                    target_hour = int(raw_th)
+                except (ValueError, TypeError):
+                    target_hour = 8
 
         dry_run = request.args.get("dry_run", "").lower() in ("1", "true")
         if request.is_json and request.json and "dry_run" in request.json:
             dry_run = bool(request.json["dry_run"])
 
-        trial_results = check_trial_expiration_pushes(target_hour=target_hour, dry_run=dry_run)
+        trial_results = check_trial_expiration_pushes(target_hour=target_hour, dry_run=dry_run, force_send=force_send)
 
         return jsonify({
             "ok": True,
             "target_hour": target_hour,
+            "force_send": force_send,
             "dry_run": dry_run,
             "trial_pushes": trial_results
         })
