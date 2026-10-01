@@ -1153,6 +1153,10 @@ async function checkAuth() {
     }
     let clientVer = '';
     let clientBld = '';
+    let clientTz = '';
+    try {
+      clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch (_) {}
     try {
       clientVer = localStorage.getItem('listmate_client_ver') || '';
       clientBld = localStorage.getItem('listmate_client_bld') || '';
@@ -1168,6 +1172,7 @@ async function checkAuth() {
     if (clientVer) cfgHeaders['X-App-Version'] = clientVer;
     if (clientPlatform) cfgHeaders['X-App-Platform'] = clientPlatform;
     if (clientBld) cfgHeaders['X-App-Build'] = clientBld;
+    if (clientTz) cfgHeaders['X-App-Timezone'] = clientTz;
 
     const cfg = await (await fetch(API+'/auth/config?_='+Date.now(), {
       credentials: 'include',
@@ -5936,6 +5941,9 @@ window.initPushNotifications = async function() {
           }
         } catch (_) {}
 
+        let clientTz = '';
+        try { clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) {}
+
         await fetch('/api/push/register', {
           method: 'POST',
           credentials: 'include',
@@ -5944,7 +5952,8 @@ window.initPushNotifications = async function() {
             token: token.value,
             platform: platform,
             device_model: deviceModel,
-            app_version: reportedVer
+            app_version: reportedVer,
+            timezone: clientTz
           })
         });
       } catch (err) {

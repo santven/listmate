@@ -229,6 +229,8 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
         except Exception: pass
+        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+        except Exception: pass
 
         default_aisle_patterns = [
             ("%patel%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),

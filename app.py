@@ -3910,6 +3910,13 @@ def api_push_register():
             app_version=app_version
         )
 
+        client_tz = str(data.get("timezone") or "").strip()[:64]
+        if client_tz and re.match(r'^[A-Za-z0-9_/\-+]+$', client_tz):
+            try:
+                authmod._exec(f"UPDATE {authmod._USERS} SET timezone = ? WHERE id = ?", (client_tz, uid))
+            except Exception:
+                pass
+
         if success:
             return jsonify({"ok": True, "message": "Push token registered successfully."})
         else:
@@ -3993,6 +4000,7 @@ def api_admin_app_versions():
                    COALESCE(NULLIF(last_app_platform, ''), 'web') as platform,
                    COALESCE(NULLIF(last_app_version, ''), 'web/legacy') as app_version,
                    COALESCE(last_app_build, '') as app_build,
+                   COALESCE(NULLIF(timezone, ''), 'America/New_York') as timezone,
                    last_active_at
             FROM auth_users
             WHERE last_active_at IS NOT NULL

@@ -642,6 +642,10 @@ var householdData = null;
   }
   let clientVer = '';
   let clientBld = '';
+  let clientTz = '';
+  try {
+    clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch (_) {}
   try {
     clientVer = localStorage.getItem('listmate_client_ver') || '';
     clientBld = localStorage.getItem('listmate_client_bld') || '';
@@ -657,6 +661,7 @@ var householdData = null;
   if (clientVer) cfgHeaders['X-App-Version'] = clientVer;
   if (clientPlatform) cfgHeaders['X-App-Platform'] = clientPlatform;
   if (clientBld) cfgHeaders['X-App-Build'] = clientBld;
+  if (clientTz) cfgHeaders['X-App-Timezone'] = clientTz;
 
   const cfg = await (await fetch('/api/auth/config', { credentials: 'include', headers: cfgHeaders })).json();
   if (!cfg.user) { window.location.href = '/login'; return; }
@@ -3020,7 +3025,7 @@ async function loadAdminAppVersions() {
               <div>
                 <div style="font-weight:600; color:#1e293b;">${escapeHtml(u.email || u.name || 'User #' + u.id)}</div>
                 <div style="color:#6b7280; font-size:11px;">
-                  ${escapeHtml(u.platform.toUpperCase())} • v${escapeHtml(u.app_version)}${u.app_build ? ' (b' + escapeHtml(u.app_build) + ')' : ''}
+                  ${escapeHtml(u.platform.toUpperCase())} • v${escapeHtml(u.app_version)}${u.app_build ? ' (b' + escapeHtml(u.app_build) + ')' : ''}${u.timezone ? ' • ' + escapeHtml(u.timezone) : ''}
                 </div>
               </div>
               <div style="color:#9ca3af; font-size:11px; text-align:right;">
