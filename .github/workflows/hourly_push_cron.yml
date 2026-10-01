@@ -1,0 +1,65 @@
+name: Hourly Push Notification Cron
+
+on:
+  schedule:
+    # Runs at the top of every hour (00 minutes UTC)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target Environment'
+        required: true
+        type: choice
+        default: 'production'
+        options:
+          - production
+          - staging
+      dry_run:
+        description: 'Run in Dry Run mode (evaluate candidates without dispatching pushes)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  trigger_hourly_push:
+    name: Trigger Hourly Push Cron
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve Target URL
+        id: target
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+            echo "url=https://listmate-staging.onrender.com/api/internal/cron/hourly-push" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://grocerlist.app/api/internal/cron/hourly-push" >> $GITHUB_OUTPUT
+          fi
+          echo "dry_run=${{ github.event.inputs.dry_run || 'false' }}" >> $GITHUB_OUTPUT
+
+      - name: Dispatch Hourly Push Webhook
+        env:
+          CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
+          TARGET_URL: ${{ steps.target.outputs.url }}
+          DRY_RUN: ${{ steps.target.outputs.dry_run }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning ::INTERNAL_CRON_SECRET is not configured in repository secrets. Skipping webhook dispatch."
+            exit 0
+          fi
+
+          echo "Dispatching hourly push webhook to $TARGET_URL (dry_run=$DRY_RUN)..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$TARGET_URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"dry_run\": $DRY_RUN, \"target_hour\": 8}")
+
+          echo "HTTP Response Status: $HTTP_STATUS"
+          echo "Response Body:"
+          cat response.json
+          echo ""
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Hourly push cron webhook completed successfully."
+          else
+            echo "::error ::Webhook returned non-2xx status ($HTTP_STATUS)."
+            exit 1
+          fi

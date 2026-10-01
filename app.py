@@ -1089,6 +1089,100 @@ def admin_test_lifetime_digest():
         import traceback; traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/admin/cron/test-trial-pushes", methods=["GET", "POST"])
+@require_admin
+def admin_test_trial_pushes():
+    """
+    Admin diagnostic tool to evaluate or trigger trial push notifications on demand.
+    Supports dry_run=true, force=true, target_hour=X.
+    """
+    try:
+        from scripts.cron_daily import check_trial_expiration_pushes
+        dry_run = request.args.get("dry_run", "").lower() in ("1", "true")
+        force_send = request.args.get("force", "").lower() in ("1", "true")
+        target_hour = 8
+
+        if request.method == "POST" and request.is_json and request.json:
+            if "dry_run" in request.json:
+                dry_run = bool(request.json["dry_run"])
+            if "force" in request.json:
+                force_send = bool(request.json["force"])
+            if "target_hour" in request.json:
+                try:
+                    target_hour = int(request.json["target_hour"])
+                except (ValueError, TypeError):
+                    target_hour = 8
+        elif request.args.get("target_hour"):
+            try:
+                target_hour = int(request.args.get("target_hour"))
+            except (ValueError, TypeError):
+                target_hour = 8
+
+        results = check_trial_expiration_pushes(target_hour=target_hour, dry_run=dry_run, force_send=force_send)
+        return jsonify({
+            "ok": True,
+            "target_hour": target_hour,
+            "dry_run": dry_run,
+            "force_send": force_send,
+            "results": results
+        })
+    except Exception as e:
+        print(f"[admin_test_trial_pushes error]: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/internal/cron/hourly-push", methods=["POST"])
+def internal_cron_hourly_push():
+    """
+    Internal authenticated webhook triggered hourly (e.g. by GitHub Actions).
+    Evaluates:
+      1. Pro trial expiration push reminders at local 8:00 AM (Issue #554).
+    """
+    secret = os.environ.get("INTERNAL_CRON_SECRET")
+    if not secret:
+        return jsonify({"ok": False, "error": "INTERNAL_CRON_SECRET is not configured on server"}), 500
+
+    auth_header = request.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif request.headers.get("X-Cron-Secret"):
+        token = request.headers.get("X-Cron-Secret").strip()
+
+    if not token or token != secret:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    try:
+        from scripts.cron_daily import check_trial_expiration_pushes
+        target_hour = 8
+        if request.is_json and request.json and "target_hour" in request.json:
+            try:
+                target_hour = int(request.json["target_hour"])
+            except (ValueError, TypeError):
+                target_hour = 8
+        elif request.args.get("target_hour"):
+            try:
+                target_hour = int(request.args.get("target_hour"))
+            except (ValueError, TypeError):
+                target_hour = 8
+
+        dry_run = request.args.get("dry_run", "").lower() in ("1", "true")
+        if request.is_json and request.json and "dry_run" in request.json:
+            dry_run = bool(request.json["dry_run"])
+
+        trial_results = check_trial_expiration_pushes(target_hour=target_hour, dry_run=dry_run)
+
+        return jsonify({
+            "ok": True,
+            "target_hour": target_hour,
+            "dry_run": dry_run,
+            "trial_pushes": trial_results
+        })
+    except Exception as e:
+        print(f"[HourlyPushError]: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/api/webhooks/revenuecat", methods=["POST"])
 def revenuecat_webhook():
     """Handle RevenueCat webhooks for cross-platform (iOS, Android, Web/Stripe) subscriptions."""

@@ -1498,8 +1498,227 @@ def test_lifetime_digest(target_hhid=1):
     return sent
 
 
+def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False):
+    """
+    Evaluates trial households approaching expiration and dispatches push reminders
+    at 72 hours (Day T-3) and 24 hours (Day T-1) before expiration.
+    
+    Acceptance Criteria (Issue #554):
+    1. Evaluates users at 8:00 AM in their local timezone (auth_users.timezone, fallback America/Chicago).
+    2. Directly verifies is_premium = FALSE and subscription_status = 'trial' in PostgreSQL immediately before dispatch.
+    3. Content:
+       - 72h: '✨ 3 Days Left in Your ListMate Pro Trial' / 'Keep real-time household sync and smart sorting active.'
+       - 24h: '⏳ Your Pro trial ends tomorrow' / 'Upgrade now to keep uninterrupted household sync.'
+    4. Idempotency: Scoped via push_notifications_log with campaign IN ('trial_72h', 'trial_24h').
+    5. Deep Link: action: 'open_upgrade_modal', url: '/?modal=upgrade&source=push_trial'.
+    """
+    _init_schema()
+    from push_helper import send_push_to_user
+    import shared.auth as authmod
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking pro trial expiration push reminders (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    # Timezone check clause: if force_send is True or target_hour is None, bypass hour matching
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    query = f"""
+        SELECT 
+            h.id AS household_id,
+            h.name AS household_name,
+            h.trial_ends_at,
+            h.is_premium,
+            h.subscription_status,
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            CASE 
+                WHEN DATE(h.trial_ends_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) + INTERVAL '3 days' 
+                     OR (h.trial_ends_at BETWEEN NOW() + INTERVAL '48 hours' AND NOW() + INTERVAL '72 hours')
+                     THEN 'trial_72h'
+                WHEN DATE(h.trial_ends_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) + INTERVAL '1 day' 
+                     OR (h.trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '24 hours')
+                     THEN 'trial_24h'
+            END AS campaign_type
+        FROM auth_households h
+        JOIN auth_household_members hm ON hm.household_id = h.id
+        JOIN auth_users u ON u.id = hm.user_id
+        WHERE h.is_premium = FALSE
+          AND h.subscription_status = 'trial'
+          AND h.trial_ends_at IS NOT NULL
+          {hour_clause}
+          AND (
+              -- 72h window check & idempotency
+              (
+                  (DATE(h.trial_ends_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                   DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) + INTERVAL '3 days'
+                   OR (h.trial_ends_at BETWEEN NOW() + INTERVAL '48 hours' AND NOW() + INTERVAL '72 hours'))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM push_notifications_log pnl 
+                      WHERE pnl.target_type = 'user' 
+                        AND pnl.target_id = u.id 
+                        AND pnl.custom_data->>'campaign' = 'trial_72h'
+                  )
+              )
+              OR
+              -- 24h window check & idempotency
+              (
+                  (DATE(h.trial_ends_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                   DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) + INTERVAL '1 day'
+                   OR (h.trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '24 hours'))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM push_notifications_log pnl 
+                      WHERE pnl.target_type = 'user' 
+                        AND pnl.target_id = u.id 
+                        AND pnl.custom_data->>'campaign' = 'trial_24h'
+                  )
+              )
+          )
+        ORDER BY h.trial_ends_at ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(query, params if params else None)
+    except Exception as e:
+        print(f"[check_trial_expiration_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for trial push notifications.")
+    results = []
+    dispatched_count = 0
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        campaign = cand.get("campaign_type")
+
+        # Defensive integer check (Falsiness rule: 0 vs None)
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+
+        # 2. Live Subscription Check: Directly verify in PostgreSQL before dispatching
+        try:
+            live_hh = _run("SELECT is_premium, subscription_status FROM auth_households WHERE id = %s", (hhid,))
+            if not live_hh:
+                continue
+            if live_hh[0].get("is_premium") is True or live_hh[0].get("subscription_status") != "trial":
+                print(f"  [Skip] User #{uid} (Household #{hhid}) upgraded or is no longer on trial (is_premium={live_hh[0].get('is_premium')}).")
+                continue
+        except Exception as live_err:
+            print(f"  [Warning] Failed live subscription check for Household #{hhid}: {live_err}")
+            continue
+
+        # Notification content per acceptance criteria
+        if campaign == "trial_72h":
+            title = "✨ 3 Days Left in Your ListMate Pro Trial"
+            body = "Keep real-time household sync and smart sorting active."
+        elif campaign == "trial_24h":
+            title = "⏳ Your Pro trial ends tomorrow"
+            body = "Upgrade now to keep uninterrupted household sync."
+        else:
+            continue
+
+        deep_link_url = "/?modal=upgrade&source=push_trial"
+        push_data = {
+            "action": "open_upgrade_modal",
+            "campaign": campaign,
+            "url": deep_link_url,
+            "household_id": str(hhid)
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch '{campaign}' to User #{uid} ({cand.get('user_email')}): '{title}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": campaign,
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        # Live dispatch via push_helper
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent '{campaign}' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            # Defensive idempotency insurance: if user had 0 registered tokens, log a record so we do not re-query
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": campaign,
+                "title": title,
+                "result": res,
+                "status": "sent"
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to dispatch push to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": campaign,
+                "error": str(dispatch_err),
+                "status": "error"
+            })
+
+    return {
+        "ok": True,
+        "dispatched": dispatched_count,
+        "candidates": len(candidates),
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
 if __name__ == "__main__":
     import sys
+    if any(arg.startswith("--test-trial-pushes") or arg == "--test-trial-push" for arg in sys.argv):
+        dry = "--dry-run" in sys.argv
+        force = "--force" in sys.argv
+        target_h = 8
+        for arg in sys.argv:
+            if arg.startswith("--target-hour="):
+                try:
+                    target_h = int(arg.split("=", 1)[1])
+                except ValueError:
+                    target_h = 8
+        res = check_trial_expiration_pushes(target_hour=target_h, dry_run=dry, force_send=force)
+        print(f"Trial pushes result: {res}")
+        sys.exit(0)
     if any(arg.startswith("--test-lifetime-digest") or arg == "--test-digest" for arg in sys.argv):
         hhid = 1
         for i, arg in enumerate(sys.argv):
