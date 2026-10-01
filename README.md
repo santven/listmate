@@ -56,10 +56,7 @@ listmate/
 ```
 
 ## Background Jobs
-ListMate uses a single consolidated cron script `scripts/cron_daily.py` designed to run daily (e.g., at 8 AM). 
-
-It handles multiple automated workflows while ensuring a user receives **at most one combined email** per day:
-- **Trial Expirations**: Reminds users 3 days before and on the day their 30-day trial ends.
-- **Activation**: Engages users who signed up 3 days ago but haven't added any items to their list.
-- **Re-engagement**: Re-engages users who haven't added an item in 14 days.
+ListMate uses two consolidated automation engines:
+1. **Daily Email Engine (`scripts/cron_daily.py`)**: Runs daily at 3 AM UTC via Render Cron. Handles automated lifecycle workflows while ensuring a user receives **at most one combined email** per day (Trial expirations, Activation, Re-engagement, Abandoned signups, Invites).
+2. **Hourly Notification Engine (`scripts/cron_hourly.py`)**: Runs hourly (`0 * * * *`) via Render Cron. Handles timezone-aware push notifications (delivering trial expiration pushes at 8:00 AM in each user's local timezone) and provides a unified entrypoint for future hourly background tasks.
 # Trigger CI
