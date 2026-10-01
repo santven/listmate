@@ -143,7 +143,22 @@ class TestTrialPushNotifications(unittest.TestCase):
             data = resp.get_json()
             self.assertTrue(data.get("ok"))
             self.assertEqual(data.get("target_hour"), 8)
-            mock_trial_func.assert_called_once_with(target_hour=8, dry_run=False)
+            mock_trial_func.assert_called_once_with(target_hour=8, dry_run=False, force_send=False)
+
+    @patch("scripts.cron_daily.check_trial_expiration_pushes")
+    def test_hourly_push_webhook_force_send(self, mock_trial_func):
+        mock_trial_func.return_value = {"ok": True, "dispatched": 1, "candidates": 1}
+        with patch.dict(os.environ, {"INTERNAL_CRON_SECRET": "secret_abc_123"}):
+            resp = self.client.post(
+                "/api/internal/cron/hourly-push",
+                headers={"Authorization": "Bearer secret_abc_123"},
+                json={"dry_run": True, "force": True}
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"))
+            self.assertTrue(data.get("force_send"))
+            mock_trial_func.assert_called_once_with(target_hour=8, dry_run=True, force_send=True)
 
 
 if __name__ == "__main__":
