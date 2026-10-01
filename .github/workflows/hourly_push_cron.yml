@@ -10,15 +10,25 @@ on:
         description: 'Target Environment'
         required: true
         type: choice
-        default: 'production'
+        default: 'staging'
         options:
-          - production
           - staging
+          - production
       dry_run:
         description: 'Run in Dry Run mode (evaluate candidates without dispatching pushes)'
         required: false
         type: boolean
         default: false
+      force_send:
+        description: 'Force test candidates now (bypass 8:00 AM local time restriction)'
+        required: false
+        type: boolean
+        default: false
+      target_hour:
+        description: 'Target local hour to evaluate (0-23, or 8 for production standard)'
+        required: false
+        type: string
+        default: '8'
 
 jobs:
   trigger_hourly_push:
@@ -40,23 +50,27 @@ jobs:
             echo "url=https://grocerlist.app/api/internal/cron/hourly-push" >> $GITHUB_OUTPUT
           fi
           echo "dry_run=${{ inputs.dry_run || github.event.inputs.dry_run || 'false' }}" >> $GITHUB_OUTPUT
+          echo "force_send=${{ inputs.force_send || github.event.inputs.force_send || 'false' }}" >> $GITHUB_OUTPUT
+          echo "target_hour=${{ inputs.target_hour || github.event.inputs.target_hour || '8' }}" >> $GITHUB_OUTPUT
 
       - name: Dispatch Hourly Push Webhook
         env:
           CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
           TARGET_URL: ${{ steps.target.outputs.url }}
           DRY_RUN: ${{ steps.target.outputs.dry_run }}
+          FORCE_SEND: ${{ steps.target.outputs.force_send }}
+          TARGET_HOUR: ${{ steps.target.outputs.target_hour }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::warning ::INTERNAL_CRON_SECRET is not configured in repository secrets. Skipping webhook dispatch."
             exit 0
           fi
 
-          echo "Dispatching hourly push webhook to $TARGET_URL (dry_run=$DRY_RUN)..."
+          echo "Dispatching hourly push webhook to $TARGET_URL (dry_run=$DRY_RUN, force=$FORCE_SEND, target_hour=$TARGET_HOUR)..."
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$TARGET_URL" \
             -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
-            -d "{\"dry_run\": $DRY_RUN, \"target_hour\": 8}")
+            -d "{\"dry_run\": $DRY_RUN, \"force\": $FORCE_SEND, \"target_hour\": \"$TARGET_HOUR\"}")
 
           echo "HTTP Response Status: $HTTP_STATUS"
           echo "Response Body:"
