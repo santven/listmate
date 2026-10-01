@@ -28,12 +28,18 @@ jobs:
       - name: Resolve Target URL
         id: target
         run: |
-          if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+          BRANCH="${{ github.ref_name }}"
+          ENV_INPUT="${{ inputs.environment || github.event.inputs.environment || '' }}"
+          echo "Triggered on branch: '$BRANCH', input environment: '$ENV_INPUT'"
+
+          if [ "$ENV_INPUT" = "staging" ] || [ "$BRANCH" = "staging" ]; then
+            echo "Target environment resolved to: STAGING"
             echo "url=https://listmate-staging.onrender.com/api/internal/cron/hourly-push" >> $GITHUB_OUTPUT
           else
+            echo "Target environment resolved to: PRODUCTION"
             echo "url=https://grocerlist.app/api/internal/cron/hourly-push" >> $GITHUB_OUTPUT
           fi
-          echo "dry_run=${{ github.event.inputs.dry_run || 'false' }}" >> $GITHUB_OUTPUT
+          echo "dry_run=${{ inputs.dry_run || github.event.inputs.dry_run || 'false' }}" >> $GITHUB_OUTPUT
 
       - name: Dispatch Hourly Push Webhook
         env:
