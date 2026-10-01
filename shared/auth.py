@@ -201,6 +201,7 @@ def _init_schema():
             id SERIAL PRIMARY KEY, google_id TEXT UNIQUE NOT NULL,
             email TEXT NOT NULL, name TEXT NOT NULL,
             household_id INTEGER NOT NULL DEFAULT 0,
+            timezone VARCHAR(64) DEFAULT 'America/New_York',
             created_at TIMESTAMP NOT NULL DEFAULT NOW())""",
         """CREATE TABLE IF NOT EXISTS auth_households (
             id SERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id INTEGER, downgraded_at TIMESTAMP,
@@ -1554,6 +1555,12 @@ def register_auth_routes(app):
                 app_tz = (request.headers.get("X-App-Timezone") or request.args.get("timezone") or "").strip()[:64]
                 if app_tz and not re.match(r'^[A-Za-z0-9_/\-+]+$', app_tz):
                     app_tz = ""
+                # Defensive self-healing: Ensure timezone column exists in auth_users
+                try:
+                    _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+                except Exception:
+                    pass
+
                 try:
                     if app_ver != "" or app_plat != "" or app_tz != "":
                         _exec(
@@ -1569,6 +1576,17 @@ def register_auth_routes(app):
                         _exec(f"UPDATE {_USERS} SET last_active_at = NOW() WHERE id = ?", (uid,))
                 except Exception as tele_err:
                     print(f"[Telemetry] Non-fatal error recording user telemetry: {tele_err}", flush=True)
+                    # Self-heal missing column and retry
+                    try:
+                        _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+                        _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''")
+                        _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''")
+                        _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''")
+                        _run(f"ALTER TABLE {_USERS} ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+                        if app_tz != "":
+                            _exec(f"UPDATE {_USERS} SET timezone = ? WHERE id = ?", (app_tz, uid))
+                    except Exception as retry_err:
+                        print(f"[Telemetry] Retry migration notice: {retry_err}", flush=True)
 
                 try:
                     u_row = _one(f"SELECT COALESCE(NULLIF(timezone, ''), 'America/New_York') as tz FROM {_USERS} WHERE id = ?", (uid,))
