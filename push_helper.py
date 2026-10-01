@@ -208,7 +208,7 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
             body=body,
         )
 
-        # Build Android config
+        # Build Android config (omit click_action so default launcher activity receives notification payload)
         android_config = None
         try:
             if hasattr(messaging, 'AndroidConfig') and hasattr(messaging, 'AndroidNotification'):
@@ -216,7 +216,6 @@ def _send_fcm_multicast(tokens: List[str], title: str, body: str, data: Optional
                     priority='high',
                     notification=messaging.AndroidNotification(
                         sound='default',
-                        click_action=clean_data.get('url', '/'),
                         channel_id='listmate_notifications',
                     )
                 )

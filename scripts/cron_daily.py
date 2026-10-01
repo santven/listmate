@@ -1630,6 +1630,7 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
         deep_link_url = "/?modal=upgrade&source=push_trial"
         push_data = {
             "action": "open_upgrade_modal",
+            "modal": "upgrade",
             "campaign": campaign,
             "url": deep_link_url,
             "household_id": str(hhid)
