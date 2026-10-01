@@ -494,6 +494,7 @@
       </h2>
       <div style="display:flex; gap:6px; align-items:center;">
         <span style="background:#7c3aed; color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; letter-spacing:0.5px;">ADMIN ONLY</span>
+        <button onclick="runAdminDbMigrate(this)" style="background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">⚡ Run Migrations</button>
         <button onclick="loadAdminAppVersions()" style="background:#fff; border:1px solid #c4b5fd; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">🔄 Refresh</button>
       </div>
     </div>
@@ -3038,6 +3039,25 @@ async function loadAdminAppVersions() {
     }
   } catch(e) {
     if (breakdownEl) breakdownEl.innerHTML = '<div style="color:#ef4444; padding:8px;">Network error loading telemetry.</div>';
+  }
+}
+
+async function runAdminDbMigrate(btn) {
+  if (btn) { btn.disabled = true; btn.innerText = 'Migrating...'; }
+  try {
+    const res = await fetch('/api/admin/db/migrate', { method: 'POST', credentials: 'include' });
+    const data = await res.json();
+    if (data.ok) {
+      const colNames = (data.auth_users_columns || []).map(c => c.column_name).join(', ');
+      alert('Migrations executed successfully!\nauth_users columns: ' + colNames);
+      loadAdminAppVersions();
+    } else {
+      alert('Migration error: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Failed to run migrations: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '⚡ Run Migrations'; }
   }
 }
 
