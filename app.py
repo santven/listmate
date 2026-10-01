@@ -74,6 +74,18 @@ def _ensure_schema():
             except Exception:
                 pass
 
+        for col, ctype in [
+            ("timezone", "VARCHAR(64) DEFAULT 'America/New_York'"),
+            ("last_app_version", "VARCHAR(32) DEFAULT ''"),
+            ("last_app_platform", "VARCHAR(32) DEFAULT ''"),
+            ("last_app_build", "VARCHAR(32) DEFAULT ''"),
+            ("last_active_at", "TIMESTAMP")
+        ]:
+            try:
+                authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS {col} {ctype}")
+            except Exception:
+                pass
+
         store_tables = [
             """CREATE TABLE IF NOT EXISTS stores (
                 id SERIAL PRIMARY KEY, name TEXT NOT NULL,
@@ -3910,6 +3922,13 @@ def api_push_register():
             app_version=app_version
         )
 
+        client_tz = str(data.get("timezone") or "").strip()[:64]
+        if client_tz and re.match(r'^[A-Za-z0-9_/\-+]+$', client_tz):
+            try:
+                authmod._exec(f"UPDATE {authmod._USERS} SET timezone = ? WHERE id = ?", (client_tz, uid))
+            except Exception:
+                pass
+
         if success:
             return jsonify({"ok": True, "message": "Push token registered successfully."})
         else:
@@ -3993,6 +4012,7 @@ def api_admin_app_versions():
                    COALESCE(NULLIF(last_app_platform, ''), 'web') as platform,
                    COALESCE(NULLIF(last_app_version, ''), 'web/legacy') as app_version,
                    COALESCE(last_app_build, '') as app_build,
+                   COALESCE(NULLIF(timezone, ''), 'America/New_York') as timezone,
                    last_active_at
             FROM auth_users
             WHERE last_active_at IS NOT NULL
@@ -4017,6 +4037,42 @@ def api_admin_app_versions():
         })
     except Exception as e:
         print(f"[/api/admin/app-versions error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/db/migrate", methods=["POST"])
+@require_admin
+def api_admin_db_migrate():
+    """Manually trigger all schema migrations and return column confirmation."""
+    try:
+        authmod._init_schema()
+        # Explicit column adds for auth_users
+        authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+        authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''")
+        authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''")
+        authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''")
+        authmod._run(f"ALTER TABLE {authmod._USERS} ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+        
+        try:
+            from db_pg import init_db as init_store_db
+            init_store_db()
+        except Exception:
+            pass
+
+        # Query columns from information_schema to verify
+        cols = authmod._run("""
+            SELECT column_name, data_type, column_default
+            FROM information_schema.columns
+            WHERE table_name = 'auth_users'
+            ORDER BY ordinal_position
+        """)
+        return jsonify({
+            "ok": True,
+            "message": "Database migrations executed successfully.",
+            "auth_users_columns": cols or []
+        })
+    except Exception as e:
+        print(f"[/api/admin/db/migrate error]: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 
