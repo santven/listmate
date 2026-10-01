@@ -24,9 +24,10 @@ class TestTrialPushNotifications(unittest.TestCase):
         self.assertIn("ends tomorrow", title_24)
         self.assertIn("uninterrupted household sync", body_24)
 
+    @patch("scripts.cron_daily._init_schema")
     @patch("scripts.cron_daily._run")
     @patch("push_helper.send_push_to_user")
-    def test_check_trial_expiration_pushes_dispatch(self, mock_send_push, mock_run):
+    def test_check_trial_expiration_pushes_dispatch(self, mock_send_push, mock_run, mock_init_schema):
         """Verify eligible trial candidates are evaluated and dispatched with deep link."""
         mock_run.side_effect = [
             # 1. Main candidate query returns two candidate users
@@ -74,9 +75,10 @@ class TestTrialPushNotifications(unittest.TestCase):
         self.assertEqual(second_call.kwargs["data"]["action"], "open_upgrade_modal")
         self.assertEqual(second_call.kwargs["data"]["campaign"], "trial_24h")
 
+    @patch("scripts.cron_daily._init_schema")
     @patch("scripts.cron_daily._run")
     @patch("push_helper.send_push_to_user")
-    def test_live_subscription_check_suppresses_upgraded_users(self, mock_send_push, mock_run):
+    def test_live_subscription_check_suppresses_upgraded_users(self, mock_send_push, mock_run, mock_init_schema):
         """Acceptance Criteria 2: Directly verify is_premium = FALSE in PostgreSQL immediately before dispatch."""
         mock_run.side_effect = [
             # Candidate query returned a user
@@ -95,8 +97,9 @@ class TestTrialPushNotifications(unittest.TestCase):
         self.assertEqual(res["dispatched"], 0)
         mock_send_push.assert_not_called()
 
+    @patch("scripts.cron_daily._init_schema")
     @patch("scripts.cron_daily._run")
-    def test_dry_run_mode(self, mock_run):
+    def test_dry_run_mode(self, mock_run, mock_init_schema):
         """Verify dry run mode outputs planned dispatches without modifying data."""
         mock_run.side_effect = [
             [{
