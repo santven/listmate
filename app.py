@@ -4023,13 +4023,16 @@ def api_push_register():
             except Exception as ex_err:
                 print(f"[/api/push/register exchange error]: {ex_err}", flush=True)
 
+        permission_status = str(data.get("permission_status") or "granted").strip().lower()[:32]
+
         success = authmod.register_push_token(
             user_id=uid,
             household_id=hhid,
             token=token,
             platform=platform,
             device_model=device_model,
-            app_version=app_version
+            app_version=app_version,
+            permission_status=permission_status
         )
 
         client_tz = str(data.get("timezone") or "").strip()[:64]
@@ -4046,6 +4049,49 @@ def api_push_register():
     except Exception as e:
         print(f"[/api/push/register error]: {e}", flush=True)
         return jsonify({"error": "Internal error registering push subscription"}), 500
+
+
+@app.route("/api/push/status", methods=["POST"])
+@authmod.require_user
+def api_push_status():
+    """Record push notification permission status (e.g. denied, prompt) from native clients."""
+    try:
+        data = request.get_json(silent=True) or {}
+        perm_status = str(data.get("permission_status") or data.get("status") or "denied").strip().lower()[:32]
+        platform = str(data.get("platform") or "android").strip().lower()[:32]
+        device_model = str(data.get("device_model") or "").strip()[:100]
+        app_version = str(data.get("app_version") or "").strip()[:50]
+
+        uid = authmod.get_user_id()
+        hhid = authmod.get_household_id()
+
+        # Defensive 0 vs None handling
+        if not uid or uid == 0 or not hhid or hhid == 0:
+            return jsonify({"error": "User or household not authenticated"}), 401
+
+        success = authmod.record_push_permission_status(
+            user_id=uid,
+            household_id=hhid,
+            permission_status=perm_status,
+            platform=platform,
+            device_model=device_model,
+            app_version=app_version
+        )
+
+        client_tz = str(data.get("timezone") or "").strip()[:64]
+        if client_tz and re.match(r'^[A-Za-z0-9_/\-+]+$', client_tz):
+            try:
+                authmod._exec(f"UPDATE {authmod._USERS} SET timezone = ? WHERE id = ?", (client_tz, uid))
+            except Exception:
+                pass
+
+        if success:
+            return jsonify({"ok": True, "message": "Push status recorded successfully."})
+        else:
+            return jsonify({"error": "Failed to record push status"}), 500
+    except Exception as e:
+        print(f"[/api/push/status error]: {e}", flush=True)
+        return jsonify({"error": "Internal error recording push status"}), 500
 
 
 @app.route("/api/push/unregister", methods=["POST"])
@@ -4068,18 +4114,19 @@ def api_push_unregister():
 @app.route("/api/admin/push/subscriptions", methods=["GET"])
 @require_admin
 def api_admin_push_subscriptions():
-    """Admin inspect active subscriptions (strictly active devices only)."""
+    """Admin inspect all subscriptions (both active and inactive/denied devices)."""
     try:
         authmod._init_schema()
         rows = authmod._run("""
             SELECT ps.id, ps.user_id, u.email, ps.household_id, h.name as household_name,
-                   ps.platform, ps.device_model, ps.app_version, ps.is_active, ps.last_seen_at
+                   ps.platform, ps.device_model, ps.app_version, ps.is_active,
+                   COALESCE(ps.permission_status, CASE WHEN ps.is_active THEN 'granted' ELSE 'inactive' END) as permission_status,
+                   ps.last_seen_at
             FROM push_subscriptions ps
             JOIN auth_users u ON u.id = ps.user_id
             JOIN auth_households h ON h.id = ps.household_id
-            WHERE ps.is_active = TRUE
             ORDER BY ps.last_seen_at DESC
-            LIMIT 50
+            LIMIT 100
         """)
         return jsonify({"ok": True, "subscriptions": rows})
     except Exception as e:

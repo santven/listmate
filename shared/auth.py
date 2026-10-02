@@ -291,6 +291,7 @@ def _init_schema():
             device_model TEXT DEFAULT '',
             app_version TEXT DEFAULT '',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            permission_status VARCHAR(32) DEFAULT 'granted',
             last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -388,7 +389,8 @@ def _init_schema():
         "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE invites ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMP",
-        "ALTER TABLE invites ADD COLUMN IF NOT EXISTS inviter_notified_at TIMESTAMP"
+        "ALTER TABLE invites ADD COLUMN IF NOT EXISTS inviter_notified_at TIMESTAMP",
+        "ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS permission_status VARCHAR(32) DEFAULT 'granted'"
     ]:
         try:
             _run(stmt)
@@ -494,7 +496,7 @@ def unsuppress_email(email: str) -> bool:
 
 # ── Push Subscription Helpers ─────────────────────────────────
 
-def register_push_token(user_id: int, household_id: int, token: str, platform: str = 'android', device_model: str = '', app_version: str = '') -> bool:
+def register_push_token(user_id: int, household_id: int, token: str, platform: str = 'android', device_model: str = '', app_version: str = '', permission_status: str = 'granted') -> bool:
     """Register or update a device push token in push_subscriptions."""
     if not token or not str(token).strip():
         return False
@@ -502,6 +504,7 @@ def register_push_token(user_id: int, household_id: int, token: str, platform: s
     clean_platform = str(platform).strip().lower() if platform else 'unknown'
     clean_model = str(device_model or '').strip()[:100]
     clean_version = str(app_version or '').strip()[:50]
+    clean_perm = str(permission_status or 'granted').strip().lower()[:32]
 
     # Zero vs None defense (per Project Rules & Gemini guidelines)
     uid = None if (user_id is None or user_id == 0) else int(user_id)
@@ -512,9 +515,15 @@ def register_push_token(user_id: int, household_id: int, token: str, platform: s
 
     try:
         _init_schema()
+        # Clean up any status placeholder token for this user & platform
         _run("""
-            INSERT INTO push_subscriptions (user_id, household_id, token, platform, device_model, app_version, is_active, last_seen_at, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW(), NOW())
+            DELETE FROM push_subscriptions
+            WHERE user_id = %s AND platform = %s AND (token LIKE 'status:%%' OR token LIKE 'denied:%%')
+        """, (uid, clean_platform))
+
+        _run("""
+            INSERT INTO push_subscriptions (user_id, household_id, token, platform, device_model, app_version, is_active, permission_status, last_seen_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s, NOW(), NOW(), NOW())
             ON CONFLICT (token) DO UPDATE SET
                 user_id = EXCLUDED.user_id,
                 household_id = EXCLUDED.household_id,
@@ -522,12 +531,68 @@ def register_push_token(user_id: int, household_id: int, token: str, platform: s
                 device_model = CASE WHEN EXCLUDED.device_model <> '' THEN EXCLUDED.device_model ELSE push_subscriptions.device_model END,
                 app_version = CASE WHEN EXCLUDED.app_version <> '' THEN EXCLUDED.app_version ELSE push_subscriptions.app_version END,
                 is_active = TRUE,
+                permission_status = EXCLUDED.permission_status,
                 last_seen_at = NOW(),
                 updated_at = NOW()
-        """, (uid, hhid, clean_token, clean_platform, clean_model, clean_version))
+        """, (uid, hhid, clean_token, clean_platform, clean_model, clean_version, clean_perm))
         return True
     except Exception as e:
         print(f"[register_push_token error] user={uid} hh={hhid}: {e}", flush=True)
+        return False
+
+
+def record_push_permission_status(user_id: int, household_id: int, permission_status: str, platform: str = 'android', device_model: str = '', app_version: str = '') -> bool:
+    """Record push notification permission status (e.g. 'denied', 'prompt') in push_subscriptions when no token is issued."""
+    clean_status = str(permission_status or 'denied').strip().lower()[:32]
+    clean_platform = str(platform).strip().lower() if platform else 'unknown'
+    clean_model = str(device_model or '').strip()[:100]
+    clean_version = str(app_version or '').strip()[:50]
+
+    uid = None if (user_id is None or user_id == 0) else int(user_id)
+    hhid = None if (household_id is None or household_id == 0) else int(household_id)
+
+    if not uid or not hhid:
+        return False
+
+    try:
+        _init_schema()
+        # If user explicitly denied permissions, deactivate any existing active tokens for this platform
+        if clean_status == 'denied':
+            _run("""
+                UPDATE push_subscriptions
+                SET is_active = FALSE, permission_status = 'denied', updated_at = NOW()
+                WHERE user_id = %s AND platform = %s AND is_active = TRUE
+            """, (uid, clean_platform))
+
+        # Check if user already has an active real token for this platform
+        active_real = _one("""
+            SELECT id FROM push_subscriptions
+            WHERE user_id = %s AND platform = %s AND is_active = TRUE AND token NOT LIKE 'status:%%' AND token NOT LIKE 'denied:%%'
+        """, (uid, clean_platform))
+
+        # If they already have an active real token and status is not denied, keep it active
+        if active_real and clean_status != 'denied':
+            return True
+
+        # Deterministic placeholder token for this user and platform
+        placeholder_token = f"status:{uid}:{clean_platform}"
+        _run("""
+            INSERT INTO push_subscriptions (user_id, household_id, token, platform, device_model, app_version, is_active, permission_status, last_seen_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE, %s, NOW(), NOW(), NOW())
+            ON CONFLICT (token) DO UPDATE SET
+                user_id = EXCLUDED.user_id,
+                household_id = EXCLUDED.household_id,
+                platform = EXCLUDED.platform,
+                device_model = CASE WHEN EXCLUDED.device_model <> '' THEN EXCLUDED.device_model ELSE push_subscriptions.device_model END,
+                app_version = CASE WHEN EXCLUDED.app_version <> '' THEN EXCLUDED.app_version ELSE push_subscriptions.app_version END,
+                is_active = FALSE,
+                permission_status = EXCLUDED.permission_status,
+                last_seen_at = NOW(),
+                updated_at = NOW()
+        """, (uid, hhid, placeholder_token, clean_platform, clean_model, clean_version, clean_status))
+        return True
+    except Exception as e:
+        print(f"[record_push_permission_status error] user={uid} hh={hhid}: {e}", flush=True)
         return False
 
 
@@ -540,7 +605,7 @@ def unregister_push_token(token: str) -> bool:
         _init_schema()
         _run("""
             UPDATE push_subscriptions
-            SET is_active = FALSE, updated_at = NOW()
+            SET is_active = FALSE, permission_status = 'revoked', updated_at = NOW()
             WHERE token = %s
         """, (clean_token,))
         return True
