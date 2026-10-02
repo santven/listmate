@@ -5968,7 +5968,8 @@ window.initPushNotifications = async function() {
             platform: platform,
             device_model: deviceModel,
             app_version: reportedVer,
-            timezone: clientTz
+            timezone: clientTz,
+            permission_status: 'granted'
           })
         });
       } catch (err) {
@@ -6035,6 +6036,42 @@ window.initPushNotifications = async function() {
 
     if (permStatus.receive !== 'granted') {
       console.log('[Push] Notification permission not granted:', permStatus.receive);
+      try {
+        const platform = (typeof window.Capacitor.getPlatform === 'function') ? window.Capacitor.getPlatform() : 'android';
+        let deviceModel = '';
+        try {
+          if (window.Capacitor?.Plugins?.Device?.getInfo) {
+            const devInfo = await window.Capacitor.Plugins.Device.getInfo();
+            deviceModel = devInfo.model || devInfo.name || '';
+          }
+        } catch (_) {}
+
+        let reportedVer = '1.0.1';
+        try {
+          if (window.Capacitor?.Plugins?.App?.getInfo) {
+            const appInf = await window.Capacitor.Plugins.App.getInfo();
+            if (appInf && appInf.version) reportedVer = appInf.version;
+          }
+        } catch (_) {}
+
+        let clientTz = '';
+        try { clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) {}
+
+        await fetch('/api/push/status', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            permission_status: permStatus.receive || 'denied',
+            platform: platform,
+            device_model: deviceModel,
+            app_version: reportedVer,
+            timezone: clientTz
+          })
+        });
+      } catch (err) {
+        console.error('[Push] Failed to report push permission status to backend:', err);
+      }
       return;
     }
 
