@@ -547,7 +547,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
                       shopperName: shopperParam
                     });
                   }
-                }, 400);
+                }, 150);
+                if (window.location.pathname === '/' || window.location.pathname === '') {
+                  return;
+                }
               }
               window.location.href = targetPath;
             }
@@ -578,6 +581,15 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     } else if (modalParam === 'trip_summary' || actionParam === 'trip_summary') {
       const storeIdParam = urlParams.get('store_id');
       const shopperParam = urlParams.get('shopper');
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        cleanParams.delete('modal');
+        cleanParams.delete('action');
+        cleanParams.delete('store_id');
+        cleanParams.delete('shopper');
+        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
+      } catch(e) {}
       setTimeout(() => {
         if (typeof window.openTripSummaryDrawer === 'function') {
           window.openTripSummaryDrawer({
@@ -5115,7 +5127,7 @@ async function deleteSavedRecipe(id) {
     </div>
 
     <!-- Items List Container -->
-    <div id="tripSummaryItemsList" style="max-height:48vh; overflow-y:auto; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+    <div id="tripSummaryItemsList" style="max-height:48vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
       <!-- Dynamically populated -->
     </div>
 
@@ -5127,7 +5139,8 @@ async function deleteSavedRecipe(id) {
 </div>
 
 <script>
-window.openTripSummaryDrawer = async function(options = {}) {
+window.openTripSummaryDrawer = async function(options) {
+  options = options || {};
   const modal = document.getElementById('tripSummaryDrawerModal');
   if (!modal) return;
 
@@ -5141,28 +5154,52 @@ window.openTripSummaryDrawer = async function(options = {}) {
   if (titleEl) titleEl.textContent = title;
   if (subtitleEl) subtitleEl.textContent = subtitle;
 
+  const safeEscape = function(val) {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   let items = options.items || [];
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch(e) { items = []; }
+  }
+
+  // If items was stringified twice in native bridge:
   if (typeof items === 'string') {
     try { items = JSON.parse(items); } catch(e) { items = []; }
   }
 
   // If no items were explicitly passed and storeId is available, resolve from list
   if ((!items || items.length === 0) && options.storeId) {
-    if (!window.list || window.list.length === 0) {
-      try {
-        const res = await fetch(API + '/list');
-        window.list = await res.json();
-      } catch(e) {}
+    if (typeof list === 'undefined' || !Array.isArray(list) || list.length === 0) {
+      if (typeof loadData === 'function') {
+        try { await loadData(); } catch(e) {}
+      } else {
+        try {
+          const res = await fetch('/api/init');
+          const d = await res.json();
+          if (Array.isArray(d.list)) list = d.list;
+          if (Array.isArray(d.stores)) stores = d.stores;
+        } catch(e) {}
+      }
     }
-    if (Array.isArray(window.list)) {
-      items = window.list
-        .filter(i => String(i.store_id) === String(options.storeId) && !isUnpurchased(i))
-        .slice(0, 30)
-        .map(i => ({ name: i.name, quantity: i.quantity || '' }));
-    }
-    if (Array.isArray(window.stores) && !options.storeName) {
-      const st = window.stores.find(s => String(s.id) === String(options.storeId));
-      if (st) {
+
+    const targetList = (typeof list !== 'undefined' && Array.isArray(list)) ? list : (Array.isArray(window.list) ? window.list : []);
+    const targetStores = (typeof stores !== 'undefined' && Array.isArray(stores)) ? stores : (Array.isArray(window.stores) ? window.stores : []);
+
+    items = targetList
+      .filter(i => i && String(i.store_id) === String(options.storeId) && (i.purchased === true || i.purchased === 1 || i.purchased === '1' || i.purchased === 'true'))
+      .slice(0, 40)
+      .map(i => ({ name: (i && i.name) || 'Item', quantity: (i && i.quantity) || '' }));
+
+    if (targetStores.length > 0 && !options.storeName) {
+      const st = targetStores.find(s => s && String(s.id) === String(options.storeId));
+      if (st && st.name) {
         options.storeName = st.name;
         if (subtitleEl) subtitleEl.textContent = `Purchased at ${st.name}`;
       }
@@ -5178,13 +5215,13 @@ window.openTripSummaryDrawer = async function(options = {}) {
         </div>`;
     } else {
       listEl.innerHTML = items.map(it => {
-        const iname = typeof it === 'string' ? it : (it.name || 'Item');
-        const iqty = typeof it === 'object' && it.quantity ? ` <span style="font-size:12px; font-weight:600; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:8px; margin-left:6px; flex-shrink:0;">${escapeHtml(it.quantity)}</span>` : '';
+        const iname = typeof it === 'string' ? it : ((it && it.name) || 'Item');
+        const iqty = (typeof it === 'object' && it && it.quantity) ? ` <span style="font-size:12px; font-weight:600; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:8px; margin-left:6px; flex-shrink:0;">${safeEscape(it.quantity)}</span>` : '';
         return `
           <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
             <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
               <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:#dcfce7; color:#16a34a; font-size:13px; font-weight:bold; flex-shrink:0;">✓</span>
-              <span style="font-size:15px; font-weight:600; color:#0f172a; word-break:break-word;">${escapeHtml(iname)}</span>
+              <span style="font-size:15px; font-weight:600; color:#0f172a; word-break:break-word;">${safeEscape(iname)}</span>
             </div>
             ${iqty}
           </div>

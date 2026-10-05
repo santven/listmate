@@ -3757,18 +3757,19 @@ def finish_store_trip(store_id):
 
             try:
                 import json
-                items_payload = [{"name": it["name"][:60], "quantity": (it.get("quantity") or "")[:20]} for it in user_items[:40]]
+                items_payload = [{"name": str(it.get("name") or "Item")[:60], "quantity": str(it.get("quantity") or "")[:20]} for it in user_items[:40]]
+                encoded_shopper = quote(str(shopper_name or ""))
                 send_push_to_user(
                     user_id=uid,
                     title=push_title,
                     body=push_body,
                     data={
-                        "url": f"/?modal=trip_summary&store_id={store_id}&shopper={shopper_name}",
+                        "url": f"/?modal=trip_summary&store_id={store_id}&shopper={encoded_shopper}",
                         "type": "trip_completed",
                         "modal": "trip_summary",
                         "store_id": str(store_id),
-                        "store_name": str(store_name),
-                        "shopper_name": str(shopper_name),
+                        "store_name": str(store_name or ""),
+                        "shopper_name": str(shopper_name or ""),
                         "title": push_title,
                         "body": push_body,
                         "items_json": json.dumps(items_payload)
