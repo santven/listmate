@@ -2768,18 +2768,14 @@ window.checkCompletionForStore = function(storeId, allItemsBefore, storeItemsBef
   const storeItemsAfter = list.filter(i => String(i.store_id) === String(storeId) && isUnpurchased(i));
   const allItemsAfter = list.filter(i => isUnpurchased(i));
 
-  if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
-    fireCelebration(true);
-    if (window.activeTrips && window.activeTrips[String(storeId)]) {
-      completeStoreTrip(parseInt(storeId), true);
-    }
-  } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
+  // Only trigger completion celebration & notification if all unpurchased items for this store became 0
+  if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
     const hasPurchased = list.some(i => String(i.store_id) === String(storeId) && !isUnpurchased(i));
     if (hasPurchased) {
-      fireCelebration(false);
-      if (window.activeTrips && window.activeTrips[String(storeId)]) {
-        completeStoreTrip(parseInt(storeId), true);
-      }
+      const isAllComplete = allItemsBefore.length > 0 && allItemsAfter.length === 0;
+      fireCelebration(isAllComplete);
+      // Automatically complete trip and notify family about any unnotified items
+      completeStoreTrip(parseInt(storeId), true);
     }
   }
 };
@@ -3009,7 +3005,6 @@ async function deleteItem(id) {
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
     enqueueOfflineAction({ type: 'delete', data: { id: id } });
     toast('⚡ Deleted offline');
-    if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
     return;
   }
 
@@ -3033,7 +3028,6 @@ async function deleteItem(id) {
   saveCache();
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
-  if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
 }
 
 var quickAddTimeout;
@@ -3223,7 +3217,6 @@ async function moveItem(targetStoreId) {
       toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');
       renderHome();
       enqueueOfflineAction({ type: 'move', data: { id: moveItemId, store_id: targetStoreId } });
-      if (isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
     }
     return;
   }
@@ -3243,7 +3236,6 @@ async function moveItem(targetStoreId) {
   $('#moveModal').classList.remove('active');
   toast('✅ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name);
   renderHome();
-  if (item && isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));

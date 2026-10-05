@@ -207,6 +207,10 @@ def init_db():
         except Exception: pass
         try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL")
         except Exception: pass
+        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS trip_notified_at TIMESTAMP")
+        except Exception: pass
+        try: db.execute("CREATE INDEX IF NOT EXISTS idx_li_unnotified ON list_items(store_id, household_id, purchased, trip_notified_at)")
+        except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_date DATE")
         except Exception: pass
         try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_by TEXT")

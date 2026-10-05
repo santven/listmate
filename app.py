@@ -3084,7 +3084,7 @@ def toggle_list_item(item_id):
             return jsonify({"error": "not found"}), 404
 
         if item["purchased"]:
-            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL WHERE id=?", (item_id,))
         else:
             db.execute(
                 "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?",
@@ -3528,7 +3528,7 @@ def sync_offline_actions():
                     item = db.execute("SELECT * FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id)).fetchone()
                     if item:
                         if item["purchased"]:
-                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL WHERE id=?", (item_id,))
                         else:
                             db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?", (display_name, current_uid, item_id))
                             db.execute("""
@@ -3665,18 +3665,19 @@ def finish_store_trip(store_id):
 
         store_name = store["name"]
 
-        # Find all items purchased at this store in the recent window (last 6 hours or today)
+        # Find all unnotified items purchased at this store in the recent window (last 12 hours or today)
         items = db.execute(
             """SELECT id, name, category, quantity, added_by, added_by_user_id, purchased_by, purchased_by_user_id, purchased_at
                FROM list_items
                WHERE store_id = ? AND household_id = ? AND purchased = TRUE
-                 AND (purchased_at >= NOW() - INTERVAL '6 hours' OR (purchased_at IS NULL AND added_at >= CURRENT_DATE))
+                 AND trip_notified_at IS NULL
+                 AND (purchased_at >= NOW() - INTERVAL '12 hours' OR (purchased_at IS NULL AND added_at >= CURRENT_DATE))
                ORDER BY id ASC""",
             (store_id, hhid)
         ).fetchall()
 
         if not items:
-            return jsonify({"ok": True, "items_count": 0, "notified_members": 0, "message": "No recent purchases found for this store"})
+            return jsonify({"ok": True, "items_count": 0, "notified_members": 0, "message": "No unnotified purchases found for this store"})
 
         # Get household name and all members (auth_users has 'name', aliased to 'display_name')
         hh_info = db.execute("SELECT name FROM auth_households WHERE id = ?", (hhid,)).fetchone()
@@ -3849,6 +3850,19 @@ def finish_store_trip(store_id):
             except Exception as se:
                 print(f"[finish_trip shopper email error] {se}", flush=True)
                 _log_email_event(shopper_obj["email"], int(shopper_id), "failed")
+
+        # 4. Mark all notified items so subsequent completions only notify new unnotified items
+        item_ids = [int(it["id"]) for it in items if it.get("id")]
+        if item_ids:
+            try:
+                placeholders = ",".join("?" for _ in item_ids)
+                db.execute(
+                    f"UPDATE list_items SET trip_notified_at = NOW() WHERE id IN ({placeholders})",
+                    tuple(item_ids)
+                )
+                db.commit()
+            except Exception as ue:
+                print(f"[update trip_notified_at error] {ue}", flush=True)
 
         return jsonify({
             "ok": True,
