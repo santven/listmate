@@ -1003,6 +1003,16 @@ function toggleBurger() {
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 
+window.activeTrips = window.activeTrips || {};
+try {
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const k = sessionStorage.key(i);
+    if (k && k.startsWith('activeTrip_') && sessionStorage.getItem(k) === '1') {
+      window.activeTrips[k.replace('activeTrip_', '')] = true;
+    }
+  }
+} catch(e) {}
+
 fetch('/api/version').then(r=>r.json()).then(d=>{
   var el = document.getElementById('versionDisplayMain');
   if (el) el.textContent = 'Build: ' + (d.version || 'unknown');
@@ -1762,6 +1772,7 @@ function renderHome() {
       '<div class="store-group-title">' +
       '<div style="display:flex;align-items:baseline;gap:6px;"><span>' + escapeHtml(storeMap[storeId] || storeName) + '</span><span style="opacity:0.6;font-size:10px;">' + items.length + '</span></div>' +
       '<div style="display:flex;align-items:center;gap:4px;">' +
+      (window.activeTrips && window.activeTrips[String(storeId)] ? '<button class="finish-trip-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 9px; border-radius:8px; font-weight:600; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(16,185,129,0.3); display:inline-flex; align-items:center; gap:3px;">🏁 Finish Trip</button>' : '') +
       ((storeMap[storeId] || storeName) !== 'General List' ? '<button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 8px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; cursor:pointer;">🗓️ Plan</button>' : '') +
       '<button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
       '</div>' +
@@ -1899,8 +1910,47 @@ function renderHome() {
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
 
+  $$('.finish-trip-btn').forEach(el => el.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const sid = parseInt(el.dataset.sid);
+    await completeStoreTrip(sid);
+  }));
+
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.checkAndApply();
+  }
+}
+
+async function completeStoreTrip(storeId, autoTriggered = false) {
+  const store = stores.find(s => s.id === storeId);
+  const storeName = store ? store.name : 'Store';
+
+  // 1. Confetti celebration!
+  if (!autoTriggered) {
+    fireCelebration(false);
+    toast('🎉 Trip complete! Notifying family...');
+  }
+
+  // 2. Clear trip state for this store
+  if (window.activeTrips) {
+    delete window.activeTrips[String(storeId)];
+  }
+  try {
+    sessionStorage.removeItem('activeTrip_' + storeId);
+  } catch(e) {}
+
+  // Immediately update UI so Finish Trip button disappears
+  renderHome();
+
+  // 3. Dispatch API call to consolidate purchases and send push + transactional email
+  try {
+    const res = await fetch(API + '/stores/' + storeId + '/finish-trip', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.notified_members > 0) {
+      toast(`✅ Sent trip update to ${data.notified_members} family member${data.notified_members > 1 ? 's' : ''}`);
+    }
+  } catch(err) {
+    console.error('Error completing trip:', err);
   }
 }
 
@@ -2720,10 +2770,16 @@ window.checkCompletionForStore = function(storeId, allItemsBefore, storeItemsBef
 
   if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
     fireCelebration(true);
+    if (window.activeTrips && window.activeTrips[String(storeId)]) {
+      completeStoreTrip(parseInt(storeId), true);
+    }
   } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
     const hasPurchased = list.some(i => String(i.store_id) === String(storeId) && !isUnpurchased(i));
     if (hasPurchased) {
       fireCelebration(false);
+      if (window.activeTrips && window.activeTrips[String(storeId)]) {
+        completeStoreTrip(parseInt(storeId), true);
+      }
     }
   }
 };
@@ -2814,15 +2870,27 @@ async function toggleItem(id, showVisitPrompt = true) {
   let visitStoreName = '';
   const itemStore = stores.find(s => String(s.id) === itemStoreId);
 
-  if (!wasPurchased && showVisitPrompt && itemStore && itemStore.name !== 'General List') {
-    try {
-      const res = await fetch(API + '/stores/' + item.store_id + '/visit/today');
-      const data = await res.json();
-      if (!data.active) {
-        needsVisitPrompt = true;
-        visitStoreName = itemStore.name || 'this store';
+  if (!wasPurchased && showVisitPrompt && itemStore) {
+    const isGeneral = itemStore.name === 'General List';
+    const isAlreadyActiveTrip = (window.activeTrips && window.activeTrips[itemStoreId]) || (sessionStorage.getItem('activeTrip_' + itemStoreId) === '1');
+    if (!isAlreadyActiveTrip) {
+      if (!isGeneral) {
+        try {
+          const res = await fetch(API + '/stores/' + item.store_id + '/visit/today');
+          const data = await res.json();
+          if (!data.active) {
+            needsVisitPrompt = true;
+            visitStoreName = itemStore.name || 'this store';
+          }
+        } catch(e){}
+      } else {
+        const isDismissed = sessionStorage.getItem('dismissedTripPrompt_' + itemStoreId) === '1';
+        if (!isDismissed) {
+          needsVisitPrompt = true;
+          visitStoreName = 'General List';
+        }
       }
-    } catch(e){}
+    }
   }
 
   applyLocalToggleAndCheckConfetti();
@@ -2835,22 +2903,43 @@ async function toggleItem(id, showVisitPrompt = true) {
   loadSuggestions();
 
   if (needsVisitPrompt) {
-    $('#visitMsg').textContent = 'Shopping at ' + visitStoreName + '?';
+    const isGeneral = itemStore && itemStore.name === 'General List';
+    $('#visitMsg').textContent = isGeneral ? 'Shopping your General List?' : ('Shopping at ' + visitStoreName + '?');
+    const descP = document.querySelector('#visitModal p');
+    if (descP) {
+      descP.textContent = isGeneral
+        ? "Checking off items? Enable shopping mode to wrap up your trip and notify family when finished."
+        : "Checking off items? Would you like to log a visit to this store today?";
+    }
+    const btnYes = $('#btnVisitYes');
+    if (btnYes) btnYes.textContent = isGeneral ? "Yes, I'm shopping" : "Yes, I'm here";
+    const btnNo = $('#btnVisitNo');
+    if (btnNo) btnNo.textContent = isGeneral ? "No, just organizing" : "No, just organizing";
+
     $('#visitModal').classList.add('active');
     $('#btnVisitYes').onclick = async () => {
-      await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
       $('#visitModal').classList.remove('active');
-      const st = stores.find(s => s.id === item.store_id);
-      if (st) {
-        st.planned_visit_date = null;
-        st.planned_visit_by = null;
-        const d = new Date();
-        st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      window.activeTrips = window.activeTrips || {};
+      window.activeTrips[itemStoreId] = true;
+      try { sessionStorage.setItem('activeTrip_' + itemStoreId, '1'); } catch(e) {}
+
+      if (!isGeneral) {
+        await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
+        const st = stores.find(s => s.id === item.store_id);
+        if (st) {
+          st.planned_visit_date = null;
+          st.planned_visit_by = null;
+          const d = new Date();
+          st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
       }
       renderHome();
       loadSuggestions();
     };
-    $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
+    $('#btnVisitNo').onclick = () => {
+      $('#visitModal').classList.remove('active');
+      try { sessionStorage.setItem('dismissedTripPrompt_' + itemStoreId, '1'); } catch(e) {}
+    };
   }
 }
 
