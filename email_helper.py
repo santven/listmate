@@ -2288,3 +2288,141 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
         },
     }
     return _send_via_api(api_key, payload)
+
+
+def send_trip_completed_email(
+    to_email: str,
+    recipient_name: str,
+    shopper_name: str,
+    store_name: str,
+    items: list,
+    household_name: str = "",
+    user_id: int = 0,
+    household_id: int = 0,
+    is_shopper: bool = False
+) -> bool:
+    """Send a transactional notification email when items requested by a household member are purchased during a shopping trip."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    if not items:
+        return False
+
+    campaign = "trip_completed"
+    clean_recipient = (recipient_name or "there").strip().split(" ")[0].capitalize()
+    clean_shopper = (shopper_name or "A household member").strip()
+    clean_store = (store_name or "the store").strip()
+    hh_label = f" ({household_name})" if household_name else ""
+
+    item_count = len(items)
+    item_word = "item" if item_count == 1 else "items"
+
+    if is_shopper:
+        subject = f"🛒 Trip complete at {clean_store}! ({item_count} {item_word})"
+        badge_text = "🛒 Trip Summary"
+        heading_text = f"Trip complete at {clean_store}!"
+        intro_plain = f"Here is your trip summary from {clean_store}{hh_label}. You purchased {item_count} {item_word}:"
+        intro_html = f"Here is your trip summary from <strong>{clean_store}</strong>. You purchased <strong>{item_count} {item_word}</strong>:"
+    else:
+        subject = f"🛒 {clean_shopper} got your {item_word} at {clean_store}!"
+        badge_text = "🛒 Shopping Trip Update"
+        heading_text = "Your items are on the way!"
+        intro_plain = f"Great news! {clean_shopper} just finished shopping at {clean_store}{hh_label} and purchased {item_count} {item_word} you requested:"
+        intro_html = f"<strong>{clean_shopper}</strong> just finished shopping at <strong>{clean_store}</strong> and purchased <strong>{item_count} {item_word}</strong> you requested:"
+
+    # Format item lines
+    text_items = []
+    html_items = []
+    for item in items:
+        if isinstance(item, dict):
+            iname = item.get("name") or "Item"
+            iqty = item.get("quantity") or ""
+        else:
+            iname = str(item)
+            iqty = ""
+        qty_str = f" ({iqty})" if iqty else ""
+        html_qty = f' <span style="color:#64748b;font-size:13px;">({iqty})</span>' if iqty else ""
+        text_items.append(f"• {iname}{qty_str}")
+        html_items.append(
+            f'<li style="margin-bottom:8px;font-size:15px;color:#1e293b;">'
+            f'<strong style="color:#0f172a;">{iname}</strong>'
+            f'{html_qty}'
+            f'</li>'
+        )
+
+    items_text_block = "\n".join(text_items)
+    items_html_block = "".join(html_items)
+
+    app_url = f"{BASE_URL}/open?url=/"
+
+    plain_text = (
+        f"Hi {clean_recipient},\n\n"
+        f"{intro_plain}\n\n"
+        f"{items_text_block}\n\n"
+        f"View your shared household list here:\n"
+        f"{app_url}\n\n"
+        f"— The ListMate Team"
+    )
+
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    body_html = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<div style="text-align:center;margin-bottom:20px;">'
+        f'<span style="display:inline-block;background:#ecfdf5;color:#065f46;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">{badge_text}</span>'
+        f'<h2 style="color:#0f172a;margin:12px 0 6px 0;font-size:22px;font-weight:700;">{heading_text}</h2>'
+        f'</div>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">Hi {clean_recipient},</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">{intro_html}</p>'
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:18px 0;">'
+        f'<ul style="margin:0;padding-left:18px;line-height:1.6;">'
+        f'{items_html_block}'
+        f'</ul>'
+        f'</div>'
+        f'<div style="text-align:center;margin:26px 0 20px 0;">'
+        f'<a href="{app_url}" style="background:linear-gradient(135deg, #059669, #10b981);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">Open ListMate →</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin:24px 0 10px 0;">'
+        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+        f'</div>'
+        f'<p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:20px;">Thank you for using ListMate to keep your household organized.</p>'
+        f'</div>'
+    )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "shopping notifications", "You received this email because a member of your ListMate household purchased items you requested.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": body_html + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+

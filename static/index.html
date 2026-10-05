@@ -536,6 +536,22 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
                targetPath = urlObj.pathname + urlObj.search;
             }
             if (targetPath !== '' && targetPath !== '/') {
+              if (urlObj.searchParams && (urlObj.searchParams.get('modal') === 'trip_summary' || urlObj.searchParams.get('action') === 'trip_summary')) {
+                const storeIdParam = urlObj.searchParams.get('store_id');
+                const shopperParam = urlObj.searchParams.get('shopper');
+                setTimeout(() => {
+                  if (typeof window.openTripSummaryDrawer === 'function') {
+                    window.openTripSummaryDrawer({
+                      title: shopperParam ? `🛒 ${shopperParam} got your items!` : '🛒 Items Purchased',
+                      storeId: storeIdParam,
+                      shopperName: shopperParam
+                    });
+                  }
+                }, 150);
+                if (window.location.pathname === '/' || window.location.pathname === '') {
+                  return;
+                }
+              }
               window.location.href = targetPath;
             }
           } catch(e) { console.error('Deep link error:', e); }
@@ -562,6 +578,27 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           else pModal.classList.add('active');
         }
       }, 1200);
+    } else if (modalParam === 'trip_summary' || actionParam === 'trip_summary') {
+      const storeIdParam = urlParams.get('store_id');
+      const shopperParam = urlParams.get('shopper');
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        cleanParams.delete('modal');
+        cleanParams.delete('action');
+        cleanParams.delete('store_id');
+        cleanParams.delete('shopper');
+        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
+      } catch(e) {}
+      setTimeout(() => {
+        if (typeof window.openTripSummaryDrawer === 'function') {
+          window.openTripSummaryDrawer({
+            title: shopperParam ? `🛒 ${shopperParam} got your items!` : '🛒 Items Purchased',
+            storeId: storeIdParam,
+            shopperName: shopperParam
+          });
+        }
+      }, 500);
     } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
@@ -1002,6 +1039,16 @@ function toggleBurger() {
 }
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
+
+window.activeTrips = window.activeTrips || {};
+try {
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const k = sessionStorage.key(i);
+    if (k && k.startsWith('activeTrip_') && sessionStorage.getItem(k) === '1') {
+      window.activeTrips[k.replace('activeTrip_', '')] = true;
+    }
+  }
+} catch(e) {}
 
 fetch('/api/version').then(r=>r.json()).then(d=>{
   var el = document.getElementById('versionDisplayMain');
@@ -1762,6 +1809,7 @@ function renderHome() {
       '<div class="store-group-title">' +
       '<div style="display:flex;align-items:baseline;gap:6px;"><span>' + escapeHtml(storeMap[storeId] || storeName) + '</span><span style="opacity:0.6;font-size:10px;">' + items.length + '</span></div>' +
       '<div style="display:flex;align-items:center;gap:4px;">' +
+      (window.activeTrips && window.activeTrips[String(storeId)] ? '<button class="finish-trip-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 9px; border-radius:8px; font-weight:600; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(16,185,129,0.3); display:inline-flex; align-items:center; gap:3px;">🏁 Finish Trip</button>' : '') +
       ((storeMap[storeId] || storeName) !== 'General List' ? '<button class="history-btn" data-sid="' + storeId + '" style="font-size:11px; padding:3px 8px; border-radius:8px; font-weight:500; background:#fff; color:#666; border:1px solid #ccc; cursor:pointer;">🗓️ Plan</button>' : '') +
       '<button class="shop-btn" data-sid="' + storeId + '">+ Add</button>' +
       '</div>' +
@@ -1899,8 +1947,47 @@ function renderHome() {
 
   $$('.shop-btn').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openStore(parseInt(el.dataset.sid));}));
 
+  $$('.finish-trip-btn').forEach(el => el.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const sid = parseInt(el.dataset.sid);
+    await completeStoreTrip(sid);
+  }));
+
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.checkAndApply();
+  }
+}
+
+async function completeStoreTrip(storeId, autoTriggered = false) {
+  const store = stores.find(s => s.id === storeId);
+  const storeName = store ? store.name : 'Store';
+
+  // 1. Confetti celebration!
+  if (!autoTriggered) {
+    fireCelebration(false);
+    toast('🎉 Trip complete!');
+  }
+
+  // 2. Clear trip state for this store
+  if (window.activeTrips) {
+    delete window.activeTrips[String(storeId)];
+  }
+  try {
+    sessionStorage.removeItem('activeTrip_' + storeId);
+  } catch(e) {}
+
+  // Immediately update UI so Finish Trip button disappears
+  renderHome();
+
+  // 3. Dispatch API call to consolidate purchases and send push + transactional email
+  try {
+    const res = await fetch(API + '/stores/' + storeId + '/finish-trip', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.notified_members > 0) {
+      toast(`✅ Sent trip update to ${data.notified_members} family member${data.notified_members > 1 ? 's' : ''}`);
+    }
+  } catch(err) {
+    console.error('Error completing trip:', err);
   }
 }
 
@@ -2718,12 +2805,14 @@ window.checkCompletionForStore = function(storeId, allItemsBefore, storeItemsBef
   const storeItemsAfter = list.filter(i => String(i.store_id) === String(storeId) && isUnpurchased(i));
   const allItemsAfter = list.filter(i => isUnpurchased(i));
 
-  if (allItemsBefore.length > 0 && allItemsAfter.length === 0) {
-    fireCelebration(true);
-  } else if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
+  // Only trigger completion celebration & notification if all unpurchased items for this store became 0
+  if (storeItemsBefore.length > 0 && storeItemsAfter.length === 0) {
     const hasPurchased = list.some(i => String(i.store_id) === String(storeId) && !isUnpurchased(i));
     if (hasPurchased) {
-      fireCelebration(false);
+      const isAllComplete = allItemsBefore.length > 0 && allItemsAfter.length === 0;
+      fireCelebration(isAllComplete);
+      // Automatically complete trip and notify family about any unnotified items
+      completeStoreTrip(parseInt(storeId), true);
     }
   }
 };
@@ -2792,19 +2881,18 @@ async function toggleItem(id, showVisitPrompt = true) {
   const storeItemsBefore = list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i));
   const allItemsBefore = list.filter(i => isUnpurchased(i));
 
-  const applyLocalToggleAndCheckConfetti = () => {
+  const applyLocalToggle = () => {
     item.purchased = !item.purchased;
     saveCache();
     renderHome();
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
-
-    if (!isUnpurchased(item)) {
-      window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
-    }
   };
 
   if (!navigator.onLine) {
-    applyLocalToggleAndCheckConfetti();
+    applyLocalToggle();
+    if (!isUnpurchased(item)) {
+      window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
+    }
     enqueueOfflineAction({ type: 'toggle', data: { id: id } });
     toast('⚡ Toggled offline');
     return;
@@ -2814,18 +2902,30 @@ async function toggleItem(id, showVisitPrompt = true) {
   let visitStoreName = '';
   const itemStore = stores.find(s => String(s.id) === itemStoreId);
 
-  if (!wasPurchased && showVisitPrompt && itemStore && itemStore.name !== 'General List') {
-    try {
-      const res = await fetch(API + '/stores/' + item.store_id + '/visit/today');
-      const data = await res.json();
-      if (!data.active) {
-        needsVisitPrompt = true;
-        visitStoreName = itemStore.name || 'this store';
+  if (!wasPurchased && showVisitPrompt && itemStore) {
+    const isGeneral = itemStore.name === 'General List';
+    const isAlreadyActiveTrip = (window.activeTrips && window.activeTrips[itemStoreId]) || (sessionStorage.getItem('activeTrip_' + itemStoreId) === '1');
+    if (!isAlreadyActiveTrip) {
+      if (!isGeneral) {
+        try {
+          const res = await fetch(API + '/stores/' + item.store_id + '/visit/today');
+          const data = await res.json();
+          if (!data.active) {
+            needsVisitPrompt = true;
+            visitStoreName = itemStore.name || 'this store';
+          }
+        } catch(e){}
+      } else {
+        const isDismissed = sessionStorage.getItem('dismissedTripPrompt_' + itemStoreId) === '1';
+        if (!isDismissed) {
+          needsVisitPrompt = true;
+          visitStoreName = 'General List';
+        }
       }
-    } catch(e){}
+    }
   }
 
-  applyLocalToggleAndCheckConfetti();
+  applyLocalToggle();
 
   await fetch(API + '/list/' + id + '/toggle', { method: 'POST' });
   list = await fetch(API + '/list').then(r => r.json());
@@ -2834,23 +2934,49 @@ async function toggleItem(id, showVisitPrompt = true) {
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
   loadSuggestions();
 
+  // Only trigger completion and finish-trip dispatch AFTER server toggle is committed
+  if (!wasPurchased) {
+    window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
+  }
+
   if (needsVisitPrompt) {
-    $('#visitMsg').textContent = 'Shopping at ' + visitStoreName + '?';
+    const isGeneral = itemStore && itemStore.name === 'General List';
+    $('#visitMsg').textContent = isGeneral ? 'Shopping your General List?' : ('Shopping at ' + visitStoreName + '?');
+    const descP = document.querySelector('#visitModal p');
+    if (descP) {
+      descP.textContent = isGeneral
+        ? "Checking off items? Enable shopping mode to wrap up your trip and notify family when finished."
+        : "Checking off items? Would you like to log a visit to this store today?";
+    }
+    const btnYes = $('#btnVisitYes');
+    if (btnYes) btnYes.textContent = isGeneral ? "Yes, I'm shopping" : "Yes, I'm here";
+    const btnNo = $('#btnVisitNo');
+    if (btnNo) btnNo.textContent = isGeneral ? "No, just organizing" : "No, just organizing";
+
     $('#visitModal').classList.add('active');
     $('#btnVisitYes').onclick = async () => {
-      await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
       $('#visitModal').classList.remove('active');
-      const st = stores.find(s => s.id === item.store_id);
-      if (st) {
-        st.planned_visit_date = null;
-        st.planned_visit_by = null;
-        const d = new Date();
-        st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      window.activeTrips = window.activeTrips || {};
+      window.activeTrips[itemStoreId] = true;
+      try { sessionStorage.setItem('activeTrip_' + itemStoreId, '1'); } catch(e) {}
+
+      if (!isGeneral) {
+        await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
+        const st = stores.find(s => s.id === item.store_id);
+        if (st) {
+          st.planned_visit_date = null;
+          st.planned_visit_by = null;
+          const d = new Date();
+          st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
       }
       renderHome();
       loadSuggestions();
     };
-    $('#btnVisitNo').onclick = () => { $('#visitModal').classList.remove('active'); };
+    $('#btnVisitNo').onclick = () => {
+      $('#visitModal').classList.remove('active');
+      try { sessionStorage.setItem('dismissedTripPrompt_' + itemStoreId, '1'); } catch(e) {}
+    };
   }
 }
 
@@ -2920,7 +3046,6 @@ async function deleteItem(id) {
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
     enqueueOfflineAction({ type: 'delete', data: { id: id } });
     toast('⚡ Deleted offline');
-    if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
     return;
   }
 
@@ -2944,7 +3069,6 @@ async function deleteItem(id) {
   saveCache();
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
-  if (item && isUnpurchased(item)) window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
 }
 
 var quickAddTimeout;
@@ -3134,7 +3258,6 @@ async function moveItem(targetStoreId) {
       toast('⚡ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name + ' (offline)');
       renderHome();
       enqueueOfflineAction({ type: 'move', data: { id: moveItemId, store_id: targetStoreId } });
-      if (isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
     }
     return;
   }
@@ -3154,7 +3277,6 @@ async function moveItem(targetStoreId) {
   $('#moveModal').classList.remove('active');
   toast('✅ Moved to ' + stores.find(s=>s.id===targetStoreId)?.name);
   renderHome();
-  if (item && isUnpurchased(item)) window.checkCompletionForStore(oldStoreId, allItemsBefore, storeItemsBefore);
 }
 $('#btnMoveCancel').addEventListener('click',()=>$('#moveModal').classList.remove('active'));
 if ($('#btnRecipeTagClose')) $('#btnRecipeTagClose').addEventListener('click',()=>$('#recipeTagModal').classList.remove('active'));
@@ -4990,6 +5112,134 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+<!-- Push Notification Purchased Items Bottom Drawer (Issue #581) -->
+<div class="modal-overlay" id="tripSummaryDrawerModal" style="z-index: 10040;" onclick="closeTripSummaryDrawer(event)">
+  <div class="modal-sheet" style="padding:20px 18px calc(24px + env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; text-align:left; max-width:500px; margin:0 auto; box-shadow:0 -10px 25px rgba(0,0,0,0.18);" onclick="event.stopPropagation()">
+    <div style="width:38px; height:4px; background:#cbd5e1; border-radius:2px; margin:0 auto 12px auto;"></div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span id="tripSummaryBadge" style="display:inline-block; background:#ecfdf5; color:#065f46; font-size:11px; font-weight:700; padding:4px 10px; border-radius:12px; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">🛒 Items Purchased</span>
+        <h3 id="tripSummaryTitle" style="margin:0; font-size:18px; font-weight:800; color:var(--text); line-height:1.3;">Items Purchased</h3>
+        <p id="tripSummarySubtitle" style="margin:4px 0 0 0; font-size:13px; color:var(--muted); line-height:1.4;">Purchased for you</p>
+      </div>
+      <button onclick="closeTripSummaryDrawer()" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:8px;" aria-label="Close">✕</button>
+    </div>
+
+    <!-- Items List Container -->
+    <div id="tripSummaryItemsList" style="max-height:48vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+      <!-- Dynamically populated -->
+    </div>
+
+    <!-- Footer button -->
+    <div style="margin-top:16px;">
+      <button onclick="closeTripSummaryDrawer()" style="width:100%; background:var(--green); color:#fff; border:none; padding:13px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(94,190,126,0.3);">Got it</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.openTripSummaryDrawer = async function(options) {
+  options = options || {};
+  const modal = document.getElementById('tripSummaryDrawerModal');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('tripSummaryTitle');
+  const subtitleEl = document.getElementById('tripSummarySubtitle');
+  const listEl = document.getElementById('tripSummaryItemsList');
+
+  const title = options.title || 'Items Purchased';
+  let subtitle = options.body || (options.storeName ? `Purchased at ${options.storeName}` : 'Purchased for you');
+
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+
+  const safeEscape = function(val) {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  let items = options.items || [];
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch(e) { items = []; }
+  }
+
+  // If items was stringified twice in native bridge:
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch(e) { items = []; }
+  }
+
+  // If no items were explicitly passed and storeId is available, resolve from list
+  if ((!items || items.length === 0) && options.storeId) {
+    if (typeof list === 'undefined' || !Array.isArray(list) || list.length === 0) {
+      if (typeof loadData === 'function') {
+        try { await loadData(); } catch(e) {}
+      } else {
+        try {
+          const res = await fetch('/api/init');
+          const d = await res.json();
+          if (Array.isArray(d.list)) list = d.list;
+          if (Array.isArray(d.stores)) stores = d.stores;
+        } catch(e) {}
+      }
+    }
+
+    const targetList = (typeof list !== 'undefined' && Array.isArray(list)) ? list : (Array.isArray(window.list) ? window.list : []);
+    const targetStores = (typeof stores !== 'undefined' && Array.isArray(stores)) ? stores : (Array.isArray(window.stores) ? window.stores : []);
+
+    items = targetList
+      .filter(i => i && String(i.store_id) === String(options.storeId) && (i.purchased === true || i.purchased === 1 || i.purchased === '1' || i.purchased === 'true'))
+      .slice(0, 40)
+      .map(i => ({ name: (i && i.name) || 'Item', quantity: (i && i.quantity) || '' }));
+
+    if (targetStores.length > 0 && !options.storeName) {
+      const st = targetStores.find(s => s && String(s.id) === String(options.storeId));
+      if (st && st.name) {
+        options.storeName = st.name;
+        if (subtitleEl) subtitleEl.textContent = `Purchased at ${st.name}`;
+      }
+    }
+  }
+
+  if (listEl) {
+    if (!items || items.length === 0) {
+      listEl.innerHTML = `
+        <div style="padding:24px 16px; text-align:center; color:var(--muted); font-size:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+          <div style="font-size:24px; margin-bottom:6px;">🛍️</div>
+          <div>All requested items have been marked as purchased.</div>
+        </div>`;
+    } else {
+      listEl.innerHTML = items.map(it => {
+        const iname = typeof it === 'string' ? it : ((it && it.name) || 'Item');
+        const iqty = (typeof it === 'object' && it && it.quantity) ? ` <span style="font-size:12px; font-weight:600; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:8px; margin-left:6px; flex-shrink:0;">${safeEscape(it.quantity)}</span>` : '';
+        return `
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:#dcfce7; color:#16a34a; font-size:13px; font-weight:bold; flex-shrink:0;">✓</span>
+              <span style="font-size:15px; font-weight:600; color:#0f172a; word-break:break-word;">${safeEscape(iname)}</span>
+            </div>
+            ${iqty}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  modal.classList.add('active');
+};
+
+window.closeTripSummaryDrawer = function(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.closest('button')) return;
+  const modal = document.getElementById('tripSummaryDrawerModal');
+  if (modal) modal.classList.remove('active');
+};
+</script>
+
 <!-- Interactive Feature Discovery Bottom Drawer (Issue #310) -->
 <div id="featureTipOverlay" class="feature-tip-overlay" onclick="closeFeatureTip(event)">
   <div id="featureTipDrawer" class="feature-tip-drawer" onclick="event.stopPropagation()">
@@ -5996,7 +6246,30 @@ window.initPushNotifications = async function() {
       const data = notifObj.data || notification.data || notifObj;
       const action = (data && data.action) || notifObj.action || '';
       const modal = (data && data.modal) || notifObj.modal || '';
+      const notifType = (data && data.type) || notifObj.type || '';
       const targetUrl = (data && data.url) || notifObj.url || '';
+
+      const isTripCompleted = notifType === 'trip_completed' || 
+                              action === 'trip_completed' || 
+                              modal === 'trip_summary' || 
+                              targetUrl.includes('modal=trip_summary');
+
+      if (isTripCompleted) {
+        console.log('[Push] Handled trip completed push tap. Opening trip summary drawer.');
+        setTimeout(() => {
+          if (typeof window.openTripSummaryDrawer === 'function') {
+            window.openTripSummaryDrawer({
+              title: data.title || notifObj.title || 'Items Purchased',
+              body: data.body || notifObj.body || '',
+              storeId: data.store_id || notifObj.store_id,
+              storeName: data.store_name || notifObj.store_name,
+              shopperName: data.shopper_name || notifObj.shopper_name,
+              items: data.items_json || data.items || notifObj.items_json
+            });
+          }
+        }, 150);
+        return;
+      }
 
       const isUpgrade = action === 'open_upgrade_modal' || 
                         action === 'upgrade' || 

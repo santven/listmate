@@ -363,6 +363,22 @@ def send_push_to_user(user_id: int, title: str, body: str, data: Optional[Dict[s
 
     token_rows = authmod.get_active_tokens_for_user(user_id)
     if not token_rows:
+        try:
+            authmod.log_push_dispatch(
+                target_type="user",
+                target_id=int(user_id),
+                title=title,
+                body=body,
+                url=(data or {}).get("url", "/"),
+                custom_data=data,
+                tokens_count=0,
+                sent_count=0,
+                failed_count=0,
+                errors=["No active push tokens for user"],
+                is_mock=False
+            )
+        except Exception:
+            pass
         return {"sent": 0, "failed": 0, "message": "No active tokens for user"}
 
     tokens = [r["token"] for r in token_rows if r.get("token")]
