@@ -2844,19 +2844,18 @@ async function toggleItem(id, showVisitPrompt = true) {
   const storeItemsBefore = list.filter(i => String(i.store_id) === itemStoreId && isUnpurchased(i));
   const allItemsBefore = list.filter(i => isUnpurchased(i));
 
-  const applyLocalToggleAndCheckConfetti = () => {
+  const applyLocalToggle = () => {
     item.purchased = !item.purchased;
     saveCache();
     renderHome();
     if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
-
-    if (!isUnpurchased(item)) {
-      window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
-    }
   };
 
   if (!navigator.onLine) {
-    applyLocalToggleAndCheckConfetti();
+    applyLocalToggle();
+    if (!isUnpurchased(item)) {
+      window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
+    }
     enqueueOfflineAction({ type: 'toggle', data: { id: id } });
     toast('⚡ Toggled offline');
     return;
@@ -2889,7 +2888,7 @@ async function toggleItem(id, showVisitPrompt = true) {
     }
   }
 
-  applyLocalToggleAndCheckConfetti();
+  applyLocalToggle();
 
   await fetch(API + '/list/' + id + '/toggle', { method: 'POST' });
   list = await fetch(API + '/list').then(r => r.json());
@@ -2897,6 +2896,11 @@ async function toggleItem(id, showVisitPrompt = true) {
   renderHome();
   if (currentStore) renderCatalog($('#catalogSearch') ? $('#catalogSearch').value.trim() : '');
   loadSuggestions();
+
+  // Only trigger completion and finish-trip dispatch AFTER server toggle is committed
+  if (!wasPurchased) {
+    window.checkCompletionForStore(itemStoreId, allItemsBefore, storeItemsBefore);
+  }
 
   if (needsVisitPrompt) {
     const isGeneral = itemStore && itemStore.name === 'General List';
