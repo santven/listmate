@@ -3694,12 +3694,6 @@ def finish_store_trip(store_id):
         member_by_id = {int(m["id"]): m for m in members if m.get("id")}
         member_by_name = {m["display_name"].strip().lower(): m for m in members if m.get("display_name")}
 
-        all_purchased_items = [{
-            "id": it["id"],
-            "name": it["name"],
-            "quantity": it.get("quantity") or ""
-        } for it in items]
-
         # Group items by recipient (who added them)
         items_by_recipient = {}
         for item in items:
@@ -3714,6 +3708,9 @@ def finish_store_trip(store_id):
 
             if recipient:
                 uid = int(recipient["id"])
+                # If requested by the purchaser themselves, do nothing (do not notify purchaser)
+                if shopper_id and uid == int(shopper_id):
+                    continue
                 if uid not in items_by_recipient:
                     items_by_recipient[uid] = {
                         "user": recipient,
@@ -3740,7 +3737,7 @@ def finish_store_trip(store_id):
             except Exception as le:
                 print(f"[email_events log error] {le}", flush=True)
 
-        # 1. Notify other household members who requested specific items
+        # Notify only household members who explicitly requested specific items
         for uid, data in items_by_recipient.items():
             if shopper_id and uid == int(shopper_id):
                 continue
@@ -3788,68 +3785,6 @@ def finish_store_trip(store_id):
                     _log_email_event(user_obj["email"], uid, "failed")
 
             notified_count += 1
-
-        # 2. Notify other household members who did NOT add specific items (general trip update)
-        for m in members:
-            uid = int(m["id"])
-            if shopper_id and uid == int(shopper_id):
-                continue
-            if uid in items_by_recipient:
-                continue
-
-            push_title = f"🛒 {shopper_name} completed a trip at {store_name}!"
-            push_body = f"Purchased {len(all_purchased_items)} item{'s' if len(all_purchased_items) > 1 else ''} for the household."
-
-            try:
-                send_push_to_user(
-                    user_id=uid,
-                    title=push_title,
-                    body=push_body,
-                    data={"url": "/", "type": "trip_completed", "store_id": str(store_id)}
-                )
-            except Exception as pe:
-                print(f"[finish_trip general push error] {pe}", flush=True)
-
-            try:
-                if m.get("email"):
-                    sent_ok = send_trip_completed_email(
-                        to_email=m["email"],
-                        recipient_name=m.get("display_name") or "there",
-                        shopper_name=shopper_name,
-                        store_name=store_name,
-                        items=all_purchased_items,
-                        household_name=hh_name,
-                        user_id=uid,
-                        household_id=hhid,
-                        is_shopper=False
-                    )
-                    _log_email_event(m["email"], uid, "sent" if sent_ok else "failed")
-            except Exception as ee:
-                print(f"[finish_trip general email error] {ee}", flush=True)
-                if m.get("email"):
-                    _log_email_event(m["email"], uid, "failed")
-
-            notified_count += 1
-
-        # 3. Send trip summary receipt email to the shopper
-        shopper_obj = member_by_id.get(int(shopper_id)) if shopper_id else None
-        if shopper_obj and shopper_obj.get("email"):
-            try:
-                sent_ok = send_trip_completed_email(
-                    to_email=shopper_obj["email"],
-                    recipient_name=shopper_name,
-                    shopper_name=shopper_name,
-                    store_name=store_name,
-                    items=all_purchased_items,
-                    household_name=hh_name,
-                    user_id=int(shopper_id),
-                    household_id=hhid,
-                    is_shopper=True
-                )
-                _log_email_event(shopper_obj["email"], int(shopper_id), "sent" if sent_ok else "failed")
-            except Exception as se:
-                print(f"[finish_trip shopper email error] {se}", flush=True)
-                _log_email_event(shopper_obj["email"], int(shopper_id), "failed")
 
         # 4. Mark all notified items so subsequent completions only notify new unnotified items
         item_ids = [int(it["id"]) for it in items if it.get("id")]
