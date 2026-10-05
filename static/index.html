@@ -536,6 +536,19 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
                targetPath = urlObj.pathname + urlObj.search;
             }
             if (targetPath !== '' && targetPath !== '/') {
+              if (urlObj.searchParams && (urlObj.searchParams.get('modal') === 'trip_summary' || urlObj.searchParams.get('action') === 'trip_summary')) {
+                const storeIdParam = urlObj.searchParams.get('store_id');
+                const shopperParam = urlObj.searchParams.get('shopper');
+                setTimeout(() => {
+                  if (typeof window.openTripSummaryDrawer === 'function') {
+                    window.openTripSummaryDrawer({
+                      title: shopperParam ? `🛒 ${shopperParam} got your items!` : '🛒 Items Purchased',
+                      storeId: storeIdParam,
+                      shopperName: shopperParam
+                    });
+                  }
+                }, 400);
+              }
               window.location.href = targetPath;
             }
           } catch(e) { console.error('Deep link error:', e); }
@@ -562,6 +575,18 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           else pModal.classList.add('active');
         }
       }, 1200);
+    } else if (modalParam === 'trip_summary' || actionParam === 'trip_summary') {
+      const storeIdParam = urlParams.get('store_id');
+      const shopperParam = urlParams.get('shopper');
+      setTimeout(() => {
+        if (typeof window.openTripSummaryDrawer === 'function') {
+          window.openTripSummaryDrawer({
+            title: shopperParam ? `🛒 ${shopperParam} got your items!` : '🛒 Items Purchased',
+            storeId: storeIdParam,
+            shopperName: shopperParam
+          });
+        }
+      }, 500);
     } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
@@ -5075,6 +5100,109 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+<!-- Push Notification Purchased Items Bottom Drawer (Issue #581) -->
+<div class="modal-overlay" id="tripSummaryDrawerModal" style="z-index: 10040;" onclick="closeTripSummaryDrawer(event)">
+  <div class="modal-sheet" style="padding:20px 18px calc(24px + env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; text-align:left; max-width:500px; margin:0 auto; box-shadow:0 -10px 25px rgba(0,0,0,0.18);" onclick="event.stopPropagation()">
+    <div style="width:38px; height:4px; background:#cbd5e1; border-radius:2px; margin:0 auto 12px auto;"></div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span id="tripSummaryBadge" style="display:inline-block; background:#ecfdf5; color:#065f46; font-size:11px; font-weight:700; padding:4px 10px; border-radius:12px; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">🛒 Items Purchased</span>
+        <h3 id="tripSummaryTitle" style="margin:0; font-size:18px; font-weight:800; color:var(--text); line-height:1.3;">Items Purchased</h3>
+        <p id="tripSummarySubtitle" style="margin:4px 0 0 0; font-size:13px; color:var(--muted); line-height:1.4;">Purchased for you</p>
+      </div>
+      <button onclick="closeTripSummaryDrawer()" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:8px;" aria-label="Close">✕</button>
+    </div>
+
+    <!-- Items List Container -->
+    <div id="tripSummaryItemsList" style="max-height:48vh; overflow-y:auto; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+      <!-- Dynamically populated -->
+    </div>
+
+    <!-- Footer button -->
+    <div style="margin-top:16px;">
+      <button onclick="closeTripSummaryDrawer()" style="width:100%; background:var(--green); color:#fff; border:none; padding:13px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(94,190,126,0.3);">Got it</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.openTripSummaryDrawer = async function(options = {}) {
+  const modal = document.getElementById('tripSummaryDrawerModal');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('tripSummaryTitle');
+  const subtitleEl = document.getElementById('tripSummarySubtitle');
+  const listEl = document.getElementById('tripSummaryItemsList');
+
+  const title = options.title || 'Items Purchased';
+  let subtitle = options.body || (options.storeName ? `Purchased at ${options.storeName}` : 'Purchased for you');
+
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+
+  let items = options.items || [];
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch(e) { items = []; }
+  }
+
+  // If no items were explicitly passed and storeId is available, resolve from list
+  if ((!items || items.length === 0) && options.storeId) {
+    if (!window.list || window.list.length === 0) {
+      try {
+        const res = await fetch(API + '/list');
+        window.list = await res.json();
+      } catch(e) {}
+    }
+    if (Array.isArray(window.list)) {
+      items = window.list
+        .filter(i => String(i.store_id) === String(options.storeId) && !isUnpurchased(i))
+        .slice(0, 30)
+        .map(i => ({ name: i.name, quantity: i.quantity || '' }));
+    }
+    if (Array.isArray(window.stores) && !options.storeName) {
+      const st = window.stores.find(s => String(s.id) === String(options.storeId));
+      if (st) {
+        options.storeName = st.name;
+        if (subtitleEl) subtitleEl.textContent = `Purchased at ${st.name}`;
+      }
+    }
+  }
+
+  if (listEl) {
+    if (!items || items.length === 0) {
+      listEl.innerHTML = `
+        <div style="padding:24px 16px; text-align:center; color:var(--muted); font-size:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+          <div style="font-size:24px; margin-bottom:6px;">🛍️</div>
+          <div>All requested items have been marked as purchased.</div>
+        </div>`;
+    } else {
+      listEl.innerHTML = items.map(it => {
+        const iname = typeof it === 'string' ? it : (it.name || 'Item');
+        const iqty = typeof it === 'object' && it.quantity ? ` <span style="font-size:12px; font-weight:600; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:8px; margin-left:6px; flex-shrink:0;">${escapeHtml(it.quantity)}</span>` : '';
+        return `
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:#dcfce7; color:#16a34a; font-size:13px; font-weight:bold; flex-shrink:0;">✓</span>
+              <span style="font-size:15px; font-weight:600; color:#0f172a; word-break:break-word;">${escapeHtml(iname)}</span>
+            </div>
+            ${iqty}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  modal.classList.add('active');
+};
+
+window.closeTripSummaryDrawer = function(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.closest('button')) return;
+  const modal = document.getElementById('tripSummaryDrawerModal');
+  if (modal) modal.classList.remove('active');
+};
+</script>
+
 <!-- Interactive Feature Discovery Bottom Drawer (Issue #310) -->
 <div id="featureTipOverlay" class="feature-tip-overlay" onclick="closeFeatureTip(event)">
   <div id="featureTipDrawer" class="feature-tip-drawer" onclick="event.stopPropagation()">
@@ -6081,7 +6209,30 @@ window.initPushNotifications = async function() {
       const data = notifObj.data || notification.data || notifObj;
       const action = (data && data.action) || notifObj.action || '';
       const modal = (data && data.modal) || notifObj.modal || '';
+      const notifType = (data && data.type) || notifObj.type || '';
       const targetUrl = (data && data.url) || notifObj.url || '';
+
+      const isTripCompleted = notifType === 'trip_completed' || 
+                              action === 'trip_completed' || 
+                              modal === 'trip_summary' || 
+                              targetUrl.includes('modal=trip_summary');
+
+      if (isTripCompleted) {
+        console.log('[Push] Handled trip completed push tap. Opening trip summary drawer.');
+        setTimeout(() => {
+          if (typeof window.openTripSummaryDrawer === 'function') {
+            window.openTripSummaryDrawer({
+              title: data.title || notifObj.title || 'Items Purchased',
+              body: data.body || notifObj.body || '',
+              storeId: data.store_id || notifObj.store_id,
+              storeName: data.store_name || notifObj.store_name,
+              shopperName: data.shopper_name || notifObj.shopper_name,
+              items: data.items_json || data.items || notifObj.items_json
+            });
+          }
+        }, 150);
+        return;
+      }
 
       const isUpgrade = action === 'open_upgrade_modal' || 
                         action === 'upgrade' || 
