@@ -2298,7 +2298,8 @@ def send_trip_completed_email(
     items: list,
     household_name: str = "",
     user_id: int = 0,
-    household_id: int = 0
+    household_id: int = 0,
+    is_shopper: bool = False
 ) -> bool:
     """Send a transactional notification email when items requested by a household member are purchased during a shopping trip."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
@@ -2317,7 +2318,19 @@ def send_trip_completed_email(
 
     item_count = len(items)
     item_word = "item" if item_count == 1 else "items"
-    subject = f"🛒 {clean_shopper} got your {item_word} at {clean_store}!"
+
+    if is_shopper:
+        subject = f"🛒 Trip complete at {clean_store}! ({item_count} {item_word})"
+        badge_text = "🛒 Trip Summary"
+        heading_text = f"Trip complete at {clean_store}!"
+        intro_plain = f"Here is your trip summary from {clean_store}{hh_label}. You purchased {item_count} {item_word}:"
+        intro_html = f"Here is your trip summary from <strong>{clean_store}</strong>. You purchased <strong>{item_count} {item_word}</strong>:"
+    else:
+        subject = f"🛒 {clean_shopper} got your {item_word} at {clean_store}!"
+        badge_text = "🛒 Shopping Trip Update"
+        heading_text = "Your items are on the way!"
+        intro_plain = f"Great news! {clean_shopper} just finished shopping at {clean_store}{hh_label} and purchased {item_count} {item_word} you requested:"
+        intro_html = f"<strong>{clean_shopper}</strong> just finished shopping at <strong>{clean_store}</strong> and purchased <strong>{item_count} {item_word}</strong> you requested:"
 
     # Format item lines
     text_items = []
@@ -2346,7 +2359,7 @@ def send_trip_completed_email(
 
     plain_text = (
         f"Hi {clean_recipient},\n\n"
-        f"Great news! {clean_shopper} just finished shopping at {clean_store}{hh_label} and purchased {item_count} {item_word} you requested:\n\n"
+        f"{intro_plain}\n\n"
         f"{items_text_block}\n\n"
         f"View your shared household list here:\n"
         f"{app_url}\n\n"
@@ -2361,11 +2374,11 @@ def send_trip_completed_email(
     body_html = (
         f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
         f'<div style="text-align:center;margin-bottom:20px;">'
-        f'<span style="display:inline-block;background:#ecfdf5;color:#065f46;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">🛒 Shopping Trip Update</span>'
-        f'<h2 style="color:#0f172a;margin:12px 0 6px 0;font-size:22px;font-weight:700;">Your items are on the way!</h2>'
+        f'<span style="display:inline-block;background:#ecfdf5;color:#065f46;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">{badge_text}</span>'
+        f'<h2 style="color:#0f172a;margin:12px 0 6px 0;font-size:22px;font-weight:700;">{heading_text}</h2>'
         f'</div>'
         f'<p style="font-size:15px;color:#334155;line-height:1.5;">Hi {clean_recipient},</p>'
-        f'<p style="font-size:15px;color:#334155;line-height:1.5;"><strong>{clean_shopper}</strong> just finished shopping at <strong>{clean_store}</strong> and purchased <strong>{item_count} {item_word}</strong> you requested:</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">{intro_html}</p>'
         f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:18px 0;">'
         f'<ul style="margin:0;padding-left:18px;line-height:1.6;">'
         f'{items_html_block}'
