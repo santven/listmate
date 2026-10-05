@@ -2444,9 +2444,9 @@ def add_recipe_to_list_endpoint():
                 added_count += 1
             else:
                 db.execute(
-                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag) "
-                    "VALUES (%s, %s, %s, %s, %s, ?, ?)",
-                    (store_id, name, category, user_name, quantity, hhid, recipe_title)
+                    "INSERT INTO list_items (store_id, name, category, added_by, quantity, household_id, recipe_tag, added_by_user_id) "
+                    "VALUES (%s, %s, %s, %s, %s, ?, ?, %s)",
+                    (store_id, name, category, user_name, quantity, hhid, recipe_title, authmod.get_user_id())
                 )
                 added_count += 1
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
@@ -3038,8 +3038,8 @@ def add_to_list():
 
         quantity = (data.get("quantity") or "").strip()
         db.execute(
-            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
-            (_hh(), store_id, name, existing_category, quantity, get_display_name()),
+            "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by, added_by_user_id) VALUES (%s, %s, %s, %s, %s, ?, %s)",
+            (_hh(), store_id, name, existing_category, quantity, get_display_name(), authmod.get_user_id()),
         )
         db.commit()
         row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
@@ -3084,11 +3084,11 @@ def toggle_list_item(item_id):
             return jsonify({"error": "not found"}), 404
 
         if item["purchased"]:
-            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL WHERE id=?", (item_id,))
         else:
             db.execute(
-                "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?",
-                (get_display_name(), item_id),
+                "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?",
+                (get_display_name(), authmod.get_user_id(), item_id),
             )
             # Update item_purchase_stats
             db.execute('''
@@ -3207,8 +3207,8 @@ def replan_visit_items(store_id):
 
                 # Add it as a new unpurchased item without quantity
                 db.execute(
-                    "INSERT INTO list_items (store_id, name, category, household_id, added_by, purchased) VALUES (?, ?, ?, ?, ?, FALSE)",
-                    (store_id, name_clean, item_cat, _hh(), get_display_name())
+                    "INSERT INTO list_items (store_id, name, category, household_id, added_by, purchased, added_by_user_id) VALUES (?, ?, ?, ?, ?, FALSE, ?)",
+                    (store_id, name_clean, item_cat, _hh(), get_display_name(), authmod.get_user_id())
                 )
                 added_count += 1
                 
@@ -3468,6 +3468,7 @@ def sync_offline_actions():
     try:
         hh_id = _hh()
         display_name = get_display_name()
+        current_uid = authmod.get_user_id()
 
         for act in actions:
             if not isinstance(act, dict):
@@ -3503,8 +3504,8 @@ def sync_offline_actions():
                                 except Exception:
                                     pass
                             db.execute(
-                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by) VALUES (%s, %s, %s, %s, %s, ?)",
-                                (hh_id, store_id, name, existing_category, quantity, display_name)
+                                "INSERT INTO list_items (household_id, store_id, name, category, quantity, added_by, added_by_user_id) VALUES (%s, %s, %s, %s, %s, ?, %s)",
+                                (hh_id, store_id, name, existing_category, quantity, display_name, current_uid)
                             )
                             if from_catalog and store_name != "General List":
                                 cat_exists = db.execute(
@@ -3527,9 +3528,9 @@ def sync_offline_actions():
                     item = db.execute("SELECT * FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id)).fetchone()
                     if item:
                         if item["purchased"]:
-                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_at=NULL WHERE id=?", (item_id,))
+                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL WHERE id=?", (item_id,))
                         else:
-                            db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_at=NOW() WHERE id=?", (display_name, item_id))
+                            db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?", (display_name, current_uid, item_id))
                             db.execute("""
                                 INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
                                 VALUES (?, ?, ?, 1, NOW())
@@ -3637,6 +3638,144 @@ def mark_visit(store_id):
         db.execute("UPDATE stores SET planned_visit_date = NULL, planned_visit_by = NULL, visit_notified_users = '' WHERE id = ? AND household_id = ?", (store_id, _hh()))
         db.commit()
         return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route("/api/stores/<int:store_id>/finish-trip", methods=["POST"])
+@require_user
+def finish_store_trip(store_id):
+    """Wrap up an active shopping trip at a store.
+    Consolidates items purchased during this visit and notifies the household members
+    who requested those items via push notification and transactional email.
+    """
+    db = get_db()
+    try:
+        hhid = _hh()
+        shopper_id = authmod.get_user_id()
+        shopper_name = get_display_name() or "A household member"
+
+        # Verify store belongs to this household
+        store = db.execute(
+            "SELECT id, name FROM stores WHERE id = ? AND household_id = ?",
+            (store_id, hhid)
+        ).fetchone()
+        if not store:
+            return jsonify({"error": "Store not found"}), 404
+
+        store_name = store["name"]
+
+        # Find all items purchased at this store in the recent window (last 6 hours or today)
+        items = db.execute(
+            """SELECT id, name, category, quantity, added_by, added_by_user_id, purchased_by, purchased_by_user_id, purchased_at
+               FROM list_items
+               WHERE store_id = ? AND household_id = ? AND purchased = TRUE
+                 AND (purchased_at >= NOW() - INTERVAL '6 hours' OR (purchased_at IS NULL AND added_at >= CURRENT_DATE))
+               ORDER BY id ASC""",
+            (store_id, hhid)
+        ).fetchall()
+
+        if not items:
+            return jsonify({"ok": True, "items_count": 0, "notified_members": 0, "message": "No recent purchases found for this store"})
+
+        # Get household name and all members
+        hh_info = db.execute("SELECT name FROM auth_households WHERE id = ?", (hhid,)).fetchone()
+        hh_name = hh_info["name"] if hh_info else ""
+
+        members = db.execute(
+            """SELECT u.id, u.email, u.display_name
+               FROM auth_users u
+               JOIN auth_household_members m ON m.user_id = u.id
+               WHERE m.household_id = ?""",
+            (hhid,)
+        ).fetchall()
+
+        member_by_id = {int(m["id"]): m for m in members if m.get("id")}
+        member_by_name = {m["display_name"].strip().lower(): m for m in members if m.get("display_name")}
+
+        # Group items by recipient (who added them), excluding the shopper
+        items_by_recipient = {}
+        for item in items:
+            target_id = item.get("added_by_user_id")
+            recipient = None
+            if target_id and int(target_id) in member_by_id:
+                recipient = member_by_id[int(target_id)]
+            elif item.get("added_by"):
+                clean_added = item["added_by"].strip().lower()
+                if clean_added in member_by_name:
+                    recipient = member_by_name[clean_added]
+
+            if recipient:
+                # Do not notify the shopper about their own items
+                if shopper_id and int(recipient["id"]) == int(shopper_id):
+                    continue
+                uid = int(recipient["id"])
+                if uid not in items_by_recipient:
+                    items_by_recipient[uid] = {
+                        "user": recipient,
+                        "items": []
+                    }
+                items_by_recipient[uid]["items"].append({
+                    "id": item["id"],
+                    "name": item["name"],
+                    "quantity": item.get("quantity") or ""
+                })
+
+        notified_count = 0
+        from push_helper import send_push_to_user
+        from email_helper import send_trip_completed_email
+
+        for uid, data in items_by_recipient.items():
+            user_obj = data["user"]
+            user_items = data["items"]
+            if not user_items:
+                continue
+
+            item_names = [it["name"] for it in user_items[:3]]
+            if len(user_items) > 3:
+                summary_str = ", ".join(item_names) + f", and {len(user_items) - 3} more"
+            else:
+                summary_str = ", ".join(item_names)
+
+            push_title = f"🛒 {shopper_name} got your items at {store_name}!"
+            push_body = f"Purchased {len(user_items)} item{'s' if len(user_items) > 1 else ''}: {summary_str}."
+
+            # 1. Send push notification to target user
+            try:
+                send_push_to_user(
+                    user_id=uid,
+                    title=push_title,
+                    body=push_body,
+                    data={"url": "/", "type": "trip_completed", "store_id": str(store_id)}
+                )
+            except Exception as pe:
+                print(f"[finish_trip push error] {pe}", flush=True)
+
+            # 2. Send transactional email to target user
+            try:
+                if user_obj.get("email"):
+                    send_trip_completed_email(
+                        to_email=user_obj["email"],
+                        recipient_name=user_obj.get("display_name") or "there",
+                        shopper_name=shopper_name,
+                        store_name=store_name,
+                        items=user_items,
+                        household_name=hh_name,
+                        user_id=uid,
+                        household_id=hhid
+                    )
+            except Exception as ee:
+                print(f"[finish_trip email error] {ee}", flush=True)
+
+            notified_count += 1
+
+        return jsonify({
+            "ok": True,
+            "items_count": len(items),
+            "notified_members": notified_count,
+            "store_id": store_id,
+            "store_name": store_name
+        })
     finally:
         db.close()
 
