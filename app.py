@@ -3756,11 +3756,23 @@ def finish_store_trip(store_id):
             push_body = f"Purchased {len(user_items)} item{'s' if len(user_items) > 1 else ''}: {summary_str}."
 
             try:
+                import json
+                items_payload = [{"name": it["name"][:60], "quantity": (it.get("quantity") or "")[:20]} for it in user_items[:40]]
                 send_push_to_user(
                     user_id=uid,
                     title=push_title,
                     body=push_body,
-                    data={"url": "/", "type": "trip_completed", "store_id": str(store_id)}
+                    data={
+                        "url": f"/?modal=trip_summary&store_id={store_id}&shopper={shopper_name}",
+                        "type": "trip_completed",
+                        "modal": "trip_summary",
+                        "store_id": str(store_id),
+                        "store_name": str(store_name),
+                        "shopper_name": str(shopper_name),
+                        "title": push_title,
+                        "body": push_body,
+                        "items_json": json.dumps(items_payload)
+                    }
                 )
             except Exception as pe:
                 print(f"[finish_trip push error] {pe}", flush=True)
