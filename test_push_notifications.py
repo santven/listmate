@@ -1,6 +1,23 @@
 import os
+import sys
 import unittest
 from unittest.mock import patch, MagicMock
+
+# Defensive mock for psycopg2 if running in environment without native postgres library
+try:
+    import psycopg2
+except ImportError:
+    mock_pg = MagicMock()
+    mock_pg.OperationalError = Exception
+    mock_pg.InterfaceError = Exception
+    mock_pg.pool = MagicMock()
+    sys.modules["psycopg2"] = mock_pg
+    sys.modules["psycopg2.pool"] = mock_pg.pool
+
+try:
+    import requests
+except ImportError:
+    sys.modules["requests"] = MagicMock()
 
 import shared.auth as authmod
 import push_helper
@@ -9,6 +26,10 @@ import push_helper
 class TestPushNotifications(unittest.TestCase):
     def setUp(self):
         self.mock_store = {}
+        self.mock_checkout_shoppers = []
+        self.mock_active_shoppers = []
+        self.mock_cooldown_active = False
+        self.mock_checkout_flood_active = False
         self.patcher_init = patch("shared.auth._init_schema", return_value=True)
         self.patcher_run = patch("shared.auth._run", side_effect=self._mock_run)
         self.patcher_one = patch("shared.auth._one", side_effect=self._mock_one)
@@ -86,11 +107,28 @@ class TestPushNotifications(unittest.TestCase):
             hhid = params[0]
             return [dict(row) for row in self.mock_store.values() if row.get("household_id") == hhid and row.get("is_active")]
 
+        if "FROM list_items" in q and "trip_notified_at IS NOT NULL" in q:
+            adder_id = params[2] if len(params) > 2 else None
+            return [{"purchased_by_user_id": uid} for uid in self.mock_checkout_shoppers if not adder_id or uid != adder_id]
+
+        if "FROM list_items" in q and "trip_notified_at IS NULL" in q:
+            adder_id = params[2] if len(params) > 2 else None
+            return [{"purchased_by_user_id": uid} for uid in self.mock_active_shoppers if not adder_id or uid != adder_id]
+
         return []
 
     def _mock_one(self, query, params=None):
         q = " ".join(query.strip().split())
         params = params or ()
+
+        if "FROM stores WHERE id =" in q:
+            return {"name": "Costco"}
+
+        if "FROM push_notifications_log" in q and "checkout_line_addition" in q and "1 minute" in q:
+            return {"id": 999} if self.mock_checkout_flood_active else None
+
+        if "FROM push_notifications_log" in q and ("active_trip_addition" in q or "checkout_line_addition" in q) and "2 minutes" in q:
+            return {"id": 998} if self.mock_cooldown_active else None
 
         if "WHERE user_id = %s AND platform = %s AND is_active = TRUE" in q:
             uid, platform = params[0], params[1]
@@ -229,6 +267,97 @@ class TestPushNotifications(unittest.TestCase):
         self.assertIsNotNone(real_row)
         self.assertTrue(real_row["is_active"])
         self.assertEqual(real_row["permission_status"], "granted")
+
+    def test_while_shopping_active_trip_in_aisles_dispatch(self):
+        # Register token for active shopper (User 2)
+        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
+        self.mock_active_shoppers = [2]
+        self.mock_cooldown_active = False
+
+        # Partner (User 1) adds Boiled Eggs to Costco
+        res = push_helper.notify_while_shopping_addition(
+            store_id=10,
+            household_id=1,
+            adding_user_id=1,
+            adder_name="Partner",
+            item_names=["Boiled Eggs"],
+            store_name="Costco"
+        )
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["notified"], 1)
+        self.assertEqual(res["suppressed"], 0)
+
+    def test_while_shopping_cooldown_suppression(self):
+        # Register token for active shopper (User 2)
+        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
+        self.mock_active_shoppers = [2]
+        self.mock_cooldown_active = True  # Push sent within last 2 minutes
+
+        # Partner adds another item during 2-minute cooldown window
+        res = push_helper.notify_while_shopping_addition(
+            store_id=10,
+            household_id=1,
+            adding_user_id=1,
+            adder_name="Partner",
+            item_names=["Milk"],
+            store_name="Costco"
+        )
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["notified"], 0)
+        self.assertEqual(res["suppressed"], 1)
+
+    def test_while_shopping_checkout_line_grace_window_bypasses_cooldown(self):
+        # Register token for shopper (User 2) who just finished shopping (< 5 min ago)
+        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
+        self.mock_checkout_shoppers = [2]
+        self.mock_cooldown_active = True  # Cooldown exists from prior in-aisle addition
+
+        # Partner adds an item right as shopper is in checkout line -> Cooldown BYPASSED
+        res = push_helper.notify_while_shopping_addition(
+            store_id=10,
+            household_id=1,
+            adding_user_id=1,
+            adder_name="Partner",
+            item_names=["Kellogg Cereal"],
+            store_name="Costco"
+        )
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["notified"], 1)
+        self.assertEqual(res["suppressed"], 0)
+
+    def test_while_shopping_self_exclusion(self):
+        # User 2 is the shopper
+        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
+        self.mock_active_shoppers = [2]
+
+        # User 2 adds an item to their own trip -> must NOT notify User 2
+        res = push_helper.notify_while_shopping_addition(
+            store_id=10,
+            household_id=1,
+            adding_user_id=2,
+            adder_name="Shopper",
+            item_names=["Bread"],
+            store_name="Costco"
+        )
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["notified"], 0)
+
+    def test_while_shopping_multi_items_summary(self):
+        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
+        self.mock_active_shoppers = [2]
+        self.mock_cooldown_active = False
+
+        # Partner adds 3 items
+        res = push_helper.notify_while_shopping_addition(
+            store_id=10,
+            household_id=1,
+            adding_user_id=1,
+            adder_name="Partner",
+            item_names=["Apples", "Bananas", "Oranges"],
+            store_name="Costco"
+        )
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["notified"], 1)
 
 
 if __name__ == "__main__":
