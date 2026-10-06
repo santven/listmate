@@ -6250,8 +6250,12 @@ window.initPushNotifications = async function() {
       console.log('[Push] Foreground notification received:', notification);
       const data = (notification && notification.data) || {};
       if (data.type === 'active_trip_addition' || data.type === 'checkout_line_addition') {
-        if (typeof loadSuggestions === 'function') loadSuggestions();
-        if (typeof renderHome === 'function') renderHome();
+        if (typeof loadData === 'function') {
+          loadData();
+        } else {
+          if (typeof loadSuggestions === 'function') loadSuggestions();
+          if (typeof renderHome === 'function') renderHome();
+        }
       }
       if (typeof toast === 'function' && notification.title) {
         toast(`🔔 ${notification.title}: ${notification.body || ''}`);
