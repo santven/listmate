@@ -2,7 +2,7 @@
 """
 scripts/send_lifetime_premium_email.py
 
-Sends a personalized appreciation & 45-day milestone update email to all
+Sends a personalized appreciation & 50-day milestone update email to all
 Lifetime Premium households on ListMate.
 
 Usage:
@@ -124,7 +124,7 @@ def generate_email_content(
     feedback_url = f"{BASE_URL}/open?url={quote('/?action=feedback&source=email_lifetime_thanks')}"
     share_url = f"{BASE_URL}/open?url={quote('/?action=share&source=email_lifetime_thanks')}"
 
-    subject = "⭐ Thank you for being an early adopter of ListMate (+ 45-day milestone & what's new)"
+    subject = "⭐ Thank you for being an early adopter of ListMate (+ 50-day milestone & what's new)"
 
     unsub_txt, unsub_html = _get_unsub_blocks(
         user_id,
@@ -134,12 +134,12 @@ def generate_email_content(
 
     plain_text = f"""Hi {first_name},
 
-When we launched ListMate just 45 days ago, our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
+When we launched ListMate 50 days ago (August 17th), our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
 
 You were among the very first to join and back us with a Lifetime Premium Subscription for {hh_name}. Your early belief gave this project life, and we are profoundly grateful for your partnership. You will always have permanent VIP access to every current and upcoming premium feature.
 
 ==================================================
-📊 45 DAYS BY THE NUMBERS
+📊 50 DAYS BY THE NUMBERS
 ==================================================
 Here is what our growing household community has accomplished together so far:
 
@@ -149,7 +149,7 @@ Here is what our growing household community has accomplished together so far:
 • 🏡 Total Active Households: {stats['households']:,} households
 
 ==================================================
-✨ WHAT WE BUILT FOR YOU IN THE LAST 45 DAYS
+✨ WHAT WE BUILT FOR YOU IN THE LAST 50 DAYS
 ==================================================
 
 1. Instant Trip Alerts & Requester-Only Routing (v1.10.3)
@@ -198,7 +198,7 @@ Founder, ListMate ({BASE_URL})
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thank You from ListMate - 45 Days of Progress & What's New</title>
+  <title>Thank You from ListMate - 50 Days of Progress & What's New</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;line-height:1.6;">
 
@@ -219,7 +219,7 @@ Founder, ListMate ({BASE_URL})
                 Thank You for Believing in ListMate
               </h1>
               <p style="margin:8px 0 0;font-size:15px;color:#dcfce7;font-weight:500;">
-                Celebrating 45 Days Since Launch with Our Lifetime Members
+                Celebrating 50 Days Since Launch with Our Lifetime Members
               </p>
             </td>
           </tr>
@@ -233,7 +233,7 @@ Founder, ListMate ({BASE_URL})
                 Hi {first_name},
               </p>
               <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.65;">
-                When we launched ListMate just 45 days ago, our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
+                When we launched ListMate 50 days ago (August 17th), our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
               </p>
               <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.65;">
                 You were among the very first to join and back us with a <strong>Lifetime Premium Subscription</strong> for <strong>{hh_name}</strong>. Your early belief gave this project life, and we are profoundly grateful for your partnership. You will always have permanent VIP access to every current and upcoming premium feature.
@@ -243,7 +243,7 @@ Founder, ListMate ({BASE_URL})
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:22px 20px;margin-bottom:28px;">
                 <div style="text-align:center;margin-bottom:18px;">
                   <span style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#16a34a;">Community Momentum</span>
-                  <h3 style="margin:4px 0 0;font-size:18px;font-weight:700;color:#0f172a;">45 Days by the Numbers</h3>
+                  <h3 style="margin:4px 0 0;font-size:18px;font-weight:700;color:#0f172a;">50 Days by the Numbers</h3>
                   <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Here is what our growing household community has accomplished together so far:</p>
                 </div>
 
@@ -306,7 +306,7 @@ Founder, ListMate ({BASE_URL})
                   Product Highlights
                 </div>
                 <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">
-                  What We Built for You in the Last 45 Days
+                  What We Built for You in the Last 50 Days
                 </h2>
                 <p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.6;">
                   We have been shipping updates continuously based directly on early adopter feedback. Here are the major highlights now live in your app:
@@ -468,7 +468,8 @@ def get_premium_users() -> list:
         FROM auth_households h
         JOIN auth_users u ON u.household_id = h.id
         WHERE h.is_premium = true
-          AND u.email IS NOT NULL
+      AND LOWER(TRIM(h.subscription_status)) = 'premium'
+      AND u.email IS NOT NULL
           AND TRIM(u.email) != ''
         ORDER BY h.id, u.id
     """
