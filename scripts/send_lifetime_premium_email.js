@@ -201,7 +201,7 @@ function buildEmailHtml(params) {
                   <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:6px;font-size:13px;font-weight:600;">
                     <tr>
                       <td align="left" style="color:#334155;">🏡 Total Active Households</td>
-                      <td align="right" style="color:#9333ea;font-weight:700;">${stats.households.toLocaleString()} families</td>
+                      <td align="right" style="color:#9333ea;font-weight:700;">${stats.households.toLocaleString()} households</td>
                     </tr>
                   </table>
                   <div style="background:#e2e8f0;border-radius:8px;height:12px;overflow:hidden;width:100%;">
@@ -390,7 +390,7 @@ Here is what our growing household community has accomplished together so far:
 • 📋 Grocery Items Tracked & Managed: ${displayItems} items
 • 🏪 Unique Stores & Grocers Mapped: ${stats.stores.toLocaleString()} stores
 • 🛒 Store Shopping Runs Completed: ${stats.visits.toLocaleString()} trips
-• 🏡 Total Active Households: ${stats.households.toLocaleString()} families
+• 🏡 Total Active Households: ${stats.households.toLocaleString()} households
 
 ==================================================
 ✨ WHAT WE BUILT FOR YOU IN THE LAST 50 DAYS
