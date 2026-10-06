@@ -3,7 +3,7 @@
 /**
  * send_lifetime_premium_email.js
  * 
- * Sends a personalized appreciation & 45-day milestone update email to all
+ * Sends a personalized appreciation & 50-day milestone update email to all
  * Lifetime Premium households on ListMate.
  * 
  * Usage:
@@ -68,6 +68,7 @@ async function fetchPremiumUsers(client) {
     FROM auth_households h
     JOIN auth_users u ON u.household_id = h.id
     WHERE h.is_premium = true
+      AND LOWER(TRIM(h.subscription_status)) = 'premium'
       AND u.email IS NOT NULL
       AND TRIM(u.email) != ''
       AND u.email NOT LIKE '%privaterelay.appleid.com%'
@@ -107,7 +108,7 @@ function buildEmailHtml(params) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thank You from ListMate - 45 Days of Progress & What's New</title>
+  <title>Thank You from ListMate - 50 Days of Progress & What's New</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;line-height:1.6;">
 
@@ -128,7 +129,7 @@ function buildEmailHtml(params) {
                 Thank You for Believing in ListMate
               </h1>
               <p style="margin:8px 0 0;font-size:15px;color:#dcfce7;font-weight:500;">
-                Celebrating 45 Days Since Launch with Our Lifetime Members
+                Celebrating 50 Days Since Launch with Our Lifetime Members
               </p>
             </td>
           </tr>
@@ -142,7 +143,7 @@ function buildEmailHtml(params) {
                 Hi ${firstName},
               </p>
               <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.65;">
-                When we launched ListMate just 45 days ago, our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
+                When we launched ListMate 50 days ago (August 17th), our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
               </p>
               <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.65;">
                 You were among the very first to join and back us with a <strong>Lifetime Premium Subscription</strong> for <strong>${hhName}</strong>. Your early belief gave this project life, and we are profoundly grateful for your partnership. You will always have permanent VIP access to every current and upcoming premium feature.
@@ -152,7 +153,7 @@ function buildEmailHtml(params) {
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:22px 20px;margin-bottom:28px;">
                 <div style="text-align:center;margin-bottom:18px;">
                   <span style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#16a34a;">Community Momentum</span>
-                  <h3 style="margin:4px 0 0;font-size:18px;font-weight:700;color:#0f172a;">45 Days by the Numbers</h3>
+                  <h3 style="margin:4px 0 0;font-size:18px;font-weight:700;color:#0f172a;">50 Days by the Numbers</h3>
                   <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Here is what our growing household community has accomplished together so far:</p>
                 </div>
 
@@ -215,7 +216,7 @@ function buildEmailHtml(params) {
                   Product Highlights
                 </div>
                 <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">
-                  What We Built for You in the Last 45 Days
+                  What We Built for You in the Last 50 Days
                 </h2>
                 <p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.6;">
                   We have been shipping updates continuously based directly on early adopter feedback. Here are the major highlights now live in your app:
@@ -377,12 +378,12 @@ function buildPlainText(params) {
 
   return `Hi ${firstName},
 
-When we launched ListMate just 45 days ago, our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
+When we launched ListMate 50 days ago (August 17th), our mission was simple: eliminate the everyday chaos of grocery shopping, duplicate purchases, and forgotten ingredients for families.
 
 You were among the very first to join and back us with a Lifetime Premium Subscription for ${hhName}. Your early belief gave this project life, and we are profoundly grateful for your partnership. You will always have permanent VIP access to every current and upcoming premium feature.
 
 ==================================================
-📊 45 DAYS BY THE NUMBERS
+📊 50 DAYS BY THE NUMBERS
 ==================================================
 Here is what our growing household community has accomplished together so far:
 
@@ -392,7 +393,7 @@ Here is what our growing household community has accomplished together so far:
 • 🏡 Total Active Households: ${stats.households.toLocaleString()} families
 
 ==================================================
-✨ WHAT WE BUILT FOR YOU IN THE LAST 45 DAYS
+✨ WHAT WE BUILT FOR YOU IN THE LAST 50 DAYS
 ==================================================
 
 1. Instant Trip Alerts & Requester-Only Routing (v1.10.3)
@@ -505,7 +506,7 @@ async function main() {
       console.log(`  ${i + 1}. [HH #${u.household_id}] ${u.household_name} | ${u.user_name} <${u.email}>`);
     });
     console.log(`\n--- SAMPLE SUBJECT ---`);
-    console.log(`⭐ Thank you for being an early adopter of ListMate (+ 45-day milestone & what's new)`);
+    console.log(`⭐ Thank you for being an early adopter of ListMate (+ 50-day milestone & what's new)`);
     console.log(`\n--- SAMPLE PLAIN TEXT ---`);
     console.log(buildPlainText({
       userName: users[0]?.user_name || 'Venkat Santhanam',
@@ -520,7 +521,7 @@ async function main() {
       process.exit(1);
     }
     console.log(`\n🚀 Sending test email to: ${testEmail}...`);
-    const subject = `⭐ Thank you for being an early adopter of ListMate (+ 45-day milestone & what's new)`;
+    const subject = `⭐ Thank you for being an early adopter of ListMate (+ 50-day milestone & what's new)`;
     const html = buildEmailHtml({
       userName: 'Early Adopter',
       householdName: 'Test Household',
@@ -559,7 +560,7 @@ async function main() {
     console.log(`\n🚀 DISPATCHING TO ALL ${users.length} PREMIUM USERS...`);
     let sentCount = 0;
     for (const u of users) {
-      const subject = `⭐ Thank you for being an early adopter of ListMate (+ 45-day milestone & what's new)`;
+      const subject = `⭐ Thank you for being an early adopter of ListMate (+ 50-day milestone & what's new)`;
       const html = buildEmailHtml({
         userName: u.user_name,
         householdName: u.household_name,
