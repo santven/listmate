@@ -413,3 +413,159 @@ def send_push_broadcast(title: str, body: str, data: Optional[Dict[str, str]] = 
     except Exception as e:
         logger.error(f"[PushHelper] Broadcast error: {e}")
         return {"sent": 0, "failed": 0, "error": str(e)}
+
+
+def notify_while_shopping_addition(store_id: int, household_id: int, adding_user_id: int,
+                                   adder_name: str, item_names: List[str],
+                                   store_name: Optional[str] = None) -> Dict[str, Any]:
+    """Alert active shoppers when a household member adds items to their current trip.
+    Supports two states:
+      1. Phase 2: Checkout Line Grace Window (completed trip within last 5 minutes) -> BYPASSES 2-min cooldown with urgency copy.
+      2. Phase 1: In the Aisles (active trip in progress) -> ENFORCES 2-minute cooldown window per shopper/store.
+      3. Strict self-exclusion (adding user is never notified).
+      4. Safe integer bounds (Falsiness rule: 0 vs None).
+    """
+    sid = None if (store_id is None or int(store_id) == 0) else int(store_id)
+    hhid = None if (household_id is None or int(household_id) == 0) else int(household_id)
+    adder_id = None if (adding_user_id is None or int(adding_user_id) == 0) else int(adding_user_id)
+
+    if not sid or not hhid:
+        return {"ok": False, "reason": "invalid_parameters", "notified": 0}
+
+    clean_item_names = [str(n).strip() for n in (item_names or []) if str(n).strip()]
+    if not clean_item_names:
+        return {"ok": False, "reason": "no_items", "notified": 0}
+
+    clean_adder = (str(adder_name or "").strip() or "A family member")
+
+    try:
+        authmod._init_schema()
+
+        # Resolve store name if not provided
+        resolved_store_name = str(store_name or "").strip()
+        if not resolved_store_name:
+            store_row = authmod._one("SELECT name FROM stores WHERE id = %s AND household_id = %s", (sid, hhid))
+            if store_row:
+                resolved_store_name = store_row.get("name") or "the store"
+            else:
+                resolved_store_name = "the store"
+
+        # Item summary text
+        if len(clean_item_names) == 1:
+            item_desc = f"'{clean_item_names[0]}'"
+        elif len(clean_item_names) == 2:
+            item_desc = f"'{clean_item_names[0]}' and '{clean_item_names[1]}'"
+        else:
+            item_desc = f"{len(clean_item_names)} items: '{clean_item_names[0]}', '{clean_item_names[1]}', and {len(clean_item_names) - 2} more"
+
+        notified_count = 0
+        suppressed_count = 0
+        handled_shoppers = set()
+
+        # ---------------------------------------------------------------------
+        # 1. PHASE 2: Checkout Line Grace Window (Trip completed < 5 mins ago)
+        # ---------------------------------------------------------------------
+        # In this window, the shopper just tapped "Finish Trip" and is likely standing in the checkout line.
+        # Cooldown is BYPASSED (high-urgency alert), with a 1-min rapid flood debounce.
+        checkout_shoppers = authmod._run("""
+            SELECT DISTINCT purchased_by_user_id
+            FROM list_items
+            WHERE store_id = %s AND household_id = %s
+              AND trip_notified_at IS NOT NULL
+              AND trip_notified_at >= NOW() - INTERVAL '5 minutes'
+              AND purchased_by_user_id IS NOT NULL
+              AND (purchased_by_user_id != %s OR %s IS NULL)
+        """, (sid, hhid, adder_id, adder_id))
+
+        for row in checkout_shoppers:
+            uid = row.get("purchased_by_user_id")
+            if not uid or int(uid) == 0 or int(uid) in handled_shoppers:
+                continue
+            uid = int(uid)
+            handled_shoppers.add(uid)
+
+            # 1-minute flood protection specifically for checkout additions (prevent rapid multiple clicks buzzing repeatedly)
+            recent_checkout_push = authmod._one("""
+                SELECT id FROM push_notifications_log
+                WHERE target_type = 'user' AND target_id = %s
+                  AND custom_data->>'type' = 'checkout_line_addition'
+                  AND custom_data->>'store_id' = %s
+                  AND created_at >= NOW() - INTERVAL '1 minute'
+            """, (uid, str(sid)))
+
+            if recent_checkout_push:
+                suppressed_count += 1
+                continue
+
+            # Urgent checkout line push
+            c_title = "🛒 Catch it before checkout!"
+            c_body = f"{clean_adder} just added {item_desc} to {resolved_store_name}. Grab it before you leave!"
+            push_data = {
+                "type": "checkout_line_addition",
+                "action": "open_store",
+                "store_id": str(sid),
+                "store_name": resolved_store_name,
+                "url": f"/?store_id={sid}"
+            }
+            send_push_to_user(user_id=uid, title=c_title, body=c_body, data=push_data)
+            notified_count += 1
+
+        # ---------------------------------------------------------------------
+        # 2. PHASE 1: In the Aisles (Active Trip In-Progress)
+        # ---------------------------------------------------------------------
+        # Shopper checked off items today that have not yet been marked completed (trip_notified_at IS NULL).
+        # Enforces a 2-minute cooldown window to avoid spamming the shopper.
+        active_shoppers = authmod._run("""
+            SELECT DISTINCT purchased_by_user_id
+            FROM list_items
+            WHERE store_id = %s AND household_id = %s
+              AND purchased = TRUE
+              AND trip_notified_at IS NULL
+              AND (purchased_at >= NOW() - INTERVAL '45 minutes' OR (purchased_at IS NULL AND added_at >= CURRENT_DATE))
+              AND purchased_by_user_id IS NOT NULL
+              AND (purchased_by_user_id != %s OR %s IS NULL)
+        """, (sid, hhid, adder_id, adder_id))
+
+        for row in active_shoppers:
+            uid = row.get("purchased_by_user_id")
+            if not uid or int(uid) == 0 or int(uid) in handled_shoppers:
+                continue
+            uid = int(uid)
+            handled_shoppers.add(uid)
+
+            # 2-Minute Cooldown Window check
+            recent_active_push = authmod._one("""
+                SELECT id FROM push_notifications_log
+                WHERE target_type = 'user' AND target_id = %s
+                  AND (custom_data->>'type' = 'active_trip_addition' OR custom_data->>'type' = 'checkout_line_addition')
+                  AND custom_data->>'store_id' = %s
+                  AND created_at >= NOW() - INTERVAL '2 minutes'
+            """, (uid, str(sid)))
+
+            if recent_active_push:
+                print(f"[WhileShoppingPush] Cooldown active (2 min) for User #{uid} at Store #{sid}. Suppressed.", flush=True)
+                suppressed_count += 1
+                continue
+
+            # Standard in-aisle addition push
+            a_title = f"🛒 {clean_adder} added to your {resolved_store_name} trip"
+            a_body = f"Added {item_desc} to the list."
+            push_data = {
+                "type": "active_trip_addition",
+                "action": "open_store",
+                "store_id": str(sid),
+                "store_name": resolved_store_name,
+                "url": f"/?store_id={sid}"
+            }
+            send_push_to_user(user_id=uid, title=a_title, body=a_body, data=push_data)
+            notified_count += 1
+
+        return {
+            "ok": True,
+            "notified": notified_count,
+            "suppressed": suppressed_count,
+            "store_name": resolved_store_name
+        }
+    except Exception as e:
+        print(f"[notify_while_shopping_addition error]: {e}", flush=True)
+        return {"ok": False, "error": str(e), "notified": 0}
