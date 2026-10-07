@@ -599,20 +599,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           });
         }
       }, 500);
-    } else if (actionParam === 'open_store' || (urlParams.has('store_id') && !modalParam)) {
-      const storeIdParam = parseInt(urlParams.get('store_id'));
-      try {
-        const cleanParams = new URLSearchParams(window.location.search);
-        cleanParams.delete('action');
-        cleanParams.delete('store_id');
-        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
-        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
-      } catch(e) {}
-      if (storeIdParam) {
-        setTimeout(() => {
-          if (typeof openStore === 'function') openStore(storeIdParam);
-        }, 400);
-      }
     } else if (screenParam === 'globalVisits') {
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
@@ -6248,11 +6234,6 @@ window.initPushNotifications = async function() {
     // Handle push received while app is in foreground
     PushPlugin.addListener('pushNotificationReceived', (notification) => {
       console.log('[Push] Foreground notification received:', notification);
-      const data = (notification && notification.data) || {};
-      if (data.type === 'active_trip_addition' || data.type === 'checkout_line_addition') {
-        if (typeof loadSuggestions === 'function') loadSuggestions();
-        if (typeof renderHome === 'function') renderHome();
-      }
       if (typeof toast === 'function' && notification.title) {
         toast(`🔔 ${notification.title}: ${notification.body || ''}`);
       }
@@ -6267,22 +6248,6 @@ window.initPushNotifications = async function() {
       const modal = (data && data.modal) || notifObj.modal || '';
       const notifType = (data && data.type) || notifObj.type || '';
       const targetUrl = (data && data.url) || notifObj.url || '';
-
-      const isWhileShopping = notifType === 'active_trip_addition' || 
-                              notifType === 'checkout_line_addition' || 
-                              action === 'open_store';
-      if (isWhileShopping) {
-        const sid = parseInt(data.store_id || notifObj.store_id);
-        console.log('[Push] Handled while-shopping addition push tap. Opening store:', sid);
-        setTimeout(() => {
-          if (sid && typeof openStore === 'function') {
-            openStore(sid);
-          } else if (typeof renderHome === 'function') {
-            renderHome();
-          }
-        }, 150);
-        return;
-      }
 
       const isTripCompleted = notifType === 'trip_completed' || 
                               action === 'trip_completed' || 

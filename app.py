@@ -2449,21 +2449,6 @@ def add_recipe_to_list_endpoint():
                     (store_id, name, category, user_name, quantity, hhid, recipe_title, authmod.get_user_id())
                 )
                 added_count += 1
-
-        if added_count > 0:
-            try:
-                import push_helper
-                push_helper.notify_while_shopping_addition(
-                    store_id=int(store_id),
-                    household_id=int(hhid),
-                    adding_user_id=int(authmod.get_user_id() or 0),
-                    adder_name=user_name or "A family member",
-                    item_names=[recipe_title or "recipe ingredients"],
-                    store_name=None
-                )
-            except Exception as pe:
-                print(f"[recipe add push error]: {pe}", flush=True)
-
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
     finally:
         db.close()
@@ -3057,21 +3042,6 @@ def add_to_list():
             (_hh(), store_id, name, existing_category, quantity, get_display_name(), authmod.get_user_id()),
         )
         db.commit()
-
-        # Alert active shoppers (in aisles or checkout line) via push
-        try:
-            import push_helper
-            push_helper.notify_while_shopping_addition(
-                store_id=int(store_id),
-                household_id=int(_hh()),
-                adding_user_id=int(authmod.get_user_id() or 0),
-                adder_name=get_display_name() or "A family member",
-                item_names=[name],
-                store_name=store_name
-            )
-        except Exception as pe:
-            print(f"[add_to_list push error]: {pe}", flush=True)
-
         row = db.execute("SELECT id FROM list_items WHERE store_id = ? AND household_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND purchased = FALSE ORDER BY id DESC LIMIT 1",
                          (store_id, _hh(), name)).fetchone()
         return jsonify({"ok": True, "id": row["id"] if row else 0})
@@ -3495,7 +3465,6 @@ def sync_offline_actions():
 
     db = get_db()
     applied_count = 0
-    added_items_by_store = {}
     try:
         hh_id = _hh()
         display_name = get_display_name()
@@ -3552,9 +3521,6 @@ def sync_offline_actions():
                                     except Exception:
                                         pass
                             applied_count += 1
-                            if store_id not in added_items_by_store:
-                                added_items_by_store[store_id] = {"store_name": store_name, "items": []}
-                            added_items_by_store[store_id]["items"].append(name)
 
             elif act_type == "toggle":
                 item_id = act_data.get("id")
@@ -3614,22 +3580,6 @@ def sync_offline_actions():
                 applied_count += 1
 
         db.commit()
-
-        # Alert active shoppers about items added in this sync
-        if added_items_by_store:
-            try:
-                import push_helper
-                for sid, sdata in added_items_by_store.items():
-                    push_helper.notify_while_shopping_addition(
-                        store_id=int(sid),
-                        household_id=int(hh_id),
-                        adding_user_id=int(current_uid or 0),
-                        adder_name=display_name or "A family member",
-                        item_names=sdata["items"],
-                        store_name=sdata.get("store_name")
-                    )
-            except Exception as pe:
-                print(f"[sync_batch while_shopping push error]: {pe}", flush=True)
 
         items = db.execute("""
             SELECT l.*, s.name as store_name, s.category_order as store_category_order
