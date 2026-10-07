@@ -3437,22 +3437,6 @@ def move_list_item(item_id):
             )
 
         db.commit()
-
-        # If item was moved to a different store, alert active shoppers at the target store
-        if target_store_id and item.get("store_id") and int(target_store_id) != int(item["store_id"]):
-            try:
-                import push_helper
-                push_helper.notify_while_shopping_addition(
-                    store_id=int(target_store_id),
-                    household_id=int(_hh()),
-                    adding_user_id=int(authmod.get_user_id() or 0),
-                    adder_name=get_display_name() or "A family member",
-                    item_names=[item["name"]],
-                    store_name=None
-                )
-            except Exception as pe:
-                print(f"[move_list_item push error]: {pe}", flush=True)
-
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3622,14 +3606,8 @@ def sync_offline_actions():
                 item_id = act_data.get("id")
                 target_store_id = act_data.get("store_id")
                 if item_id and target_store_id and not str(item_id).startswith("temp_"):
-                    mv_item = db.execute("SELECT name, store_id FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id)).fetchone()
                     db.execute("UPDATE list_items SET store_id = ? WHERE id = ? AND household_id = ?", (target_store_id, item_id, hh_id))
                     applied_count += 1
-                    if mv_item and int(target_store_id) != int(mv_item["store_id"]):
-                        if target_store_id not in added_items_by_store:
-                            st_row = db.execute("SELECT name FROM stores WHERE id = ? AND household_id = ?", (target_store_id, hh_id)).fetchone()
-                            added_items_by_store[target_store_id] = {"store_name": (st_row["name"] if st_row else "the store"), "items": []}
-                        added_items_by_store[target_store_id]["items"].append(mv_item["name"])
 
             elif act_type == "clear":
                 db.execute("DELETE FROM list_items WHERE purchased = FALSE AND household_id = ?", (hh_id,))

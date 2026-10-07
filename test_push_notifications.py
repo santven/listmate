@@ -359,25 +359,6 @@ class TestPushNotifications(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertEqual(res["notified"], 1)
 
-    def test_while_shopping_move_item_to_active_store_dispatch(self):
-        # User 2 is actively shopping at Costco (Store 10)
-        authmod.register_push_token(user_id=2, household_id=1, token="shopper_token_2", platform="android")
-        self.mock_active_shoppers = [2]
-        self.mock_cooldown_active = False
-
-        # Partner (User 1) moves "Dish Soap" from General List to Costco
-        res = push_helper.notify_while_shopping_addition(
-            store_id=10,
-            household_id=1,
-            adding_user_id=1,
-            adder_name="Partner",
-            item_names=["Dish Soap"],
-            store_name=None  # Verifies store name lookup ("Costco")
-        )
-        self.assertTrue(res["ok"])
-        self.assertEqual(res["notified"], 1)
-        self.assertEqual(res["store_name"], "Costco")
-
 
 if __name__ == "__main__":
     unittest.main()
