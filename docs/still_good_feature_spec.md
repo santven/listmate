@@ -127,11 +127,49 @@ CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_i
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/still-good` | `GET` | Returns active items filtered by location/status along with household stats and cycling celebration messages. |
-| `/api/still-good` | `POST` | Creates a new leftover or batch-cooked meal item with default or custom shelf-life. |
+| `/api/still-good` | `GET` | Returns active items filtered by location/status along with household stats, AI tips, and cycling celebration messages. |
+| `/api/still-good` | `POST` | Creates a new leftover or batch-cooked meal item with app-recommended or custom nudge shelf-life. |
 | `/api/still-good/<id>/action` | `POST` | Executes state transition: `consume`, `discard`, `move` (fridge ↔ freezer), or `thaw`. |
 | `/api/still-good/<id>` | `PUT` | Updates item metadata (name, portions, target date, notes). |
 | `/api/still-good/<id>` | `DELETE` | Permanently deletes an item record. |
+
+---
+
+## 4.3 App-Based Shelf-Life Recommendation Engine (Issue #595)
+
+**Issue**: [#595](https://github.com/santven/listmate/issues/595)  
+**Goal**: Remove manual calendar date picking cognitive load; replace with intelligent, conservative food-safety defaults and one-tap nudge chips.
+
+### Design Principles
+1. **Zero Calendar Friction**: Users should never have to manually consult a calendar to figure out when a leftover spoils. The modal immediately presents a clear recommendation card:
+   * **Takeout / Restaurant**: **24 hours / Tomorrow** (*"Restaurant takeout degrades quickly in the fridge; seafood/dressed salads strictly 1 day"*).
+   * **Home-Cooked Leftovers**: **3 days** (*"USDA standard safe window for home-cooked meals"*).
+   * **Batch Cook in Fridge**: **4–5 days** (*"Hearty stews, soups, or batch cooks in fridge"*).
+   * **Freezer Storage**: **~60 days / 2 months** (*"Freezing pauses spoilage; best within 2 months for flavor"*).
+2. **One-Tap Nudge Chips**: Instead of a date picker, four preset nudge chips allow instant adjustments:
+   * `[ Tomorrow ]` (1 day)
+   * `[ 3 days ]` (Home meal)
+   * `[ 5 days ]` (Batch cook / soups)
+   * `[ 2 months ]` (Freezer)
+
+---
+
+## 4.4 Midnight GMT Batch AI Estimator (`still_good_ai.py` & `scripts/cron_daily.py`)
+
+To further personalize shelf-life without incurring token bloat or user latency, Still Good uses an asynchronous daily batch AI process.
+
+### Operational Characteristics
+* **Schedule**: Runs once per day during the midnight GMT cron cycle (`scripts/cron_daily.py`).
+* **Token Efficiency**: Aggregates all unestimated active items (`ai_estimated = FALSE`) into a **single batch JSON prompt** sent to Gemini Flash.
+* **Idempotency & One-Time Enhancement**: Sets `ai_estimated = TRUE`, `ai_estimated_at = NOW()`, `shelf_life_days`, and `ai_tip`. Each item is only processed once by AI in its entire lifecycle, conserving LLM tokens.
+* **Strict Food Safety Prompting**: AI is instructed to be conservative:
+  - Seafood / sushi / dressed salads: strictly 1 day.
+  - Cooked rice / pasta / grains: max 2 days (bacillus cereus risk).
+  - Meats / poultry: 2–3 days.
+  - Soups / curries / lentils: 3–4 days.
+  - Generates concise 3–6 word action tips (e.g. *"Reheat until steaming hot"*, *"Keep in airtight container"*).
+* **Graceful Heuristic Fallback**: If no Gemini key is configured or API limits are reached, the system falls back to conservative culinary heuristics without breaking.
+* **Manual / Debug Execution**: Can be run ad-hoc via `python3 scripts/cron_daily.py --still-good-ai`.
 
 ---
 

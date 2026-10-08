@@ -1038,15 +1038,25 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
-    <!-- Target Date / Expiry -->
+    <!-- Recommended Shelf-Life Display -->
     <div style="margin-bottom:16px;">
-      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Target consume-by date</label>
-      <input type="date" id="sgInputConsumeBy" style="width:100%; padding:10px 14px; font-size:15px; border:1.5px solid var(--border); border-radius:10px; background:#fff; outline:none; margin-bottom:6px;">
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        <button type="button" onclick="setSgModalDays(3)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+3 days</button>
-        <button type="button" onclick="setSgModalDays(5)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+5 days</button>
-        <button type="button" onclick="setSgModalDays(30)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+1 month</button>
-        <button type="button" onclick="setSgModalDays(60)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+2 months</button>
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Recommended Shelf Life</label>
+      <div id="sgRecCard" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:12px; padding:12px 14px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">💡</span>
+          <div>
+            <div id="sgRecTitle" style="font-size:13px; font-weight:700; color:#15803d;">Best within 24 hours (Eat by tomorrow)</div>
+            <div id="sgRecSub" style="font-size:11px; color:#166534; opacity:0.85; margin-top:2px;">Restaurant takeout degrades quickly in the fridge</div>
+          </div>
+        </div>
+      </div>
+      <!-- Quick Adjustment Chips (no calendar date picker needed) -->
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:11px; color:var(--muted); font-weight:600; margin-right:2px;">Nudge:</span>
+        <button type="button" id="sgChip1d" onclick="setSgModalDays(1, 'Eat within 24 hours (Tomorrow)', 'Best for high-perishable or seafood/takeout meals')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Tomorrow</button>
+        <button type="button" id="sgChip3d" onclick="setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">3 days</button>
+        <button type="button" id="sgChip5d" onclick="setSgModalDays(5, 'Eat within 5 days', 'Hearty stews, soups, or batch cooks in fridge')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">5 days</button>
+        <button type="button" id="sgChip60d" onclick="setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">2 months</button>
       </div>
     </div>
 
@@ -4062,6 +4072,7 @@ function renderStillGoodItems() {
               typeBadge +
               '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:3px 7px; border-radius:6px;">' + portionsText + '</span>' +
               (item.notes ? '<span style="font-size:11px; color:var(--muted); font-style:italic;">' + escapeHtml(item.notes) + '</span>' : '') +
+              (item.ai_tip ? '<span style="font-size:11px; font-weight:600; color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; padding:2px 7px; border-radius:6px;" title="AI Conservative Safe Shelf-Life Tip">🤖 ' + escapeHtml(item.ai_tip) + '</span>' : '') +
             '</div>' +
           '</div>' +
           '<div style="flex-shrink:0;">' +
@@ -4204,6 +4215,9 @@ async function stillGoodAction(itemId, action) {
   }
 }
 
+var sgModalDays = 3;
+var sgModalConsumeBy = '';
+
 function openAddStillGoodModal(preLocation) {
   sgModalLocation = preLocation || sgActiveTab || 'fridge';
   sgModalType = 'home_cooked';
@@ -4217,7 +4231,6 @@ function openAddStillGoodModal(preLocation) {
   selectSgModalLocation(sgModalLocation);
   selectSgModalType(sgModalType);
   updateSgModalServingsDisplay();
-  setSgModalDays(sgModalLocation === 'freezer' ? 60 : 4);
 
   var modal = document.getElementById('stillGoodAddModal');
   if (modal) modal.classList.add('active');
@@ -4244,7 +4257,13 @@ function selectSgModalLocation(loc) {
       zBtn.style.borderColor = 'var(--border)';
       zBtn.style.color = 'var(--muted)';
     }
-    setSgModalDays(sgModalType === 'restaurant' ? 3 : 4);
+    if (sgModalType === 'restaurant') {
+      setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
+    } else if (sgModalType === 'batch_cook') {
+      setSgModalDays(5, 'Eat within 5 days in fridge', 'Hearty stews, soups, or batch cooks in fridge');
+    } else {
+      setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
+    }
   } else {
     if (zBtn) {
       zBtn.style.background = '#eff6ff';
@@ -4256,7 +4275,7 @@ function selectSgModalLocation(loc) {
       fBtn.style.borderColor = 'var(--border)';
       fBtn.style.color = 'var(--muted)';
     }
-    setSgModalDays(60);
+    setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
   }
 }
 
@@ -4278,18 +4297,20 @@ function selectSgModalType(type) {
     hBtn.style.background = '#f0fdf4';
     hBtn.style.borderColor = 'var(--green)';
     hBtn.style.color = 'var(--green-dark)';
-    if (sgModalLocation === 'fridge') setSgModalDays(4);
+    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    else setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
   } else if (type === 'restaurant' && rBtn) {
     rBtn.style.background = '#fef3c7';
     rBtn.style.borderColor = '#f59e0b';
     rBtn.style.color = '#92400e';
-    if (sgModalLocation === 'fridge') setSgModalDays(3);
+    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    else setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
   } else if (type === 'batch_cook' && bBtn) {
     bBtn.style.background = '#e0e7ff';
     bBtn.style.borderColor = '#6366f1';
     bBtn.style.color = '#3730a3';
-    if (sgModalLocation === 'freezer') setSgModalDays(60);
-    else setSgModalDays(5);
+    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    else setSgModalDays(5, 'Eat within 5 days in fridge', 'Hearty stews, soups, or batch cooks in fridge');
   }
 }
 
@@ -4305,14 +4326,51 @@ function updateSgModalServingsDisplay() {
   }
 }
 
-function setSgModalDays(days) {
+function setSgModalDays(days, title, subtitle) {
+  sgModalDays = days;
   var d = new Date();
   d.setDate(d.getDate() + days);
   var yyyy = d.getFullYear();
   var mm = String(d.getMonth() + 1).padStart(2, '0');
   var dd = String(d.getDate()).padStart(2, '0');
-  var input = document.getElementById('sgInputConsumeBy');
-  if (input) input.value = yyyy + '-' + mm + '-' + dd;
+  sgModalConsumeBy = yyyy + '-' + mm + '-' + dd;
+
+  var titleEl = document.getElementById('sgRecTitle');
+  var subEl = document.getElementById('sgRecSub');
+  if (titleEl && title) titleEl.textContent = title;
+  else if (titleEl) {
+    if (days === 1) titleEl.textContent = 'Best within 24 hours (Eat by tomorrow)';
+    else if (days >= 30) titleEl.textContent = 'Good for ~' + Math.round(days / 30) + ' months in freezer';
+    else titleEl.textContent = 'Eat within ' + days + ' days';
+  }
+
+  if (subEl && subtitle) subEl.textContent = subtitle;
+  else if (subEl) {
+    if (days === 1) subEl.textContent = 'Restaurant takeout degrades quickly in fridge';
+    else if (days >= 30) subEl.textContent = 'Freezing pauses spoilage; best within 2 months for flavor';
+    else subEl.textContent = 'Safe conservative window for refrigerated meals';
+  }
+
+  // Visual highlight for active nudge chip
+  var chips = [
+    { id: 'sgChip1d', days: 1 },
+    { id: 'sgChip3d', days: 3 },
+    { id: 'sgChip5d', days: 5 },
+    { id: 'sgChip60d', days: 60 }
+  ];
+  chips.forEach(function(c) {
+    var btn = document.getElementById(c.id);
+    if (!btn) return;
+    if (c.days === days) {
+      btn.style.background = '#f0fdf4';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green-dark)';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--text)';
+    }
+  });
 }
 
 async function submitAddStillGood() {
@@ -4326,9 +4384,6 @@ async function submitAddStillGood() {
   var notesInput = document.getElementById('sgInputNotes');
   var notes = notesInput ? notesInput.value.trim() : '';
 
-  var consumeByInput = document.getElementById('sgInputConsumeBy');
-  var consumeBy = consumeByInput ? consumeByInput.value : '';
-
   var saveBtn = document.getElementById('btnSaveStillGood');
   if (saveBtn) {
     saveBtn.disabled = true;
@@ -4341,7 +4396,7 @@ async function submitAddStillGood() {
       location: sgModalLocation,
       item_type: sgModalType,
       servings: sgModalServings,
-      consume_by: consumeBy,
+      consume_by: sgModalConsumeBy,
       notes: notes
     };
 

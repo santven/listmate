@@ -167,9 +167,10 @@ _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS app_invites (id SERIAL PRIMARY KEY, sender_email TEXT, household_id INTEGER, recipient_email TEXT NOT NULL, sent_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS item_taxonomy (id SERIAL PRIMARY KEY, normalized_name VARCHAR(120) UNIQUE NOT NULL, category VARCHAR(60) NOT NULL, source VARCHAR(30) DEFAULT 'manual', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_item_taxonomy_norm ON item_taxonomy(normalized_name)",
-    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL DEFAULT 1, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', ai_estimated BOOLEAN NOT NULL DEFAULT FALSE, ai_estimated_at TIMESTAMP, shelf_life_days INTEGER, ai_tip TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_status ON still_good_items(household_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_id, location)",
+    "CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)",
 ]
 
 def init_db():
@@ -241,6 +242,16 @@ def init_db():
         try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
         except Exception: pass
         try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+        except Exception: pass
+        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated BOOLEAN NOT NULL DEFAULT FALSE")
+        except Exception: pass
+        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated_at TIMESTAMP")
+        except Exception: pass
+        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER")
+        except Exception: pass
+        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''")
+        except Exception: pass
+        try: db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)")
         except Exception: pass
 
         default_aisle_patterns = [
