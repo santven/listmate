@@ -1,0 +1,146 @@
+# Feature Specification: "Still Good" — Leftover & Freezer Meal Tracker (Issue #592)
+
+**Issue**: [#592](https://github.com/santven/listmate/issues/592)  
+**Status**: Shipped to Staging (PR #593)  
+**Target Milestone**: v1.8.x (Staging)
+
+---
+
+## 1. Executive Summary & Problem Space
+
+Households routinely experience food waste and friction around prepared food management across three major everyday situations:
+
+1. **Restaurant Takeout Leftovers**: People dine out or order takeout and bring home leftovers with good intentions. Without a visual reminder, the container sits behind other groceries and quietly moves from restaurant to fridge to trash.
+2. **Daily Meal Leftovers**: Home-cooked lunch and dinner meals packed into containers for the next day get lost behind fresh items and are forgotten until they spoil.
+3. **Sunday Batch / Mass Cooking Fatigue**: Households dedicate Sunday afternoons to batch-cooking multiple portions/boxes of curries, soups, or grains and store them in the freezer. After 2 to 3 days, palate fatigue sets in. The remaining boxes get pushed deeper into the freezer and forgotten for months. While food in the freezer does not spoil quickly, it loses quality and takes up valuable space without being consumed in a reasonable timeframe.
+
+### The Emotional Tone & Psychology: "Thoughtful Kitchen"
+Prior waste-tracking paradigms frequently invoke guilt or negative phrasing such as *"saved from trash"*, which inadvertently makes users feel like their stomachs are being treated as garbage bins. 
+
+**Still Good** reframes the experience into positive reinforcement, mindfulness, and tangible household wins:
+* **Purpose**: *"Meals put to good use"*
+* **Achievement**: *"Kitchen wins this month"*
+* **Financial Reward**: *"$40 kept in your pocket"* (estimating ~$8 saved per meal enjoyed rather than discarded)
+* **Mindfulness**: *"Thoughtful Kitchen: Meals enjoyed"*
+
+---
+
+## 2. Information Architecture & Navigation
+
+ListMate does not use bottom tabs; key feature destinations (Store Visits, Recipe Planner, Analytics) function as dedicated full screens.
+
+### 2.1 Navigation Hooks
+* **Home Screen Hook**: The Recipe Planner button on the primary grocery list screen—which had low daily engagement—is replaced by the high-frequency hook **`🍲 Still Good`**.
+* **Hamburger Menu Retention**: To ensure existing users can always access both tools, the hamburger drawer includes:
+  - `📋 Grocery List`
+  - `🍲 Still Good`
+  - `🍳 Recipe Planner`
+  - `🗓️ Store Visits`
+  - `📊 Analytics`
+* **Deep Linking**: Direct URL routing via query parameter: `/?screen=stillGood` (also supporting `?screen=still_good`).
+
+---
+
+## 3. UI/UX Specification
+
+### 3.1 Thoughtful Kitchen Celebration Banner
+Mounted at the top of the Still Good screen, this card cyclically displays four positive milestones:
+1. `✨ 5 meals put to good use`
+2. `🏆 5 kitchen wins this month`
+3. `💵 $40 kept in your pocket`
+4. `🌿 Thoughtful Kitchen: 5 meals enjoyed`
+
+* **Cadence**: Automatically transitions every 5 seconds with a gentle fade animation, or updates immediately when tapped.
+* **Progress Dots**: Four dot indicators illustrate rotation sequence.
+* **Zero State**: Displays encouraging welcome guidance when a household begins logging meals.
+
+### 3.2 Dual-Storage Tabs: Refrigerator vs. Freezer
+* **`🧊 Refrigerator (<count>)`**: Focused on immediate leftovers with 3–4 day target shelf lives.
+* **`❄️ Freezer (<count>)`**: Focused on mass-cooked boxes, frozen staples, and meals preserved for 30–90 days.
+
+### 3.3 Thawing Alert Bar
+When freezer items are marked as **Thawing**, a prominent soft-blue alert bar informs household members:
+> `💧 1 freezer meal thawing for dinner`
+This helps avoid redundant cooking when a frozen meal is already prepped to eat.
+
+### 3.4 Multi-Modal Interaction: Swiping & Tap-Accessible Controls
+The card interface supports dual interaction paradigms with zero Capacitor plugins or native iOS/Android bridge overhead:
+
+#### Native Web Touch Gestures
+* **Swipe Right (→ Green Reveal)**: Passing the 85px threshold triggers the **Enjoyed** action, firing a joyful micro-confetti burst (`canvas-confetti`) and immediately incrementing the household's monthly kitchen win count.
+* **Swipe Left (← Red Reveal)**: Passing the -85px threshold marks the item as **Discarded**.
+
+#### Desktop & Accessibility Direct Buttons
+On desktop or for users who prefer direct tapping:
+* `✓ Enjoyed` (Green button): One-tap consume with celebration toast.
+* `❄️ Freeze` (On fridge cards): Moves expiring fridge items to the freezer, extending expiration to 60 days.
+* `💧 Thaw` (On freezer cards): Toggles the thawing indicator for evening dinner planning.
+* `🧊 Move to Fridge` (On thawing freezer cards): Completes defrost transfer into the active fridge queue.
+* `🗑` (Trash icon): Discards or removes the item.
+
+### 3.5 Quick Add Bottom Sheet
+Accessible via the `+ Add Item` header button:
+* **Food Name**: Input with examples (`"Chicken Tikka"`, `"Veggie Biryani"`, `"Sunday Chili"`).
+* **Storage Location Toggle**: `[ 🧊 Refrigerator ]` vs. `[ ❄️ Freezer ]`.
+* **Food Category Badges**:
+  - `🍳 Home Meal` (Default target: +4 days)
+  - `🥡 Restaurant Leftover` (Default target: +3 days)
+  - `🍲 Sunday Batch Cook` (Default target: +60 days for freezer / +5 days for fridge)
+* **Portions / Boxes Stepper**: Counter stepper (`[-] 1 portion / box [+]`).
+* **Target Consume-By Date**: HTML5 date input with one-tap quick jump buttons (`+3 days`, `+5 days`, `+1 month`, `+2 months`).
+* **Notes**: Optional memo (e.g. `"Mild spice"`, `"Box 2 of 4"`).
+
+### 3.6 Kitchen Wins Modal
+Accessible via `🏆 Wins`:
+* Displays month-to-date kitchen wins and calculated dollar savings.
+* Provides encouraging education on household impact.
+
+---
+
+## 4. Technical Architecture & Database Design
+
+### 4.1 PostgreSQL Schema (`still_good_items`)
+```sql
+CREATE TABLE IF NOT EXISTS still_good_items (
+    id SERIAL PRIMARY KEY,
+    household_id INTEGER NOT NULL DEFAULT 1,
+    name TEXT NOT NULL,
+    location TEXT NOT NULL DEFAULT 'fridge',    -- 'fridge' or 'freezer'
+    item_type TEXT NOT NULL DEFAULT 'home_cooked', -- 'restaurant', 'home_cooked', 'batch_cook', 'other'
+    servings INTEGER NOT NULL DEFAULT 1,
+    date_added DATE NOT NULL DEFAULT CURRENT_DATE,
+    consume_by DATE,
+    status TEXT NOT NULL DEFAULT 'active',      -- 'active', 'consumed', 'discarded'
+    consumed_at TIMESTAMP,
+    discarded_at TIMESTAMP,
+    thawing BOOLEAN NOT NULL DEFAULT FALSE,
+    notes TEXT DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_still_good_hh_status ON still_good_items(household_id, status);
+CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_id, location);
+```
+
+### 4.2 REST API Specification
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/still-good` | `GET` | Returns active items filtered by location/status along with household stats and cycling celebration messages. |
+| `/api/still-good` | `POST` | Creates a new leftover or batch-cooked meal item with default or custom shelf-life. |
+| `/api/still-good/<id>/action` | `POST` | Executes state transition: `consume`, `discard`, `move` (fridge ↔ freezer), or `thaw`. |
+| `/api/still-good/<id>` | `PUT` | Updates item metadata (name, portions, target date, notes). |
+| `/api/still-good/<id>` | `DELETE` | Permanently deletes an item record. |
+
+---
+
+## 5. Future Roadmap & Iterations
+
+1. **Push Notifications**:
+   - Timezone-aware 11:30 AM reminder: *"You have Chicken Tikka in the fridge ready for lunch!"*
+   - Evening dinner thaw reminder for freezer items flagged for today.
+2. **Inventory to Grocery List Restock**:
+   - When the final box of a Sunday batch cook is consumed, prompt: *"Enjoyed your last box of Lentil Soup? Add ingredients to your grocery list for Sunday."*
+3. **Household Push Alerts**:
+   - When a family member marks takeout leftovers as eaten or thawing, optionally inform the household so nobody double-cooks.
