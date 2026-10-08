@@ -2657,7 +2657,9 @@ def still_good_create_endpoint():
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
         if not name:
-            return jsonify({"error": "Item name is required"}), 400
+            from datetime import date
+            day_name = date.today().strftime("%A")
+            name = f"{day_name} left overs"
 
         location = (data.get("location") or "fridge").strip().lower()
         if location not in ["fridge", "freezer"]:
@@ -2821,33 +2823,76 @@ def still_good_item_endpoint(item_id):
             db.execute("DELETE FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid))
             return jsonify({"ok": True})
 
+        cur = db.execute(
+            "SELECT name, location, item_type, servings, notes, consume_by, ai_estimated "
+            "FROM still_good_items WHERE id = ? AND household_id = ?",
+            (item_id, hhid)
+        )
+        existing = cur.fetchone()
+        if not existing:
+            return jsonify({"ok": False, "error": "Item not found"}), 404
+
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
         location = (data.get("location") or "").strip().lower()
+        item_type = (data.get("item_type") or "").strip().lower()
         consume_by = (data.get("consume_by") or "").strip()
         servings = data.get("servings")
         notes = data.get("notes")
 
         updates = []
         params = []
-        if name:
+        name_changed = False
+        other_changed = False
+
+        if name and name != existing.get("name"):
+            name_changed = True
             updates.append("name = ?")
             params.append(name)
+
         if location in ["fridge", "freezer"]:
+            if location != (existing.get("location") or "").lower():
+                other_changed = True
             updates.append("location = ?")
             params.append(location)
+
+        if item_type in ["home_cooked", "restaurant", "batch_cook"]:
+            if item_type != (existing.get("item_type") or "").lower():
+                other_changed = True
+            updates.append("item_type = ?")
+            params.append(item_type)
+
         if consume_by:
+            old_consume = str(existing.get("consume_by") or "")[:10]
+            if consume_by != old_consume:
+                other_changed = True
             updates.append("consume_by = ?::date")
             params.append(consume_by)
+
         if servings is not None:
             try:
+                s_int = max(1, int(servings))
+                if s_int != existing.get("servings"):
+                    other_changed = True
                 updates.append("servings = ?")
-                params.append(max(1, int(servings)))
+                params.append(s_int)
             except (ValueError, TypeError):
                 pass
+
         if notes is not None:
+            clean_notes = notes.strip()
+            if clean_notes != (existing.get("notes") or "").strip():
+                other_changed = True
             updates.append("notes = ?")
-            params.append(notes.strip())
+            params.append(clean_notes)
+
+        # Rule: if only name changes, do nothing to AI estimation columns.
+        # If anything other than name changes, if AI estimation was already done, null those values.
+        if other_changed and existing.get("ai_estimated"):
+            updates.append("ai_estimated = FALSE")
+            updates.append("ai_estimated_at = NULL")
+            updates.append("shelf_life_days = NULL")
+            updates.append("ai_tip = ''")
 
         if updates:
             updates.append("updated_at = NOW()")

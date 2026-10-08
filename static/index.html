@@ -371,6 +371,7 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
 
 #btnOpenStillGood.discovery-halo {
   border-radius: 10px !important;
+  box-shadow: 0 0 0 2px #fef3c7, 0 0 12px rgba(245, 158, 11, 0.6) !important;
 }
 
 #btnStillGoodAddItem.discovery-halo {
@@ -1018,7 +1019,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <div class="modal-overlay" id="stillGoodAddModal">
   <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Add to Still Good</h3>
+      <h3 id="sgModalTitle" style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Add to Still Good</h3>
       <button onclick="closeAddStillGoodModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
     </div>
 
@@ -4114,7 +4115,10 @@ function renderStillGoodItems() {
       '<div class="sg-card" id="sgCard_' + item.id + '" data-id="' + item.id + '">' +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">' +
           '<div style="min-width:0; flex:1;">' +
-            '<div style="font-size:16px; font-weight:700; color:var(--text); word-break:break-word; margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
+            '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">' +
+              '<span style="font-size:16px; font-weight:700; color:var(--text); word-break:break-word;">' + escapeHtml(item.name) + '</span>' +
+              '<button type="button" class="btn-sg-edit" onclick="openEditStillGoodModal(' + item.id + ')" title="Edit item" style="background:transparent; border:none; cursor:pointer; font-size:13px; color:var(--muted); padding:2px 4px; border-radius:4px; display:inline-flex; align-items:center;">✏️</button>' +
+            '</div>' +
             '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
               typeBadge +
               '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:3px 7px; border-radius:6px;">' + portionsText + '</span>' +
@@ -4264,8 +4268,47 @@ async function stillGoodAction(itemId, action) {
 
 var sgModalDays = 3;
 var sgModalConsumeBy = '';
+var sgEditingItemId = null;
+
+function openEditStillGoodModal(itemId) {
+  var item = sgItems.find(function(i) { return i.id === itemId; });
+  if (!item) return;
+
+  sgEditingItemId = itemId;
+  sgModalLocation = item.location || 'fridge';
+  sgModalType = item.item_type || 'home_cooked';
+  sgModalServings = item.servings || 1;
+  sgModalConsumeBy = item.consume_by || '';
+
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = '✏️ Edit Still Good Item';
+
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = 'Save Changes';
+
+  var nameInput = document.getElementById('sgInputName');
+  if (nameInput) nameInput.value = item.name || '';
+
+  var notesInput = document.getElementById('sgInputNotes');
+  if (notesInput) notesInput.value = item.notes || '';
+
+  selectSgModalLocation(sgModalLocation);
+  selectSgModalType(sgModalType);
+  updateSgModalServingsDisplay();
+
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.add('active');
+  if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
+}
 
 function openAddStillGoodModal(preLocation) {
+  sgEditingItemId = null;
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = 'Add to Still Good';
+
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = '+ Save to Still Good';
+
   sgModalLocation = preLocation || sgActiveTab || 'fridge';
   sgModalType = 'home_cooked';
   sgModalServings = 1;
@@ -4285,6 +4328,12 @@ function openAddStillGoodModal(preLocation) {
 }
 
 function closeAddStillGoodModal() {
+  sgEditingItemId = null;
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = 'Add to Still Good';
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = '+ Save to Still Good';
+
   var modal = document.getElementById('stillGoodAddModal');
   if (modal) modal.classList.remove('active');
   if (window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.isTourActive()) {
@@ -4410,17 +4459,19 @@ async function submitAddStillGood() {
   var nameInput = document.getElementById('sgInputName');
   var name = nameInput ? nameInput.value.trim() : '';
   if (!name) {
-    if (typeof toast === 'function') toast('Please enter a food name.');
-    return;
+    var todayDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+    name = todayDay + ' left overs';
+    if (nameInput) nameInput.value = name;
   }
 
   var notesInput = document.getElementById('sgInputNotes');
   var notes = notesInput ? notesInput.value.trim() : '';
 
+  var isEdit = !!sgEditingItemId;
   var saveBtn = document.getElementById('btnSaveStillGood');
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
+    saveBtn.textContent = isEdit ? 'Updating...' : 'Saving...';
   }
 
   try {
@@ -4433,14 +4484,17 @@ async function submitAddStillGood() {
       notes: notes
     };
 
-    var res = await fetch(API + '/still-good', {
-      method: 'POST',
+    var endpoint = isEdit ? (API + '/still-good/' + sgEditingItemId) : (API + '/still-good');
+    var method = isEdit ? 'PUT' : 'POST';
+
+    var res = await fetch(endpoint, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function(r) { return r.json(); });
 
     if (res && res.ok) {
-      if (typeof toast === 'function') toast('Added to Still Good!');
+      if (typeof toast === 'function') toast(isEdit ? 'Item updated!' : 'Added to Still Good!');
       closeAddStillGoodModal();
       if (sgActiveTab !== sgModalLocation) {
         switchSgTab(sgModalLocation);
@@ -4450,15 +4504,15 @@ async function submitAddStillGood() {
         window.stillGoodDiscoveryTour.completeTour();
       }
     } else {
-      if (typeof toast === 'function') toast(res.error || 'Failed to add item.');
+      if (typeof toast === 'function') toast(res.error || (isEdit ? 'Failed to update item.' : 'Failed to add item.'));
     }
   } catch(e) {
-    console.error('Error adding Still Good item:', e);
+    console.error('Error saving Still Good item:', e);
     if (typeof toast === 'function') toast('Network error saving item.');
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = '+ Save to Still Good';
+      saveBtn.textContent = isEdit ? 'Save Changes' : '+ Save to Still Good';
     }
   }
 }
@@ -4722,10 +4776,10 @@ window.stillGoodDiscoveryTour = (function() {
 
   function onSaveBtnClicked() {
     if (!isInteractive) return;
-    // If name is empty when clicking save during tour, pre-populate a sample dish name so save succeeds!
     var nameInput = document.getElementById('sgInputName');
     if (nameInput && !nameInput.value.trim()) {
-      nameInput.value = 'Sunday Leftovers';
+      var todayDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+      nameInput.value = todayDay + ' left overs';
     }
   }
 
@@ -4741,6 +4795,7 @@ window.stillGoodDiscoveryTour = (function() {
     }
 
     try {
+      localStorage.setItem('listmate_still_good_acknowledged', 'true');
       localStorage.setItem('listmate_still_good_tour_completed', 'true');
     } catch(e) {}
 
@@ -6914,9 +6969,22 @@ window.featureDiscoveryEngine = (function() {
     return applicableTips.every(key => ack.includes(key));
   }
 
+  function isStillGoodAcknowledged() {
+    try {
+      if (localStorage.getItem('listmate_still_good_acknowledged') === 'true') return true;
+      const ack = getAcknowledged();
+      return ack.includes('still_good');
+    } catch(e) {
+      return false;
+    }
+  }
+
   function markAcknowledged(tipId) {
     if (!tipId) return;
     try {
+      if (tipId === 'still_good') {
+        localStorage.setItem('listmate_still_good_acknowledged', 'true');
+      }
       const ack = getAcknowledged();
       if (!ack.includes(tipId)) {
         ack.push(tipId);
@@ -7005,6 +7073,8 @@ window.featureDiscoveryEngine = (function() {
       } else if (hadTip.id === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
       } else if (hadTip.id === 'still_good') {
+        markAcknowledged('still_good');
+        try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(e) {}
         currentActiveTip = null;
         currentActiveTarget = null;
         clearHalos();
@@ -7062,14 +7132,22 @@ window.featureDiscoveryEngine = (function() {
       }
       if (target) {
         target.classList.add('discovery-halo');
-        const handler = function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          currentActiveTarget = target;
-          showTipDrawer(tip);
-        };
-        target.addEventListener('click', handler, { once: true });
-        boundElements.push({ el: target, event: 'click', handler: handler });
+        if (tip.id === 'still_good') {
+          const handler = function(e) {
+            onStillGoodClick(e);
+          };
+          target.addEventListener('click', handler, { once: true });
+          boundElements.push({ el: target, event: 'click', handler: handler });
+        } else {
+          const handler = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            currentActiveTarget = target;
+            showTipDrawer(tip);
+          };
+          target.addEventListener('click', handler, { once: true });
+          boundElements.push({ el: target, event: 'click', handler: handler });
+        }
       }
     }
   }
@@ -7125,16 +7203,29 @@ window.featureDiscoveryEngine = (function() {
   }
 
   function onStillGoodClick(e) {
-    const nextTip = getNextTip();
-    if (nextTip && nextTip.id === 'still_good') {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      showTipDrawer(nextTip);
-      return true;
+    if (isStillGoodAcknowledged()) {
+      return false;
     }
-    return false;
+    if (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
+    }
+    markAcknowledged('still_good');
+    try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(err) {}
+    clearHalos();
+    currentActiveTip = null;
+    currentActiveTarget = null;
+    const btn = document.getElementById('btnOpenStillGood');
+    if (btn) btn.classList.remove('discovery-halo');
+
+    if (typeof showStillGoodScreen === 'function') {
+      showStillGoodScreen();
+    }
+    if (window.stillGoodDiscoveryTour) {
+      setTimeout(function() {
+        window.stillGoodDiscoveryTour.startInteractiveFlow();
+      }, 250);
+    }
+    return true;
   }
 
   function checkAndApply() {
@@ -7152,11 +7243,21 @@ window.featureDiscoveryEngine = (function() {
     } else {
       clearHalos();
     }
+
+    // Launch halo: golden discovery halo on Still Good for ALL users ONE TIME until acknowledged
+    if (!isStillGoodAcknowledged() && currentScreen === 'home') {
+      const btn = document.getElementById('btnOpenStillGood');
+      if (btn) {
+        btn.classList.add('discovery-halo');
+      }
+    }
   }
 
   function resetAndStart() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('listmate_still_good_acknowledged');
+      localStorage.removeItem('listmate_still_good_tour_completed');
       localStorage.removeItem('listmate_discovery_tips_disabled');
       localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
@@ -7175,6 +7276,7 @@ window.featureDiscoveryEngine = (function() {
     onMenuItemClick: onMenuItemClick,
     onLogoClick: onLogoClick,
     onStillGoodClick: onStillGoodClick,
+    isStillGoodAcknowledged: isStillGoodAcknowledged,
     markAcknowledged: markAcknowledged,
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
@@ -7193,6 +7295,8 @@ window.featureDiscoveryEngine = (function() {
       } else if (tipId === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
       } else if (tipId === 'still_good') {
+        markAcknowledged('still_good');
+        try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(e) {}
         const overlay = document.getElementById('featureTipOverlay');
         if (overlay) overlay.classList.remove('show');
         currentActiveTip = null;
