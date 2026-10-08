@@ -835,10 +835,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <!-- Thawing Notification Bar -->
-    <div id="sgThawingBar" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
+    <div id="sgThawingBar" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; align-items:center; justify-content:space-between;">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-size:18px;">💧</span>
-        <span id="sgThawingText" style="font-size:13px; color:#1e40af; font-weight:600;">1 freezer meal thawing for dinner</span>
+        <span id="sgThawingText" style="font-size:13px; color:#1e40af; font-weight:600;"></span>
       </div>
       <button onclick="switchSgTab('freezer')" style="background:none; border:none; color:#2563eb; font-size:12px; font-weight:700; cursor:pointer;">View →</button>
     </div>
@@ -1040,8 +1040,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
     <!-- Recommended Shelf-Life Display -->
     <div style="margin-bottom:16px;">
-      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Recommended Shelf Life</label>
-      <div id="sgRecCard" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:12px; padding:12px 14px; margin-bottom:8px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Smart Shelf Life</label>
+      <div id="sgRecCard" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:12px; padding:12px 14px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:20px;">💡</span>
           <div>
@@ -1050,13 +1050,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           </div>
         </div>
       </div>
-      <!-- Quick Adjustment Chips (no calendar date picker needed) -->
-      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-        <span style="font-size:11px; color:var(--muted); font-weight:600; margin-right:2px;">Nudge:</span>
-        <button type="button" id="sgChip1d" onclick="setSgModalDays(1, 'Eat within 24 hours (Tomorrow)', 'Best for high-perishable or seafood/takeout meals')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Tomorrow</button>
-        <button type="button" id="sgChip3d" onclick="setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">3 days</button>
-        <button type="button" id="sgChip5d" onclick="setSgModalDays(5, 'Eat within 5 days', 'Hearty stews, soups, or batch cooks in fridge')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">5 days</button>
-        <button type="button" id="sgChip60d" onclick="setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor')" style="padding:5px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">2 months</button>
+      <div style="margin-top:6px; font-size:11px; color:#6b7280; display:flex; align-items:center; gap:4px;">
+        <span>🤖 Evaluated automatically by conservative AI at midnight GMT</span>
       </div>
     </div>
 
@@ -4350,27 +4345,6 @@ function setSgModalDays(days, title, subtitle) {
     else if (days >= 30) subEl.textContent = 'Freezing pauses spoilage; best within 2 months for flavor';
     else subEl.textContent = 'Safe conservative window for refrigerated meals';
   }
-
-  // Visual highlight for active nudge chip
-  var chips = [
-    { id: 'sgChip1d', days: 1 },
-    { id: 'sgChip3d', days: 3 },
-    { id: 'sgChip5d', days: 5 },
-    { id: 'sgChip60d', days: 60 }
-  ];
-  chips.forEach(function(c) {
-    var btn = document.getElementById(c.id);
-    if (!btn) return;
-    if (c.days === days) {
-      btn.style.background = '#f0fdf4';
-      btn.style.borderColor = 'var(--green)';
-      btn.style.color = 'var(--green-dark)';
-    } else {
-      btn.style.background = '#fff';
-      btn.style.borderColor = 'var(--border)';
-      btn.style.color = 'var(--text)';
-    }
-  });
 }
 
 async function submitAddStillGood() {

@@ -176,83 +176,59 @@ _SCHEMA = [
 def init_db():
     db = get_db()
     try:
-        for s in _SCHEMA: db.execute(s)
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS rating INTEGER")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open'")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_title TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_description TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_type TEXT DEFAULT 'feature'")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS build_number TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolution_note TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS github_issue INTEGER")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS notified_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("CREATE INDEX IF NOT EXISTS idx_feedback_public ON app_feedback(is_public, status)")
-        except Exception: pass
-        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL")
-        except Exception: pass
-        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL")
-        except Exception: pass
-        try: db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS trip_notified_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("CREATE INDEX IF NOT EXISTS idx_li_unnotified ON list_items(store_id, household_id, purchased, trip_notified_at)")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_date DATE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_by TEXT")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS visit_notified_users TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE stores ADD COLUMN IF NOT EXISTS auto_populated BOOLEAN DEFAULT FALSE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
-        except Exception: pass
-        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated BOOLEAN NOT NULL DEFAULT FALSE")
-        except Exception: pass
-        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated_at TIMESTAMP")
-        except Exception: pass
-        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER")
-        except Exception: pass
-        try: db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''")
-        except Exception: pass
-        try: db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)")
-        except Exception: pass
+        for s in _SCHEMA:
+            try:
+                db.execute(s)
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+
+        def _safe_exec(stmt, params=None):
+            try:
+                if params: db.execute(stmt, params)
+                else: db.execute(stmt)
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS rating INTEGER")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open'")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_title TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_description TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS public_type TEXT DEFAULT 'feature'")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS build_number TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolution_note TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS github_issue INTEGER")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS notified_at TIMESTAMP")
+        _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMP")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_feedback_public ON app_feedback(is_public, status)")
+        _safe_exec("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS quantity TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS recipe_tag TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL")
+        _safe_exec("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL")
+        _safe_exec("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS trip_notified_at TIMESTAMP")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_li_unnotified ON list_items(store_id, household_id, purchased, trip_notified_at)")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_date DATE")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS planned_visit_by TEXT")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS visit_notified_users TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS category_order TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cuisine TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE stores ADD COLUMN IF NOT EXISTS auto_populated BOOLEAN DEFAULT FALSE")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_inspiration_seen_date DATE")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS daily_inspiration_enabled BOOLEAN NOT NULL DEFAULT TRUE")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version VARCHAR(32) DEFAULT ''")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_platform VARCHAR(32) DEFAULT ''")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_build VARCHAR(32) DEFAULT ''")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'America/New_York'")
+        _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated BOOLEAN NOT NULL DEFAULT FALSE")
+        _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated_at TIMESTAMP")
+        _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER")
+        _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)")
 
         default_aisle_patterns = [
             ("%patel%", "Produce,Spices & Seasonings,Legumes & Grains,Indian Specialties,Nuts & Seeds,Dips & Spreads,Canned & Jarred,Snacks & Sweets,Beverages,Dairy,Frozen,Household"),
@@ -264,10 +240,8 @@ def init_db():
             ("%valli%", "Produce,Bakery,Meat & Seafood,Deli,Pantry,Canned & Jarred,Dairy,Frozen,Household")
         ]
         for pattern, order in default_aisle_patterns:
-            try: db.execute("UPDATE stores SET category_order = %s WHERE name ILIKE %s AND (category_order IS NULL OR category_order = '' OR category_order NOT LIKE '%Spices%')", (order, pattern))
-            except Exception: pass
-        try: db.execute("UPDATE stores SET category_order = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household' WHERE (category_order IS NULL OR category_order = '')")
-        except Exception: pass
+            _safe_exec("UPDATE stores SET category_order = %s WHERE name ILIKE %s AND (category_order IS NULL OR category_order = '' OR category_order NOT LIKE '%Spices%')", (order, pattern))
+        _safe_exec("UPDATE stores SET category_order = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household' WHERE (category_order IS NULL OR category_order = '')")
 
         db.commit()
     finally: close_db(db)

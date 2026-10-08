@@ -2471,18 +2471,45 @@ def add_recipe_to_list_endpoint():
 
 # ── Still Good (Leftovers & Freezer Meal Tracker) ──
 
+def _resolve_still_good_hh(db):
+    hhid = _hh()
+    if not hhid or hhid <= 0:
+        try:
+            import shared.auth as authmod_local
+            uid = authmod_local.get_user_id()
+            if uid:
+                u_row = db.execute("SELECT household_id FROM auth_users WHERE id = ?", (uid,)).fetchone()
+                if u_row and u_row.get("household_id") and u_row["household_id"] > 0:
+                    return u_row["household_id"]
+        except Exception:
+            pass
+        return 1
+    return hhid
+
+
 @app.route("/api/still-good", methods=["GET"])
 @require_user
 def still_good_list_endpoint():
-    hhid = _hh()
-    if not hhid or hhid == 0:
-        return jsonify({"error": "No household"}), 400
-
-    location = request.args.get("location", "").strip().lower()
-    status = request.args.get("status", "active").strip().lower()
-
     db = get_db()
     try:
+        hhid = _resolve_still_good_hh(db)
+
+        # Ensure Still Good columns exist
+        for col_stmt in [
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated_at TIMESTAMP",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''"
+        ]:
+            try:
+                db.execute(col_stmt)
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+
+        location = request.args.get("location", "").strip().lower()
+        status = request.args.get("status", "active").strip().lower()
+
         query = (
             "SELECT id, household_id, name, location, item_type, servings, "
             "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
@@ -2502,8 +2529,31 @@ def still_good_list_endpoint():
             params.append(location)
 
         query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, created_at DESC"
-        cur = db.execute(query, tuple(params))
-        items = cur.fetchall() or []
+
+        try:
+            cur = db.execute(query, tuple(params))
+            items = cur.fetchall() or []
+        except Exception as q_err:
+            try: db.rollback()
+            except Exception: pass
+            print(f"[STILL GOOD ERROR] Query with ai columns failed: {q_err}, attempting fallback")
+            fallback_query = (
+                "SELECT id, household_id, name, location, item_type, servings, "
+                "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
+                "TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, "
+                "status, consumed_at, discarded_at, thawing, notes, created_at "
+                "FROM still_good_items WHERE household_id = ?"
+            )
+            fallback_params = [hhid]
+            if status and status != "all":
+                fallback_query += " AND status = ?"
+                fallback_params.append(status)
+            if location and location in ["fridge", "freezer"]:
+                fallback_query += " AND location = ?"
+                fallback_params.append(location)
+            fallback_query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, created_at DESC"
+            cur = db.execute(fallback_query, tuple(fallback_params))
+            items = cur.fetchall() or []
 
         from datetime import date, datetime
         today = date.today()
@@ -2585,6 +2635,9 @@ def still_good_list_endpoint():
                 "cycle_messages": cycle_messages,
             }
         })
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error loading still good items: {exc}")
+        return jsonify({"ok": False, "error": str(exc), "items": [], "stats": {}}), 500
     finally:
         db.close()
 
@@ -2592,45 +2645,43 @@ def still_good_list_endpoint():
 @app.route("/api/still-good", methods=["POST"])
 @require_user
 def still_good_create_endpoint():
-    hhid = _hh()
-    if not hhid or hhid == 0:
-        return jsonify({"error": "No household"}), 400
-
-    data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "Item name is required"}), 400
-
-    location = (data.get("location") or "fridge").strip().lower()
-    if location not in ["fridge", "freezer"]:
-        location = "fridge"
-
-    item_type = (data.get("item_type") or "home_cooked").strip().lower()
-    if item_type not in ["restaurant", "home_cooked", "batch_cook", "other"]:
-        item_type = "home_cooked"
-
-    try:
-        servings = max(1, int(data.get("servings") or 1))
-    except (ValueError, TypeError):
-        servings = 1
-
-    notes = (data.get("notes") or "").strip()
-    consume_by = (data.get("consume_by") or "").strip()
-
-    from datetime import date, timedelta
-    today = date.today()
-    if not consume_by:
-        if location == "freezer":
-            consume_by = (today + timedelta(days=60)).strftime("%Y-%m-%d")
-        elif item_type == "restaurant":
-            consume_by = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        elif item_type == "batch_cook":
-            consume_by = (today + timedelta(days=5)).strftime("%Y-%m-%d")
-        else:
-            consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
-
     db = get_db()
     try:
+        hhid = _resolve_still_good_hh(db)
+
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "Item name is required"}), 400
+
+        location = (data.get("location") or "fridge").strip().lower()
+        if location not in ["fridge", "freezer"]:
+            location = "fridge"
+
+        item_type = (data.get("item_type") or "home_cooked").strip().lower()
+        if item_type not in ["restaurant", "home_cooked", "batch_cook", "other"]:
+            item_type = "home_cooked"
+
+        try:
+            servings = max(1, int(data.get("servings") or 1))
+        except (ValueError, TypeError):
+            servings = 1
+
+        notes = (data.get("notes") or "").strip()
+        consume_by = (data.get("consume_by") or "").strip()
+
+        from datetime import date, timedelta
+        today = date.today()
+        if not consume_by:
+            if location == "freezer":
+                consume_by = (today + timedelta(days=60)).strftime("%Y-%m-%d")
+            elif item_type == "restaurant":
+                consume_by = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+            elif item_type == "batch_cook":
+                consume_by = (today + timedelta(days=5)).strftime("%Y-%m-%d")
+            else:
+                consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+
         cur = db.execute(
             "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, status, notes) "
             "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, 'active', ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by",
@@ -2653,6 +2704,9 @@ def still_good_create_endpoint():
                 "thawing": False,
             }
         })
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error creating still good item: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
 
@@ -2660,18 +2714,16 @@ def still_good_create_endpoint():
 @app.route("/api/still-good/<int:item_id>/action", methods=["POST"])
 @require_user
 def still_good_action_endpoint(item_id):
-    hhid = _hh()
-    if not hhid or hhid == 0:
-        return jsonify({"error": "No household"}), 400
-
-    data = request.get_json(silent=True) or {}
-    action = (data.get("action") or "").strip().lower()
-
-    if action not in ["consume", "discard", "move", "thaw"]:
-        return jsonify({"error": f"Invalid action: {action}"}), 400
-
     db = get_db()
     try:
+        hhid = _resolve_still_good_hh(db)
+
+        data = request.get_json(silent=True) or {}
+        action = (data.get("action") or "").strip().lower()
+
+        if action not in ["consume", "discard", "move", "thaw"]:
+            return jsonify({"error": f"Invalid action: {action}"}), 400
+
         item = db.execute(
             "SELECT id, location, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?",
             (item_id, hhid)
@@ -2709,6 +2761,9 @@ def still_good_action_endpoint(item_id):
                 )
 
         return jsonify({"ok": True, "action": action, "item_id": item_id})
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error executing action on item {item_id}: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
 
@@ -2716,12 +2771,10 @@ def still_good_action_endpoint(item_id):
 @app.route("/api/still-good/<int:item_id>", methods=["PUT", "DELETE"])
 @require_user
 def still_good_item_endpoint(item_id):
-    hhid = _hh()
-    if not hhid or hhid == 0:
-        return jsonify({"error": "No household"}), 400
-
     db = get_db()
     try:
+        hhid = _resolve_still_good_hh(db)
+
         if request.method == "DELETE":
             db.execute("DELETE FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid))
             return jsonify({"ok": True})
@@ -2761,6 +2814,9 @@ def still_good_item_endpoint(item_id):
             db.execute(sql, tuple(params))
 
         return jsonify({"ok": True, "item_id": item_id})
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error updating item {item_id}: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
 
