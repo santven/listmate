@@ -135,19 +135,20 @@ CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_i
 
 ---
 
-## 4.3 App-Based Shelf-Life Recommendation Engine (Issue #595 & #597)
+## 4.3 App-Based Shelf-Life Recommendation Engine (Issues #595, #597, #599)
 
-**Issues**: [#595](https://github.com/santven/listmate/issues/595), [#597](https://github.com/santven/listmate/issues/597)  
-**Goal**: Remove manual date picking and nudge decision friction; let the app and AI determine safe shelf-life automatically.
+**Issues**: [#595](https://github.com/santven/listmate/issues/595), [#597](https://github.com/santven/listmate/issues/597), [#599](https://github.com/santven/listmate/issues/599)  
+**Goal**: Remove manual date picking and nudge decision friction; let the app and AI determine safe shelf-life automatically without burdening users with behind-the-scenes mechanics.
 
 ### Automated Decision Matrix
 Users should never have to manually consult a calendar or guess when an app should nudge them. The app immediately presents the intelligent, conservative shelf-life based on storage location and meal type:
 * **🥡 Restaurant Takeout (Fridge)**: **24 hours / Tomorrow** (*"Restaurant takeout degrades quickly in the fridge; seafood/dressed salads strictly 1 day"*).
 * **🍳 Home-Cooked Leftovers (Fridge)**: **3 days** (*"USDA standard safe window for home-cooked meals"*).
 * **🍲 Batch Cook (Fridge)**: **4–5 days** (*"Hearty stews, soups, or batch cooks in fridge"*).
-* **❄️ Freezer Storage**: **~60 days / 2 months** (*"Freezing pauses spoilage; best within 2 months for peak flavor"*).
+* **🥡 Restaurant Takeout (Freezer)**: **~30 days / 1 month** (*"Conservative window: whether chef-boxed untouched or leftover from a meal, takeout experiences faster quality degradation, sauce breakdown, and freezer burn than home batch meals"*).
+* **❄️ Home Meals / Batch Cook (Freezer)**: **~60 days / 2 months** (*"Freezing pauses spoilage; best within 2 months for peak flavor"*).
 
-The Add Item modal displays this recommendation directly and saves it automatically—no calendar friction, and no manual nudge buttons needed from the user.
+The Add Item modal displays this recommendation directly and cleanly—without any distracting mentions of background AI processing or manual nudge buttons.
 
 ---
 
@@ -159,13 +160,8 @@ To further personalize shelf-life without incurring token bloat or user latency,
 * **Schedule**: Runs from `scripts/cron_hourly.py` specifically when `now_utc.hour == 0` (12:00 AM / midnight GMT), rather than `cron_daily.py` (which runs at 8:00 AM GMT / 3:00 AM Central).
 * **Token Efficiency**: Aggregates all unestimated active items (`ai_estimated = FALSE`) across households into a **single batch JSON prompt** sent to Gemini Flash.
 * **Idempotency & One-Time Enhancement**: Sets `ai_estimated = TRUE`, `ai_estimated_at = NOW()`, `shelf_life_days`, and `ai_tip`. Each item is evaluated exactly once in its lifetime, conserving LLM tokens.
-* **Strict Food Safety Prompting**: AI is instructed to be conservative:
-  - Seafood / sushi / dressed salads: strictly 1 day.
-  - Cooked rice / pasta / grains: max 2 days (bacillus cereus risk).
-  - Meats / poultry: 2–3 days.
-  - Soups / curries / lentils: 3–4 days.
-  - Generates concise 3–6 word action tips (e.g. *"Reheat until steaming hot"*, *"Keep in airtight container"*).
-* **Graceful Heuristic Fallback**: If no Gemini key is configured or API limits are reached, the system falls back to conservative culinary heuristics without breaking.
+* **Unconstrained Conservative Prompting**: The AI is instructed to be strictly conservative based on food safety principles (prioritizing food safety over shelf extension), but is not bound by prescriptive hardcoded day caps. The model decides the appropriate safe cap and nudge window using its culinary and microbiological knowledge.
+* **Graceful Heuristic Fallback**: If no Gemini key is configured or API limits are reached, the system falls back to conservative culinary heuristics (e.g. 1 day for fridge takeout, 30 days for freezer takeout, 3 days for fridge home cooked, 60 days for freezer batch cooks) without breaking.
 * **CLI Execution**: Can be run ad-hoc via `python3 scripts/cron_hourly.py --still-good-ai` or `python3 scripts/cron_hourly.py --force`.
 
 ---

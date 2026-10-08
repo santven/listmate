@@ -1050,9 +1050,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           </div>
         </div>
       </div>
-      <div style="margin-top:6px; font-size:11px; color:#6b7280; display:flex; align-items:center; gap:4px;">
-        <span>🤖 Evaluated automatically by conservative AI at midnight GMT</span>
-      </div>
     </div>
 
     <!-- Notes -->
@@ -4270,7 +4267,11 @@ function selectSgModalLocation(loc) {
       fBtn.style.borderColor = 'var(--border)';
       fBtn.style.color = 'var(--muted)';
     }
-    setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    if (sgModalType === 'restaurant') {
+      setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
+    } else {
+      setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    }
   }
 }
 
@@ -4298,7 +4299,7 @@ function selectSgModalType(type) {
     rBtn.style.background = '#fef3c7';
     rBtn.style.borderColor = '#f59e0b';
     rBtn.style.color = '#92400e';
-    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    if (sgModalLocation === 'freezer') setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
     else setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
   } else if (type === 'batch_cook' && bBtn) {
     bBtn.style.background = '#e0e7ff';
