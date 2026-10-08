@@ -1,8 +1,8 @@
 # Feature Specification: "Still Good" — Leftover & Freezer Meal Tracker (Issue #592)
 
 **Issue**: [#592](https://github.com/santven/listmate/issues/592)  
-**Status**: Shipped to Staging (PR #593)  
-**Target Milestone**: v1.8.x (Staging)
+**Status**: Merged to `main` (Production Release)  
+**Target Milestone**: v1.8.x
 
 ---
 
@@ -30,8 +30,8 @@ Prior waste-tracking paradigms frequently invoke guilt or negative phrasing such
 ListMate does not use bottom tabs; key feature destinations (Store Visits, Recipe Planner, Analytics) function as dedicated full screens.
 
 ### 2.1 Navigation Hooks
-* **Home Screen Hook**: The Recipe Planner button on the primary grocery list screen—which had low daily engagement—is replaced by the high-frequency hook **`🍲 Still Good`**.
-* **Hamburger Menu Retention**: To ensure existing users can always access both tools, the hamburger drawer includes:
+* **Home Screen Hook**: Positioned directly above the primary Quick-Add box on the grocery list screen, the **`🍲 Still Good`** button provides high-frequency access without cluttering the screen.
+* **Hamburger Menu Retention**: To ensure existing users can always access all tools, the hamburger drawer (☰) includes:
   - `📋 Grocery List`
   - `🍲 Still Good`
   - `🍳 Recipe Planner`
@@ -43,16 +43,12 @@ ListMate does not use bottom tabs; key feature destinations (Store Visits, Recip
 
 ## 3. UI/UX Specification
 
-### 3.1 Thoughtful Kitchen Celebration Banner
-Mounted at the top of the Still Good screen, this card cyclically displays four positive milestones:
-1. `✨ 5 meals put to good use`
-2. `🏆 5 kitchen wins this month`
-3. `💵 $40 kept in your pocket`
-4. `🌿 Thoughtful Kitchen: 5 meals enjoyed`
+### 3.1 Thoughtful Kitchen Motivation Banner
+Mounted at the top of the Still Good screen, this card displays daily household motivation and trailing 7-day savings.
 
-* **Cadence**: Automatically transitions every 5 seconds with a gentle fade animation, or updates immediately when tapped.
-* **Progress Dots**: Four dot indicators illustrate rotation sequence.
-* **Zero State**: Displays encouraging welcome guidance when a household begins logging meals.
+* **Daily Deterministic Rotation**: Rotates by day of year (`dayOfYear % messages.length`) to provide a fresh thought daily without distracting auto-cycling carousel carousels.
+* **Trailing 7-Day Savings**: Displays calculated 7-day savings (`$8 * meals enjoyed in past 7 days`). If $0 is saved in the past 7 days, this message is cleanly omitted from the rotation until meals are logged as enjoyed.
+* **On-Demand Kitchen Wins**: Tapping the banner immediately opens the **🏆 Thoughtful Kitchen Wins** modal.
 
 ### 3.2 Dual-Storage Tabs: Refrigerator vs. Freezer
 * **`🧊 Refrigerator (<count>)`**: Focused on immediate leftovers with 3–4 day target shelf lives.
@@ -73,26 +69,27 @@ The card interface supports dual interaction paradigms with zero Capacitor plugi
 #### Desktop & Accessibility Direct Buttons
 On desktop or for users who prefer direct tapping:
 * `✓ Enjoyed` (Green button): One-tap consume with celebration toast.
+* `✏️ Edit` (Pencil button): Opens the Add/Edit bottom sheet pre-populated with item data for easy updates.
 * `❄️ Freeze` (On fridge cards): Moves expiring fridge items to the freezer, extending expiration to 60 days.
 * `💧 Thaw` (On freezer cards): Toggles the thawing indicator for evening dinner planning.
 * `🧊 Move to Fridge` (On thawing freezer cards): Completes defrost transfer into the active fridge queue.
 * `🗑` (Trash icon): Discards or removes the item.
 
-### 3.5 Quick Add Bottom Sheet
-Accessible via the `+ Add Item` header button:
-* **Food Name**: Input with examples (`"Chicken Tikka"`, `"Veggie Biryani"`, `"Sunday Chili"`).
+### 3.5 Quick Add / Edit Bottom Sheet
+Accessible via the `+ Add Item` header button or card pencil edit icon:
+* **Food Name**: Input with placeholder and dynamic fallback (`"[Day of Week] Leftovers"` if left blank).
 * **Storage Location Toggle**: `[ 🧊 Refrigerator ]` vs. `[ ❄️ Freezer ]`.
 * **Food Category Badges**:
-  - `🍳 Home Meal` (Default target: +4 days)
-  - `🥡 Restaurant Leftover` (Default target: +3 days)
-  - `🍲 Sunday Batch Cook` (Default target: +60 days for freezer / +5 days for fridge)
+  - `🍳 Home Meal` (Default target: +3 days)
+  - `🥡 Restaurant Leftover` (Default target: +24h fridge / +30d freezer)
+  - `🍲 Sunday Batch Cook` (Default target: +60 days for freezer / +4–5 days for fridge)
 * **Portions / Boxes Stepper**: Counter stepper (`[-] 1 portion / box [+]`).
 * **Target Consume-By Date**: HTML5 date input with one-tap quick jump buttons (`+3 days`, `+5 days`, `+1 month`, `+2 months`).
 * **Notes**: Optional memo (e.g. `"Mild spice"`, `"Box 2 of 4"`).
 
 ### 3.6 Kitchen Wins Modal
-Accessible via `🏆 Wins`:
-* Displays month-to-date kitchen wins and calculated dollar savings.
+Accessible via `🏆 Wins` or tapping the motivation banner:
+* Displays month-to-date kitchen wins and calculated 7-day dollar savings.
 * Provides encouraging education on household impact.
 
 ---
@@ -115,133 +112,151 @@ CREATE TABLE IF NOT EXISTS still_good_items (
     discarded_at TIMESTAMP,
     thawing BOOLEAN NOT NULL DEFAULT FALSE,
     notes TEXT DEFAULT '',
+    ai_estimated BOOLEAN NOT NULL DEFAULT FALSE,
+    ai_estimated_at TIMESTAMP,
+    shelf_life_days INTEGER,
+    ai_tip TEXT DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_still_good_hh_status ON still_good_items(household_id, status);
 CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_id, location);
+CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated);
 ```
 
-### 4.2 REST API Specification
+### 4.2 REST API Specification & Paywall Security
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/still-good` | `GET` | Returns active items filtered by location/status along with household stats, AI tips, and cycling celebration messages. |
-| `/api/still-good` | `POST` | Creates a new leftover or batch-cooked meal item with app-recommended or custom nudge shelf-life. |
-| `/api/still-good/<id>/action` | `POST` | Executes state transition: `consume`, `discard`, `move` (fridge ↔ freezer), or `thaw`. |
-| `/api/still-good/<id>` | `PUT` | Updates item metadata (name, portions, target date, notes). |
-| `/api/still-good/<id>` | `DELETE` | Permanently deletes an item record. |
+All Still Good endpoints are protected by `@require_user` and enforce household subscription verification (`_can_household_access_still_good`):
+
+| Endpoint | Method | Paywall Gated | Description |
+|---|---|:---:|---|
+| `/api/still-good` | `GET` | Yes (403 for expired/free) | Returns active items filtered by location/status along with household stats, AI tips, and messages. |
+| `/api/still-good` | `POST` | Yes (403 for expired/free) | Creates a new leftover or batch-cooked meal item with validated dates. |
+| `/api/still-good/<id>/action` | `POST` | Yes (403 for expired/free) | Executes state transition: `consume`, `discard`, `move` (fridge ↔ freezer), or `thaw`. |
+| `/api/still-good/<id>` | `PUT` | Yes (403 for expired/free) | Updates item metadata (name, portions, validated target date, notes). |
+| `/api/still-good/<id>` | `DELETE` | Yes (403 for expired/free) | Permanently deletes an item record. |
+| `/api/still-good/vacation-freeze` | `POST` | Yes (403 for expired/free) | Batch-moves all active fridge items to freezer with safe conservative target dates. |
 
 ---
 
-## 4.3 App-Based Shelf-Life Recommendation Engine (Issues #595, #597, #599)
+## 4.3 Subscription Access Control & Paywall Architecture
 
-**Issues**: [#595](https://github.com/santven/listmate/issues/595), [#597](https://github.com/santven/listmate/issues/597), [#599](https://github.com/santven/listmate/issues/599)  
+### Eligibility Rules
+Still Good is an exclusive Pro feature available to:
+1. **Premium Active / Canceled Households**: Users on active paid subscriptions or during the paid period after cancellation (`subscription_status = 'premium'` or `'active'`).
+2. **Active Pro Trial Households**: Users in an ongoing Pro trial (`subscription_status = 'trial'` and `trial_ends_at >= NOW()`).
+
+### Ineligible Users
+* **Expired Households**: Trial or subscription has ended (`subscription_status = 'expired'` or expired trial timestamp).
+* **Free / Legacy Unsubscribed Households**: Users without an active subscription.
+
+### Enforcement Mechanism
+* **Backend**: `_can_household_access_still_good(db, hhid)` returns `False` for expired and free accounts, aborting requests with HTTP `403 Forbidden` (`{"error": "premium_required", "message": "Still Good is a Pro feature..."}`).
+* **Frontend UI Gating**:
+  - `canAccessStillGood()` helper checks `window.currentCfg.subscription_status` and active trial date.
+  - Tapping `#btnOpenStillGood` or the menu link `#menuStillGoodLink` displays the paywall upgrade modal (`showPremiumModal('Still Good')`) for ineligible users instead of loading the screen.
+  - Feature discovery halos are suppressed for expired households.
+
+---
+
+## 4.4 App-Based Shelf-Life Recommendation Engine
+
 **Goal**: Remove manual date picking and nudge decision friction; let the app and AI determine safe shelf-life automatically without burdening users with behind-the-scenes mechanics.
 
 ### Automated Decision Matrix
 Users should never have to manually consult a calendar or guess when an app should nudge them. The app immediately presents the intelligent, conservative shelf-life based on storage location and meal type:
-* **🥡 Restaurant Takeout (Fridge)**: **24 hours / Tomorrow** (*"Restaurant takeout degrades quickly in the fridge; seafood/dressed salads strictly 1 day"*).
+* **🥡 Restaurant Takeout (Fridge)**: **24 hours / Tomorrow** (*"Takeout degrades rapidly; seafood/dressed salads strictly 1 day"*).
 * **🍳 Home-Cooked Leftovers (Fridge)**: **3 days** (*"USDA standard safe window for home-cooked meals"*).
 * **🍲 Batch Cook (Fridge)**: **4–5 days** (*"Hearty stews, soups, or batch cooks in fridge"*).
-* **🥡 Restaurant Takeout (Freezer)**: **~30 days / 1 month** (*"Conservative window: whether chef-boxed untouched or leftover from a meal, takeout experiences faster quality degradation, sauce breakdown, and freezer burn than home batch meals"*).
+* **🥡 Restaurant Takeout (Freezer)**: **~30 days / 1 month** (*"Conservative window: experiences faster quality degradation, sauce breakdown, and freezer burn than home batch meals"*).
 * **❄️ Home Meals / Batch Cook (Freezer)**: **~60 days / 2 months** (*"Freezing pauses spoilage; best within 2 months for peak flavor"*).
-
-The Add Item modal displays this recommendation directly and cleanly—without any distracting mentions of background AI processing or manual nudge buttons.
 
 ---
 
-## 4.4 Midnight GMT Batch AI Estimator (`still_good_ai.py` & `scripts/cron_hourly.py`)
+## 4.5 Midnight GMT Batch AI Estimator (`still_good_ai.py` & `scripts/cron_hourly.py`)
 
 To further personalize shelf-life without incurring token bloat or user latency, Still Good uses an asynchronous daily batch AI process triggered from the hourly cron engine.
 
 ### Operational Characteristics
-* **Schedule**: Runs from `scripts/cron_hourly.py` specifically when `now_utc.hour == 0` (12:00 AM / midnight GMT), rather than `cron_daily.py` (which runs at 8:00 AM GMT / 3:00 AM Central).
+* **Schedule**: Runs from `scripts/cron_hourly.py` specifically when `now_utc.hour == 0` (12:00 AM / midnight GMT), rather than `cron_daily.py`.
 * **Token Efficiency**: Aggregates all unestimated active items (`ai_estimated = FALSE`) across households into a **single batch JSON prompt** sent to Gemini Flash.
 * **Idempotency & One-Time Enhancement**: Sets `ai_estimated = TRUE`, `ai_estimated_at = NOW()`, `shelf_life_days`, and `ai_tip`. Each item is evaluated exactly once in its lifetime, conserving LLM tokens.
-* **Unconstrained Conservative Prompting**: The AI is instructed to be strictly conservative based on food safety principles (prioritizing food safety over shelf extension), but is not bound by prescriptive hardcoded day caps. The model decides the appropriate safe cap and nudge window using its culinary and microbiological knowledge.
-* **Graceful Heuristic Fallback**: If no Gemini key is configured or API limits are reached, the system falls back to conservative culinary heuristics (e.g. 1 day for fridge takeout, 30 days for freezer takeout, 3 days for fridge home cooked, 60 days for freezer batch cooks) without breaking.
+* **Conservative Food Safety Analysis**: Considers microbial growth, water activity, dish composition, and storage temperature to compute a conservative shelf life.
+* **Graceful Heuristic Fallback**: If no API key is configured or API limits are reached, the system falls back to conservative culinary heuristics without error.
 * **CLI Execution**: Can be run ad-hoc via `python3 scripts/cron_hourly.py --still-good-ai` or `python3 scripts/cron_hourly.py --force`.
 
 ---
 
-## 4.5 Household Daily Motivation & 7-Day Savings Engine (Issue #601)
+## 4.6 Launch Halo, Dismissal Persistence & Dynamic Defaults
 
-**Issue**: [#601](https://github.com/santven/listmate/issues/601)  
-**Goal**: Replace intrusive 5-second carousel banners with a calm, authentic daily household motivation card, and ground dollar savings directly in the household's actual 7-day activity.
-
-### Operational Principles
-1. **Daily Calendar Rotation (No Carousels)**:
-   - Rather than cycling every 5 seconds with pagination dots and transition flicker, the motivation banner displays a single steady highlight for the day.
-   - Rotates deterministically based on day of year (`dayOfYear % messages.length`) so each day brings a fresh household thought.
-   - Tapping the banner opens the **🏆 Thoughtful Kitchen Wins** modal for on-demand details.
-2. **Dynamic 7-Day Household Savings**:
-   - Calculates exact household dollars saved over the trailing 7 days: `COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= (NOW() - INTERVAL '7 days')) * $8`.
-   - **Zero-Waste Motivation Pruning**: If the household has **$0 saved in the last 7 days**, the dollar savings message is omitted completely from the rotation, gracefully switching between the other thoughtful kitchen motivations (e.g. tracking batch cooks, meals enjoyed).
-   - Once a household consumes an item, the `"💵 $X saved in the last 7 days"` message dynamically enters the rotation.
-
----
-
-## 4.6 Resilience & Frontend Bug Fixes (Issue #597)
-1. **Thawing Alert Bar Initial State**: Corrected an inline CSS cascade issue (`style="display:none; ... display:flex;"`) where `display:flex` erroneously overrode `display:none` on initial page load, causing a phantom "1 freezer meal thawing for dinner" bar before items were loaded.
-2. **Resilient Endpoint Queries**: Wrapped `/api/still-good` in robust try/except blocks and added automatic fallback queries to ensure the endpoint succeeds even if new optional columns are temporarily absent during database deployment cycles.
-3. **Household Resolution Fallback**: Enforces safe household fallback to the authenticated user's record or household 1 so items are never hidden due to missing session keys.
+1. **One-Time Feature Launch Halo**:
+   - The `#btnOpenStillGood` button displays a pulsating golden halo for eligible users to announce the new feature.
+   - Upon first tap/click, the halo is permanently dismissed and persisted in `localStorage` (`listmate_dismissed_halo_still_good = 'true'`), preventing annoying recurring pulses.
+2. **Dynamic Day-of-Week Leftovers Default**:
+   - When a user adds an item without typing a name, the app automatically assigns a contextual name: `"[Day of Week] Leftovers"` (e.g. *"Thursday Leftovers"* or *"Monday Leftovers"*).
+3. **Pencil Icon Edit Mode**:
+   - Cards display a dedicated pencil icon button that opens the bottom sheet with pre-populated values, allowing quick corrections to portions, name, or consume-by dates.
+4. **Backend Date Validation**:
+   - Endpoints validate incoming `consume_by` and `date_added` strings against ISO `YYYY-MM-DD` formatting, rejecting invalid dates with HTTP 400.
 
 ---
 
 ## 4.7 Vacation Mode Drawer & 1-Click Batch Freeze (Issue #603)
 
-**Issue**: [#603](https://github.com/santven/listmate/issues/603)  
-**Goal**: Allow households leaving town or going on vacation to quickly review perishable fridge leftovers before departure, discard unwanted meals, leave non-perishables, or move all active leftovers to the freezer in one click with automatically updated safe freezer nudges.
+**Goal**: Allow households leaving town to review perishable fridge leftovers before departure, discard unwanted meals, or freeze all active leftovers in one click with automatically updated safe freezer nudges.
 
 ### Features
-1. **Header Action**: `✈️ Vacation` button positioned prominently in the Still Good top navigation bar.
+1. **Header Action**: `✈️ Vacation` button positioned in the Still Good top navigation bar.
 2. **Bottom Drawer Modal**:
-   - Opens `stillGoodVacationModal` with clear instructions & reminders: *"Perishable leftovers won't keep while you're away. Review your fridge items below: Freeze meals to safely preserve them (nudges update automatically), Discard leftovers you won't eat, or leave items in the fridge as is."*
-   - Displays all active refrigerator items with current portions, categories, and freshness/urgency badges.
-   - Individual item actions:
-     - `🗑 Discard`: Removes/discards perishable items that the user chooses not to keep.
-     - `❄️ Freeze`: Individually moves an item to the freezer.
+   - Displays all active refrigerator items with current portions, categories, and freshness badges.
+   - Individual item actions: `🗑 Discard` and `❄️ Freeze`.
 3. **1-Click Bulk Freezer Transfer**:
    - `❄️ Move All (<count>) to Freezer & Update Nudges`: Sends `POST /api/still-good/vacation-freeze` which transitions all active fridge items into the freezer simultaneously.
-   - **Automatic Conservative Nudges**: Sets safe freezer target dates (+30 days for restaurant takeout, +60 days for home-cooked meals/batch cooks).
+   - Automatically sets conservative freezer target dates (+30 days for restaurant takeout, +60 days for home-cooked meals/batch cooks).
    - Instant UI feedback with confetti celebration, toast notification, and automatic redirection to the `❄️ Freezer` tab.
-4. **Flexible Exit**: Users can also choose to leave remaining items in the fridge and simply close the drawer.
+
+---
 
 ## 4.8 Interactive Feature Discovery Tips & Guided Walkthrough (Issue #605)
-**Issue**: [#605](https://github.com/santven/listmate/issues/605)  
+
 **Goal**: Guide new and returning household members through an interactive, multi-step feature discovery tour highlighting Still Good, how it operates, and how to track meals in seconds.
 
-### Guided Steps & Interactive Halos:
-1. **Step 1: Main Screen Entry (`#btnOpenStillGood`)**:
-   - Pulses with the golden amber discovery halo (`#btnOpenStillGood.discovery-halo`) identical to discovery halos across ListMate.
-   - Tapping the button opens the discovery bottom drawer with smart explanation:
-     > *"Still Good is your kitchen companion for perishable leftovers and freezer meals. It tracks when dishes are stashed, calculates conservative freshness windows, and sends proactive nudges before food spoils. Every meal saved keeps real dollars in your household budget and eliminates kitchen waste!"*
-   - Clicking *"Next: Add an Item ➔"* (or dismiss) navigates to Still Good and advances to Step 2.
-2. **Step 2: Add Item Action (`#btnStillGoodAddItem`)**:
-   - Pulses with the golden discovery halo on the `+ Add Item` button in Still Good header.
-   - Opens bottom drawer explaining:
-     > *"Whenever you package dinner leftovers for the fridge, bring home takeout from a restaurant, or stash batch-cooked meals in the freezer, tap + Add Item to log it in seconds."*
-   - Clicking *"Open Add Item Modal ➔"* (or tapping the button) launches the Add Item bottom sheet modal.
-3. **Step 3: Food & Meal Name Input (`#sgInputName`)**:
-   - Inside the Add Item modal, pulses with the golden discovery halo around the food name input.
-   - Displays an in-modal floating tip card (`#sgTourFloatingCard`):
-     > *"Step 3 of 4: What food is this? Give your food a clear, recognizable name (e.g. Chicken Tikka, Sunday Chili, or Pad Thai takeout). ListMate automatically configures conservative freshness dates based on fridge vs. freezer storage!"*
-   - Auto-focuses the input and provides a *"Next: Save Button ➔"* action.
-4. **Step 4: Save & Track (`#btnSaveStillGood`)**:
-   - Pulses with the golden discovery halo around the `+ Save to Still Good` button.
-   - Updates the floating tip card:
-     > *"Step 4 of 4: Save to Still Good. Tap + Save to Still Good to start tracking your dish! ListMate will gently nudge your household before food spoils, and celebrate real dollar savings whenever a portion is enjoyed."*
-   - Clicking *"Complete Tour 🎉"* or saving the item triggers:
-     - Confetti celebration burst 🎊
-     - Success toast: *"🎉 Still Good discovery tour complete! Keep saving meals and money."*
-     - Clears all halos and sets `listmate_still_good_tour_completed = 'true'` in `localStorage`.
-5. **Replayability & Access Points**:
-   - `💡 Tips` button in the Still Good top navigation bar.
-   - `🍲 Still Good Discovery Tour` link in the burger menu (☰).
-   - URL query parameter support via `?tour=still_good`.
-   - Integrated into the global `featureDiscoveryEngine` sequence.
+### Guided Steps & Interactive Halos
+1. **Step 1: Main Screen Entry (`#btnOpenStillGood`)**: Golden discovery halo with introduction drawer.
+2. **Step 2: Add Item Action (`#btnStillGoodAddItem`)**: Halo on header `+ Add Item` button.
+3. **Step 3: Food Name Input (`#sgInputName`)**: Floating in-modal tip card auto-focusing the food name input.
+4. **Step 4: Save & Track (`#btnSaveStillGood`)**: Floating tip card guiding the user to save and track their dish.
+5. **Replayability**: Accessible anytime via `💡 Tips` in the header or `?tour=still_good` in the URL.
+
+---
+
+## 4.9 Announcement Email Engine & Lifecycle Retargeting (`scripts/send_still_good_announcement_email.py`)
+
+A multi-segment announcement email campaign was created to introduce Still Good across all household lifecycle stages.
+
+### Campaign Segments
+1. **Premium & Active Households** (`static/preview_still_good_premium_active.html`):
+   - **Tone**: Exciting feature upgrade celebration.
+   - **Visual Guidance**: High-fidelity in-app home screen mockup showing the exact placement of the `🍲 Still Good` button directly above the Quick-Add box.
+   - **CTA**: Direct deep-link button (`Open Still Good in ListMate`).
+2. **Active Trial Households** (`static/preview_still_good_trial.html`):
+   - **Tone**: Feature announcement highlighting Pro value.
+   - **CTA**: "Upgrade to Pro" button alongside the visual app mockup.
+3. **Expired Households** (`static/preview_still_good_expired.html`):
+   - **Tone**: Win-back feature announcement.
+   - **Incentive**: **15-day Pro trial extension** generated via `claim_trial_extension(hhid, uid, '15d')` with automatic login deep-link (`BASE_URL/open?token=...`).
+   - **CTA**: "Claim 15-Day Free Extension" and "Upgrade to Pro".
+
+### Shared Campaign Elements & Copy Standards
+* **Team Signature**: Signed respectfully as *"The ListMate Team"*.
+* **Estimated Savings Phrasing**: Clarifies that savings are estimated over the trailing 7-day period rather than representing an all-time money-saved tracker.
+* **Viral & Update Hooks**:
+  - `📲 Share ListMate with Friends` button (`sms:...` / native share).
+  - `⚡ Update to Latest Version` prompt with iOS App Store and Google Play badges/links.
+* **Test & Dry-Run Modes**:
+  - `python3 scripts/send_still_good_announcement_email.py --dry-run`
+  - `python3 scripts/send_still_good_announcement_email.py --test-email you@example.com`
 
 ---
 
