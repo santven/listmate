@@ -63,21 +63,18 @@ def enhance_still_good_shelf_life_batch(limit=50):
 
         if key:
             system_instruction = (
-                "You are a conservative food safety and culinary expert. "
-                "Estimate the maximum safe consumption shelf life (in days) from the cook/purchase date for leftovers. "
-                "CRITICAL CONSERVATIVE FOOD SAFETY RULES:\n"
-                "1. Food safety is #1 priority: always err on the side of caution to avoid food poisoning.\n"
-                "2. Restaurant takeout in fridge: 1 to 2 days maximum (seafood, sushi, dressed salads: strictly 1 day).\n"
-                "3. Home-cooked meats, poultry, seafood in fridge: 2 to 3 days maximum.\n"
-                "4. Cooked rice, pasta, grains: 2 days (spores can form toxins quickly).\n"
-                "5. Soups, stews, daal, cooked vegetables: 3 to 4 days.\n"
-                "6. Freezer meals: 30 to 90 days (default 60 days).\n"
-                "7. Provide a short 3-6 word helpful tip (e.g. 'Reheat thoroughly until steaming', 'Keep in airtight container', 'Eat seafood by tomorrow').\n"
+                "You are an expert culinary and food safety authority. "
+                "For each leftover or prepared food item, evaluate its specific ingredients, storage location, and preparation type, "
+                "and determine the safe conservative shelf life (in days) from the date stored, along with an optimal nudge window. "
+                "CRITICAL PRINCIPLE:\n"
+                "Be strictly conservative. Always prioritize food safety over shelf extension to prevent foodborne illness. "
+                "Use your full knowledge of microbial growth, food chemistry, moisture activity, and temperature to decide the safe shelf life and cap. "
+                "Provide a short 3-6 word practical tip (e.g., 'Reheat until steaming hot', 'Keep tightly sealed in freezer bag').\n"
                 "Produce ONLY a valid JSON array of objects with keys: id, safe_days, tip. No markdown wrapping."
             )
 
             prompt = (
-                "Evaluate the safe shelf-life in days for these batch items:\n" +
+                "Conservatively evaluate the safe shelf-life in days and food safety tips for these items:\n" +
                 json.dumps(batch_payload, indent=2)
             )
 
@@ -151,8 +148,12 @@ def enhance_still_good_shelf_life_batch(limit=50):
             else:
                 # Conservative fallback
                 if it["location"] == "freezer":
-                    safe_days = 60
-                    tip = "Keep airtight to avoid freezer burn"
+                    if it["item_type"] == "restaurant":
+                        safe_days = 30
+                        tip = "Best within 1 month in freezer"
+                    else:
+                        safe_days = 60
+                        tip = "Keep airtight to avoid freezer burn"
                 elif it["item_type"] == "restaurant":
                     safe_days = 1
                     tip = "Best consumed within 24 hours"
