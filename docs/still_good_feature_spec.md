@@ -215,22 +215,22 @@ To further personalize shelf-life without incurring token bloat or user latency,
 
 ### Guided Steps & Interactive Halos:
 1. **Step 1: Main Screen Entry (`#btnOpenStillGood`)**:
-   - Pulses with an emerald discovery halo (`#btnOpenStillGood.discovery-halo`).
-   - Opens smart explanation:
+   - Pulses with the golden amber discovery halo (`#btnOpenStillGood.discovery-halo`) identical to discovery halos across ListMate.
+   - Tapping the button opens the discovery bottom drawer with smart explanation:
      > *"Still Good is your kitchen companion for perishable leftovers and freezer meals. It tracks when dishes are stashed, calculates conservative freshness windows, and sends proactive nudges before food spoils. Every meal saved keeps real dollars in your household budget and eliminates kitchen waste!"*
-   - Tapping the button or clicking *"Explore Still Good ➔"* seamlessly navigates to the Still Good screen.
+   - Clicking *"Next: Add an Item ➔"* (or dismiss) navigates to Still Good and advances to Step 2.
 2. **Step 2: Add Item Action (`#btnStillGoodAddItem`)**:
-   - Pulses with an emerald discovery halo on the `+ Add Item` button.
-   - Explains:
+   - Pulses with the golden discovery halo on the `+ Add Item` button in Still Good header.
+   - Opens bottom drawer explaining:
      > *"Whenever you package dinner leftovers for the fridge, bring home takeout from a restaurant, or stash batch-cooked meals in the freezer, tap + Add Item to log it in seconds."*
-   - Tapping the button or clicking *"Open Add Item Modal ➔"* launches the Add Item bottom sheet modal.
+   - Clicking *"Open Add Item Modal ➔"* (or tapping the button) launches the Add Item bottom sheet modal.
 3. **Step 3: Food & Meal Name Input (`#sgInputName`)**:
-   - Inside the Add Item modal, pulses with an emerald discovery halo around the food name input.
+   - Inside the Add Item modal, pulses with the golden discovery halo around the food name input.
    - Displays an in-modal floating tip card (`#sgTourFloatingCard`):
      > *"Step 3 of 4: What food is this? Give your food a clear, recognizable name (e.g. Chicken Tikka, Sunday Chili, or Pad Thai takeout). ListMate automatically configures conservative freshness dates based on fridge vs. freezer storage!"*
    - Auto-focuses the input and provides a *"Next: Save Button ➔"* action.
 4. **Step 4: Save & Track (`#btnSaveStillGood`)**:
-   - Pulses with an emerald discovery halo around the `+ Save to Still Good` button.
+   - Pulses with the golden discovery halo around the `+ Save to Still Good` button.
    - Updates the floating tip card:
      > *"Step 4 of 4: Save to Still Good. Tap + Save to Still Good to start tracking your dish! ListMate will gently nudge your household before food spoils, and celebrate real dollar savings whenever a portion is enjoyed."*
    - Clicking *"Complete Tour 🎉"* or saving the item triggers:
