@@ -2487,7 +2487,8 @@ def still_good_list_endpoint():
             "SELECT id, household_id, name, location, item_type, servings, "
             "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
             "TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, "
-            "status, consumed_at, discarded_at, thawing, notes, created_at "
+            "status, consumed_at, discarded_at, thawing, notes, "
+            "ai_estimated, ai_tip, shelf_life_days, created_at "
             "FROM still_good_items WHERE household_id = ?"
         )
         params = [hhid]
@@ -2622,9 +2623,11 @@ def still_good_create_endpoint():
         if location == "freezer":
             consume_by = (today + timedelta(days=60)).strftime("%Y-%m-%d")
         elif item_type == "restaurant":
-            consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+            consume_by = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        elif item_type == "batch_cook":
+            consume_by = (today + timedelta(days=5)).strftime("%Y-%m-%d")
         else:
-            consume_by = (today + timedelta(days=4)).strftime("%Y-%m-%d")
+            consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
 
     db = get_db()
     try:

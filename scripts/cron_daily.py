@@ -1309,6 +1309,14 @@ def run_cron():
     except Exception as exc:
         print(f"Auto-categorization sweep failed: {exc}")
 
+    # 12. Still Good AI Shelf-Life Batch Enhancement (Conservative, token-efficient, once daily)
+    try:
+        from still_good_ai import enhance_still_good_shelf_life_batch
+        sg_stats = enhance_still_good_shelf_life_batch(limit=50)
+        print(f"Still Good AI shelf-life batch enhancement complete: {sg_stats}")
+    except Exception as exc:
+        print(f"Still Good AI shelf-life batch enhancement failed: {exc}")
+
 
 def cleanup_abandoned_signups():
     """Prune unattached user registrations (Day 10+, no household) with engagement protection.
@@ -1744,6 +1752,17 @@ if __name__ == "__main__":
             print(f"Auto-categorization sweep complete: {stats}")
         except Exception as exc:
             print(f"Auto-categorization sweep failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
+    if any(arg in sys.argv for arg in ("--still-good-ai", "--test-still-good-ai")):
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good AI batch shelf-life enhancement...")
+        try:
+            from still_good_ai import enhance_still_good_shelf_life_batch
+            stats = enhance_still_good_shelf_life_batch(limit=50)
+            print(f"Still Good AI result: {stats}")
+        except Exception as exc:
+            print(f"Still Good AI failed: {exc}")
         print("Done.")
         sys.exit(0)
 
