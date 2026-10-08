@@ -359,37 +359,31 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
   animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
-/* ── Still Good Feature Discovery Golden Halos (Consistent with App) ── */
-#btnOpenStillGood.discovery-halo {
-  outline: 3px solid #f59e0b !important;
-  outline-offset: 2px !important;
-  border-radius: 10px !important;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
-  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
-}
-
-#btnStillGoodAddItem.discovery-halo {
-  outline: 3px solid #f59e0b !important;
-  outline-offset: 2px !important;
-  border-radius: 10px !important;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
-  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
-}
-
-#sgInputName.discovery-halo {
-  outline: 3px solid #f59e0b !important;
-  outline-offset: 2px !important;
-  border-color: #f59e0b !important;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35) !important;
-  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
-}
-
+/* ── Still Good Feature Discovery Golden Halos (Identical to Feature Discovery Tips) ── */
+#btnOpenStillGood.discovery-halo,
+#btnStillGoodAddItem.discovery-halo,
+#sgInputName.discovery-halo,
 #btnSaveStillGood.discovery-halo {
   outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
-  border-radius: 12px !important;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
   animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+}
+
+#btnOpenStillGood.discovery-halo {
+  border-radius: 10px !important;
+}
+
+#btnStillGoodAddItem.discovery-halo {
+  border-radius: 10px !important;
+}
+
+#sgInputName.discovery-halo {
+  border-radius: 12px !important;
+  border-color: #f59e0b !important;
+}
+
+#btnSaveStillGood.discovery-halo {
+  border-radius: 12px !important;
 }
 
 /* Feature Tip Bottom Drawer */
@@ -703,7 +697,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a href="/settings">⚙️ Settings</a>
       <a href="#" onclick="if(window.dailyInspirationEngine) window.dailyInspirationEngine.openDrawer(true); if(typeof toggleBurger==='function') toggleBurger(); return false;">✨ Daily Inspiration</a>
       <a href="#" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.resetAndStart(); if(typeof toggleBurger==='function') toggleBurger(); return false;">💡 Feature Discovery Tips</a>
-      <a href="#" onclick="startStillGoodTour(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🍲 Still Good Discovery Tour</a>
       <a href="#" onclick="if(typeof toggleBurger==='function') toggleBurger(); showShareAppModal(); return false;">🎁 Share ListMate</a>
       <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
@@ -727,7 +720,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         
       </div>
       <div style="display:flex; gap:8px;">
-        <button id="btnOpenStillGood" onclick="if(window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.onMainBtnClicked()) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+        <button id="btnOpenStillGood" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onStillGoodClick(event)) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
           🍲 Still Good
         </button>
       </div>
@@ -840,7 +833,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         ← Back to List
       </button>
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <button onclick="startStillGoodTour()" style="background:#fef3c7; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Still Good Feature Discovery Tour">
+        <button onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.startInteractiveFlow();" style="background:#fef3c7; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Still Good Feature Discovery Tips">
           💡 Tips
         </button>
         <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="View Wins">
@@ -849,7 +842,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <button onclick="openStillGoodVacationModal()" id="btnStillGoodVacation" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Vacation Mode: Review fridge items before trip">
           ✈️ Vacation
         </button>
-        <button id="btnStillGoodAddItem" onclick="if(window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.onAddBtnClicked()) return; openAddStillGoodModal();" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+        <button id="btnStillGoodAddItem" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onAddBtnClicked(); openAddStillGoodModal();" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
           + Add Item
         </button>
       </div>
@@ -1029,23 +1022,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <button onclick="closeAddStillGoodModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
     </div>
 
-    <!-- In-Modal Still Good Tour Floating Card (Issue #605) -->
-    <div id="sgTourFloatingCard" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, #fffbeb, #fef3c7); border:1.5px solid #f59e0b; border-radius:14px; padding:12px 14px; box-shadow:0 4px 14px rgba(245,158,11,0.18);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <div id="sgTourCardTitle" style="font-weight:700; font-size:13px; color:#92400e; display:flex; align-items:center; gap:6px;">
-          ✏️ Step 3 of 4: Name Your Food
-        </div>
-        <span id="sgTourCardBadge" style="background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px;">Step 3 / 4</span>
-      </div>
-      <div id="sgTourCardBody" style="font-size:12px; color:#b45309; line-height:1.45; margin-bottom:10px;">
-        Give your food a recognizable name. ListMate automatically configures conservative freshness dates based on fridge vs. freezer storage.
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button type="button" onclick="closeStillGoodTour()" style="background:transparent; border:none; color:#92400e; font-size:11px; font-weight:600; cursor:pointer; padding:4px 8px;">Skip Tour</button>
-        <button type="button" id="sgTourCardNextBtn" onclick="nextStillGoodTourStep()" style="background:linear-gradient(135deg, #f59e0b, #d97706); border:none; color:#fff; font-size:12px; font-weight:700; border-radius:8px; padding:6px 14px; cursor:pointer; box-shadow:0 2px 6px rgba(245,158,11,0.25);">Next: Save Button ➔</button>
-      </div>
-    </div>
-
     <div style="margin-bottom:14px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">What food is this?</label>
       <input type="text" id="sgInputName" placeholder="e.g. Chicken Tikka masala, Veggie Curry, Sunday Chili..." autocomplete="off" style="width:100%; padding:12px 14px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
@@ -1112,7 +1088,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
     <div style="display:flex; gap:10px;">
       <button type="button" onclick="closeAddStillGoodModal()" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; color:var(--text); font-weight:600; font-size:14px; cursor:pointer;">Cancel</button>
-      <button type="button" id="btnSaveStillGood" onclick="submitAddStillGood()" style="flex:2; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
+      <button type="button" id="btnSaveStillGood" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onSaveBtnClicked(); submitAddStillGood();" style="flex:2; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
         + Save to Still Good
       </button>
     </div>
@@ -4670,308 +4646,149 @@ async function vacationFreezeAllItems() {
 
 // ── Still Good Feature Discovery Tips & Walkthrough (Issue #605) ──
 window.stillGoodDiscoveryTour = (function() {
-  var STORAGE_KEY = 'listmate_still_good_tour_completed';
-  var currentStep = 0; // 0 = inactive, 1 = main button, 2 = add item button, 3 = name input, 4 = save button
-  var isActive = false;
+  var isInteractive = false;
+  var activeStep = 0; // 0 = inactive, 1 = add item button, 2 = name input, 3 = save button
 
-  function isCompleted() {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
-  }
-
-  function isTourActive() {
-    return isActive;
-  }
-
-  function getCurrentStep() {
-    return currentStep;
-  }
-
-  function clearTourHalos() {
+  function clearHalos() {
     document.querySelectorAll('.discovery-halo').forEach(function(el) {
       el.classList.remove('discovery-halo');
     });
-    var floatingCard = document.getElementById('sgTourFloatingCard');
-    if (floatingCard) floatingCard.style.display = 'none';
   }
 
-  function showOverlayTip(title, body, actionText, actionFn, onDismiss) {
-    var overlay = document.getElementById('featureTipOverlay');
-    var titleEl = document.getElementById('featureTipTitle');
-    var bodyEl = document.getElementById('featureTipBody');
-    var actionsEl = document.getElementById('featureTipActions');
-    if (!overlay || !titleEl || !bodyEl || !actionsEl) return;
+  function startInteractiveFlow() {
+    isInteractive = true;
+    activeStep = 1;
+    clearHalos();
 
-    titleEl.innerHTML = title;
-    bodyEl.innerHTML = body;
-
-    var actionsHtml = '<button class="tip-btn-primary" id="btnSgTourAction">' + actionText + '</button>';
-    actionsHtml += '<button class="tip-btn-dismiss" id="btnSgTourDismiss">Skip Tour</button>';
-    actionsEl.innerHTML = actionsHtml;
-
-    var actionBtn = document.getElementById('btnSgTourAction');
-    var dismissBtn = document.getElementById('btnSgTourDismiss');
-
-    if (actionBtn) {
-      actionBtn.onclick = function() {
-        overlay.classList.remove('show');
-        if (typeof actionFn === 'function') actionFn();
-      };
-    }
-    if (dismissBtn) {
-      dismissBtn.onclick = function() {
-        overlay.classList.remove('show');
-        if (typeof onDismiss === 'function') onDismiss();
-        else closeTour();
-      };
-    }
-
-    overlay.classList.add('show');
-  }
-
-  function hideOverlayTip() {
-    var overlay = document.getElementById('featureTipOverlay');
-    if (overlay) overlay.classList.remove('show');
-  }
-
-  function start(force) {
-    if (force === undefined) force = true;
-    if (!force && isCompleted()) return;
-    isActive = true;
-    currentStep = 1;
-
-    // Ensure we are on home screen first
-    if (typeof showScreen === 'function') {
-      showScreen('home');
+    // Ensure we are on Still Good screen
+    if (typeof showStillGoodScreen === 'function' && (typeof currentScreen === 'undefined' || currentScreen !== 'stillGood')) {
+      showStillGoodScreen();
     }
 
     setTimeout(function() {
-      goToStep(1);
-    }, 200);
-  }
-
-  function goToStep(step) {
-    isActive = true;
-    currentStep = step;
-    clearTourHalos();
-
-    if (step === 1) {
-      // Step 1: Still Good button on the main screen
-      var sgBtn = document.getElementById('btnOpenStillGood');
-      if (sgBtn) {
-        sgBtn.classList.add('discovery-halo');
-        try { sgBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
-      }
-
-      showOverlayTip(
-        '🍲 Still Good: Track Leftovers & Freezer Meals',
-        'Still Good is your kitchen companion for perishable leftovers and freezer meals. It tracks when dishes are stashed, calculates conservative freshness windows, and sends proactive nudges before food spoils.<br><br>Every meal saved keeps real dollars in your household budget and eliminates kitchen waste!',
-        'Next: Add an Item ➔',
-        function() {
-          if (typeof showStillGoodScreen === 'function') {
-            showStillGoodScreen();
-          }
-          setTimeout(function() { goToStep(2); }, 350);
-        },
-        function() {
-          closeTour();
-        }
-      );
-    } else if (step === 2) {
-      // Step 2: Add item button on Still Good screen
-      hideOverlayTip();
+      // Step 1 on Still Good screen: Halo on the "+ Add Item" button!
+      // No bottom drawer or modal overlay! The user clicks the button on screen.
       var addBtn = document.getElementById('btnStillGoodAddItem');
       if (addBtn) {
         addBtn.classList.add('discovery-halo');
         try { addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
       }
+    }, 200);
+  }
 
-      showOverlayTip(
-        '➕ Add Food or Leftovers',
-        'Whenever you package dinner leftovers for the fridge, bring home takeout from a restaurant, or stash batch-cooked meals in the freezer, tap <b>+ Add Item</b> to log it in seconds.',
-        'Open Add Item Modal ➔',
-        function() {
-          if (typeof openAddStillGoodModal === 'function') {
-            openAddStillGoodModal();
-          }
-          setTimeout(function() { goToStep(3); }, 350);
-        },
-        function() {
-          closeTour();
-        }
-      );
-    } else if (step === 3) {
-      // Step 3: Name field inside Add Item modal
-      hideOverlayTip();
-      var modal = document.getElementById('stillGoodAddModal');
-      if (modal && !modal.classList.contains('active') && typeof openAddStillGoodModal === 'function') {
-        openAddStillGoodModal();
-      }
+  function onAddBtnClicked() {
+    if (!isInteractive) return;
+    clearHalos();
+    activeStep = 2;
 
+    // Normal openAddStillGoodModal() will open the modal.
+    // In the next tick after modal opens, halo the name input!
+    setTimeout(function() {
       var nameInput = document.getElementById('sgInputName');
       if (nameInput) {
         nameInput.classList.add('discovery-halo');
         try { nameInput.focus(); } catch(e) {}
-      }
 
-      var floatingCard = document.getElementById('sgTourFloatingCard');
-      var cardTitle = document.getElementById('sgTourCardTitle');
-      var cardBadge = document.getElementById('sgTourCardBadge');
-      var cardBody = document.getElementById('sgTourCardBody');
-      var cardNextBtn = document.getElementById('sgTourCardNextBtn');
+        var moveToSave = function() {
+          if (activeStep === 2) {
+            moveToSaveStep();
+          }
+        };
 
-      if (floatingCard && cardTitle && cardBadge && cardBody && cardNextBtn) {
-        cardBadge.textContent = 'Step 3 / 4';
-        cardTitle.innerHTML = '✏️ What food is this?';
-        cardBody.innerHTML = 'Give your food a clear, recognizable name (e.g. <i>Chicken Tikka</i>, <i>Sunday Chili</i>, or <i>Pad Thai takeout</i>). ListMate automatically configures conservative freshness dates based on fridge vs. freezer storage!';
-        cardNextBtn.textContent = 'Next: Save Button ➔';
-        floatingCard.style.display = 'block';
-      }
-    } else if (step === 4) {
-      // Step 4: Save to Still Good button inside modal
-      hideOverlayTip();
-      var saveBtn = document.getElementById('btnSaveStillGood');
-      if (saveBtn) {
-        saveBtn.classList.add('discovery-halo');
-        try { saveBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
-      }
+        nameInput.addEventListener('input', moveToSave, { once: true });
+        nameInput.addEventListener('change', moveToSave, { once: true });
 
-      var floatingCard = document.getElementById('sgTourFloatingCard');
-      var cardTitle = document.getElementById('sgTourCardTitle');
-      var cardBadge = document.getElementById('sgTourCardBadge');
-      var cardBody = document.getElementById('sgTourCardBody');
-      var cardNextBtn = document.getElementById('sgTourCardNextBtn');
-
-      if (floatingCard && cardTitle && cardBadge && cardBody && cardNextBtn) {
-        cardBadge.textContent = 'Step 4 / 4';
-        cardTitle.innerHTML = '💾 Save to Still Good';
-        cardBody.innerHTML = 'Tap <b>+ Save to Still Good</b> to start tracking your dish! ListMate will gently nudge your household before food spoils, and celebrate real dollar savings whenever a portion is enjoyed.';
-        cardNextBtn.textContent = 'Complete Tour 🎉';
-        floatingCard.style.display = 'block';
+        // Also guide user to Save button if they pause or focus away
+        setTimeout(function() {
+          if (activeStep === 2) {
+            moveToSaveStep();
+          }
+        }, 3500);
       }
+    }, 250);
+  }
+
+  function moveToSaveStep() {
+    if (!isInteractive || activeStep !== 2) return;
+    activeStep = 3;
+    clearHalos();
+
+    var saveBtn = document.getElementById('btnSaveStillGood');
+    if (saveBtn) {
+      saveBtn.classList.add('discovery-halo');
+      try { saveBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
     }
   }
 
-  function nextStep() {
-    if (!isActive) return;
-    if (currentStep === 1) goToStep(2);
-    else if (currentStep === 2) goToStep(3);
-    else if (currentStep === 3) goToStep(4);
-    else if (currentStep === 4) completeTour();
+  function onSaveBtnClicked() {
+    if (!isInteractive) return;
+    // If name is empty when clicking save during tour, pre-populate a sample dish name so save succeeds!
+    var nameInput = document.getElementById('sgInputName');
+    if (nameInput && !nameInput.value.trim()) {
+      nameInput.value = 'Sunday Leftovers';
+    }
   }
 
   function completeTour() {
-    isActive = false;
-    currentStep = 0;
-    clearTourHalos();
-    hideOverlayTip();
+    if (!isInteractive) return;
+    isInteractive = false;
+    activeStep = 0;
+    clearHalos();
 
-    try {
-      localStorage.setItem(STORAGE_KEY, 'true');
-    } catch(e) {}
-
+    // Mark acknowledged in feature discovery engine
     if (window.featureDiscoveryEngine && typeof window.featureDiscoveryEngine.markAcknowledged === 'function') {
       window.featureDiscoveryEngine.markAcknowledged('still_good');
     }
 
-    if (window.confetti) {
+    try {
+      localStorage.setItem('listmate_still_good_tour_completed', 'true');
+    } catch(e) {}
+
+    // Celebration confetti
+    if (typeof window.confetti === 'function') {
       window.confetti({
-        particleCount: 70,
+        particleCount: 75,
         spread: 60,
         origin: { y: 0.6 },
-        colors: ['#f59e0b', '#fbbf24', '#d97706', '#10b981', '#3b82f6']
+        colors: ['#f59e0b', '#fbbf24', '#d97706', '#10b981', '#059669']
       });
     }
 
     if (typeof toast === 'function') {
-      toast('🎉 Still Good discovery tour complete! Keep saving meals and money.');
-    }
-  }
-
-  function closeTour() {
-    isActive = false;
-    currentStep = 0;
-    clearTourHalos();
-    hideOverlayTip();
-    if (typeof toast === 'function') {
-      toast('Tour dismissed. You can reopen anytime from 💡 Tips.');
+      toast('🎉 Still Good discovery complete! Keep saving meals and money.');
     }
   }
 
   function onModalClosed() {
-    if (isActive && (currentStep === 3 || currentStep === 4)) {
-      clearTourHalos();
-      isActive = false;
-      currentStep = 0;
+    if (isInteractive) {
+      clearHalos();
+      isInteractive = false;
+      activeStep = 0;
     }
-  }
-
-  function onMainBtnClicked() {
-    var sgBtn = document.getElementById('btnOpenStillGood');
-    if (sgBtn && sgBtn.classList.contains('discovery-halo')) {
-      goToStep(1);
-      return true;
-    }
-    if (isActive && currentStep === 1) {
-      goToStep(1);
-      return true;
-    }
-    return false;
-  }
-
-  function onAddBtnClicked() {
-    var addBtn = document.getElementById('btnStillGoodAddItem');
-    if (addBtn && addBtn.classList.contains('discovery-halo')) {
-      hideOverlayTip();
-      if (typeof openAddStillGoodModal === 'function') {
-        openAddStillGoodModal();
-      }
-      setTimeout(function() { goToStep(3); }, 350);
-      return true;
-    }
-    if (isActive && currentStep === 2) {
-      hideOverlayTip();
-      if (typeof openAddStillGoodModal === 'function') {
-        openAddStillGoodModal();
-      }
-      setTimeout(function() { goToStep(3); }, 350);
-      return true;
-    }
-    return false;
   }
 
   return {
-    start: start,
-    startAtStep: function(step) {
-      isActive = true;
-      goToStep(step);
-    },
-    goToStep: goToStep,
-    nextStep: nextStep,
+    start: startInteractiveFlow,
+    startInteractiveFlow: startInteractiveFlow,
+    onAddBtnClicked: onAddBtnClicked,
+    moveToSaveStep: moveToSaveStep,
+    onSaveBtnClicked: onSaveBtnClicked,
     completeTour: completeTour,
-    closeTour: closeTour,
-    isTourActive: isTourActive,
-    getCurrentStep: getCurrentStep,
-    isCompleted: isCompleted,
     onModalClosed: onModalClosed,
-    onMainBtnClicked: onMainBtnClicked,
-    onAddBtnClicked: onAddBtnClicked
+    closeTour: onModalClosed,
+    isTourActive: function() { return isInteractive; }
   };
 })();
 
-window.startStillGoodTour = function(force) {
-  if (force === undefined) force = true;
+window.startStillGoodTour = function() {
   if (window.stillGoodDiscoveryTour) {
-    window.stillGoodDiscoveryTour.start(force);
+    window.stillGoodDiscoveryTour.startInteractiveFlow();
   }
 };
-window.nextStillGoodTourStep = function() {
-  if (window.stillGoodDiscoveryTour) {
-    window.stillGoodDiscoveryTour.nextStep();
-  }
-};
+window.nextStillGoodTourStep = function() {};
 window.closeStillGoodTour = function() {
   if (window.stillGoodDiscoveryTour) {
-    window.stillGoodDiscoveryTour.closeTour();
+    window.stillGoodDiscoveryTour.onModalClosed();
   }
 };
 
@@ -6951,7 +6768,7 @@ window.featureDiscoveryEngine = (function() {
       id: 'still_good',
       title: '🍲 Still Good: Track Leftovers & Freezer Meals',
       body: 'Still Good helps your household prevent food waste and save real dollars by keeping track of perishable leftovers and batch-cooked freezer meals with smart conservative nudges and real dollar savings.',
-      actionText: 'Next: Add an Item ➔',
+      actionText: 'Open Still Good ➔',
       type: 'element',
       targetSelector: '#btnOpenStillGood',
       condition: function() { return currentScreen === 'home'; }
@@ -7067,7 +6884,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'still_good', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household', 'still_good'];
 
   let currentActiveTip = null;
   let currentActiveTarget = null;
@@ -7188,7 +7005,6 @@ window.featureDiscoveryEngine = (function() {
       } else if (hadTip.id === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
       } else if (hadTip.id === 'still_good') {
-        markAcknowledged(hadTip.id);
         currentActiveTip = null;
         currentActiveTarget = null;
         clearHalos();
@@ -7197,7 +7013,7 @@ window.featureDiscoveryEngine = (function() {
         }
         if (window.stillGoodDiscoveryTour) {
           setTimeout(() => {
-            window.stillGoodDiscoveryTour.goToStep(2);
+            window.stillGoodDiscoveryTour.startInteractiveFlow();
           }, 350);
         }
         return;
@@ -7308,6 +7124,19 @@ window.featureDiscoveryEngine = (function() {
     return false;
   }
 
+  function onStillGoodClick(e) {
+    const nextTip = getNextTip();
+    if (nextTip && nextTip.id === 'still_good') {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      showTipDrawer(nextTip);
+      return true;
+    }
+    return false;
+  }
+
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
       clearHalos();
@@ -7345,6 +7174,8 @@ window.featureDiscoveryEngine = (function() {
     onBurgerToggle: onBurgerToggle,
     onMenuItemClick: onMenuItemClick,
     onLogoClick: onLogoClick,
+    onStillGoodClick: onStillGoodClick,
+    markAcknowledged: markAcknowledged,
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
@@ -7364,7 +7195,6 @@ window.featureDiscoveryEngine = (function() {
       } else if (tipId === 'still_good') {
         const overlay = document.getElementById('featureTipOverlay');
         if (overlay) overlay.classList.remove('show');
-        markAcknowledged(tipId);
         currentActiveTip = null;
         currentActiveTarget = null;
         clearHalos();
@@ -7373,7 +7203,7 @@ window.featureDiscoveryEngine = (function() {
         }
         if (window.stillGoodDiscoveryTour) {
           setTimeout(() => {
-            window.stillGoodDiscoveryTour.goToStep(2);
+            window.stillGoodDiscoveryTour.startInteractiveFlow();
           }, 350);
         }
         return;
