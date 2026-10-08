@@ -359,46 +359,37 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
   animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
-/* ── Still Good Feature Discovery Halos (Issue #605) ── */
-@keyframes listmateEmeraldPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.9), 0 0 12px rgba(52, 211, 153, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0), 0 0 24px rgba(52, 211, 153, 0.95);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0), 0 0 12px rgba(52, 211, 153, 0);
-  }
-}
-
+/* ── Still Good Feature Discovery Golden Halos (Consistent with App) ── */
 #btnOpenStillGood.discovery-halo {
-  outline: 3px solid #10b981 !important;
+  outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
   border-radius: 10px !important;
-  animation: listmateEmeraldPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
 #btnStillGoodAddItem.discovery-halo {
-  outline: 3px solid #10b981 !important;
+  outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
   border-radius: 10px !important;
-  animation: listmateEmeraldPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
 #sgInputName.discovery-halo {
-  outline: 3px solid #10b981 !important;
+  outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
-  border-color: #10b981 !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
-  animation: listmateEmeraldPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35) !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
 #btnSaveStillGood.discovery-halo {
-  outline: 3px solid #10b981 !important;
+  outline: 3px solid #f59e0b !important;
   outline-offset: 2px !important;
   border-radius: 12px !important;
-  animation: listmateEmeraldPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.45), 0 0 16px rgba(251, 191, 36, 0.75) !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
 /* Feature Tip Bottom Drawer */
@@ -1039,19 +1030,19 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <!-- In-Modal Still Good Tour Floating Card (Issue #605) -->
-    <div id="sgTourFloatingCard" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #10b981; border-radius:14px; padding:12px 14px; box-shadow:0 4px 12px rgba(16,185,129,0.15);">
+    <div id="sgTourFloatingCard" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, #fffbeb, #fef3c7); border:1.5px solid #f59e0b; border-radius:14px; padding:12px 14px; box-shadow:0 4px 14px rgba(245,158,11,0.18);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <div id="sgTourCardTitle" style="font-weight:700; font-size:13px; color:#065f46; display:flex; align-items:center; gap:6px;">
+        <div id="sgTourCardTitle" style="font-weight:700; font-size:13px; color:#92400e; display:flex; align-items:center; gap:6px;">
           ✏️ Step 3 of 4: Name Your Food
         </div>
-        <span id="sgTourCardBadge" style="background:#10b981; color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px;">Step 3 / 4</span>
+        <span id="sgTourCardBadge" style="background:#f59e0b; color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px;">Step 3 / 4</span>
       </div>
-      <div id="sgTourCardBody" style="font-size:12px; color:#047857; line-height:1.45; margin-bottom:10px;">
+      <div id="sgTourCardBody" style="font-size:12px; color:#b45309; line-height:1.45; margin-bottom:10px;">
         Give your food a recognizable name. ListMate automatically configures conservative freshness dates based on fridge vs. freezer storage.
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button type="button" onclick="closeStillGoodTour()" style="background:transparent; border:none; color:#065f46; font-size:11px; font-weight:600; cursor:pointer; padding:4px 8px;">Skip Tour</button>
-        <button type="button" id="sgTourCardNextBtn" onclick="nextStillGoodTourStep()" style="background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; font-size:12px; font-weight:700; border-radius:8px; padding:6px 14px; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.25);">Next: Save Button ➔</button>
+        <button type="button" onclick="closeStillGoodTour()" style="background:transparent; border:none; color:#92400e; font-size:11px; font-weight:600; cursor:pointer; padding:4px 8px;">Skip Tour</button>
+        <button type="button" id="sgTourCardNextBtn" onclick="nextStillGoodTourStep()" style="background:linear-gradient(135deg, #f59e0b, #d97706); border:none; color:#fff; font-size:12px; font-weight:700; border-radius:8px; padding:6px 14px; cursor:pointer; box-shadow:0 2px 6px rgba(245,158,11,0.25);">Next: Save Button ➔</button>
       </div>
     </div>
 
@@ -4759,7 +4750,7 @@ window.stillGoodDiscoveryTour = (function() {
   }
 
   function goToStep(step) {
-    if (!isActive) return;
+    isActive = true;
     currentStep = step;
     clearTourHalos();
 
@@ -4772,9 +4763,9 @@ window.stillGoodDiscoveryTour = (function() {
       }
 
       showOverlayTip(
-        '🍲 Still Good: Track Meals & Save Money',
+        '🍲 Still Good: Track Leftovers & Freezer Meals',
         'Still Good is your kitchen companion for perishable leftovers and freezer meals. It tracks when dishes are stashed, calculates conservative freshness windows, and sends proactive nudges before food spoils.<br><br>Every meal saved keeps real dollars in your household budget and eliminates kitchen waste!',
-        'Explore Still Good ➔',
+        'Next: Add an Item ➔',
         function() {
           if (typeof showStillGoodScreen === 'function') {
             showStillGoodScreen();
@@ -4795,7 +4786,7 @@ window.stillGoodDiscoveryTour = (function() {
       }
 
       showOverlayTip(
-        '➕ Add a Meal or Leftover',
+        '➕ Add Food or Leftovers',
         'Whenever you package dinner leftovers for the fridge, bring home takeout from a restaurant, or stash batch-cooked meals in the freezer, tap <b>+ Add Item</b> to log it in seconds.',
         'Open Add Item Modal ➔',
         function() {
@@ -4887,7 +4878,7 @@ window.stillGoodDiscoveryTour = (function() {
         particleCount: 70,
         spread: 60,
         origin: { y: 0.6 },
-        colors: ['#10b981', '#059669', '#34d399', '#f59e0b', '#3b82f6']
+        colors: ['#f59e0b', '#fbbf24', '#d97706', '#10b981', '#3b82f6']
       });
     }
 
@@ -4915,18 +4906,28 @@ window.stillGoodDiscoveryTour = (function() {
   }
 
   function onMainBtnClicked() {
+    var sgBtn = document.getElementById('btnOpenStillGood');
+    if (sgBtn && sgBtn.classList.contains('discovery-halo')) {
+      goToStep(1);
+      return true;
+    }
     if (isActive && currentStep === 1) {
-      hideOverlayTip();
-      if (typeof showStillGoodScreen === 'function') {
-        showStillGoodScreen();
-      }
-      setTimeout(function() { goToStep(2); }, 350);
+      goToStep(1);
       return true;
     }
     return false;
   }
 
   function onAddBtnClicked() {
+    var addBtn = document.getElementById('btnStillGoodAddItem');
+    if (addBtn && addBtn.classList.contains('discovery-halo')) {
+      hideOverlayTip();
+      if (typeof openAddStillGoodModal === 'function') {
+        openAddStillGoodModal();
+      }
+      setTimeout(function() { goToStep(3); }, 350);
+      return true;
+    }
     if (isActive && currentStep === 2) {
       hideOverlayTip();
       if (typeof openAddStillGoodModal === 'function') {
@@ -4940,6 +4941,10 @@ window.stillGoodDiscoveryTour = (function() {
 
   return {
     start: start,
+    startAtStep: function(step) {
+      isActive = true;
+      goToStep(step);
+    },
     goToStep: goToStep,
     nextStep: nextStep,
     completeTour: completeTour,
@@ -6944,9 +6949,9 @@ window.featureDiscoveryEngine = (function() {
     },
     still_good: {
       id: 'still_good',
-      title: '🍲 Still Good: Track Meals & Save Money',
-      body: 'Still Good is your kitchen companion for perishable leftovers and freezer meals. It tracks when dishes are stashed, calculates conservative freshness dates, and gently nudges your household before food spoils.',
-      actionText: 'Start Walkthrough ➔',
+      title: '🍲 Still Good: Track Leftovers & Freezer Meals',
+      body: 'Still Good helps your household prevent food waste and save real dollars by keeping track of perishable leftovers and batch-cooked freezer meals with smart conservative nudges and real dollar savings.',
+      actionText: 'Next: Add an Item ➔',
       type: 'element',
       targetSelector: '#btnOpenStillGood',
       condition: function() { return currentScreen === 'home'; }
@@ -7150,6 +7155,9 @@ window.featureDiscoveryEngine = (function() {
     if (tip.actionText && tip.actionUrl) {
       actionsHtml += `<a href="${tip.actionUrl}" class="tip-btn-primary" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onActionClick('${tip.id}')">${tip.actionText}</a>`;
       actionsHtml += `<button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>`;
+    } else if (tip.actionText) {
+      actionsHtml += `<button class="tip-btn-primary" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onActionClick('${tip.id}')">${tip.actionText}</button>`;
+      actionsHtml += `<button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>`;
     } else {
       actionsHtml += `<button class="tip-btn-primary" onclick="closeFeatureTip()">Got it</button>`;
     }
@@ -7179,6 +7187,20 @@ window.featureDiscoveryEngine = (function() {
         }
       } else if (hadTip.id === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
+      } else if (hadTip.id === 'still_good') {
+        markAcknowledged(hadTip.id);
+        currentActiveTip = null;
+        currentActiveTarget = null;
+        clearHalos();
+        if (typeof showStillGoodScreen === 'function') {
+          showStillGoodScreen();
+        }
+        if (window.stillGoodDiscoveryTour) {
+          setTimeout(() => {
+            window.stillGoodDiscoveryTour.goToStep(2);
+          }, 350);
+        }
+        return;
       }
       markAcknowledged(hadTip.id);
       currentActiveTip = null;
@@ -7228,11 +7250,7 @@ window.featureDiscoveryEngine = (function() {
           e.preventDefault();
           e.stopPropagation();
           currentActiveTarget = target;
-          if (tip.id === 'still_good' && window.stillGoodDiscoveryTour) {
-            window.stillGoodDiscoveryTour.goToStep(1);
-          } else {
-            showTipDrawer(tip);
-          }
+          showTipDrawer(tip);
         };
         target.addEventListener('click', handler, { once: true });
         boundElements.push({ el: target, event: 'click', handler: handler });
@@ -7344,10 +7362,21 @@ window.featureDiscoveryEngine = (function() {
       } else if (tipId === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
       } else if (tipId === 'still_good') {
-        if (window.stillGoodDiscoveryTour) {
-          window.stillGoodDiscoveryTour.goToStep(1);
-          return;
+        const overlay = document.getElementById('featureTipOverlay');
+        if (overlay) overlay.classList.remove('show');
+        markAcknowledged(tipId);
+        currentActiveTip = null;
+        currentActiveTarget = null;
+        clearHalos();
+        if (typeof showStillGoodScreen === 'function') {
+          showStillGoodScreen();
         }
+        if (window.stillGoodDiscoveryTour) {
+          setTimeout(() => {
+            window.stillGoodDiscoveryTour.goToStep(2);
+          }, 350);
+        }
+        return;
       }
       markAcknowledged(tipId);
       currentActiveTip = null;
@@ -7365,6 +7394,9 @@ window.featureDiscoveryEngine = (function() {
 window.closeFeatureTip = function(event) {
   if (event && event.target && event.target.id !== 'featureTipOverlay') {
     return;
+  }
+  if (window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.isTourActive()) {
+    window.stillGoodDiscoveryTour.closeTour();
   }
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.dismissCurrentTip();
