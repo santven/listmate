@@ -165,7 +165,7 @@ def _ensure_schema():
 @app.before_request
 def enforce_read_only():
     if request.method in ["POST", "PUT", "DELETE"]:
-        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path == "/api/sync":
+        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path.startswith("/api/still-good") or request.path == "/api/sync":
             # Allowed for read-only: None, but wait, maybe some specific ones?
             if request.path == "/api/recipes/generate":
                 # Recipes generate might require premium entirely, but let's just guard modifications to data.
@@ -2465,6 +2465,299 @@ def add_recipe_to_list_endpoint():
                 print(f"[recipe add push error]: {pe}", flush=True)
 
         return jsonify({"ok": True, "added_count": added_count, "recipe_title": recipe_title})
+    finally:
+        db.close()
+
+
+# ── Still Good (Leftovers & Freezer Meal Tracker) ──
+
+@app.route("/api/still-good", methods=["GET"])
+@require_user
+def still_good_list_endpoint():
+    hhid = _hh()
+    if not hhid or hhid == 0:
+        return jsonify({"error": "No household"}), 400
+
+    location = request.args.get("location", "").strip().lower()
+    status = request.args.get("status", "active").strip().lower()
+
+    db = get_db()
+    try:
+        query = (
+            "SELECT id, household_id, name, location, item_type, servings, "
+            "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
+            "TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, "
+            "status, consumed_at, discarded_at, thawing, notes, created_at "
+            "FROM still_good_items WHERE household_id = ?"
+        )
+        params = [hhid]
+
+        if status and status != "all":
+            query += " AND status = ?"
+            params.append(status)
+
+        if location and location in ["fridge", "freezer"]:
+            query += " AND location = ?"
+            params.append(location)
+
+        query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, created_at DESC"
+        cur = db.execute(query, tuple(params))
+        items = cur.fetchall() or []
+
+        from datetime import date, datetime
+        today = date.today()
+        formatted_items = []
+        for r in items:
+            item = dict(r)
+            consume_by_str = item.get("consume_by")
+            days_left = None
+            urgency = "fresh"
+            if consume_by_str:
+                try:
+                    c_date = datetime.strptime(consume_by_str, "%Y-%m-%d").date()
+                    delta = (c_date - today).days
+                    days_left = delta
+                    if item.get("location") == "freezer":
+                        urgency = "frozen"
+                    elif delta < 0:
+                        urgency = "urgent"
+                    elif delta <= 1:
+                        urgency = "urgent"
+                    elif delta <= 2:
+                        urgency = "soon"
+                    else:
+                        urgency = "fresh"
+                except Exception:
+                    pass
+            elif item.get("location") == "freezer":
+                urgency = "frozen"
+
+            item["days_left"] = days_left
+            item["urgency"] = urgency
+            formatted_items.append(item)
+
+        stat_rows = db.execute(
+            "SELECT "
+            "COUNT(*) FILTER (WHERE status = 'active' AND location = 'fridge') as active_fridge, "
+            "COUNT(*) FILTER (WHERE status = 'active' AND location = 'freezer') as active_freezer, "
+            "COUNT(*) FILTER (WHERE status = 'active' AND thawing = TRUE) as thawing_count, "
+            "COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= DATE_TRUNC('month', NOW())) as wins_this_month, "
+            "COUNT(*) FILTER (WHERE status = 'consumed') as total_wins "
+            "FROM still_good_items WHERE household_id = ?",
+            (hhid,)
+        ).fetchone()
+
+        active_fridge = (stat_rows["active_fridge"] if stat_rows else 0) or 0
+        active_freezer = (stat_rows["active_freezer"] if stat_rows else 0) or 0
+        thawing_count = (stat_rows["thawing_count"] if stat_rows else 0) or 0
+        wins_this_month = (stat_rows["wins_this_month"] if stat_rows else 0) or 0
+        total_wins = (stat_rows["total_wins"] if stat_rows else 0) or 0
+
+        dollars_saved = wins_this_month * 8
+
+        win_count_for_display = wins_this_month if wins_this_month > 0 else total_wins
+        if win_count_for_display > 0:
+            cycle_messages = [
+                f"✨ {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} put to good use",
+                f"🏆 {win_count_for_display} kitchen {'win' if win_count_for_display == 1 else 'wins'} this month",
+                f"💵 ${dollars_saved or (win_count_for_display * 8)} kept in your pocket",
+                f"🌿 Thoughtful Kitchen: {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} enjoyed",
+            ]
+        else:
+            cycle_messages = [
+                "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence",
+                "✨ Put meals to good use & save money",
+                "💵 $40+ kept in your pocket each month",
+                "🍲 Keep track of fridge leftovers & Sunday batch cooks",
+            ]
+
+        return jsonify({
+            "ok": True,
+            "items": formatted_items,
+            "stats": {
+                "active_fridge": active_fridge,
+                "active_freezer": active_freezer,
+                "thawing_count": thawing_count,
+                "wins_this_month": wins_this_month,
+                "total_wins": total_wins,
+                "dollars_saved": dollars_saved,
+                "cycle_messages": cycle_messages,
+            }
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good", methods=["POST"])
+@require_user
+def still_good_create_endpoint():
+    hhid = _hh()
+    if not hhid or hhid == 0:
+        return jsonify({"error": "No household"}), 400
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Item name is required"}), 400
+
+    location = (data.get("location") or "fridge").strip().lower()
+    if location not in ["fridge", "freezer"]:
+        location = "fridge"
+
+    item_type = (data.get("item_type") or "home_cooked").strip().lower()
+    if item_type not in ["restaurant", "home_cooked", "batch_cook", "other"]:
+        item_type = "home_cooked"
+
+    try:
+        servings = max(1, int(data.get("servings") or 1))
+    except (ValueError, TypeError):
+        servings = 1
+
+    notes = (data.get("notes") or "").strip()
+    consume_by = (data.get("consume_by") or "").strip()
+
+    from datetime import date, timedelta
+    today = date.today()
+    if not consume_by:
+        if location == "freezer":
+            consume_by = (today + timedelta(days=60)).strftime("%Y-%m-%d")
+        elif item_type == "restaurant":
+            consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+        else:
+            consume_by = (today + timedelta(days=4)).strftime("%Y-%m-%d")
+
+    db = get_db()
+    try:
+        cur = db.execute(
+            "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, status, notes) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, 'active', ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by",
+            (hhid, name, location, item_type, servings, consume_by, notes)
+        )
+        row = cur.fetchone()
+        item_id = row["id"] if row else None
+        return jsonify({
+            "ok": True,
+            "item": {
+                "id": item_id,
+                "name": name,
+                "location": location,
+                "item_type": item_type,
+                "servings": servings,
+                "date_added": row["date_added"] if row else str(today),
+                "consume_by": row["consume_by"] if row else consume_by,
+                "status": "active",
+                "notes": notes,
+                "thawing": False,
+            }
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/<int:item_id>/action", methods=["POST"])
+@require_user
+def still_good_action_endpoint(item_id):
+    hhid = _hh()
+    if not hhid or hhid == 0:
+        return jsonify({"error": "No household"}), 400
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "").strip().lower()
+
+    if action not in ["consume", "discard", "move", "thaw"]:
+        return jsonify({"error": f"Invalid action: {action}"}), 400
+
+    db = get_db()
+    try:
+        item = db.execute(
+            "SELECT id, location, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?",
+            (item_id, hhid)
+        ).fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+
+        if action == "consume":
+            db.execute(
+                "UPDATE still_good_items SET status = 'consumed', consumed_at = NOW(), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        elif action == "discard":
+            db.execute(
+                "UPDATE still_good_items SET status = 'discarded', discarded_at = NOW(), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        elif action == "thaw":
+            new_thaw = not bool(item["thawing"])
+            db.execute(
+                "UPDATE still_good_items SET thawing = ?, updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (new_thaw, item_id, hhid)
+            )
+        elif action == "move":
+            curr_loc = item["location"]
+            if curr_loc == "fridge":
+                db.execute(
+                    "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + INTERVAL '60 days', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    (item_id, hhid)
+                )
+            else:
+                db.execute(
+                    "UPDATE still_good_items SET location = 'fridge', thawing = FALSE, consume_by = CURRENT_DATE + INTERVAL '3 days', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    (item_id, hhid)
+                )
+
+        return jsonify({"ok": True, "action": action, "item_id": item_id})
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/<int:item_id>", methods=["PUT", "DELETE"])
+@require_user
+def still_good_item_endpoint(item_id):
+    hhid = _hh()
+    if not hhid or hhid == 0:
+        return jsonify({"error": "No household"}), 400
+
+    db = get_db()
+    try:
+        if request.method == "DELETE":
+            db.execute("DELETE FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid))
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        location = (data.get("location") or "").strip().lower()
+        consume_by = (data.get("consume_by") or "").strip()
+        servings = data.get("servings")
+        notes = data.get("notes")
+
+        updates = []
+        params = []
+        if name:
+            updates.append("name = ?")
+            params.append(name)
+        if location in ["fridge", "freezer"]:
+            updates.append("location = ?")
+            params.append(location)
+        if consume_by:
+            updates.append("consume_by = ?::date")
+            params.append(consume_by)
+        if servings is not None:
+            try:
+                updates.append("servings = ?")
+                params.append(max(1, int(servings)))
+            except (ValueError, TypeError):
+                pass
+        if notes is not None:
+            updates.append("notes = ?")
+            params.append(notes.strip())
+
+        if updates:
+            updates.append("updated_at = NOW()")
+            params.extend([item_id, hhid])
+            sql = f"UPDATE still_good_items SET {', '.join(updates)} WHERE id = ? AND household_id = ?"
+            db.execute(sql, tuple(params))
+
+        return jsonify({"ok": True, "item_id": item_id})
     finally:
         db.close()
 
