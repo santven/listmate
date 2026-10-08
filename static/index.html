@@ -815,22 +815,17 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
-    <!-- Cycling Celebration Banner -->
-    <div id="sgCelebrationBanner" onclick="cycleNextSgMessage()" role="button" tabindex="0" title="Tap to rotate kitchen milestone" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.08); user-select:none;">
+    <!-- Daily Thoughtful Kitchen Motivation Banner -->
+    <div id="sgCelebrationBanner" onclick="openStillGoodWinsModal()" role="button" tabindex="0" title="View kitchen wins and milestones" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.08); user-select:none;">
       <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
         <span id="sgBannerIcon" style="font-size:22px; flex-shrink:0;">✨</span>
         <div style="min-width:0;">
-          <div id="sgBannerText" style="font-size:14px; font-weight:700; color:#065f46; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity 0.2s ease;">5 meals put to good use</div>
-          <div style="font-size:11px; color:#047857; opacity:0.85; margin-top:1px;">Tap to rotate · Thoughtful Kitchen milestones</div>
+          <div id="sgBannerText" style="font-size:14px; font-weight:700; color:#065f46; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Thoughtful Kitchen</div>
+          <div style="font-size:11px; color:#047857; opacity:0.85; margin-top:1px;">Today's Household Motivation · Tap for Wins</div>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:8px;">
-        <span id="sgBannerDots" style="display:flex; gap:3px;">
-          <span class="sg-dot active" style="width:14px; height:6px; border-radius:10px; background:#059669; display:inline-block;"></span>
-          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
-          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
-          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
-        </span>
+      <div style="flex-shrink:0; margin-left:8px; color:#059669; font-size:13px; font-weight:700;">
+        🏆
       </div>
     </div>
 
@@ -3930,61 +3925,36 @@ async function loadStillGood() {
 function initSgBannerRotation(messages) {
   if (messages && messages.length > 0) {
     window._sgMessages = messages;
-  } else if (!window._sgMessages || window._sgMessages.length === 0) {
+  } else {
     window._sgMessages = [
-      "✨ 5 meals put to good use",
-      "🏆 5 kitchen wins this month",
-      "💵 $40 kept in your pocket",
-      "🌿 Thoughtful Kitchen: 5 meals enjoyed"
+      "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence",
+      "🍲 Keep track of fridge leftovers & Sunday batch cooks"
     ];
   }
-  updateSgBannerDisplay();
-  if (sgCycleTimer) clearInterval(sgCycleTimer);
-  sgCycleTimer = setInterval(function() {
-    cycleNextSgMessage();
-  }, 5000);
-}
-
-function cycleNextSgMessage() {
-  if (!window._sgMessages || window._sgMessages.length === 0) return;
-  sgCycleIndex = (sgCycleIndex + 1) % window._sgMessages.length;
+  // Daily deterministic rotation: selects one motivation per calendar day
+  var now = new Date();
+  var startOfYear = new Date(now.getFullYear(), 0, 0);
+  var diff = (now - startOfYear) + ((startOfYear.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+  var oneDay = 1000 * 60 * 60 * 24;
+  var dayOfYear = Math.floor(diff / oneDay);
+  sgCycleIndex = dayOfYear % window._sgMessages.length;
   updateSgBannerDisplay();
 }
 
 function updateSgBannerDisplay() {
-  var msg = (window._sgMessages && window._sgMessages[sgCycleIndex]) || "✨ Put meals to good use";
+  var msg = (window._sgMessages && window._sgMessages[sgCycleIndex]) || "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence";
   var textEl = document.getElementById('sgBannerText');
   var iconEl = document.getElementById('sgBannerIcon');
   if (!textEl) return;
 
-  var icon = "✨";
+  var icon = "🌿";
   if (msg.indexOf("🏆") !== -1) icon = "🏆";
   else if (msg.indexOf("💵") !== -1) icon = "💵";
-  else if (msg.indexOf("🌿") !== -1) icon = "🌿";
   else if (msg.indexOf("✨") !== -1) icon = "✨";
   else if (msg.indexOf("🍲") !== -1) icon = "🍲";
 
-  var cleanMsg = msg;
-  textEl.style.opacity = '0';
-  setTimeout(function() {
-    if (iconEl) iconEl.textContent = icon;
-    textEl.textContent = cleanMsg;
-    textEl.style.opacity = '1';
-  }, 150);
-
-  // Update dots indicator
-  var dots = document.querySelectorAll('#sgBannerDots .sg-dot');
-  dots.forEach(function(dot, idx) {
-    if (idx === sgCycleIndex) {
-      dot.style.background = '#059669';
-      dot.style.width = '14px';
-      dot.style.borderRadius = '10px';
-    } else {
-      dot.style.background = '#a7f3d0';
-      dot.style.width = '6px';
-      dot.style.borderRadius = '50%';
-    }
-  });
+  if (iconEl) iconEl.textContent = icon;
+  textEl.textContent = msg;
 }
 
 function renderStillGoodItems() {

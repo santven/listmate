@@ -2592,6 +2592,7 @@ def still_good_list_endpoint():
             "COUNT(*) FILTER (WHERE status = 'active' AND location = 'fridge') as active_fridge, "
             "COUNT(*) FILTER (WHERE status = 'active' AND location = 'freezer') as active_freezer, "
             "COUNT(*) FILTER (WHERE status = 'active' AND thawing = TRUE) as thawing_count, "
+            "COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= (NOW() - INTERVAL '7 days')) as wins_7d, "
             "COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= DATE_TRUNC('month', NOW())) as wins_this_month, "
             "COUNT(*) FILTER (WHERE status = 'consumed') as total_wins "
             "FROM still_good_items WHERE household_id = ?",
@@ -2601,26 +2602,28 @@ def still_good_list_endpoint():
         active_fridge = (stat_rows["active_fridge"] if stat_rows else 0) or 0
         active_freezer = (stat_rows["active_freezer"] if stat_rows else 0) or 0
         thawing_count = (stat_rows["thawing_count"] if stat_rows else 0) or 0
+        wins_7d = (stat_rows["wins_7d"] if stat_rows else 0) or 0
         wins_this_month = (stat_rows["wins_this_month"] if stat_rows else 0) or 0
         total_wins = (stat_rows["total_wins"] if stat_rows else 0) or 0
 
-        dollars_saved = wins_this_month * 8
+        dollars_saved_7d = wins_7d * 8
+        dollars_saved_month = wins_this_month * 8
 
         win_count_for_display = wins_this_month if wins_this_month > 0 else total_wins
+
+        # Build clean daily rotation messages
+        # Only include savings message if THAT household had savings in the last 7 days!
+        cycle_messages = []
         if win_count_for_display > 0:
-            cycle_messages = [
-                f"✨ {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} put to good use",
-                f"🏆 {win_count_for_display} kitchen {'win' if win_count_for_display == 1 else 'wins'} this month",
-                f"💵 ${dollars_saved or (win_count_for_display * 8)} kept in your pocket",
-                f"🌿 Thoughtful Kitchen: {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} enjoyed",
-            ]
+            cycle_messages.append(f"✨ {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} put to good use")
+            cycle_messages.append(f"🌿 Thoughtful Kitchen: {win_count_for_display} {'meal' if win_count_for_display == 1 else 'meals'} enjoyed")
+            if dollars_saved_7d > 0:
+                cycle_messages.append(f"💵 ${dollars_saved_7d} saved in the last 7 days")
         else:
-            cycle_messages = [
-                "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence",
-                "✨ Put meals to good use & save money",
-                "💵 $40+ kept in your pocket each month",
-                "🍲 Keep track of fridge leftovers & Sunday batch cooks",
-            ]
+            cycle_messages.append("🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence")
+            cycle_messages.append("🍲 Keep track of fridge leftovers & Sunday batch cooks")
+            if dollars_saved_7d > 0:
+                cycle_messages.append(f"💵 ${dollars_saved_7d} saved in the last 7 days")
 
         return jsonify({
             "ok": True,
@@ -2629,9 +2632,11 @@ def still_good_list_endpoint():
                 "active_fridge": active_fridge,
                 "active_freezer": active_freezer,
                 "thawing_count": thawing_count,
+                "wins_7d": wins_7d,
                 "wins_this_month": wins_this_month,
                 "total_wins": total_wins,
-                "dollars_saved": dollars_saved,
+                "dollars_saved_7d": dollars_saved_7d,
+                "dollars_saved": dollars_saved_month,
                 "cycle_messages": cycle_messages,
             }
         })

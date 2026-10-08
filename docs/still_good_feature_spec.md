@@ -166,7 +166,24 @@ To further personalize shelf-life without incurring token bloat or user latency,
 
 ---
 
-## 4.5 Resilience & Frontend Bug Fixes (Issue #597)
+## 4.5 Household Daily Motivation & 7-Day Savings Engine (Issue #601)
+
+**Issue**: [#601](https://github.com/santven/listmate/issues/601)  
+**Goal**: Replace intrusive 5-second carousel banners with a calm, authentic daily household motivation card, and ground dollar savings directly in the household's actual 7-day activity.
+
+### Operational Principles
+1. **Daily Calendar Rotation (No Carousels)**:
+   - Rather than cycling every 5 seconds with pagination dots and transition flicker, the motivation banner displays a single steady highlight for the day.
+   - Rotates deterministically based on day of year (`dayOfYear % messages.length`) so each day brings a fresh household thought.
+   - Tapping the banner opens the **🏆 Thoughtful Kitchen Wins** modal for on-demand details.
+2. **Dynamic 7-Day Household Savings**:
+   - Calculates exact household dollars saved over the trailing 7 days: `COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= (NOW() - INTERVAL '7 days')) * $8`.
+   - **Zero-Waste Motivation Pruning**: If the household has **$0 saved in the last 7 days**, the dollar savings message is omitted completely from the rotation, gracefully switching between the other thoughtful kitchen motivations (e.g. tracking batch cooks, meals enjoyed).
+   - Once a household consumes an item, the `"💵 $X saved in the last 7 days"` message dynamically enters the rotation.
+
+---
+
+## 4.6 Resilience & Frontend Bug Fixes (Issue #597)
 1. **Thawing Alert Bar Initial State**: Corrected an inline CSS cascade issue (`style="display:none; ... display:flex;"`) where `display:flex` erroneously overrode `display:none` on initial page load, causing a phantom "1 freezer meal thawing for dinner" bar before items were loaded.
 2. **Resilient Endpoint Queries**: Wrapped `/api/still-good` in robust try/except blocks and added automatic fallback queries to ensure the endpoint succeeds even if new optional columns are temporarily absent during database deployment cycles.
 3. **Household Resolution Fallback**: Enforces safe household fallback to the authenticated user's record or household 1 so items are never hidden due to missing session keys.
