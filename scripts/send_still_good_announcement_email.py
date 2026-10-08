@@ -36,7 +36,7 @@ from email_helper import (
 
 CAMPAIGN_NAME = "still_good_announcement"
 REPLY_TO_EMAIL = "venragh@gmail.com"
-REPLY_TO_NAME = "Venkat Santhanam (Founder, ListMate)"
+REPLY_TO_NAME = "The ListMate Team"
 APP_STORE_URL = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
 
@@ -73,7 +73,7 @@ def generate_email_content(
         hero_subtitle = "Fresh from the ListMate kitchen — keep tabs on perishables & freezer meals"
         greeting_line = f"Hi {first_name},"
         intro_p1 = f"As a valued premium member of ListMate for <strong>{hh_name}</strong>, you get first access to everything we build to make kitchen and grocery management seamless."
-        intro_p2 = "We are thrilled to unveil our newest major feature: <strong>Still Good</strong> — an intelligent leftovers and freezer meal tracker designed to save your family real money and prevent forgotten ingredients from ending up in the trash."
+        intro_p2 = "We are thrilled to unveil our newest major feature: <strong>Still Good</strong> — an intelligent leftovers and freezer meal manager designed to help prevent forgotten ingredients from ending up in the trash and estimate your household food savings."
         cta_primary_html = f"""
           <div style="text-align:center;margin:28px 0 20px;">
             <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(16,185,129,0.35);">
@@ -93,7 +93,7 @@ def generate_email_content(
         hero_subtitle = "Now unlocked on your household trial — track leftovers & freeze with confidence"
         greeting_line = f"Hi {first_name},"
         intro_p1 = f"We have some exciting news for <strong>{hh_name}</strong>! We just launched one of our biggest features yet, and it is <strong>fully unlocked on your active Pro Trial</strong> right now."
-        intro_p2 = "Meet <strong>Still Good</strong> — an intelligent perishables and freezer meal tracker that tells you exactly how long cooked leftovers stay safe, nudges you when it is time to eat them, and calculates your household savings."
+        intro_p2 = "Meet <strong>Still Good</strong> — an intelligent perishables and freezer meal manager that helps you see how long cooked leftovers stay safe, nudges you when it is time to eat them, and estimates your last 7-day savings."
         cta_primary_html = f"""
           <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:20px;text-align:center;margin:24px 0 20px;">
             <div style="font-size:14px;font-weight:700;color:#854d0e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
@@ -167,9 +167,9 @@ def generate_email_content(
 The average family throws away over $1,500 worth of forgotten groceries and leftovers every year. Still Good stops the cycle:
 
 • 🥗 Track Fridge Leftovers & Takeout: Save cooked dishes with one tap (defaults to today's leftovers!).
-• ⏱️ Conservative Food Safety Timers: Clear countdown timers so you know exactly when food is fresh, urgent, or ready to freeze.
+• ⏱️ Clear color-coded badges show you exactly when food is fresh, eat soon, urgent, or ready to freeze.
 • ❄️ 1-Click Freezer Stash: Freeze perishable meals before they spoil. Tap "Thaw" in the morning and get an automatic reminder when dinner is ready.
-• 💵 Real Money Saved: Track your household's 7-day and monthly dollar savings right on your dashboard!
+• 💵 7-Day Savings Estimation: See an estimate of your household's last 7-day food savings based on rescued meals.
 
 ==================================================
 📍 WHERE TO FIND IT IN LISTMATE
@@ -231,8 +231,8 @@ Feedback link: {feedback_url}
 (Or simply reply directly to this email — I read every note!)
 
 Warm regards,
-Venkat & The ListMate Team
-Founder, ListMate ({BASE_URL})
+The ListMate Team
+ListMate ({BASE_URL})
 
 {unsub_txt}
 """
@@ -367,13 +367,10 @@ Founder, ListMate ({BASE_URL})
                   </div>
                 </div>
 
-                <!-- Feature 2: Conservative Food Safety & Safe Shelf-Life -->
+                <!-- Feature 2: Safe Timing Badges -->
                 <div style="background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:8px;padding:14px 16px;margin-bottom:12px;">
-                  <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">
-                    ⏱️ Conservative Food Safety & Safe Days Left
-                  </div>
-                  <div style="font-size:13.5px;color:#475569;line-height:1.55;">
-                    Clear color-coded badges show exactly what is <strong>Fresh</strong>, <strong>Eat Soon</strong>, or <strong>Urgent</strong>. Rest easy knowing meals are consumed safely before spoilage.
+                  <div style="font-size:14px;color:#334155;line-height:1.55;">
+                    ⏱️ Clear color-coded badges show exactly what is <strong>Fresh</strong>, <strong>Eat Soon</strong>, or <strong>Urgent</strong>. Rest easy knowing meals are consumed safely before spoilage.
                   </div>
                 </div>
 
@@ -387,13 +384,13 @@ Founder, ListMate ({BASE_URL})
                   </div>
                 </div>
 
-                <!-- Feature 4: Real Household Dollar Savings -->
+                <!-- Feature 4: 7-Day Savings Estimation -->
                 <div style="background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:12px;">
                   <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">
-                    💵 Real Household Savings Tracker
+                    💵 7-Day Savings Estimation
                   </div>
                   <div style="font-size:13.5px;color:#475569;line-height:1.55;">
-                    Watch your household savings add up! Still Good tracks 7-day and monthly dollar savings based on rescued meals ($25–$45 saved per month on average).
+                    Still Good estimates your last 7-day savings based on rescued leftovers and frozen meals directly in your Still Good view.
                   </div>
                 </div>
               </div>
@@ -457,8 +454,8 @@ Founder, ListMate ({BASE_URL})
                 </p>
                 <p style="margin:16px 0 0;font-size:15px;color:#1e293b;font-weight:600;">
                   Warm regards,<br>
-                  <span style="color:#0f172a;font-weight:800;">Venkat & The ListMate Team</span><br>
-                  <span style="font-size:13px;color:#64748b;font-weight:400;">Founder, ListMate (<a href="{BASE_URL}" style="color:#16a34a;text-decoration:none;">grocerlist.app</a>)</span>
+                  <span style="color:#0f172a;font-weight:800;">The ListMate Team</span><br>
+                  <span style="font-size:13px;color:#64748b;font-weight:400;">ListMate (<a href="{BASE_URL}" style="color:#16a34a;text-decoration:none;">grocerlist.app</a>)</span>
                 </p>
               </div>
 
@@ -523,7 +520,7 @@ def query_households_by_tier() -> dict:
     except Exception as e:
         print(f"[Notice] Could not connect to live database ({e}). Using sample database households for dry run.")
         rows = [
-            {"household_id": 1, "household_name": "Santhanam Household", "is_premium": True, "subscription_status": "premium", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 1, "user_name": "Venkat Santhanam", "email": "venragh@gmail.com"},
+            {"household_id": 1, "household_name": "Miller Household", "is_premium": True, "subscription_status": "premium", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 1, "user_name": "Jordan Miller", "email": "member@example.com"},
             {"household_id": 2, "household_name": "Taylor Household", "is_premium": True, "subscription_status": "active", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 2, "user_name": "Alex Taylor", "email": "alex.taylor@example.com"},
             {"household_id": 3, "household_name": "Rivera Household", "is_premium": False, "subscription_status": "trial", "trial_ends_at": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat(), "subscription_ends_at": None, "user_id": 3, "user_name": "Maria Rivera", "email": "maria.rivera@example.com"},
             {"household_id": 4, "household_name": "Chen Household", "is_premium": False, "subscription_status": "expired", "trial_ends_at": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).isoformat(), "subscription_ends_at": None, "user_id": 4, "user_name": "David Chen", "email": "david.chen@example.com"},
