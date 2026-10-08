@@ -504,6 +504,31 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   color: #b45309;
   border: 1px solid #fde68a;
 }
+/* Still Good Styles */
+.still-good-screen { min-height: 80vh; }
+.sg-card-wrap { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 12px; background: #fff; touch-action: pan-y; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.sg-swipe-underlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; border-radius: 14px; z-index: 1; }
+.sg-swipe-left-bg { background: #10b981; color: #fff; display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; position: absolute; left: 0; top: 0; padding-left: 20px; font-weight: 700; font-size: 14px; }
+.sg-swipe-right-bg { background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; height: 100%; position: absolute; right: 0; top: 0; padding-right: 20px; font-weight: 700; font-size: 14px; }
+.sg-card { position: relative; z-index: 2; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; transition: transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1); user-select: none; }
+.sg-card.swiping { transition: none; }
+.sg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+.sg-badge-restaurant { background: #fef3c7; color: #92400e; }
+.sg-badge-home { background: #ecfdf5; color: #065f46; }
+.sg-badge-batch { background: #e0e7ff; color: #3730a3; }
+.sg-badge-thawing { background: #dbeafe; color: #1e40af; }
+.sg-status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.sg-status-fresh { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sg-status-soon { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.sg-status-urgent { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.sg-status-frozen { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.sg-action-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease; }
+.sg-action-enjoy { background: #10b981; color: #fff; }
+.sg-action-enjoy:active { background: #059669; transform: scale(0.97); }
+.sg-action-sec { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+.sg-action-sec:active { background: #e5e7eb; }
+.sg-action-danger { background: none; color: #9ca3af; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
+.sg-action-danger:hover, .sg-action-danger:active { color: #ef4444; background: #fee2e2; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -603,6 +628,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
       setTimeout(() => { showAnalyticsScreen(); }, 400);
+    } else if (screenParam === 'stillGood' || screenParam === 'still_good' || localStorage.getItem('open_still_good') === '1') {
+      localStorage.removeItem('open_still_good');
+      setTimeout(() => {
+        showStillGoodScreen();
+      }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
       localStorage.removeItem('open_recipes');
       setTimeout(() => {
@@ -630,6 +660,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a id="menuJoinHouseholdLink" href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
+      <a id="menuStillGoodLink" href="#" onclick="showStillGoodScreen(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🍲 Still Good</a>
+      <a id="menuRecipesLink" href="#" onclick="showRecipesScreen(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🍳 Recipe Planner</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
@@ -661,8 +693,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         
       </div>
       <div style="display:flex; gap:8px;">
-        <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          🍳 Recipes Planner
+        <button id="btnOpenStillGood" onclick="showStillGoodScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+          🍲 Still Good
         </button>
       </div>
     </div>
@@ -764,6 +796,74 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
+  </div>
+
+  <!-- STILL GOOD SCREEN -->
+  <div class="still-good-screen" id="screenStillGood" style="display:none; padding-bottom:40px;">
+    <!-- Top Nav Bar -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <button onclick="showScreen('home')" style="background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        ← Back to List
+      </button>
+      <div style="display:flex; gap:8px;">
+        <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px;" title="View Wins">
+          🏆 Wins
+        </button>
+        <button onclick="openAddStillGoodModal()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+          + Add Item
+        </button>
+      </div>
+    </div>
+
+    <!-- Cycling Celebration Banner -->
+    <div id="sgCelebrationBanner" onclick="cycleNextSgMessage()" role="button" tabindex="0" title="Tap to rotate kitchen milestone" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.08); user-select:none;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+        <span id="sgBannerIcon" style="font-size:22px; flex-shrink:0;">✨</span>
+        <div style="min-width:0;">
+          <div id="sgBannerText" style="font-size:14px; font-weight:700; color:#065f46; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity 0.2s ease;">5 meals put to good use</div>
+          <div style="font-size:11px; color:#047857; opacity:0.85; margin-top:1px;">Tap to rotate · Thoughtful Kitchen milestones</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:8px;">
+        <span id="sgBannerDots" style="display:flex; gap:3px;">
+          <span class="sg-dot active" style="width:14px; height:6px; border-radius:10px; background:#059669; display:inline-block;"></span>
+          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
+          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
+          <span class="sg-dot" style="width:6px; height:6px; border-radius:50%; background:#a7f3d0; display:inline-block;"></span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Thawing Notification Bar -->
+    <div id="sgThawingBar" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:18px;">💧</span>
+        <span id="sgThawingText" style="font-size:13px; color:#1e40af; font-weight:600;">1 freezer meal thawing for dinner</span>
+      </div>
+      <button onclick="switchSgTab('freezer')" style="background:none; border:none; color:#2563eb; font-size:12px; font-weight:700; cursor:pointer;">View →</button>
+    </div>
+
+    <!-- Tabs Header -->
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button id="tabSgFridge" onclick="switchSgTab('fridge')" style="flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--green); background:#f0fdf4; font-weight:700; font-size:14px; cursor:pointer; color:var(--green-dark); display:flex; align-items:center; justify-content:center; gap:6px;">
+        🧊 Refrigerator (<span id="sgCountFridge">0</span>)
+      </button>
+      <button id="tabSgFreezer" onclick="switchSgTab('freezer')" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; font-size:14px; cursor:pointer; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:6px;">
+        ❄️ Freezer (<span id="sgCountFreezer">0</span>)
+      </button>
+    </div>
+
+    <!-- Swipe Tip Helper Banner -->
+    <div style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      <span>👉 Swipe <b>Right</b> to mark Enjoyed</span>
+      <span>•</span>
+      <span>Swipe <b>Left</b> to discard</span>
+    </div>
+
+    <!-- List of Still Good Items -->
+    <div id="sgItemsList" style="display:flex; flex-direction:column; gap:6px;">
+      <div style="text-align:center; padding:30px; color:var(--muted);">Loading Still Good items...</div>
+    </div>
   </div>
 
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
@@ -883,6 +983,120 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
       </button>
     </div>
+  </div>
+</div>
+
+<!-- Still Good Add Item Modal -->
+<div class="modal-overlay" id="stillGoodAddModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Add to Still Good</h3>
+      <button onclick="closeAddStillGoodModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">What food is this?</label>
+      <input type="text" id="sgInputName" placeholder="e.g. Chicken Tikka masala, Veggie Curry, Sunday Chili..." autocomplete="off" style="width:100%; padding:12px 14px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
+    </div>
+
+    <!-- Location Selector (Fridge vs Freezer) -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Where is it stored?</label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="sgLocFridgeBtn" onclick="selectSgModalLocation('fridge')" style="flex:1; padding:10px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-weight:700; font-size:13px; cursor:pointer;">
+          🧊 Refrigerator
+        </button>
+        <button type="button" id="sgLocFreezerBtn" onclick="selectSgModalLocation('freezer')" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-weight:600; font-size:13px; cursor:pointer;">
+          ❄️ Freezer
+        </button>
+      </div>
+    </div>
+
+    <!-- Type Selector -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Type of food</label>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+        <button type="button" id="sgTypeHome" onclick="selectSgModalType('home_cooked')" style="padding:10px 6px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🍳 Home Meal
+        </button>
+        <button type="button" id="sgTypeRest" onclick="selectSgModalType('restaurant')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🥡 Restaurant
+        </button>
+        <button type="button" id="sgTypeBatch" onclick="selectSgModalType('batch_cook')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🍲 Batch Cook
+        </button>
+      </div>
+    </div>
+
+    <!-- Servings / Portions -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Portions / Boxes</label>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button type="button" onclick="adjustSgModalServings(-1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:#f9fafb; font-size:18px; font-weight:700; cursor:pointer;">-</button>
+        <span id="sgServingsDisplay" style="font-size:16px; font-weight:700; min-width:80px; text-align:center;">1 portion</span>
+        <button type="button" onclick="adjustSgModalServings(1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:#f9fafb; font-size:18px; font-weight:700; cursor:pointer;">+</button>
+      </div>
+    </div>
+
+    <!-- Target Date / Expiry -->
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Target consume-by date</label>
+      <input type="date" id="sgInputConsumeBy" style="width:100%; padding:10px 14px; font-size:15px; border:1.5px solid var(--border); border-radius:10px; background:#fff; outline:none; margin-bottom:6px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" onclick="setSgModalDays(3)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+3 days</button>
+        <button type="button" onclick="setSgModalDays(5)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+5 days</button>
+        <button type="button" onclick="setSgModalDays(30)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+1 month</button>
+        <button type="button" onclick="setSgModalDays(60)" style="padding:4px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:11px; font-weight:600; cursor:pointer;">+2 months</button>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Notes (optional)</label>
+      <input type="text" id="sgInputNotes" placeholder="e.g. Mild spice, box 2 of 4..." autocomplete="off" style="width:100%; padding:10px 14px; font-size:14px; border:1.5px solid var(--border); border-radius:10px; outline:none; background:#fff;">
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button type="button" onclick="closeAddStillGoodModal()" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; color:var(--text); font-weight:600; font-size:14px; cursor:pointer;">Cancel</button>
+      <button type="button" id="btnSaveStillGood" onclick="submitAddStillGood()" style="flex:2; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
+        + Save to Still Good
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Still Good Wins & Milestones Modal -->
+<div class="modal-overlay" id="stillGoodWinsModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">🏆 Thoughtful Kitchen Wins</h3>
+      <button onclick="document.getElementById('stillGoodWinsModal').classList.remove('active')" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
+    </div>
+
+    <!-- Stats Grid -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:14px; text-align:center;">
+        <div id="sgWinsModalCount" style="font-size:26px; font-weight:800; color:#15803d;">0</div>
+        <div style="font-size:12px; font-weight:600; color:#166534; margin-top:2px;">Kitchen Wins This Month</div>
+      </div>
+      <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:14px; padding:14px; text-align:center;">
+        <div id="sgWinsModalDollars" style="font-size:26px; font-weight:800; color:#065f46;">$0</div>
+        <div style="font-size:12px; font-weight:600; color:#047857; margin-top:2px;">Kept In Your Pocket</div>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:4px;">🌿 How Still Good helps your household:</div>
+      <div style="font-size:12px; color:#64748b; line-height:1.5;">
+        • Prevents takeout & leftovers from going from fridge to trash.<br>
+        • Keeps mass-cooked freezer batches organized so you remember them.<br>
+        • Averages $8+ saved per meal put to good use instead of wasted.
+      </div>
+    </div>
+
+    <button onclick="document.getElementById('stillGoodWinsModal').classList.remove('active')" style="width:100%; padding:12px; border-radius:12px; border:none; background:var(--green); color:#fff; font-size:14px; font-weight:700; cursor:pointer;">
+      Got It!
+    </button>
   </div>
 </div>
 
@@ -2344,6 +2558,7 @@ function showScreen(name){
     $('#screenHome').style.display='block';
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -2364,6 +2579,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -2374,6 +2590,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -2384,6 +2601,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
@@ -2397,12 +2615,28 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+  } else if(name==='stillGood'){
+    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='block';
+    $('#headerTitle').textContent='Still Good';
+    loadStillGood();
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
@@ -3593,6 +3827,559 @@ async function fetchAIInsights() {
   } catch (err) {
     contentEl.innerHTML = '<div style="text-align:center; padding:10px; color:red;">Error connecting to AI.</div>';
   }
+}
+
+// ── Still Good (Leftovers & Freezer Meals Tracker) ──
+var sgActiveTab = 'fridge'; // 'fridge' or 'freezer'
+var sgItems = [];
+var sgStats = { active_fridge: 0, active_freezer: 0, thawing_count: 0, wins_this_month: 0, total_wins: 0, dollars_saved: 0, cycle_messages: [] };
+var sgCycleIndex = 0;
+var sgCycleTimer = null;
+var sgModalLocation = 'fridge';
+var sgModalType = 'home_cooked';
+var sgModalServings = 1;
+
+function showStillGoodScreen() {
+  if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+  showScreen('stillGood');
+}
+
+function switchSgTab(tab) {
+  sgActiveTab = tab;
+  var fridgeBtn = document.getElementById('tabSgFridge');
+  var freezerBtn = document.getElementById('tabSgFreezer');
+  if (tab === 'fridge') {
+    if (fridgeBtn) {
+      fridgeBtn.style.background = '#f0fdf4';
+      fridgeBtn.style.borderColor = 'var(--green)';
+      fridgeBtn.style.color = 'var(--green-dark)';
+      fridgeBtn.style.fontWeight = '700';
+    }
+    if (freezerBtn) {
+      freezerBtn.style.background = '#f3f4f6';
+      freezerBtn.style.borderColor = 'var(--border)';
+      freezerBtn.style.color = 'var(--muted)';
+      freezerBtn.style.fontWeight = '600';
+    }
+  } else {
+    if (freezerBtn) {
+      freezerBtn.style.background = '#eff6ff';
+      freezerBtn.style.borderColor = '#3b82f6';
+      freezerBtn.style.color = '#1d4ed8';
+      freezerBtn.style.fontWeight = '700';
+    }
+    if (fridgeBtn) {
+      fridgeBtn.style.background = '#f3f4f6';
+      fridgeBtn.style.borderColor = 'var(--border)';
+      fridgeBtn.style.color = 'var(--muted)';
+      fridgeBtn.style.fontWeight = '600';
+    }
+  }
+  renderStillGoodItems();
+}
+
+async function loadStillGood() {
+  var listEl = document.getElementById('sgItemsList');
+  if (listEl && sgItems.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted); font-size:14px;">Loading Still Good items...</div>';
+  }
+  try {
+    var res = await fetch(API + '/still-good').then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      sgItems = res.items || [];
+      sgStats = res.stats || {};
+
+      var countFridgeEl = document.getElementById('sgCountFridge');
+      if (countFridgeEl) countFridgeEl.textContent = sgStats.active_fridge || 0;
+      var countFreezerEl = document.getElementById('sgCountFreezer');
+      if (countFreezerEl) countFreezerEl.textContent = sgStats.active_freezer || 0;
+
+      // Thawing notification banner
+      var thawBar = document.getElementById('sgThawingBar');
+      var thawText = document.getElementById('sgThawingText');
+      if (thawBar && thawText) {
+        if (sgStats.thawing_count && sgStats.thawing_count > 0) {
+          thawText.textContent = (sgStats.thawing_count === 1) ? '1 freezer meal thawing for dinner' : (sgStats.thawing_count + ' freezer meals thawing for dinner');
+          thawBar.style.display = 'flex';
+        } else {
+          thawBar.style.display = 'none';
+        }
+      }
+
+      // Wins modal numbers
+      var winsModalCount = document.getElementById('sgWinsModalCount');
+      if (winsModalCount) winsModalCount.textContent = sgStats.wins_this_month || sgStats.total_wins || 0;
+      var winsModalDollars = document.getElementById('sgWinsModalDollars');
+      if (winsModalDollars) winsModalDollars.textContent = '$' + (sgStats.dollars_saved || 0);
+
+      // Start / update celebration banner rotation
+      initSgBannerRotation(sgStats.cycle_messages);
+
+      renderStillGoodItems();
+    } else {
+      if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:#ef4444;">Failed to load items. Tap refresh to retry.</div>';
+    }
+  } catch(e) {
+    console.error('Error loading Still Good:', e);
+    if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted);">Unable to connect to Still Good service.</div>';
+  }
+}
+
+function initSgBannerRotation(messages) {
+  if (messages && messages.length > 0) {
+    window._sgMessages = messages;
+  } else if (!window._sgMessages || window._sgMessages.length === 0) {
+    window._sgMessages = [
+      "✨ 5 meals put to good use",
+      "🏆 5 kitchen wins this month",
+      "💵 $40 kept in your pocket",
+      "🌿 Thoughtful Kitchen: 5 meals enjoyed"
+    ];
+  }
+  updateSgBannerDisplay();
+  if (sgCycleTimer) clearInterval(sgCycleTimer);
+  sgCycleTimer = setInterval(function() {
+    cycleNextSgMessage();
+  }, 5000);
+}
+
+function cycleNextSgMessage() {
+  if (!window._sgMessages || window._sgMessages.length === 0) return;
+  sgCycleIndex = (sgCycleIndex + 1) % window._sgMessages.length;
+  updateSgBannerDisplay();
+}
+
+function updateSgBannerDisplay() {
+  var msg = (window._sgMessages && window._sgMessages[sgCycleIndex]) || "✨ Put meals to good use";
+  var textEl = document.getElementById('sgBannerText');
+  var iconEl = document.getElementById('sgBannerIcon');
+  if (!textEl) return;
+
+  var icon = "✨";
+  if (msg.indexOf("🏆") !== -1) icon = "🏆";
+  else if (msg.indexOf("💵") !== -1) icon = "💵";
+  else if (msg.indexOf("🌿") !== -1) icon = "🌿";
+  else if (msg.indexOf("✨") !== -1) icon = "✨";
+  else if (msg.indexOf("🍲") !== -1) icon = "🍲";
+
+  var cleanMsg = msg;
+  textEl.style.opacity = '0';
+  setTimeout(function() {
+    if (iconEl) iconEl.textContent = icon;
+    textEl.textContent = cleanMsg;
+    textEl.style.opacity = '1';
+  }, 150);
+
+  // Update dots indicator
+  var dots = document.querySelectorAll('#sgBannerDots .sg-dot');
+  dots.forEach(function(dot, idx) {
+    if (idx === sgCycleIndex) {
+      dot.style.background = '#059669';
+      dot.style.width = '14px';
+      dot.style.borderRadius = '10px';
+    } else {
+      dot.style.background = '#a7f3d0';
+      dot.style.width = '6px';
+      dot.style.borderRadius = '50%';
+    }
+  });
+}
+
+function renderStillGoodItems() {
+  var listEl = document.getElementById('sgItemsList');
+  if (!listEl) return;
+
+  var currentItems = sgItems.filter(function(i) {
+    return i.location === sgActiveTab && i.status === 'active';
+  });
+
+  if (currentItems.length === 0) {
+    if (sgActiveTab === 'fridge') {
+      listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; background:#fff; border-radius:16px; border:1.5px dashed var(--border); margin-top:10px;">' +
+        '<div style="font-size:38px; margin-bottom:10px;">🧊</div>' +
+        '<div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">No leftovers in the fridge!</div>' +
+        '<div style="font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:16px;">When you bring takeout or store meal leftovers, add them here so nothing gets forgotten.</div>' +
+        '<button onclick="openAddStillGoodModal(\'fridge\')" style="background:var(--green); color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">+ Add Fridge Leftover</button>' +
+        '</div>';
+    } else {
+      listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; background:#fff; border-radius:16px; border:1.5px dashed var(--border); margin-top:10px;">' +
+        '<div style="font-size:38px; margin-bottom:10px;">❄️</div>' +
+        '<div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">No meals in the freezer yet!</div>' +
+        '<div style="font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:16px;">Cooked a big batch on Sunday? Freeze your boxes and log them here so you can enjoy them over the weeks.</div>' +
+        '<button onclick="openAddStillGoodModal(\'freezer\')" style="background:#2563eb; color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">+ Add Freezer Batch</button>' +
+        '</div>';
+    }
+    return;
+  }
+
+  var html = '';
+  currentItems.forEach(function(item) {
+    var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home Meal</span>';
+    if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
+    else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch Cook</span>';
+
+    var statusPill = '';
+    if (item.location === 'freezer') {
+      if (item.thawing) {
+        statusPill = '<span class="sg-status-pill sg-badge-thawing">💧 Thawing</span>';
+      } else {
+        statusPill = '<span class="sg-status-pill sg-status-frozen">❄️ Frozen</span>';
+      }
+    } else {
+      if (item.urgency === 'urgent') {
+        var daysText = (item.days_left !== null && item.days_left < 0) ? Math.abs(item.days_left) + 'd past target' : 'Eat today!';
+        statusPill = '<span class="sg-status-pill sg-status-urgent">🔴 ' + daysText + '</span>';
+      } else if (item.urgency === 'soon') {
+        statusPill = '<span class="sg-status-pill sg-status-soon">🟡 ' + (item.days_left || 1) + 'd left · Soon</span>';
+      } else {
+        statusPill = '<span class="sg-status-pill sg-status-fresh">🟢 ' + (item.days_left !== null ? item.days_left + 'd left' : 'Fresh') + '</span>';
+      }
+    }
+
+    var portionsText = (item.servings > 1) ? (item.servings + (item.location === 'freezer' ? ' boxes' : ' portions')) : (item.location === 'freezer' ? '1 box' : '1 portion');
+
+    var secondaryActionBtn = '';
+    if (item.location === 'fridge') {
+      secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'move\')" title="Move to Freezer to preserve">❄️ Freeze</button>';
+    } else {
+      if (item.thawing) {
+        secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'move\')" title="Move to Fridge to eat">🧊 Move to Fridge</button>';
+      } else {
+        secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'thaw\')" title="Mark as Thawing for dinner">💧 Thaw</button>';
+      }
+    }
+
+    html += '<div class="sg-card-wrap" id="sgWrap_' + item.id + '">' +
+      '<div class="sg-swipe-underlay">' +
+        '<div class="sg-swipe-left-bg"><span>✓ Enjoyed! 🎉</span></div>' +
+        '<div class="sg-swipe-right-bg"><span>🗑 Discard</span></div>' +
+      '</div>' +
+      '<div class="sg-card" id="sgCard_' + item.id + '" data-id="' + item.id + '">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">' +
+          '<div style="min-width:0; flex:1;">' +
+            '<div style="font-size:16px; font-weight:700; color:var(--text); word-break:break-word; margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
+            '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+              typeBadge +
+              '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:3px 7px; border-radius:6px;">' + portionsText + '</span>' +
+              (item.notes ? '<span style="font-size:11px; color:var(--muted); font-style:italic;">' + escapeHtml(item.notes) + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="flex-shrink:0;">' +
+            statusPill +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f3f4f6; padding-top:10px; margin-top:10px;">' +
+          '<div style="font-size:11px; color:#9ca3af;">' +
+            (item.date_added ? 'Added ' + item.date_added : '') +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:8px;">' +
+            '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\')" title="Mark as Enjoyed">✓ Enjoyed</button>' +
+            secondaryActionBtn +
+            '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  listEl.innerHTML = html;
+
+  currentItems.forEach(function(item) {
+    attachSgSwipe(item.id);
+  });
+}
+
+function attachSgSwipe(itemId) {
+  var card = document.getElementById('sgCard_' + itemId);
+  if (!card) return;
+
+  var startX = 0;
+  var startY = 0;
+  var currentX = 0;
+  var isSwiping = false;
+  var isScrolling = false;
+
+  card.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    currentX = startX;
+    isSwiping = false;
+    isScrolling = false;
+    card.classList.add('swiping');
+  }, { passive: true });
+
+  card.addEventListener('touchmove', function(e) {
+    if (e.touches.length !== 1 || isScrolling) return;
+    var x = e.touches[0].clientX;
+    var y = e.touches[0].clientY;
+    var diffX = x - startX;
+    var diffY = y - startY;
+
+    if (!isSwiping) {
+      if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 8) {
+        isScrolling = true;
+        card.classList.remove('swiping');
+        return;
+      }
+      if (Math.abs(diffX) > 10) {
+        isSwiping = true;
+      }
+    }
+
+    if (isSwiping) {
+      var translation = diffX;
+      if (translation > 160) translation = 160 + (translation - 160) * 0.2;
+      if (translation < -160) translation = -160 + (translation + 160) * 0.2;
+      card.style.transform = 'translateX(' + translation + 'px)';
+    }
+  }, { passive: true });
+
+  function endSwipe(e) {
+    if (!isSwiping) {
+      card.classList.remove('swiping');
+      card.style.transform = '';
+      return;
+    }
+    card.classList.remove('swiping');
+    var touch = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+    var endX = touch ? touch.clientX : currentX;
+    var diffX = endX - startX;
+
+    if (diffX > 85) {
+      card.style.transform = 'translateX(100vw)';
+      setTimeout(function() {
+        stillGoodAction(itemId, 'consume');
+      }, 150);
+    } else if (diffX < -85) {
+      card.style.transform = 'translateX(-100vw)';
+      setTimeout(function() {
+        stillGoodAction(itemId, 'discard');
+      }, 150);
+    } else {
+      card.style.transform = 'translateX(0)';
+    }
+    isSwiping = false;
+  }
+
+  card.addEventListener('touchend', endSwipe);
+  card.addEventListener('touchcancel', endSwipe);
+}
+
+async function stillGoodAction(itemId, action) {
+  try {
+    if (action === 'consume' && window.confetti) {
+      window.confetti({
+        particleCount: 45,
+        spread: 60,
+        origin: { y: 0.65 },
+        colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6']
+      });
+    }
+
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (action === 'consume') {
+        if (typeof toast === 'function') toast('🎉 Kitchen win! Meal put to good use.');
+      } else if (action === 'discard') {
+        if (typeof toast === 'function') toast('Item removed.');
+      } else if (action === 'move') {
+        if (typeof toast === 'function') toast('Item location updated.');
+      } else if (action === 'thaw') {
+        if (typeof toast === 'function') toast('Thawing status updated.');
+      }
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not update item.');
+      loadStillGood();
+    }
+  } catch(e) {
+    console.error('Action error:', e);
+    loadStillGood();
+  }
+}
+
+function openAddStillGoodModal(preLocation) {
+  sgModalLocation = preLocation || sgActiveTab || 'fridge';
+  sgModalType = 'home_cooked';
+  sgModalServings = 1;
+
+  var nameInput = document.getElementById('sgInputName');
+  if (nameInput) nameInput.value = '';
+  var notesInput = document.getElementById('sgInputNotes');
+  if (notesInput) notesInput.value = '';
+
+  selectSgModalLocation(sgModalLocation);
+  selectSgModalType(sgModalType);
+  updateSgModalServingsDisplay();
+  setSgModalDays(sgModalLocation === 'freezer' ? 60 : 4);
+
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.add('active');
+  if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
+}
+
+function closeAddStillGoodModal() {
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function selectSgModalLocation(loc) {
+  sgModalLocation = loc;
+  var fBtn = document.getElementById('sgLocFridgeBtn');
+  var zBtn = document.getElementById('sgLocFreezerBtn');
+  if (loc === 'fridge') {
+    if (fBtn) {
+      fBtn.style.background = '#f0fdf4';
+      fBtn.style.borderColor = 'var(--green)';
+      fBtn.style.color = 'var(--green-dark)';
+    }
+    if (zBtn) {
+      zBtn.style.background = '#fff';
+      zBtn.style.borderColor = 'var(--border)';
+      zBtn.style.color = 'var(--muted)';
+    }
+    setSgModalDays(sgModalType === 'restaurant' ? 3 : 4);
+  } else {
+    if (zBtn) {
+      zBtn.style.background = '#eff6ff';
+      zBtn.style.borderColor = '#3b82f6';
+      zBtn.style.color = '#1d4ed8';
+    }
+    if (fBtn) {
+      fBtn.style.background = '#fff';
+      fBtn.style.borderColor = 'var(--border)';
+      fBtn.style.color = 'var(--muted)';
+    }
+    setSgModalDays(60);
+  }
+}
+
+function selectSgModalType(type) {
+  sgModalType = type;
+  var hBtn = document.getElementById('sgTypeHome');
+  var rBtn = document.getElementById('sgTypeRest');
+  var bBtn = document.getElementById('sgTypeBatch');
+
+  [hBtn, rBtn, bBtn].forEach(function(btn) {
+    if (btn) {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--muted)';
+    }
+  });
+
+  if (type === 'home_cooked' && hBtn) {
+    hBtn.style.background = '#f0fdf4';
+    hBtn.style.borderColor = 'var(--green)';
+    hBtn.style.color = 'var(--green-dark)';
+    if (sgModalLocation === 'fridge') setSgModalDays(4);
+  } else if (type === 'restaurant' && rBtn) {
+    rBtn.style.background = '#fef3c7';
+    rBtn.style.borderColor = '#f59e0b';
+    rBtn.style.color = '#92400e';
+    if (sgModalLocation === 'fridge') setSgModalDays(3);
+  } else if (type === 'batch_cook' && bBtn) {
+    bBtn.style.background = '#e0e7ff';
+    bBtn.style.borderColor = '#6366f1';
+    bBtn.style.color = '#3730a3';
+    if (sgModalLocation === 'freezer') setSgModalDays(60);
+    else setSgModalDays(5);
+  }
+}
+
+function adjustSgModalServings(delta) {
+  sgModalServings = Math.max(1, sgModalServings + delta);
+  updateSgModalServingsDisplay();
+}
+
+function updateSgModalServingsDisplay() {
+  var disp = document.getElementById('sgServingsDisplay');
+  if (disp) {
+    disp.textContent = sgModalServings + (sgModalLocation === 'freezer' ? (sgModalServings === 1 ? ' box' : ' boxes') : (sgModalServings === 1 ? ' portion' : ' portions'));
+  }
+}
+
+function setSgModalDays(days) {
+  var d = new Date();
+  d.setDate(d.getDate() + days);
+  var yyyy = d.getFullYear();
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  var input = document.getElementById('sgInputConsumeBy');
+  if (input) input.value = yyyy + '-' + mm + '-' + dd;
+}
+
+async function submitAddStillGood() {
+  var nameInput = document.getElementById('sgInputName');
+  var name = nameInput ? nameInput.value.trim() : '';
+  if (!name) {
+    if (typeof toast === 'function') toast('Please enter a food name.');
+    return;
+  }
+
+  var notesInput = document.getElementById('sgInputNotes');
+  var notes = notesInput ? notesInput.value.trim() : '';
+
+  var consumeByInput = document.getElementById('sgInputConsumeBy');
+  var consumeBy = consumeByInput ? consumeByInput.value : '';
+
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+  }
+
+  try {
+    var payload = {
+      name: name,
+      location: sgModalLocation,
+      item_type: sgModalType,
+      servings: sgModalServings,
+      consume_by: consumeBy,
+      notes: notes
+    };
+
+    var res = await fetch(API + '/still-good', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('Added to Still Good!');
+      closeAddStillGoodModal();
+      if (sgActiveTab !== sgModalLocation) {
+        switchSgTab(sgModalLocation);
+      }
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast(res.error || 'Failed to add item.');
+    }
+  } catch(e) {
+    console.error('Error adding Still Good item:', e);
+    if (typeof toast === 'function') toast('Network error saving item.');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '+ Save to Still Good';
+    }
+  }
+}
+
+function openStillGoodWinsModal() {
+  var winsModalCount = document.getElementById('sgWinsModalCount');
+  if (winsModalCount) winsModalCount.textContent = sgStats.wins_this_month || sgStats.total_wins || 0;
+  var winsModalDollars = document.getElementById('sgWinsModalDollars');
+  if (winsModalDollars) winsModalDollars.textContent = '$' + (sgStats.dollars_saved || 0);
+
+  var modal = document.getElementById('stillGoodWinsModal');
+  if (modal) modal.classList.add('active');
 }
 
 // ── Recipe Planner & AI Generator (US-112) ──
