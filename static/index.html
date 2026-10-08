@@ -3922,8 +3922,36 @@ var sgModalLocation = 'fridge';
 var sgModalType = 'home_cooked';
 var sgModalServings = 1;
 
+function canAccessStillGood() {
+  var cfg = window.currentCfg || {};
+  var status = (cfg.subscription_status || '').toLowerCase().trim();
+  // Premium, active and trial users only. Expired users don't get it.
+  if (status === 'trial') {
+    if (cfg.trial_ends_at) {
+      try {
+        var dEnd = new Date(cfg.trial_ends_at);
+        if (!isNaN(dEnd.getTime()) && dEnd < new Date()) {
+          return false;
+        }
+      } catch(e) {}
+    }
+    return true;
+  }
+  if (status === 'premium' || status === 'active') {
+    return true;
+  }
+  if (cfg.is_premium && status !== 'expired' && status !== 'canceled' && status !== 'free') {
+    return true;
+  }
+  return false;
+}
+
 function showStillGoodScreen() {
   if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+  if (!canAccessStillGood()) {
+    showPremiumModal('Still Good');
+    return;
+  }
   showScreen('stillGood');
 }
 
@@ -4000,6 +4028,11 @@ async function loadStillGood() {
 
       renderStillGoodItems();
     } else {
+      if (res && res.paywall_required) {
+        showPremiumModal('Still Good');
+        showScreen('home');
+        return;
+      }
       if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:#ef4444;">Failed to load items. Tap refresh to retry.</div>';
     }
   } catch(e) {
@@ -4884,6 +4917,9 @@ function showPremiumModal(featureName) {
     } else if (featureName === 'AI Insights') {
       title.textContent = 'AI Analytics is Premium';
       desc.textContent = 'Upgrade to unlock personalized AI shopping recommendations, habit insights, and money-saving tips.';
+    } else if (featureName === 'Still Good') {
+      title.textContent = 'Still Good is a Premium Feature';
+      desc.textContent = 'Track leftovers, reduce household food waste, and get AI-powered safe shelf-life recommendations with ListMate Premium.';
     } else {
       title.textContent = 'Recipe Planner is Premium';
       desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
@@ -7220,7 +7256,7 @@ window.featureDiscoveryEngine = (function() {
     if (typeof showStillGoodScreen === 'function') {
       showStillGoodScreen();
     }
-    if (window.stillGoodDiscoveryTour) {
+    if (typeof canAccessStillGood === 'function' && canAccessStillGood() && window.stillGoodDiscoveryTour) {
       setTimeout(function() {
         window.stillGoodDiscoveryTour.startInteractiveFlow();
       }, 250);

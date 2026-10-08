@@ -2487,12 +2487,61 @@ def _resolve_still_good_hh(db):
     return hhid
 
 
+def _can_household_access_still_good(db, hhid):
+    """
+    Still Good is available for premium, active, and trial users only.
+    Expired and free users do not get it (behind paywall).
+    """
+    if not hhid or hhid <= 0:
+        return False
+    try:
+        import shared.auth as authmod
+        hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at FROM {authmod._HH} WHERE id = ?", (hhid,))
+        if not hh:
+            return False
+        sub_status = (hh.get("subscription_status") or "free").lower().strip()
+        is_prem = bool(hh.get("is_premium"))
+
+        # Trial users: active as long as trial has not expired
+        if sub_status == "trial":
+            trial_ends_at = hh.get("trial_ends_at")
+            if trial_ends_at:
+                import datetime
+                try:
+                    t_end = trial_ends_at
+                    if isinstance(t_end, str):
+                        if 'T' in t_end:
+                            t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                        else:
+                            t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
+                    now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
+                    if t_end <= now:
+                        return False # trial expired
+                except Exception:
+                    pass
+            return True
+
+        # Premium and active subscribers
+        if sub_status in ["premium", "active"]:
+            return True
+
+        if is_prem and sub_status not in ["expired", "canceled", "free"]:
+            return True
+
+        return False
+    except Exception as e:
+        print(f"[Still Good Access Check Error] {e}")
+        return False
+
+
 @app.route("/api/still-good", methods=["GET"])
 @require_user
 def still_good_list_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         # Ensure Still Good columns exist
         for col_stmt in [
@@ -2653,6 +2702,8 @@ def still_good_create_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
@@ -2818,6 +2869,8 @@ def still_good_item_endpoint(item_id):
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         if request.method == "DELETE":
             db.execute("DELETE FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid))
