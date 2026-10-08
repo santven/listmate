@@ -67,6 +67,18 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         force_send=force_send
     )
 
+    # Task 2: Still Good AI Shelf-Life Batch Estimator (Runs once daily at 12a GMT / 00:00 UTC)
+    if now_utc.hour == 0 or force_send:
+        try:
+            from still_good_ai import enhance_still_good_shelf_life_batch
+            pipeline_results["still_good_ai"] = safe_execute_task(
+                "Still Good AI Shelf-Life Batch Estimator (12a GMT)",
+                enhance_still_good_shelf_life_batch,
+                limit=50
+            )
+        except Exception as exc:
+            logger.error(f"Still Good AI task failed to launch: {exc}")
+
     # -------------------------------------------------------------------------
     # Future Piggybacked Hourly Tasks can be added here cleanly:
     # e.g.,
@@ -99,8 +111,24 @@ def main():
         default=8,
         help="Target local hour for timezone evaluation (0-23, default: 8)"
     )
+    parser.add_argument(
+        "--still-good-ai",
+        action="store_true",
+        help="Run Still Good AI batch shelf-life enhancement immediately"
+    )
 
     args = parser.parse_args()
+
+    if args.still_good_ai:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good AI batch shelf-life enhancement via cron_hourly...")
+        try:
+            from still_good_ai import enhance_still_good_shelf_life_batch
+            stats = enhance_still_good_shelf_life_batch(limit=50)
+            print(f"Still Good AI result: {stats}")
+        except Exception as exc:
+            print(f"Still Good AI failed: {exc}")
+        print("Done.")
+        sys.exit(0)
 
     results = run_hourly_pipeline(
         dry_run=args.dry_run,

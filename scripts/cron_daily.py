@@ -1747,6 +1747,17 @@ if __name__ == "__main__":
         print("Done.")
         sys.exit(0)
 
+    if any(arg in sys.argv for arg in ("--still-good-ai", "--test-still-good-ai")):
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good AI batch shelf-life enhancement...")
+        try:
+            from still_good_ai import enhance_still_good_shelf_life_batch
+            stats = enhance_still_good_shelf_life_batch(limit=50)
+            print(f"Still Good AI result: {stats}")
+        except Exception as exc:
+            print(f"Still Good AI failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Starting daily cron jobs...")
     run_cron()
     print("Done.")

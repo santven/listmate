@@ -359,6 +359,34 @@ body.is-read-only .item-check { pointer-events: none !important; opacity: 0.5 !i
   animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
 }
 
+/* ── Still Good Feature Discovery Golden Halos (Identical to Feature Discovery Tips) ── */
+#btnOpenStillGood.discovery-halo,
+#btnStillGoodAddItem.discovery-halo,
+#sgInputName.discovery-halo,
+#btnSaveStillGood.discovery-halo {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 2px !important;
+  animation: listmateAmberPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
+}
+
+#btnOpenStillGood.discovery-halo {
+  border-radius: 10px !important;
+  box-shadow: 0 0 0 2px #fef3c7, 0 0 12px rgba(245, 158, 11, 0.6) !important;
+}
+
+#btnStillGoodAddItem.discovery-halo {
+  border-radius: 10px !important;
+}
+
+#sgInputName.discovery-halo {
+  border-radius: 12px !important;
+  border-color: #f59e0b !important;
+}
+
+#btnSaveStillGood.discovery-halo {
+  border-radius: 12px !important;
+}
+
 /* Feature Tip Bottom Drawer */
 .feature-tip-overlay {
   display: none;
@@ -504,6 +532,31 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   color: #b45309;
   border: 1px solid #fde68a;
 }
+/* Still Good Styles */
+.still-good-screen { min-height: 80vh; }
+.sg-card-wrap { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 12px; background: #fff; touch-action: pan-y; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.sg-swipe-underlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; border-radius: 14px; z-index: 1; }
+.sg-swipe-left-bg { background: #10b981; color: #fff; display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; position: absolute; left: 0; top: 0; padding-left: 20px; font-weight: 700; font-size: 14px; }
+.sg-swipe-right-bg { background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; height: 100%; position: absolute; right: 0; top: 0; padding-right: 20px; font-weight: 700; font-size: 14px; }
+.sg-card { position: relative; z-index: 2; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; transition: transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1); user-select: none; }
+.sg-card.swiping { transition: none; }
+.sg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+.sg-badge-restaurant { background: #fef3c7; color: #92400e; }
+.sg-badge-home { background: #ecfdf5; color: #065f46; }
+.sg-badge-batch { background: #e0e7ff; color: #3730a3; }
+.sg-badge-thawing { background: #dbeafe; color: #1e40af; }
+.sg-status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.sg-status-fresh { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.sg-status-soon { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.sg-status-urgent { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.sg-status-frozen { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.sg-action-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease; }
+.sg-action-enjoy { background: #10b981; color: #fff; }
+.sg-action-enjoy:active { background: #059669; transform: scale(0.97); }
+.sg-action-sec { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+.sg-action-sec:active { background: #e5e7eb; }
+.sg-action-danger { background: none; color: #9ca3af; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
+.sg-action-danger:hover, .sg-action-danger:active { color: #ef4444; background: #fee2e2; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -603,6 +656,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       setTimeout(() => { showScreen('globalVisits'); }, 400);
     } else if (screenParam === 'analytics') {
       setTimeout(() => { showAnalyticsScreen(); }, 400);
+    } else if (screenParam === 'stillGood' || screenParam === 'still_good' || localStorage.getItem('open_still_good') === '1') {
+      localStorage.removeItem('open_still_good');
+      setTimeout(() => {
+        showStillGoodScreen();
+      }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
       localStorage.removeItem('open_recipes');
       setTimeout(() => {
@@ -630,6 +688,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <a id="menuJoinHouseholdLink" href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); return false;">📋 Grocery List</a>
+      <a id="menuStillGoodLink" href="#" onclick="showStillGoodScreen(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🍲 Still Good</a>
+      <a id="menuRecipesLink" href="#" onclick="showRecipesScreen(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🍳 Recipe Planner</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); return false;">📊 Analytics</a>
       <div class="divider"></div>
@@ -661,8 +721,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         
       </div>
       <div style="display:flex; gap:8px;">
-        <button id="btnOpenRecipes" onclick="showRecipesScreen()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          🍳 Recipes Planner
+        <button id="btnOpenStillGood" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onStillGoodClick(event)) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+          🍲 Still Good
         </button>
       </div>
     </div>
@@ -764,6 +824,75 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
+  </div>
+
+  <!-- STILL GOOD SCREEN -->
+  <div class="still-good-screen" id="screenStillGood" style="display:none; padding-bottom:40px;">
+    <!-- Top Nav Bar -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:6px; flex-wrap:wrap;">
+      <button onclick="showScreen('home')" style="background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        ← Back to List
+      </button>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <button onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.startInteractiveFlow();" style="background:#fef3c7; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Still Good Feature Discovery Tips">
+          💡 Tips
+        </button>
+        <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="View Wins">
+          🏆 Wins
+        </button>
+        <button onclick="openStillGoodVacationModal()" id="btnStillGoodVacation" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Vacation Mode: Review fridge items before trip">
+          ✈️ Vacation
+        </button>
+        <button id="btnStillGoodAddItem" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onAddBtnClicked(); openAddStillGoodModal();" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+          + Add Item
+        </button>
+      </div>
+    </div>
+
+    <!-- Daily Thoughtful Kitchen Motivation Banner -->
+    <div id="sgCelebrationBanner" onclick="openStillGoodWinsModal()" role="button" tabindex="0" title="View kitchen wins and milestones" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.08); user-select:none;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+        <span id="sgBannerIcon" style="font-size:22px; flex-shrink:0;">✨</span>
+        <div style="min-width:0;">
+          <div id="sgBannerText" style="font-size:14px; font-weight:700; color:#065f46; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Thoughtful Kitchen</div>
+          <div style="font-size:11px; color:#047857; opacity:0.85; margin-top:1px;">Today's Household Motivation · Tap for Wins</div>
+        </div>
+      </div>
+      <div style="flex-shrink:0; margin-left:8px; color:#059669; font-size:13px; font-weight:700;">
+        🏆
+      </div>
+    </div>
+
+    <!-- Thawing Notification Bar -->
+    <div id="sgThawingBar" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; margin-bottom:14px; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:18px;">💧</span>
+        <span id="sgThawingText" style="font-size:13px; color:#1e40af; font-weight:600;"></span>
+      </div>
+      <button onclick="switchSgTab('freezer')" style="background:none; border:none; color:#2563eb; font-size:12px; font-weight:700; cursor:pointer;">View →</button>
+    </div>
+
+    <!-- Tabs Header -->
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button id="tabSgFridge" onclick="switchSgTab('fridge')" style="flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--green); background:#f0fdf4; font-weight:700; font-size:14px; cursor:pointer; color:var(--green-dark); display:flex; align-items:center; justify-content:center; gap:6px;">
+        🧊 Refrigerator (<span id="sgCountFridge">0</span>)
+      </button>
+      <button id="tabSgFreezer" onclick="switchSgTab('freezer')" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; font-size:14px; cursor:pointer; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:6px;">
+        ❄️ Freezer (<span id="sgCountFreezer">0</span>)
+      </button>
+    </div>
+
+    <!-- Swipe Tip Helper Banner -->
+    <div style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      <span>👉 Swipe <b>Right</b> to mark Enjoyed</span>
+      <span>•</span>
+      <span>Swipe <b>Left</b> to discard</span>
+    </div>
+
+    <!-- List of Still Good Items -->
+    <div id="sgItemsList" style="display:flex; flex-direction:column; gap:6px;">
+      <div style="text-align:center; padding:30px; color:var(--muted);">Loading Still Good items...</div>
+    </div>
   </div>
 
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
@@ -881,6 +1010,174 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <button onclick="confirmAddRecipeToList()" style="flex:2; padding:10px 14px; border-radius:12px; border:none; background:linear-gradient(135deg, #059669, #10b981); color:#fff; font-weight:700; font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
         <span>✅ Add Items to List</span>
         <span style="font-size:10px; font-weight:500; opacity:0.9;">(saves recipe for future use)</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Still Good Add Item Modal -->
+<div class="modal-overlay" id="stillGoodAddModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 id="sgModalTitle" style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Add to Still Good</h3>
+      <button onclick="closeAddStillGoodModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">What food is this?</label>
+      <input type="text" id="sgInputName" placeholder="e.g. Chicken Tikka masala, Veggie Curry, Sunday Chili..." autocomplete="off" style="width:100%; padding:12px 14px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff;">
+    </div>
+
+    <!-- Location Selector (Fridge vs Freezer) -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Where is it stored?</label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="sgLocFridgeBtn" onclick="selectSgModalLocation('fridge')" style="flex:1; padding:10px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-weight:700; font-size:13px; cursor:pointer;">
+          🧊 Refrigerator
+        </button>
+        <button type="button" id="sgLocFreezerBtn" onclick="selectSgModalLocation('freezer')" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-weight:600; font-size:13px; cursor:pointer;">
+          ❄️ Freezer
+        </button>
+      </div>
+    </div>
+
+    <!-- Type Selector -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Type of food</label>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+        <button type="button" id="sgTypeHome" onclick="selectSgModalType('home_cooked')" style="padding:10px 6px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🍳 Home Meal
+        </button>
+        <button type="button" id="sgTypeRest" onclick="selectSgModalType('restaurant')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🥡 Restaurant
+        </button>
+        <button type="button" id="sgTypeBatch" onclick="selectSgModalType('batch_cook')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🍲 Batch Cook
+        </button>
+      </div>
+    </div>
+
+    <!-- Servings / Portions -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Portions / Boxes</label>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button type="button" onclick="adjustSgModalServings(-1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:#f9fafb; font-size:18px; font-weight:700; cursor:pointer;">-</button>
+        <span id="sgServingsDisplay" style="font-size:16px; font-weight:700; min-width:80px; text-align:center;">1 portion</span>
+        <button type="button" onclick="adjustSgModalServings(1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:#f9fafb; font-size:18px; font-weight:700; cursor:pointer;">+</button>
+      </div>
+    </div>
+
+    <!-- Recommended Shelf-Life Display -->
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Smart Shelf Life</label>
+      <div id="sgRecCard" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:12px; padding:12px 14px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">💡</span>
+          <div>
+            <div id="sgRecTitle" style="font-size:13px; font-weight:700; color:#15803d;">Best within 24 hours (Eat by tomorrow)</div>
+            <div id="sgRecSub" style="font-size:11px; color:#166534; opacity:0.85; margin-top:2px;">Restaurant takeout degrades quickly in the fridge</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Notes (optional)</label>
+      <input type="text" id="sgInputNotes" placeholder="e.g. Mild spice, box 2 of 4..." autocomplete="off" style="width:100%; padding:10px 14px; font-size:14px; border:1.5px solid var(--border); border-radius:10px; outline:none; background:#fff;">
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button type="button" onclick="closeAddStillGoodModal()" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f3f4f6; color:var(--text); font-weight:600; font-size:14px; cursor:pointer;">Cancel</button>
+      <button type="button" id="btnSaveStillGood" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onSaveBtnClicked(); submitAddStillGood();" style="flex:2; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
+        + Save to Still Good
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Still Good Wins & Milestones Modal -->
+<div class="modal-overlay" id="stillGoodWinsModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">🏆 Thoughtful Kitchen Wins</h3>
+      <button onclick="document.getElementById('stillGoodWinsModal').classList.remove('active')" style="background:none; border:none; font-size:20px; cursor:pointer; color:#888;">✕</button>
+    </div>
+
+    <!-- Stats Grid -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:14px; text-align:center;">
+        <div id="sgWinsModalCount" style="font-size:26px; font-weight:800; color:#15803d;">0</div>
+        <div style="font-size:12px; font-weight:600; color:#166534; margin-top:2px;">Kitchen Wins This Month</div>
+      </div>
+      <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:14px; padding:14px; text-align:center;">
+        <div id="sgWinsModalDollars" style="font-size:26px; font-weight:800; color:#065f46;">$0</div>
+        <div style="font-size:12px; font-weight:600; color:#047857; margin-top:2px;">Kept In Your Pocket</div>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:4px;">🌿 How Still Good helps your household:</div>
+      <div style="font-size:12px; color:#64748b; line-height:1.5;">
+        • Prevents takeout & leftovers from going from fridge to trash.<br>
+        • Keeps mass-cooked freezer batches organized so you remember them.<br>
+        • Averages $8+ saved per meal put to good use instead of wasted.
+      </div>
+    </div>
+
+    <button onclick="document.getElementById('stillGoodWinsModal').classList.remove('active')" style="width:100%; padding:12px; border-radius:12px; border:none; background:var(--green); color:#fff; font-size:14px; font-weight:700; cursor:pointer;">
+      Got It!
+    </button>
+  </div>
+</div>
+
+<!-- Still Good Vacation Mode Bottom Drawer -->
+<div class="modal-overlay" id="stillGoodVacationModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:20px;">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:24px;">✈️</span>
+        <div>
+          <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Vacation Mode</h3>
+          <div style="font-size:12px; color:var(--muted);">Review fridge items before you head out</div>
+        </div>
+      </div>
+      <button onclick="closeStillGoodVacationModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#888; padding:4px 8px;">✕</button>
+    </div>
+
+    <!-- Instruction & Reminder Card -->
+    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:14px; padding:12px 14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:700; color:#0369a1; margin-bottom:4px;">
+        🏝️ Heading out of town?
+      </div>
+      <div style="font-size:12px; color:#0c4a6e; line-height:1.5;">
+        Perishable leftovers won't keep while you're away. Review your fridge items below:
+        <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
+          <div>• <b>Freeze</b> meals to safely preserve them (nudges update automatically).</div>
+          <div>• <b>Discard</b> leftovers you won't eat before leaving.</div>
+          <div>• Or <b>leave</b> selected items in the fridge as is.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- List of active fridge items -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:13px; font-weight:700; color:var(--text);">Current Refrigerator Items (<span id="sgVacationCount">0</span>)</span>
+      </div>
+      <div id="sgVacationItemsList" style="display:flex; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto; padding-right:2px;">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Actions / One-Click Freeze All -->
+    <div style="display:flex; flex-direction:column; gap:10px; border-top:1px solid #f1f5f9; padding-top:14px;">
+      <button type="button" id="btnSgVacationFreezeAll" onclick="vacationFreezeAllItems()" style="width:100%; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
+        <span>❄️ Move All to Freezer & Update Nudges</span>
+      </button>
+      <button type="button" onclick="closeStillGoodVacationModal()" style="width:100%; padding:11px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); font-size:13px; font-weight:600; cursor:pointer;">
+        Leave Remaining in Fridge & Close
       </button>
     </div>
   </div>
@@ -2344,6 +2641,7 @@ function showScreen(name){
     $('#screenHome').style.display='block';
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -2364,6 +2662,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -2374,6 +2673,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -2384,6 +2684,7 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
@@ -2397,12 +2698,28 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     $('#headerTitle').textContent='Recipe Planner';
     checkDietaryStatus();
     loadRecipeUsage();
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+  } else if(name==='stillGood'){
+    if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='block';
+    $('#headerTitle').textContent='Still Good';
+    loadStillGood();
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
@@ -3595,6 +3912,974 @@ async function fetchAIInsights() {
   }
 }
 
+// ── Still Good (Leftovers & Freezer Meals Tracker) ──
+var sgActiveTab = 'fridge'; // 'fridge' or 'freezer'
+var sgItems = [];
+var sgStats = { active_fridge: 0, active_freezer: 0, thawing_count: 0, wins_this_month: 0, total_wins: 0, dollars_saved: 0, cycle_messages: [] };
+var sgCycleIndex = 0;
+var sgCycleTimer = null;
+var sgModalLocation = 'fridge';
+var sgModalType = 'home_cooked';
+var sgModalServings = 1;
+
+function canAccessStillGood() {
+  var cfg = window.currentCfg || {};
+  var status = (cfg.subscription_status || '').toLowerCase().trim();
+  // Premium, active and trial users only. Expired users don't get it.
+  if (status === 'trial') {
+    if (cfg.trial_ends_at) {
+      try {
+        var dEnd = new Date(cfg.trial_ends_at);
+        if (!isNaN(dEnd.getTime()) && dEnd < new Date()) {
+          return false;
+        }
+      } catch(e) {}
+    }
+    return true;
+  }
+  if (status === 'premium' || status === 'active') {
+    return true;
+  }
+  if (cfg.is_premium && status !== 'expired' && status !== 'canceled' && status !== 'free') {
+    return true;
+  }
+  return false;
+}
+
+function showStillGoodScreen() {
+  if (document.getElementById('burgerMenu') && document.getElementById('burgerMenu').classList.contains('show') && typeof toggleBurger === 'function') toggleBurger();
+  if (!canAccessStillGood()) {
+    showPremiumModal('Still Good');
+    return;
+  }
+  showScreen('stillGood');
+}
+
+function switchSgTab(tab) {
+  sgActiveTab = tab;
+  var fridgeBtn = document.getElementById('tabSgFridge');
+  var freezerBtn = document.getElementById('tabSgFreezer');
+  if (tab === 'fridge') {
+    if (fridgeBtn) {
+      fridgeBtn.style.background = '#f0fdf4';
+      fridgeBtn.style.borderColor = 'var(--green)';
+      fridgeBtn.style.color = 'var(--green-dark)';
+      fridgeBtn.style.fontWeight = '700';
+    }
+    if (freezerBtn) {
+      freezerBtn.style.background = '#f3f4f6';
+      freezerBtn.style.borderColor = 'var(--border)';
+      freezerBtn.style.color = 'var(--muted)';
+      freezerBtn.style.fontWeight = '600';
+    }
+  } else {
+    if (freezerBtn) {
+      freezerBtn.style.background = '#eff6ff';
+      freezerBtn.style.borderColor = '#3b82f6';
+      freezerBtn.style.color = '#1d4ed8';
+      freezerBtn.style.fontWeight = '700';
+    }
+    if (fridgeBtn) {
+      fridgeBtn.style.background = '#f3f4f6';
+      fridgeBtn.style.borderColor = 'var(--border)';
+      fridgeBtn.style.color = 'var(--muted)';
+      fridgeBtn.style.fontWeight = '600';
+    }
+  }
+  renderStillGoodItems();
+}
+
+async function loadStillGood() {
+  var listEl = document.getElementById('sgItemsList');
+  if (listEl && sgItems.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted); font-size:14px;">Loading Still Good items...</div>';
+  }
+  try {
+    var res = await fetch(API + '/still-good').then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      sgItems = res.items || [];
+      sgStats = res.stats || {};
+
+      var countFridgeEl = document.getElementById('sgCountFridge');
+      if (countFridgeEl) countFridgeEl.textContent = sgStats.active_fridge || 0;
+      var countFreezerEl = document.getElementById('sgCountFreezer');
+      if (countFreezerEl) countFreezerEl.textContent = sgStats.active_freezer || 0;
+
+      // Thawing notification banner
+      var thawBar = document.getElementById('sgThawingBar');
+      var thawText = document.getElementById('sgThawingText');
+      if (thawBar && thawText) {
+        if (sgStats.thawing_count && sgStats.thawing_count > 0) {
+          thawText.textContent = (sgStats.thawing_count === 1) ? '1 freezer meal thawing for dinner' : (sgStats.thawing_count + ' freezer meals thawing for dinner');
+          thawBar.style.display = 'flex';
+        } else {
+          thawBar.style.display = 'none';
+        }
+      }
+
+      // Wins modal numbers
+      var winsModalCount = document.getElementById('sgWinsModalCount');
+      if (winsModalCount) winsModalCount.textContent = sgStats.wins_this_month || sgStats.total_wins || 0;
+      var winsModalDollars = document.getElementById('sgWinsModalDollars');
+      if (winsModalDollars) winsModalDollars.textContent = '$' + (sgStats.dollars_saved || 0);
+
+      // Start / update celebration banner rotation
+      initSgBannerRotation(sgStats.cycle_messages);
+
+      renderStillGoodItems();
+    } else {
+      if (res && res.paywall_required) {
+        showPremiumModal('Still Good');
+        showScreen('home');
+        return;
+      }
+      if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:#ef4444;">Failed to load items. Tap refresh to retry.</div>';
+    }
+  } catch(e) {
+    console.error('Error loading Still Good:', e);
+    if (listEl) listEl.innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted);">Unable to connect to Still Good service.</div>';
+  }
+}
+
+function initSgBannerRotation(messages) {
+  if (messages && messages.length > 0) {
+    window._sgMessages = messages;
+  } else {
+    window._sgMessages = [
+      "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence",
+      "🍲 Keep track of fridge leftovers & Sunday batch cooks"
+    ];
+  }
+  // Daily deterministic rotation: selects one motivation per calendar day
+  var now = new Date();
+  var startOfYear = new Date(now.getFullYear(), 0, 0);
+  var diff = (now - startOfYear) + ((startOfYear.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+  var oneDay = 1000 * 60 * 60 * 24;
+  var dayOfYear = Math.floor(diff / oneDay);
+  sgCycleIndex = dayOfYear % window._sgMessages.length;
+  updateSgBannerDisplay();
+}
+
+function updateSgBannerDisplay() {
+  var msg = (window._sgMessages && window._sgMessages[sgCycleIndex]) || "🌿 Thoughtful Kitchen: Track leftovers & freeze with confidence";
+  var textEl = document.getElementById('sgBannerText');
+  var iconEl = document.getElementById('sgBannerIcon');
+  if (!textEl) return;
+
+  var icon = "🌿";
+  if (msg.indexOf("🏆") !== -1) icon = "🏆";
+  else if (msg.indexOf("💵") !== -1) icon = "💵";
+  else if (msg.indexOf("✨") !== -1) icon = "✨";
+  else if (msg.indexOf("🍲") !== -1) icon = "🍲";
+
+  if (iconEl) iconEl.textContent = icon;
+  textEl.textContent = msg;
+}
+
+function renderStillGoodItems() {
+  var listEl = document.getElementById('sgItemsList');
+  if (!listEl) return;
+
+  var currentItems = sgItems.filter(function(i) {
+    return i.location === sgActiveTab && i.status === 'active';
+  });
+
+  if (currentItems.length === 0) {
+    if (sgActiveTab === 'fridge') {
+      listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; background:#fff; border-radius:16px; border:1.5px dashed var(--border); margin-top:10px;">' +
+        '<div style="font-size:38px; margin-bottom:10px;">🧊</div>' +
+        '<div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">No leftovers in the fridge!</div>' +
+        '<div style="font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:16px;">When you bring takeout or store meal leftovers, add them here so nothing gets forgotten.</div>' +
+        '<button onclick="openAddStillGoodModal(\'fridge\')" style="background:var(--green); color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">+ Add Fridge Leftover</button>' +
+        '</div>';
+    } else {
+      listEl.innerHTML = '<div style="text-align:center; padding:40px 20px; background:#fff; border-radius:16px; border:1.5px dashed var(--border); margin-top:10px;">' +
+        '<div style="font-size:38px; margin-bottom:10px;">❄️</div>' +
+        '<div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">No meals in the freezer yet!</div>' +
+        '<div style="font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:16px;">Cooked a big batch on Sunday? Freeze your boxes and log them here so you can enjoy them over the weeks.</div>' +
+        '<button onclick="openAddStillGoodModal(\'freezer\')" style="background:#2563eb; color:#fff; border:none; padding:10px 18px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;">+ Add Freezer Batch</button>' +
+        '</div>';
+    }
+    return;
+  }
+
+  var html = '';
+  currentItems.forEach(function(item) {
+    var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home Meal</span>';
+    if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
+    else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch Cook</span>';
+
+    var statusPill = '';
+    if (item.location === 'freezer') {
+      if (item.thawing) {
+        statusPill = '<span class="sg-status-pill sg-badge-thawing">💧 Thawing</span>';
+      } else {
+        statusPill = '<span class="sg-status-pill sg-status-frozen">❄️ Frozen</span>';
+      }
+    } else {
+      if (item.urgency === 'urgent') {
+        var daysText = (item.days_left !== null && item.days_left < 0) ? Math.abs(item.days_left) + 'd past target' : 'Eat today!';
+        statusPill = '<span class="sg-status-pill sg-status-urgent">🔴 ' + daysText + '</span>';
+      } else if (item.urgency === 'soon') {
+        statusPill = '<span class="sg-status-pill sg-status-soon">🟡 ' + (item.days_left || 1) + 'd left · Soon</span>';
+      } else {
+        statusPill = '<span class="sg-status-pill sg-status-fresh">🟢 ' + (item.days_left !== null ? item.days_left + 'd left' : 'Fresh') + '</span>';
+      }
+    }
+
+    var portionsText = (item.servings > 1) ? (item.servings + (item.location === 'freezer' ? ' boxes' : ' portions')) : (item.location === 'freezer' ? '1 box' : '1 portion');
+
+    var secondaryActionBtn = '';
+    if (item.location === 'fridge') {
+      secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'move\')" title="Move to Freezer to preserve">❄️ Freeze</button>';
+    } else {
+      if (item.thawing) {
+        secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'move\')" title="Move to Fridge to eat">🧊 Move to Fridge</button>';
+      } else {
+        secondaryActionBtn = '<button class="sg-action-btn sg-action-sec" onclick="stillGoodAction(' + item.id + ', \'thaw\')" title="Mark as Thawing for dinner">💧 Thaw</button>';
+      }
+    }
+
+    html += '<div class="sg-card-wrap" id="sgWrap_' + item.id + '">' +
+      '<div class="sg-swipe-underlay">' +
+        '<div class="sg-swipe-left-bg"><span>✓ Enjoyed! 🎉</span></div>' +
+        '<div class="sg-swipe-right-bg"><span>🗑 Discard</span></div>' +
+      '</div>' +
+      '<div class="sg-card" id="sgCard_' + item.id + '" data-id="' + item.id + '">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">' +
+          '<div style="min-width:0; flex:1;">' +
+            '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">' +
+              '<span style="font-size:16px; font-weight:700; color:var(--text); word-break:break-word;">' + escapeHtml(item.name) + '</span>' +
+              '<button type="button" class="btn-sg-edit" onclick="openEditStillGoodModal(' + item.id + ')" title="Edit item" style="background:transparent; border:none; cursor:pointer; font-size:13px; color:var(--muted); padding:2px 4px; border-radius:4px; display:inline-flex; align-items:center;">✏️</button>' +
+            '</div>' +
+            '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+              typeBadge +
+              '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:3px 7px; border-radius:6px;">' + portionsText + '</span>' +
+              (item.notes ? '<span style="font-size:11px; color:var(--muted); font-style:italic;">' + escapeHtml(item.notes) + '</span>' : '') +
+              (item.ai_tip ? '<span style="font-size:11px; font-weight:600; color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; padding:2px 7px; border-radius:6px;" title="AI Conservative Safe Shelf-Life Tip">🤖 ' + escapeHtml(item.ai_tip) + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="flex-shrink:0;">' +
+            statusPill +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f3f4f6; padding-top:10px; margin-top:10px;">' +
+          '<div style="font-size:11px; color:#9ca3af;">' +
+            (item.date_added ? 'Added ' + item.date_added : '') +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:8px;">' +
+            '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\')" title="Mark as Enjoyed">✓ Enjoyed</button>' +
+            secondaryActionBtn +
+            '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  listEl.innerHTML = html;
+
+  currentItems.forEach(function(item) {
+    attachSgSwipe(item.id);
+  });
+}
+
+function attachSgSwipe(itemId) {
+  var card = document.getElementById('sgCard_' + itemId);
+  if (!card) return;
+
+  var startX = 0;
+  var startY = 0;
+  var currentX = 0;
+  var isSwiping = false;
+  var isScrolling = false;
+
+  card.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    currentX = startX;
+    isSwiping = false;
+    isScrolling = false;
+    card.classList.add('swiping');
+  }, { passive: true });
+
+  card.addEventListener('touchmove', function(e) {
+    if (e.touches.length !== 1 || isScrolling) return;
+    var x = e.touches[0].clientX;
+    var y = e.touches[0].clientY;
+    var diffX = x - startX;
+    var diffY = y - startY;
+
+    if (!isSwiping) {
+      if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 8) {
+        isScrolling = true;
+        card.classList.remove('swiping');
+        return;
+      }
+      if (Math.abs(diffX) > 10) {
+        isSwiping = true;
+      }
+    }
+
+    if (isSwiping) {
+      var translation = diffX;
+      if (translation > 160) translation = 160 + (translation - 160) * 0.2;
+      if (translation < -160) translation = -160 + (translation + 160) * 0.2;
+      card.style.transform = 'translateX(' + translation + 'px)';
+    }
+  }, { passive: true });
+
+  function endSwipe(e) {
+    if (!isSwiping) {
+      card.classList.remove('swiping');
+      card.style.transform = '';
+      return;
+    }
+    card.classList.remove('swiping');
+    var touch = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+    var endX = touch ? touch.clientX : currentX;
+    var diffX = endX - startX;
+
+    if (diffX > 85) {
+      card.style.transform = 'translateX(100vw)';
+      setTimeout(function() {
+        stillGoodAction(itemId, 'consume');
+      }, 150);
+    } else if (diffX < -85) {
+      card.style.transform = 'translateX(-100vw)';
+      setTimeout(function() {
+        stillGoodAction(itemId, 'discard');
+      }, 150);
+    } else {
+      card.style.transform = 'translateX(0)';
+    }
+    isSwiping = false;
+  }
+
+  card.addEventListener('touchend', endSwipe);
+  card.addEventListener('touchcancel', endSwipe);
+}
+
+async function stillGoodAction(itemId, action) {
+  try {
+    if (action === 'consume' && window.confetti) {
+      window.confetti({
+        particleCount: 45,
+        spread: 60,
+        origin: { y: 0.65 },
+        colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6']
+      });
+    }
+
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (action === 'consume') {
+        if (typeof toast === 'function') toast('🎉 Kitchen win! Meal put to good use.');
+      } else if (action === 'discard') {
+        if (typeof toast === 'function') toast('Item removed.');
+      } else if (action === 'move') {
+        if (typeof toast === 'function') toast('Item location updated.');
+      } else if (action === 'thaw') {
+        if (typeof toast === 'function') toast('Thawing status updated.');
+      }
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not update item.');
+      loadStillGood();
+    }
+  } catch(e) {
+    console.error('Action error:', e);
+    loadStillGood();
+  }
+}
+
+var sgModalDays = 3;
+var sgModalConsumeBy = '';
+var sgEditingItemId = null;
+
+function openEditStillGoodModal(itemId) {
+  var item = sgItems.find(function(i) { return i.id === itemId; });
+  if (!item) return;
+
+  sgEditingItemId = itemId;
+  sgModalLocation = item.location || 'fridge';
+  sgModalType = item.item_type || 'home_cooked';
+  sgModalServings = item.servings || 1;
+  sgModalConsumeBy = item.consume_by || '';
+
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = '✏️ Edit Still Good Item';
+
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = 'Save Changes';
+
+  var nameInput = document.getElementById('sgInputName');
+  if (nameInput) nameInput.value = item.name || '';
+
+  var notesInput = document.getElementById('sgInputNotes');
+  if (notesInput) notesInput.value = item.notes || '';
+
+  selectSgModalLocation(sgModalLocation);
+  selectSgModalType(sgModalType);
+  updateSgModalServingsDisplay();
+
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.add('active');
+  if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
+}
+
+function openAddStillGoodModal(preLocation) {
+  sgEditingItemId = null;
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = 'Add to Still Good';
+
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = '+ Save to Still Good';
+
+  sgModalLocation = preLocation || sgActiveTab || 'fridge';
+  sgModalType = 'home_cooked';
+  sgModalServings = 1;
+
+  var nameInput = document.getElementById('sgInputName');
+  if (nameInput) nameInput.value = '';
+  var notesInput = document.getElementById('sgInputNotes');
+  if (notesInput) notesInput.value = '';
+
+  selectSgModalLocation(sgModalLocation);
+  selectSgModalType(sgModalType);
+  updateSgModalServingsDisplay();
+
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.add('active');
+  if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
+}
+
+function closeAddStillGoodModal() {
+  sgEditingItemId = null;
+  var modalTitle = document.getElementById('sgModalTitle');
+  if (modalTitle) modalTitle.textContent = 'Add to Still Good';
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) saveBtn.textContent = '+ Save to Still Good';
+
+  var modal = document.getElementById('stillGoodAddModal');
+  if (modal) modal.classList.remove('active');
+  if (window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.isTourActive()) {
+    window.stillGoodDiscoveryTour.onModalClosed();
+  }
+}
+
+function selectSgModalLocation(loc) {
+  sgModalLocation = loc;
+  var fBtn = document.getElementById('sgLocFridgeBtn');
+  var zBtn = document.getElementById('sgLocFreezerBtn');
+  if (loc === 'fridge') {
+    if (fBtn) {
+      fBtn.style.background = '#f0fdf4';
+      fBtn.style.borderColor = 'var(--green)';
+      fBtn.style.color = 'var(--green-dark)';
+    }
+    if (zBtn) {
+      zBtn.style.background = '#fff';
+      zBtn.style.borderColor = 'var(--border)';
+      zBtn.style.color = 'var(--muted)';
+    }
+    if (sgModalType === 'restaurant') {
+      setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
+    } else if (sgModalType === 'batch_cook') {
+      setSgModalDays(5, 'Eat within 5 days in fridge', 'Hearty stews, soups, or batch cooks in fridge');
+    } else {
+      setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
+    }
+  } else {
+    if (zBtn) {
+      zBtn.style.background = '#eff6ff';
+      zBtn.style.borderColor = '#3b82f6';
+      zBtn.style.color = '#1d4ed8';
+    }
+    if (fBtn) {
+      fBtn.style.background = '#fff';
+      fBtn.style.borderColor = 'var(--border)';
+      fBtn.style.color = 'var(--muted)';
+    }
+    if (sgModalType === 'restaurant') {
+      setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
+    } else {
+      setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    }
+  }
+}
+
+function selectSgModalType(type) {
+  sgModalType = type;
+  var hBtn = document.getElementById('sgTypeHome');
+  var rBtn = document.getElementById('sgTypeRest');
+  var bBtn = document.getElementById('sgTypeBatch');
+
+  [hBtn, rBtn, bBtn].forEach(function(btn) {
+    if (btn) {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--muted)';
+    }
+  });
+
+  if (type === 'home_cooked' && hBtn) {
+    hBtn.style.background = '#f0fdf4';
+    hBtn.style.borderColor = 'var(--green)';
+    hBtn.style.color = 'var(--green-dark)';
+    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    else setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
+  } else if (type === 'restaurant' && rBtn) {
+    rBtn.style.background = '#fef3c7';
+    rBtn.style.borderColor = '#f59e0b';
+    rBtn.style.color = '#92400e';
+    if (sgModalLocation === 'freezer') setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
+    else setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
+  } else if (type === 'batch_cook' && bBtn) {
+    bBtn.style.background = '#e0e7ff';
+    bBtn.style.borderColor = '#6366f1';
+    bBtn.style.color = '#3730a3';
+    if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
+    else setSgModalDays(5, 'Eat within 5 days in fridge', 'Hearty stews, soups, or batch cooks in fridge');
+  }
+}
+
+function adjustSgModalServings(delta) {
+  sgModalServings = Math.max(1, sgModalServings + delta);
+  updateSgModalServingsDisplay();
+}
+
+function updateSgModalServingsDisplay() {
+  var disp = document.getElementById('sgServingsDisplay');
+  if (disp) {
+    disp.textContent = sgModalServings + (sgModalLocation === 'freezer' ? (sgModalServings === 1 ? ' box' : ' boxes') : (sgModalServings === 1 ? ' portion' : ' portions'));
+  }
+}
+
+function setSgModalDays(days, title, subtitle) {
+  sgModalDays = days;
+  var d = new Date();
+  d.setDate(d.getDate() + days);
+  var yyyy = d.getFullYear();
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  sgModalConsumeBy = yyyy + '-' + mm + '-' + dd;
+
+  var titleEl = document.getElementById('sgRecTitle');
+  var subEl = document.getElementById('sgRecSub');
+  if (titleEl && title) titleEl.textContent = title;
+  else if (titleEl) {
+    if (days === 1) titleEl.textContent = 'Best within 24 hours (Eat by tomorrow)';
+    else if (days >= 30) titleEl.textContent = 'Good for ~' + Math.round(days / 30) + ' months in freezer';
+    else titleEl.textContent = 'Eat within ' + days + ' days';
+  }
+
+  if (subEl && subtitle) subEl.textContent = subtitle;
+  else if (subEl) {
+    if (days === 1) subEl.textContent = 'Restaurant takeout degrades quickly in fridge';
+    else if (days >= 30) subEl.textContent = 'Freezing pauses spoilage; best within 2 months for flavor';
+    else subEl.textContent = 'Safe conservative window for refrigerated meals';
+  }
+}
+
+async function submitAddStillGood() {
+  var nameInput = document.getElementById('sgInputName');
+  var name = nameInput ? nameInput.value.trim() : '';
+  if (!name) {
+    var todayDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+    name = todayDay + ' left overs';
+    if (nameInput) nameInput.value = name;
+  }
+
+  var notesInput = document.getElementById('sgInputNotes');
+  var notes = notesInput ? notesInput.value.trim() : '';
+
+  var isEdit = !!sgEditingItemId;
+  var saveBtn = document.getElementById('btnSaveStillGood');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = isEdit ? 'Updating...' : 'Saving...';
+  }
+
+  try {
+    var payload = {
+      name: name,
+      location: sgModalLocation,
+      item_type: sgModalType,
+      servings: sgModalServings,
+      consume_by: sgModalConsumeBy,
+      notes: notes
+    };
+
+    var endpoint = isEdit ? (API + '/still-good/' + sgEditingItemId) : (API + '/still-good');
+    var method = isEdit ? 'PUT' : 'POST';
+
+    var res = await fetch(endpoint, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast(isEdit ? 'Item updated!' : 'Added to Still Good!');
+      closeAddStillGoodModal();
+      if (sgActiveTab !== sgModalLocation) {
+        switchSgTab(sgModalLocation);
+      }
+      loadStillGood();
+      if (window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.isTourActive()) {
+        window.stillGoodDiscoveryTour.completeTour();
+      }
+    } else {
+      if (typeof toast === 'function') toast(res.error || (isEdit ? 'Failed to update item.' : 'Failed to add item.'));
+    }
+  } catch(e) {
+    console.error('Error saving Still Good item:', e);
+    if (typeof toast === 'function') toast('Network error saving item.');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEdit ? 'Save Changes' : '+ Save to Still Good';
+    }
+  }
+}
+
+function openStillGoodWinsModal() {
+  var winsModalCount = document.getElementById('sgWinsModalCount');
+  if (winsModalCount) winsModalCount.textContent = sgStats.wins_this_month || sgStats.total_wins || 0;
+  var winsModalDollars = document.getElementById('sgWinsModalDollars');
+  if (winsModalDollars) winsModalDollars.textContent = '$' + (sgStats.dollars_saved || 0);
+
+  var modal = document.getElementById('stillGoodWinsModal');
+  if (modal) modal.classList.add('active');
+}
+
+function openStillGoodVacationModal() {
+  renderVacationDrawerItems();
+  var modal = document.getElementById('stillGoodVacationModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeStillGoodVacationModal() {
+  var modal = document.getElementById('stillGoodVacationModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function renderVacationDrawerItems() {
+  var listEl = document.getElementById('sgVacationItemsList');
+  var countEl = document.getElementById('sgVacationCount');
+  var btnFreezeAll = document.getElementById('btnSgVacationFreezeAll');
+  if (!listEl) return;
+
+  var fridgeItems = sgItems.filter(function(i) {
+    return i.location === 'fridge' && i.status === 'active';
+  });
+
+  if (countEl) countEl.textContent = fridgeItems.length;
+
+  if (fridgeItems.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center; padding:30px 16px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:14px;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">✨</div>' +
+      '<div style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:4px;">No leftovers in the fridge!</div>' +
+      '<div style="font-size:12px; color:#64748b; line-height:1.4;">Your fridge is completely clear of perishable meals. You are all set for vacation!</div>' +
+      '</div>';
+    if (btnFreezeAll) {
+      btnFreezeAll.style.display = 'none';
+    }
+    return;
+  }
+
+  if (btnFreezeAll) {
+    btnFreezeAll.style.display = 'flex';
+    btnFreezeAll.disabled = false;
+    btnFreezeAll.innerHTML = '<span>❄️ Move All (' + fridgeItems.length + ') to Freezer & Update Nudges</span>';
+  }
+
+  var html = '';
+  fridgeItems.forEach(function(item) {
+    var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home</span>';
+    if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
+    else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch</span>';
+
+    var statusPill = '';
+    if (item.urgency === 'urgent') {
+      var daysText = (item.days_left !== null && item.days_left < 0) ? Math.abs(item.days_left) + 'd past target' : 'Eat today!';
+      statusPill = '<span class="sg-status-pill sg-status-urgent">🔴 ' + daysText + '</span>';
+    } else if (item.urgency === 'soon') {
+      statusPill = '<span class="sg-status-pill sg-status-soon">🟡 ' + (item.days_left || 1) + 'd left</span>';
+    } else {
+      statusPill = '<span class="sg-status-pill sg-status-fresh">🟢 ' + (item.days_left !== null ? item.days_left + 'd left' : 'Fresh') + '</span>';
+    }
+
+    var portionsText = (item.servings > 1) ? (item.servings + ' portions') : '1 portion';
+
+    html += '<div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">' +
+      '<div style="min-width:0; flex:1;">' +
+        '<div style="font-size:14px; font-weight:700; color:var(--text); word-break:break-word; margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
+        '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          typeBadge +
+          '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:2px 6px; border-radius:4px;">' + portionsText + '</span>' +
+          statusPill +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+        '<button type="button" onclick="vacationFreezeSingleItem(' + item.id + ')" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:7px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Move to Freezer to preserve">❄️ Freeze</button>' +
+        '<button type="button" onclick="vacationDiscardItem(' + item.id + ')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; padding:7px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Discard before leaving">🗑 Discard</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  listEl.innerHTML = html;
+}
+
+async function vacationDiscardItem(itemId) {
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'discard' })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('Item discarded.');
+      sgItems = sgItems.filter(function(i) { return i.id !== itemId; });
+      if (sgStats && sgStats.active_fridge > 0) sgStats.active_fridge--;
+      renderVacationDrawerItems();
+      renderStillGoodItems();
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not discard item.');
+    }
+  } catch(e) {
+    console.error('Vacation discard error:', e);
+  }
+}
+
+async function vacationFreezeSingleItem(itemId) {
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'move' })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('❄️ Moved to freezer & updated nudge.');
+      for (var i = 0; i < sgItems.length; i++) {
+        if (sgItems[i].id === itemId) {
+          sgItems[i].location = 'freezer';
+          break;
+        }
+      }
+      if (sgStats) {
+        if (sgStats.active_fridge > 0) sgStats.active_fridge--;
+        sgStats.active_freezer = (sgStats.active_freezer || 0) + 1;
+      }
+      renderVacationDrawerItems();
+      renderStillGoodItems();
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not freeze item.');
+    }
+  } catch(e) {
+    console.error('Vacation freeze single error:', e);
+  }
+}
+
+async function vacationFreezeAllItems() {
+  var btn = document.getElementById('btnSgVacationFreezeAll');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Moving to freezer...</span>';
+  }
+  try {
+    var res = await fetch(API + '/still-good/vacation-freeze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (window.confetti) {
+        window.confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 } });
+      }
+      if (typeof toast === 'function') {
+        toast('✈️ Moved ' + (res.moved_count || 'all') + ' items to freezer with safe nudges!');
+      }
+      closeStillGoodVacationModal();
+      await loadStillGood();
+      switchSgTab('freezer');
+    } else {
+      if (typeof toast === 'function') toast('Could not move items to freezer.');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>❄️ Move All to Freezer & Update Nudges</span>';
+      }
+    }
+  } catch(e) {
+    console.error('Vacation freeze all error:', e);
+    if (typeof toast === 'function') toast('Connection error.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>❄️ Move All to Freezer & Update Nudges</span>';
+    }
+  }
+}
+
+// ── Still Good Feature Discovery Tips & Walkthrough (Issue #605) ──
+window.stillGoodDiscoveryTour = (function() {
+  var isInteractive = false;
+  var activeStep = 0; // 0 = inactive, 1 = add item button, 2 = name input, 3 = save button
+
+  function clearHalos() {
+    document.querySelectorAll('.discovery-halo').forEach(function(el) {
+      el.classList.remove('discovery-halo');
+    });
+  }
+
+  function startInteractiveFlow() {
+    isInteractive = true;
+    activeStep = 1;
+    clearHalos();
+
+    // Ensure we are on Still Good screen
+    if (typeof showStillGoodScreen === 'function' && (typeof currentScreen === 'undefined' || currentScreen !== 'stillGood')) {
+      showStillGoodScreen();
+    }
+
+    setTimeout(function() {
+      // Step 1 on Still Good screen: Halo on the "+ Add Item" button!
+      // No bottom drawer or modal overlay! The user clicks the button on screen.
+      var addBtn = document.getElementById('btnStillGoodAddItem');
+      if (addBtn) {
+        addBtn.classList.add('discovery-halo');
+        try { addBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
+      }
+    }, 200);
+  }
+
+  function onAddBtnClicked() {
+    if (!isInteractive) return;
+    clearHalos();
+    activeStep = 2;
+
+    // Normal openAddStillGoodModal() will open the modal.
+    // In the next tick after modal opens, halo the name input!
+    setTimeout(function() {
+      var nameInput = document.getElementById('sgInputName');
+      if (nameInput) {
+        nameInput.classList.add('discovery-halo');
+        try { nameInput.focus(); } catch(e) {}
+
+        var moveToSave = function() {
+          if (activeStep === 2) {
+            moveToSaveStep();
+          }
+        };
+
+        nameInput.addEventListener('input', moveToSave, { once: true });
+        nameInput.addEventListener('change', moveToSave, { once: true });
+
+        // Also guide user to Save button if they pause or focus away
+        setTimeout(function() {
+          if (activeStep === 2) {
+            moveToSaveStep();
+          }
+        }, 3500);
+      }
+    }, 250);
+  }
+
+  function moveToSaveStep() {
+    if (!isInteractive || activeStep !== 2) return;
+    activeStep = 3;
+    clearHalos();
+
+    var saveBtn = document.getElementById('btnSaveStillGood');
+    if (saveBtn) {
+      saveBtn.classList.add('discovery-halo');
+      try { saveBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e) {}
+    }
+  }
+
+  function onSaveBtnClicked() {
+    if (!isInteractive) return;
+    var nameInput = document.getElementById('sgInputName');
+    if (nameInput && !nameInput.value.trim()) {
+      var todayDay = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+      nameInput.value = todayDay + ' left overs';
+    }
+  }
+
+  function completeTour() {
+    if (!isInteractive) return;
+    isInteractive = false;
+    activeStep = 0;
+    clearHalos();
+
+    // Mark acknowledged in feature discovery engine
+    if (window.featureDiscoveryEngine && typeof window.featureDiscoveryEngine.markAcknowledged === 'function') {
+      window.featureDiscoveryEngine.markAcknowledged('still_good');
+    }
+
+    try {
+      localStorage.setItem('listmate_still_good_acknowledged', 'true');
+      localStorage.setItem('listmate_still_good_tour_completed', 'true');
+    } catch(e) {}
+
+    // Celebration confetti
+    if (typeof window.confetti === 'function') {
+      window.confetti({
+        particleCount: 75,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#f59e0b', '#fbbf24', '#d97706', '#10b981', '#059669']
+      });
+    }
+
+    if (typeof toast === 'function') {
+      toast('🎉 Still Good discovery complete! Keep saving meals and money.');
+    }
+  }
+
+  function onModalClosed() {
+    if (isInteractive) {
+      clearHalos();
+      isInteractive = false;
+      activeStep = 0;
+    }
+  }
+
+  return {
+    start: startInteractiveFlow,
+    startInteractiveFlow: startInteractiveFlow,
+    onAddBtnClicked: onAddBtnClicked,
+    moveToSaveStep: moveToSaveStep,
+    onSaveBtnClicked: onSaveBtnClicked,
+    completeTour: completeTour,
+    onModalClosed: onModalClosed,
+    closeTour: onModalClosed,
+    isTourActive: function() { return isInteractive; }
+  };
+})();
+
+window.startStillGoodTour = function() {
+  if (window.stillGoodDiscoveryTour) {
+    window.stillGoodDiscoveryTour.startInteractiveFlow();
+  }
+};
+window.nextStillGoodTourStep = function() {};
+window.closeStillGoodTour = function() {
+  if (window.stillGoodDiscoveryTour) {
+    window.stillGoodDiscoveryTour.onModalClosed();
+  }
+};
+
 // ── Recipe Planner & AI Generator (US-112) ──
 var currentDraftRecipe = null;
 var savedRecipesList = [];
@@ -3632,6 +4917,9 @@ function showPremiumModal(featureName) {
     } else if (featureName === 'AI Insights') {
       title.textContent = 'AI Analytics is Premium';
       desc.textContent = 'Upgrade to unlock personalized AI shopping recommendations, habit insights, and money-saving tips.';
+    } else if (featureName === 'Still Good') {
+      title.textContent = 'Still Good is a Premium Feature';
+      desc.textContent = 'Track leftovers, reduce household food waste, and get AI-powered safe shelf-life recommendations with ListMate Premium.';
     } else {
       title.textContent = 'Recipe Planner is Premium';
       desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
@@ -5567,6 +6855,15 @@ window.featureDiscoveryEngine = (function() {
       menuTargetId: 'menuInviteLink',
       condition: function() { return currentScreen === 'home'; }
     },
+    still_good: {
+      id: 'still_good',
+      title: '🍲 Still Good: Track Leftovers & Freezer Meals',
+      body: 'Still Good helps your household prevent food waste and save real dollars by keeping track of perishable leftovers and batch-cooked freezer meals with smart conservative nudges and real dollar savings.',
+      actionText: 'Open Still Good ➔',
+      type: 'element',
+      targetSelector: '#btnOpenStillGood',
+      condition: function() { return currentScreen === 'home'; }
+    },
     stores_vs_general: {
       id: 'stores_vs_general',
       title: '📋 General List: Your Catch-All List',
@@ -5678,7 +6975,7 @@ window.featureDiscoveryEngine = (function() {
     }
   };
 
-  const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household'];
+  const TIP_ORDER = ['invite', 'stores_vs_general', 'logo_home', 'add_store', 'store_catalog', 'quick_add', 'shopping_list_view', 'move_items', 'reuse_visit_menu', 'reuse_visit_card', 'reuse_visit_add', 'switch_household', 'still_good'];
 
   let currentActiveTip = null;
   let currentActiveTarget = null;
@@ -5708,9 +7005,22 @@ window.featureDiscoveryEngine = (function() {
     return applicableTips.every(key => ack.includes(key));
   }
 
+  function isStillGoodAcknowledged() {
+    try {
+      if (localStorage.getItem('listmate_still_good_acknowledged') === 'true') return true;
+      const ack = getAcknowledged();
+      return ack.includes('still_good');
+    } catch(e) {
+      return false;
+    }
+  }
+
   function markAcknowledged(tipId) {
     if (!tipId) return;
     try {
+      if (tipId === 'still_good') {
+        localStorage.setItem('listmate_still_good_acknowledged', 'true');
+      }
       const ack = getAcknowledged();
       if (!ack.includes(tipId)) {
         ack.push(tipId);
@@ -5766,6 +7076,9 @@ window.featureDiscoveryEngine = (function() {
     if (tip.actionText && tip.actionUrl) {
       actionsHtml += `<a href="${tip.actionUrl}" class="tip-btn-primary" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onActionClick('${tip.id}')">${tip.actionText}</a>`;
       actionsHtml += `<button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>`;
+    } else if (tip.actionText) {
+      actionsHtml += `<button class="tip-btn-primary" onclick="if(window.featureDiscoveryEngine) window.featureDiscoveryEngine.onActionClick('${tip.id}')">${tip.actionText}</button>`;
+      actionsHtml += `<button class="tip-btn-dismiss" onclick="closeFeatureTip()">Got it</button>`;
     } else {
       actionsHtml += `<button class="tip-btn-primary" onclick="closeFeatureTip()">Got it</button>`;
     }
@@ -5795,6 +7108,21 @@ window.featureDiscoveryEngine = (function() {
         }
       } else if (hadTip.id === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
+      } else if (hadTip.id === 'still_good') {
+        markAcknowledged('still_good');
+        try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(e) {}
+        currentActiveTip = null;
+        currentActiveTarget = null;
+        clearHalos();
+        if (typeof showStillGoodScreen === 'function') {
+          showStillGoodScreen();
+        }
+        if (window.stillGoodDiscoveryTour) {
+          setTimeout(() => {
+            window.stillGoodDiscoveryTour.startInteractiveFlow();
+          }, 350);
+        }
+        return;
       }
       markAcknowledged(hadTip.id);
       currentActiveTip = null;
@@ -5840,14 +7168,22 @@ window.featureDiscoveryEngine = (function() {
       }
       if (target) {
         target.classList.add('discovery-halo');
-        const handler = function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          currentActiveTarget = target;
-          showTipDrawer(tip);
-        };
-        target.addEventListener('click', handler, { once: true });
-        boundElements.push({ el: target, event: 'click', handler: handler });
+        if (tip.id === 'still_good') {
+          const handler = function(e) {
+            onStillGoodClick(e);
+          };
+          target.addEventListener('click', handler, { once: true });
+          boundElements.push({ el: target, event: 'click', handler: handler });
+        } else {
+          const handler = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            currentActiveTarget = target;
+            showTipDrawer(tip);
+          };
+          target.addEventListener('click', handler, { once: true });
+          boundElements.push({ el: target, event: 'click', handler: handler });
+        }
       }
     }
   }
@@ -5902,6 +7238,32 @@ window.featureDiscoveryEngine = (function() {
     return false;
   }
 
+  function onStillGoodClick(e) {
+    if (isStillGoodAcknowledged()) {
+      return false;
+    }
+    if (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
+    }
+    markAcknowledged('still_good');
+    try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(err) {}
+    clearHalos();
+    currentActiveTip = null;
+    currentActiveTarget = null;
+    const btn = document.getElementById('btnOpenStillGood');
+    if (btn) btn.classList.remove('discovery-halo');
+
+    if (typeof showStillGoodScreen === 'function') {
+      showStillGoodScreen();
+    }
+    if (typeof canAccessStillGood === 'function' && canAccessStillGood() && window.stillGoodDiscoveryTour) {
+      setTimeout(function() {
+        window.stillGoodDiscoveryTour.startInteractiveFlow();
+      }, 250);
+    }
+    return true;
+  }
+
   function checkAndApply() {
     if (localStorage.getItem('listmate_discovery_tips_disabled') === 'true') {
       clearHalos();
@@ -5917,11 +7279,21 @@ window.featureDiscoveryEngine = (function() {
     } else {
       clearHalos();
     }
+
+    // Launch halo: golden discovery halo on Still Good for ALL users ONE TIME until acknowledged
+    if (!isStillGoodAcknowledged() && currentScreen === 'home') {
+      const btn = document.getElementById('btnOpenStillGood');
+      if (btn) {
+        btn.classList.add('discovery-halo');
+      }
+    }
   }
 
   function resetAndStart() {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('listmate_still_good_acknowledged');
+      localStorage.removeItem('listmate_still_good_tour_completed');
       localStorage.removeItem('listmate_discovery_tips_disabled');
       localStorage.removeItem('listmate_discovery_tips_caught_up');
     } catch(e) {}
@@ -5939,6 +7311,9 @@ window.featureDiscoveryEngine = (function() {
     onBurgerToggle: onBurgerToggle,
     onMenuItemClick: onMenuItemClick,
     onLogoClick: onLogoClick,
+    onStillGoodClick: onStillGoodClick,
+    isStillGoodAcknowledged: isStillGoodAcknowledged,
+    markAcknowledged: markAcknowledged,
     showTipDrawer: showTipDrawer,
     dismissCurrentTip: closeTipDrawer,
     onActionClick: function(tipId) {
@@ -5955,6 +7330,23 @@ window.featureDiscoveryEngine = (function() {
         }
       } else if (tipId === 'switch_household' && typeof showHouseholdSwitcher === 'function') {
         showHouseholdSwitcher();
+      } else if (tipId === 'still_good') {
+        markAcknowledged('still_good');
+        try { localStorage.setItem('listmate_still_good_acknowledged', 'true'); } catch(e) {}
+        const overlay = document.getElementById('featureTipOverlay');
+        if (overlay) overlay.classList.remove('show');
+        currentActiveTip = null;
+        currentActiveTarget = null;
+        clearHalos();
+        if (typeof showStillGoodScreen === 'function') {
+          showStillGoodScreen();
+        }
+        if (window.stillGoodDiscoveryTour) {
+          setTimeout(() => {
+            window.stillGoodDiscoveryTour.startInteractiveFlow();
+          }, 350);
+        }
+        return;
       }
       markAcknowledged(tipId);
       currentActiveTip = null;
@@ -5973,6 +7365,9 @@ window.closeFeatureTip = function(event) {
   if (event && event.target && event.target.id !== 'featureTipOverlay') {
     return;
   }
+  if (window.stillGoodDiscoveryTour && window.stillGoodDiscoveryTour.isTourActive()) {
+    window.stillGoodDiscoveryTour.closeTour();
+  }
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.dismissCurrentTip();
   }
@@ -5982,6 +7377,18 @@ window.closeFeatureTip = function(event) {
 (function checkTipsUrlParam() {
   try {
     const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tour') === 'still_good' || urlParams.get('tour') === 'stillgood' || urlParams.get('start_still_good_tour') === '1') {
+      urlParams.delete('tour');
+      urlParams.delete('start_still_good_tour');
+      const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+      window.history.replaceState({}, document.title, cleanUrl);
+      setTimeout(() => {
+        if (typeof window.startStillGoodTour === 'function') {
+          window.startStillGoodTour(true);
+        }
+      }, 650);
+      return;
+    }
     if (urlParams.get('start_tour') === '1' || urlParams.get('reset_tips') === '1') {
       urlParams.delete('start_tour');
       urlParams.delete('reset_tips');
