@@ -2775,6 +2775,8 @@ def still_good_action_endpoint(item_id):
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         data = request.get_json(silent=True) or {}
         action = (data.get("action") or "").strip().lower()
@@ -2834,6 +2836,8 @@ def still_good_vacation_freeze_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         rows = db.execute(
             "SELECT id, name, item_type FROM still_good_items WHERE household_id = ? AND location = 'fridge' AND status = 'active'",
@@ -2916,11 +2920,16 @@ def still_good_item_endpoint(item_id):
             params.append(item_type)
 
         if consume_by:
-            old_consume = str(existing.get("consume_by") or "")[:10]
-            if consume_by != old_consume:
-                other_changed = True
-            updates.append("consume_by = ?::date")
-            params.append(consume_by)
+            try:
+                from datetime import date
+                valid_date = date.fromisoformat(consume_by[:10])
+                old_consume = str(existing.get("consume_by") or "")[:10]
+                if str(valid_date) != old_consume:
+                    other_changed = True
+                updates.append("consume_by = ?::date")
+                params.append(str(valid_date))
+            except (ValueError, TypeError):
+                pass
 
         if servings is not None:
             try:
