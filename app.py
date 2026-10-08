@@ -2730,7 +2730,7 @@ def still_good_action_endpoint(item_id):
             return jsonify({"error": f"Invalid action: {action}"}), 400
 
         item = db.execute(
-            "SELECT id, location, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?",
+            "SELECT id, location, item_type, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?",
             (item_id, hhid)
         ).fetchone()
         if not item:
@@ -2754,10 +2754,12 @@ def still_good_action_endpoint(item_id):
             )
         elif action == "move":
             curr_loc = item["location"]
+            item_type = item["item_type"] if "item_type" in item.keys() else "home_cooked"
             if curr_loc == "fridge":
+                freeze_days = 30 if item_type == "restaurant" else 60
                 db.execute(
-                    "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + INTERVAL '60 days', updated_at = NOW() WHERE id = ? AND household_id = ?",
-                    (item_id, hhid)
+                    "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    (freeze_days, item_id, hhid)
                 )
             else:
                 db.execute(
@@ -2768,6 +2770,41 @@ def still_good_action_endpoint(item_id):
         return jsonify({"ok": True, "action": action, "item_id": item_id})
     except Exception as exc:
         print(f"[STILL GOOD ERROR] Error executing action on item {item_id}: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/vacation-freeze", methods=["POST"])
+@require_user
+def still_good_vacation_freeze_endpoint():
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+
+        rows = db.execute(
+            "SELECT id, name, item_type FROM still_good_items WHERE household_id = ? AND location = 'fridge' AND status = 'active'",
+            (hhid,)
+        ).fetchall()
+
+        moved_count = 0
+        for r in rows:
+            i_id = r["id"]
+            itype = r["item_type"] if "item_type" in r.keys() else "home_cooked"
+            freeze_days = 30 if itype == "restaurant" else 60
+            db.execute(
+                "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (freeze_days, i_id, hhid)
+            )
+            moved_count += 1
+
+        return jsonify({
+            "ok": True,
+            "moved_count": moved_count,
+            "message": f"{moved_count} items moved to freezer"
+        })
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error executing vacation freeze: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()

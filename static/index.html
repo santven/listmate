@@ -801,15 +801,18 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <!-- STILL GOOD SCREEN -->
   <div class="still-good-screen" id="screenStillGood" style="display:none; padding-bottom:40px;">
     <!-- Top Nav Bar -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <button onclick="showScreen('home')" style="background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:6px; flex-wrap:wrap;">
+      <button onclick="showScreen('home')" style="background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
         ← Back to List
       </button>
-      <div style="display:flex; gap:8px;">
-        <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px;" title="View Wins">
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="View Wins">
           🏆 Wins
         </button>
-        <button onclick="openAddStillGoodModal()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+        <button onclick="openStillGoodVacationModal()" id="btnStillGoodVacation" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Vacation Mode: Review fridge items before trip">
+          ✈️ Vacation
+        </button>
+        <button onclick="openAddStillGoodModal()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
           + Add Item
         </button>
       </div>
@@ -1094,6 +1097,58 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <button onclick="document.getElementById('stillGoodWinsModal').classList.remove('active')" style="width:100%; padding:12px; border-radius:12px; border:none; background:var(--green); color:#fff; font-size:14px; font-weight:700; cursor:pointer;">
       Got It!
     </button>
+  </div>
+</div>
+
+<!-- Still Good Vacation Mode Bottom Drawer -->
+<div class="modal-overlay" id="stillGoodVacationModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:20px;">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:24px;">✈️</span>
+        <div>
+          <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text);">Vacation Mode</h3>
+          <div style="font-size:12px; color:var(--muted);">Review fridge items before you head out</div>
+        </div>
+      </div>
+      <button onclick="closeStillGoodVacationModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#888; padding:4px 8px;">✕</button>
+    </div>
+
+    <!-- Instruction & Reminder Card -->
+    <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:14px; padding:12px 14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:700; color:#0369a1; margin-bottom:4px;">
+        🏝️ Heading out of town?
+      </div>
+      <div style="font-size:12px; color:#0c4a6e; line-height:1.5;">
+        Perishable leftovers won't keep while you're away. Review your fridge items below:
+        <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
+          <div>• <b>Freeze</b> meals to safely preserve them (nudges update automatically).</div>
+          <div>• <b>Discard</b> leftovers you won't eat before leaving.</div>
+          <div>• Or <b>leave</b> selected items in the fridge as is.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- List of active fridge items -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:13px; font-weight:700; color:var(--text);">Current Refrigerator Items (<span id="sgVacationCount">0</span>)</span>
+      </div>
+      <div id="sgVacationItemsList" style="display:flex; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto; padding-right:2px;">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Actions / One-Click Freeze All -->
+    <div style="display:flex; flex-direction:column; gap:10px; border-top:1px solid #f1f5f9; padding-top:14px;">
+      <button type="button" id="btnSgVacationFreezeAll" onclick="vacationFreezeAllItems()" style="width:100%; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
+        <span>❄️ Move All to Freezer & Update Nudges</span>
+      </button>
+      <button type="button" onclick="closeStillGoodVacationModal()" style="width:100%; padding:11px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); font-size:13px; font-weight:600; cursor:pointer;">
+        Leave Remaining in Fridge & Close
+      </button>
+    </div>
   </div>
 </div>
 
@@ -4380,6 +4435,177 @@ function openStillGoodWinsModal() {
 
   var modal = document.getElementById('stillGoodWinsModal');
   if (modal) modal.classList.add('active');
+}
+
+function openStillGoodVacationModal() {
+  renderVacationDrawerItems();
+  var modal = document.getElementById('stillGoodVacationModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeStillGoodVacationModal() {
+  var modal = document.getElementById('stillGoodVacationModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function renderVacationDrawerItems() {
+  var listEl = document.getElementById('sgVacationItemsList');
+  var countEl = document.getElementById('sgVacationCount');
+  var btnFreezeAll = document.getElementById('btnSgVacationFreezeAll');
+  if (!listEl) return;
+
+  var fridgeItems = sgItems.filter(function(i) {
+    return i.location === 'fridge' && i.status === 'active';
+  });
+
+  if (countEl) countEl.textContent = fridgeItems.length;
+
+  if (fridgeItems.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center; padding:30px 16px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:14px;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">✨</div>' +
+      '<div style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:4px;">No leftovers in the fridge!</div>' +
+      '<div style="font-size:12px; color:#64748b; line-height:1.4;">Your fridge is completely clear of perishable meals. You are all set for vacation!</div>' +
+      '</div>';
+    if (btnFreezeAll) {
+      btnFreezeAll.style.display = 'none';
+    }
+    return;
+  }
+
+  if (btnFreezeAll) {
+    btnFreezeAll.style.display = 'flex';
+    btnFreezeAll.disabled = false;
+    btnFreezeAll.innerHTML = '<span>❄️ Move All (' + fridgeItems.length + ') to Freezer & Update Nudges</span>';
+  }
+
+  var html = '';
+  fridgeItems.forEach(function(item) {
+    var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home</span>';
+    if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
+    else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch</span>';
+
+    var statusPill = '';
+    if (item.urgency === 'urgent') {
+      var daysText = (item.days_left !== null && item.days_left < 0) ? Math.abs(item.days_left) + 'd past target' : 'Eat today!';
+      statusPill = '<span class="sg-status-pill sg-status-urgent">🔴 ' + daysText + '</span>';
+    } else if (item.urgency === 'soon') {
+      statusPill = '<span class="sg-status-pill sg-status-soon">🟡 ' + (item.days_left || 1) + 'd left</span>';
+    } else {
+      statusPill = '<span class="sg-status-pill sg-status-fresh">🟢 ' + (item.days_left !== null ? item.days_left + 'd left' : 'Fresh') + '</span>';
+    }
+
+    var portionsText = (item.servings > 1) ? (item.servings + ' portions') : '1 portion';
+
+    html += '<div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">' +
+      '<div style="min-width:0; flex:1;">' +
+        '<div style="font-size:14px; font-weight:700; color:var(--text); word-break:break-word; margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
+        '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          typeBadge +
+          '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:2px 6px; border-radius:4px;">' + portionsText + '</span>' +
+          statusPill +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+        '<button type="button" onclick="vacationFreezeSingleItem(' + item.id + ')" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:7px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Move to Freezer to preserve">❄️ Freeze</button>' +
+        '<button type="button" onclick="vacationDiscardItem(' + item.id + ')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; padding:7px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Discard before leaving">🗑 Discard</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  listEl.innerHTML = html;
+}
+
+async function vacationDiscardItem(itemId) {
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'discard' })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('Item discarded.');
+      sgItems = sgItems.filter(function(i) { return i.id !== itemId; });
+      if (sgStats && sgStats.active_fridge > 0) sgStats.active_fridge--;
+      renderVacationDrawerItems();
+      renderStillGoodItems();
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not discard item.');
+    }
+  } catch(e) {
+    console.error('Vacation discard error:', e);
+  }
+}
+
+async function vacationFreezeSingleItem(itemId) {
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'move' })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('❄️ Moved to freezer & updated nudge.');
+      for (var i = 0; i < sgItems.length; i++) {
+        if (sgItems[i].id === itemId) {
+          sgItems[i].location = 'freezer';
+          break;
+        }
+      }
+      if (sgStats) {
+        if (sgStats.active_fridge > 0) sgStats.active_fridge--;
+        sgStats.active_freezer = (sgStats.active_freezer || 0) + 1;
+      }
+      renderVacationDrawerItems();
+      renderStillGoodItems();
+      loadStillGood();
+    } else {
+      if (typeof toast === 'function') toast('Could not freeze item.');
+    }
+  } catch(e) {
+    console.error('Vacation freeze single error:', e);
+  }
+}
+
+async function vacationFreezeAllItems() {
+  var btn = document.getElementById('btnSgVacationFreezeAll');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Moving to freezer...</span>';
+  }
+  try {
+    var res = await fetch(API + '/still-good/vacation-freeze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (window.confetti) {
+        window.confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 } });
+      }
+      if (typeof toast === 'function') {
+        toast('✈️ Moved ' + (res.moved_count || 'all') + ' items to freezer with safe nudges!');
+      }
+      closeStillGoodVacationModal();
+      await loadStillGood();
+      switchSgTab('freezer');
+    } else {
+      if (typeof toast === 'function') toast('Could not move items to freezer.');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>❄️ Move All to Freezer & Update Nudges</span>';
+      }
+    }
+  } catch(e) {
+    console.error('Vacation freeze all error:', e);
+    if (typeof toast === 'function') toast('Connection error.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>❄️ Move All to Freezer & Update Nudges</span>';
+    }
+  }
 }
 
 // ── Recipe Planner & AI Generator (US-112) ──

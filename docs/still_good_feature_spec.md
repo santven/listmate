@@ -190,6 +190,27 @@ To further personalize shelf-life without incurring token bloat or user latency,
 
 ---
 
+## 4.7 Vacation Mode Drawer & 1-Click Batch Freeze (Issue #603)
+
+**Issue**: [#603](https://github.com/santven/listmate/issues/603)  
+**Goal**: Allow households leaving town or going on vacation to quickly review perishable fridge leftovers before departure, discard unwanted meals, leave non-perishables, or move all active leftovers to the freezer in one click with automatically updated safe freezer nudges.
+
+### Features
+1. **Header Action**: `✈️ Vacation` button positioned prominently in the Still Good top navigation bar.
+2. **Bottom Drawer Modal**:
+   - Opens `stillGoodVacationModal` with clear instructions & reminders: *"Perishable leftovers won't keep while you're away. Review your fridge items below: Freeze meals to safely preserve them (nudges update automatically), Discard leftovers you won't eat, or leave items in the fridge as is."*
+   - Displays all active refrigerator items with current portions, categories, and freshness/urgency badges.
+   - Individual item actions:
+     - `🗑 Discard`: Removes/discards perishable items that the user chooses not to keep.
+     - `❄️ Freeze`: Individually moves an item to the freezer.
+3. **1-Click Bulk Freezer Transfer**:
+   - `❄️ Move All (<count>) to Freezer & Update Nudges`: Sends `POST /api/still-good/vacation-freeze` which transitions all active fridge items into the freezer simultaneously.
+   - **Automatic Conservative Nudges**: Sets safe freezer target dates (+30 days for restaurant takeout, +60 days for home-cooked meals/batch cooks).
+   - Instant UI feedback with confetti celebration, toast notification, and automatic redirection to the `❄️ Freezer` tab.
+4. **Flexible Exit**: Users can also choose to leave remaining items in the fridge and simply close the drawer.
+
+---
+
 ## 5. Future Roadmap & Iterations
 
 1. **Push Notifications**:
