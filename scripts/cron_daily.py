@@ -264,12 +264,56 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
     return sent
 
 
-def run_cron():
+def run_cron(dry_run=False, mock_now=None):
     _init_schema()
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = mock_now or datetime.datetime.now(datetime.timezone.utc)
     today_date = now.date()
     plus_3_date = today_date + datetime.timedelta(days=3)
+
+    if dry_run:
+        print(f"\n=======================================================")
+        print(f" [DRY-RUN] Daily Cron Simulation Mode ACTIVE")
+        print(f" Simulated Timestamp : {now.isoformat()}")
+        print(f" Simulated Date      : {today_date.isoformat()}")
+        print(f"=======================================================\n")
+
+    import re
+    import shared.auth
+    real_run = shared.auth._run
+    real_one = shared.auth._one
+
+    def sim_run(sql, params=None):
+        sql_mod = sql
+        if mock_now:
+            d_str = today_date.strftime('%Y-%m-%d')
+            t_str = now.strftime('%Y-%m-%d %H:%M:%S%z')
+            sql_mod = re.sub(r'\bCURRENT_DATE\b', f"'{d_str}'::date", sql_mod, flags=re.IGNORECASE)
+            sql_mod = re.sub(r'\bNOW\(\)', f"'{t_str}'::timestamptz", sql_mod, flags=re.IGNORECASE)
+        if dry_run:
+            stripped = sql_mod.strip().upper()
+            if stripped.startswith("UPDATE") or stripped.startswith("DELETE") or (stripped.startswith("INSERT") and "SELECT" not in stripped and "email_events" in stripped):
+                first_line = sql_mod.strip().splitlines()[0]
+                print(f"  [DRY-RUN Mutation Skipped]: {first_line[:80]}...")
+                return []
+        return real_run(sql_mod, params)
+
+    def sim_one(sql, params=None):
+        sql_mod = sql
+        if mock_now:
+            d_str = today_date.strftime('%Y-%m-%d')
+            t_str = now.strftime('%Y-%m-%d %H:%M:%S%z')
+            sql_mod = re.sub(r'\bCURRENT_DATE\b', f"'{d_str}'::date", sql_mod, flags=re.IGNORECASE)
+            sql_mod = re.sub(r'\bNOW\(\)', f"'{t_str}'::timestamptz", sql_mod, flags=re.IGNORECASE)
+        return real_one(sql_mod, params)
+
+    global _run, _one
+    saved_cron_run = _run
+    saved_cron_one = _one
+    _run = sim_run
+    _one = sim_one
+    shared.auth._run = sim_run
+    shared.auth._one = sim_one
 
     # Dictionary to aggregate events per user email
     # Format: { 'user@email.com': { 'user_name': 'John', 'user_id': 1, 'household_id': 2, 'events': { ... } } }
@@ -1264,60 +1308,77 @@ def run_cron():
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
 
     if users_to_notify:
-        with ThreadPoolExecutor(max_workers=min(5, len(users_to_notify))) as executor:
-            futures = []
+        if dry_run:
+            print("\n[DRY-RUN] The following emails WOULD be dispatched:")
             for email, data in users_to_notify.items():
-                futures.append(
-                    executor.submit(
-                        process_email_events,
-                        email,
-                        data['user_name'],
-                        data['events'],
-                        data.get('user_id', 0),
-                        data.get('household_id', 0),
+                ev_names = list(data.get('events', {}).keys())
+                print(f"  • {email} ({data.get('user_name', '')}) -> Campaigns: {', '.join(ev_names)} (HH #{data.get('household_id', 0)}, User #{data.get('user_id', 0)})")
+        else:
+            with ThreadPoolExecutor(max_workers=min(5, len(users_to_notify))) as executor:
+                futures = []
+                for email, data in users_to_notify.items():
+                    futures.append(
+                        executor.submit(
+                            process_email_events,
+                            email,
+                            data['user_name'],
+                            data['events'],
+                            data.get('user_id', 0),
+                            data.get('household_id', 0),
+                        )
                     )
-                )
 
-            for future in as_completed(futures):
-                try:
-                    success = future.result()
-                    if not success:
-                        print("An email failed to send.")
-                except Exception as exc:
-                    print(f"Task generated an exception: {exc}")
+                for future in as_completed(futures):
+                    try:
+                        success = future.result()
+                        if not success:
+                            print("An email failed to send.")
+                    except Exception as exc:
+                        print(f"Task generated an exception: {exc}")
     else:
         print("No emails to send today.")
 
     # 10. Engagement-Aware Signup Abandonment Cleanup (Day 10+ unattached registrations)
     try:
-        cleanup_abandoned_signups()
+        cleanup_abandoned_signups(dry_run=dry_run)
     except Exception as exc:
         print(f"Signup abandonment cleanup routine failed: {exc}")
 
     # 11. Push Notification Logs Retention Pruning (30+ days)
-    try:
-        pruned_pushes = prune_push_notifications_log(retention_days=30)
-        print(f"Push notification audit logs cleanup complete: {pruned_pushes} record(s) pruned.")
-    except Exception as exc:
-        print(f"Push notifications log pruning routine failed: {exc}")
+    if not dry_run:
+        try:
+            pruned_pushes = prune_push_notifications_log(retention_days=30)
+            print(f"Push notification audit logs cleanup complete: {pruned_pushes} record(s) pruned.")
+        except Exception as exc:
+            print(f"Push notifications log pruning routine failed: {exc}")
+    else:
+        print("[DRY-RUN] Skipping push notification logs retention pruning.")
 
     # Auto-categorize any uncategorized items
-    try:
-        from categorize import backfill_uncategorized_items
-        stats = backfill_uncategorized_items()
-        print(f"Auto-categorization sweep complete: {stats}")
-    except Exception as exc:
-        print(f"Auto-categorization sweep failed: {exc}")
+    if not dry_run:
+        try:
+            from categorize import backfill_uncategorized_items
+            stats = backfill_uncategorized_items()
+            print(f"Auto-categorization sweep complete: {stats}")
+        except Exception as exc:
+            print(f"Auto-categorization sweep failed: {exc}")
+    else:
+        print("[DRY-RUN] Skipping auto-categorization sweep.")
 
     # Store Plan Email Reminders (for stores with >= n items without a plan date)
     try:
-        plan_email_stats = check_store_plan_email_reminders(dry_run=False)
+        plan_email_stats = check_store_plan_email_reminders(dry_run=dry_run)
         print(f"Store plan email reminders complete: {plan_email_stats}")
     except Exception as exc:
         print(f"Store plan email reminders routine failed: {exc}")
 
+    _run = saved_cron_run
+    _one = saved_cron_one
+    shared.auth._run = real_run
+    shared.auth._one = real_one
 
-def cleanup_abandoned_signups():
+
+def cleanup_abandoned_signups(dry_run=False):
     """Prune unattached user registrations (Day 10+, no household) with engagement protection.
     
     Engagement Protection Rules:
@@ -1362,6 +1423,9 @@ def cleanup_abandoned_signups():
     LIMIT 100
     """
     candidates = _run(query)
+    if dry_run:
+        print(f"  [DRY-RUN] Found {len(candidates)} stale signup-abandoned registration(s) eligible for cleanup (skipping deletion).")
+        return len(candidates)
     deleted_count = 0
     for cand in candidates:
         uid = cand.get('id')
@@ -2636,6 +2700,31 @@ if __name__ == "__main__":
         except Exception as exc:
             print(f"Still Good AI failed: {exc}")
         print("Done.")
+        sys.exit(0)
+
+    dry_mode = "--dry-run" in sys.argv
+    mock_ts = None
+    if any(arg in sys.argv for arg in ("--tomorrow-3am", "--mock-tomorrow-3am", "--tomorrow")):
+        mock_ts = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)).replace(hour=3, minute=0, second=0, microsecond=0)
+    elif any(arg in sys.argv for arg in ("--tomorrow-3am-local", "--tomorrow-local")):
+        now_local = datetime.datetime.now().astimezone()
+        mock_ts = (now_local + datetime.timedelta(days=1)).replace(hour=3, minute=0, second=0, microsecond=0).astimezone(datetime.timezone.utc)
+    else:
+        for arg in sys.argv:
+            if arg.startswith("--mock-time="):
+                val = arg.split("=", 1)[1]
+                mock_ts = datetime.datetime.fromisoformat(val)
+                if not mock_ts.tzinfo:
+                    mock_ts = mock_ts.replace(tzinfo=datetime.timezone.utc)
+            elif arg.startswith("--mock-date="):
+                val = arg.split("=", 1)[1]
+                d = datetime.date.fromisoformat(val)
+                mock_ts = datetime.datetime(d.year, d.month, d.day, 3, 0, 0, tzinfo=datetime.timezone.utc)
+
+    if dry_mode or mock_ts:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] [DRY-RUN] Starting daily cron jobs simulation" + (f" (mocking timestamp: {mock_ts.isoformat()})" if mock_ts else "") + "...")
+        run_cron(dry_run=True, mock_now=mock_ts)
+        print("Dry run complete.")
         sys.exit(0)
 
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Starting daily cron jobs...")
