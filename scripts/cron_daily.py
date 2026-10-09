@@ -365,6 +365,16 @@ def run_cron(dry_run=False, mock_now=None):
             WHERE subscription_status = 'trial'
               AND trial_ends_at <= NOW()
         """)
+        # Transition expired paid subscriptions to free ('expired') and set downgraded_at if unset
+        _run("""
+            UPDATE auth_households
+            SET is_premium = FALSE,
+                subscription_status = 'expired',
+                downgraded_at = COALESCE(downgraded_at, subscription_ends_at, NOW())
+            WHERE subscription_status = 'active'
+              AND subscription_ends_at IS NOT NULL
+              AND subscription_ends_at <= NOW()
+        """)
         _run("""
             UPDATE auth_households
             SET lifecycle_status = 'lapsed'
@@ -519,7 +529,7 @@ def run_cron(dry_run=False, mock_now=None):
                 ))
             ))
             OR
-            (h.subscription_status IN ('premium', 'active') AND h.subscription_ends_at IS NOT NULL AND (
+            (h.subscription_status = 'active' AND h.subscription_ends_at IS NOT NULL AND (
                 (DATE(h.subscription_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
                     SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'sub_exp_3days' AND ee.event_type = 'sent'
                 ))
@@ -548,7 +558,7 @@ def run_cron(dry_run=False, mock_now=None):
                 except ValueError:
                     target_date = datetime.datetime.strptime(target_date, '%Y-%m-%d %H:%M:%S').date()
             is_trial = True
-        elif status in ('premium', 'active') and sub_ends_at:
+        elif status == 'active' and sub_ends_at:
             target_date = sub_ends_at.date() if hasattr(sub_ends_at, 'date') else sub_ends_at
             if isinstance(target_date, str):
                 try:
@@ -1531,6 +1541,9 @@ def test_lifetime_digest(target_hhid=1):
     print(f"Household        : #{household_id} ({household_name})")
     is_lifetime_vip = bool(hh.get("is_premium") and hh.get("subscription_status") == "premium")
     print(f"Subscription     : status='{hh.get('subscription_status')}', is_premium={hh.get('is_premium')}{' (LIFETIME PREMIUM)' if is_lifetime_vip else ' (WARNING: NOT LIFETIME PREMIUM — Lifetime requires is_premium=True and status=premium)'}")
+    if not is_lifetime_vip:
+        print(f"ABORT: Household #{household_id} ({email}) is not a Lifetime Premium member (is_premium={hh.get('is_premium')}, status='{hh.get('subscription_status')}'). Lifetime Premium requires is_premium=True and subscription_status='premium'.")
+        return False
     print(f"Selected Template: {'Template 1 (Active Metrics)' if stats['is_active'] else 'Template 2 (VIP Perks Re-engagement)'}")
     print("--------------------------------------------------")
     print(f"  • Members      : {stats['member_count']}")
@@ -1622,8 +1635,7 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
         FROM auth_households h
         JOIN auth_household_members hm ON hm.household_id = h.id
         JOIN auth_users u ON u.id = hm.user_id
-        WHERE h.is_premium = FALSE
-          AND h.subscription_status = 'trial'
+        WHERE h.subscription_status = 'trial'
           AND h.trial_ends_at IS NOT NULL
           {hour_clause}
           AND (
@@ -1682,8 +1694,8 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
             live_hh = _run("SELECT is_premium, subscription_status FROM auth_households WHERE id = %s", (hhid,))
             if not live_hh:
                 continue
-            if live_hh[0].get("is_premium") is True or live_hh[0].get("subscription_status") != "trial":
-                print(f"  [Skip] User #{uid} (Household #{hhid}) upgraded or is no longer on trial (is_premium={live_hh[0].get('is_premium')}).")
+            if live_hh[0].get("subscription_status") != "trial":
+                print(f"  [Skip] User #{uid} (Household #{hhid}) upgraded or is no longer on trial (status={live_hh[0].get('subscription_status')}).")
                 continue
         except Exception as live_err:
             print(f"  [Warning] Failed live subscription check for Household #{hhid}: {live_err}")

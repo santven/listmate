@@ -1971,7 +1971,7 @@ def premium_settings():
     if request.method == "GET":
         hh = authmod._one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at, owner_id FROM {authmod._HH} WHERE id = ?", (hhid,))
         is_prem = bool(hh.get("is_premium")) if hh else False
-        sub_status = hh.get("subscription_status", "free") if hh else "free"
+        sub_status = hh.get("subscription_status", "expired") if hh else "expired"
         trial_ends_at = hh.get("trial_ends_at") if hh else None
         if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
             trial_ends_at = trial_ends_at.isoformat()
@@ -1980,27 +1980,48 @@ def premium_settings():
         if sub_ends_at and hasattr(sub_ends_at, 'isoformat'):
             sub_ends_at = sub_ends_at.isoformat()
 
-        is_early = bool(is_prem and sub_status == "premium")
-
-
-
-        if sub_status == 'trial' and trial_ends_at:
-            import datetime
-            try:
-                t_end = trial_ends_at
-                if isinstance(t_end, str):
-                    if 'T' in t_end:
-                        t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+        import datetime
+        now = datetime.datetime.now(datetime.timezone.utc)
+        def _parse_dt(val):
+            if not val: return None
+            if isinstance(val, str):
+                try:
+                    if 'T' in val:
+                        val = datetime.datetime.fromisoformat(val.replace('Z', '+00:00'))
                     else:
-                        t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
-                now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
-                if t_end > now:
-                    is_prem = True
-                else:
-                    sub_status = "expired"
-                    is_prem = False
-            except:
-                pass
+                        val = datetime.datetime.strptime(val, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    return None
+            if not getattr(val, 'tzinfo', None):
+                val = val.replace(tzinfo=datetime.timezone.utc)
+            return val
+
+        # Tier definitions:
+        # premium lifetime: is_premium = True AND subscription_status = "premium"
+        # paid customer:    is_premium = True AND subscription_status = "active"
+        # trial user:       is_premium = True AND subscription_status = "trial"
+        # free:             is_premium = False AND subscription_status = "expired"
+        if sub_status == 'premium':
+            is_prem = True
+        elif sub_status == 'active':
+            s_end = _parse_dt(sub_ends_at)
+            if s_end and s_end <= now:
+                is_prem = False
+                sub_status = 'expired'
+            else:
+                is_prem = True
+        elif sub_status == 'trial':
+            t_end = _parse_dt(trial_ends_at)
+            if t_end and t_end <= now:
+                is_prem = False
+                sub_status = 'expired'
+            else:
+                is_prem = True
+        else:
+            is_prem = False
+            sub_status = 'expired'
+
+        is_early = bool(is_prem and sub_status == "premium")
 
         uid = authmod.get_user_id()
         is_owner = (uid == hh.get("owner_id")) if hh else False

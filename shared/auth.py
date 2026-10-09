@@ -940,23 +940,50 @@ def get_household_status():
     hh = _one(f"SELECT * FROM {_HH} WHERE id = ?", (hhid,))
     if not hh: return None
     is_prem = bool(hh.get("is_premium", False))
-    sub_status = hh.get("subscription_status", "free")
+    sub_status = hh.get("subscription_status", "expired")
     trial_ends_at = hh.get("trial_ends_at")
+    sub_ends_at = hh.get("subscription_ends_at")
     
-    if sub_status == 'trial' and trial_ends_at:
-        import datetime
-        try:
-            t_end = trial_ends_at
-            if isinstance(t_end, str):
-                if 'T' in t_end:
-                    t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc)
+    def _parse_dt(val):
+        if not val: return None
+        if isinstance(val, str):
+            try:
+                if 'T' in val:
+                    val = datetime.datetime.fromisoformat(val.replace('Z', '+00:00'))
                 else:
-                    t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
-            now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
-            if t_end > now:
-                is_prem = True
-        except:
-            pass
+                    val = datetime.datetime.strptime(val, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                return None
+        if not getattr(val, 'tzinfo', None):
+            val = val.replace(tzinfo=datetime.timezone.utc)
+        return val
+
+    # Tier rules:
+    # premium lifetime: is_premium = True AND subscription_status = "premium"
+    # paid customer:    is_premium = True AND subscription_status = "active"
+    # trial user:       is_premium = True AND subscription_status = "trial"
+    # free:             is_premium = False AND subscription_status = "expired"
+    if sub_status == 'premium':
+        is_prem = True
+    elif sub_status == 'active':
+        s_end = _parse_dt(sub_ends_at)
+        if s_end and s_end <= now:
+            is_prem = False
+            sub_status = 'expired'
+        else:
+            is_prem = True
+    elif sub_status == 'trial':
+        t_end = _parse_dt(trial_ends_at)
+        if t_end and t_end <= now:
+            is_prem = False
+            sub_status = 'expired'
+        else:
+            is_prem = True
+    else:
+        is_prem = False
+        sub_status = 'expired'
             
     members = _run("SELECT user_id FROM auth_household_members WHERE household_id = ?", (hhid,))
     if not members:
@@ -1678,7 +1705,7 @@ def register_auth_routes(app):
                 _init_schema()
                 hh = _one(f"SELECT is_premium, subscription_status, trial_ends_at, subscription_ends_at, owner_id FROM {_HH} WHERE id = ?", (hh_id,))
                 is_prem = bool(hh.get("is_premium")) if hh else False
-                sub_status = hh.get("subscription_status", "free") if hh else "free"
+                sub_status = hh.get("subscription_status", "expired") if hh else "expired"
                 trial_ends_at = hh.get("trial_ends_at") if hh else None
                 if trial_ends_at and hasattr(trial_ends_at, 'isoformat'):
                     trial_ends_at = trial_ends_at.isoformat()
@@ -1686,28 +1713,45 @@ def register_auth_routes(app):
                 if subscription_ends_at and hasattr(subscription_ends_at, 'isoformat'):
                     subscription_ends_at = subscription_ends_at.isoformat()
 
-                
-                # Check active trial
-                if sub_status == 'trial' and trial_ends_at:
-                    import datetime
-                    try:
-                        t_end = trial_ends_at
-                        if isinstance(t_end, str):
-                            if 'T' in t_end:
-                                t_end = datetime.datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+                import datetime
+                now = datetime.datetime.now(datetime.timezone.utc)
+                def _parse_dt(val):
+                    if not val: return None
+                    if isinstance(val, str):
+                        try:
+                            if 'T' in val:
+                                val = datetime.datetime.fromisoformat(val.replace('Z', '+00:00'))
                             else:
-                                t_end = datetime.datetime.strptime(t_end, '%Y-%m-%d %H:%M:%S')
-                        now = datetime.datetime.now(datetime.timezone.utc) if getattr(t_end, 'tzinfo', None) else datetime.datetime.utcnow()
-                        if t_end > now:
-                            is_prem = True
-                        else:
-                            sub_status = "expired"
-                    except:
-                        pass
+                                val = datetime.datetime.strptime(val, '%Y-%m-%d %H:%M:%S')
+                        except Exception:
+                            return None
+                    if not getattr(val, 'tzinfo', None):
+                        val = val.replace(tzinfo=datetime.timezone.utc)
+                    return val
+
+                if sub_status == 'premium':
+                    is_prem = True
+                elif sub_status == 'active':
+                    s_end = _parse_dt(subscription_ends_at)
+                    if s_end and s_end <= now:
+                        is_prem = False
+                        sub_status = 'expired'
+                    else:
+                        is_prem = True
+                elif sub_status == 'trial':
+                    t_end = _parse_dt(trial_ends_at)
+                    if t_end and t_end <= now:
+                        is_prem = False
+                        sub_status = 'expired'
+                    else:
+                        is_prem = True
+                else:
+                    is_prem = False
+                    sub_status = 'expired'
 
             status = get_household_status() if hh_id else {"is_read_only": False, "over_limit": False}
             resp["is_premium"] = is_prem
-            resp["subscription_status"] = sub_status if hh_id else "free"
+            resp["subscription_status"] = sub_status if hh_id else "expired"
             resp["trial_ends_at"] = trial_ends_at if hh_id else None
             resp["subscription_ends_at"] = subscription_ends_at if hh_id else None
             resp["is_read_only"] = status["is_read_only"]
@@ -2639,10 +2683,10 @@ def register_auth_routes(app):
             user = _one(f"SELECT name FROM {_USERS} WHERE id = ?", (uid,))
             new_name = user["name"] + "'s Household" if user and user.get("name") else "My Personal Household"
         
-        # Create new household without premium/trial
+        # Create new household without premium/trial (free tier: is_premium=False, subscription_status='expired')
         import secrets
         code = secrets.token_hex(4).upper()
-        res = _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, owner_id) VALUES (?, ?, False, 'free', ?) RETURNING id", (new_name, code, uid))
+        res = _one(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, owner_id) VALUES (?, ?, False, 'expired', ?) RETURNING id", (new_name, code, uid))
         new_hhid = res["id"]
         
         # Move the user to the new household
