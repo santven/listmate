@@ -45,11 +45,12 @@ def safe_execute_task(task_name: str, task_fn, *args, **kwargs):
         return {"status": "error", "error": str(exc), "duration_ms": duration_ms}
 
 
-def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_hour: int = 8):
+def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_hour: int = 8, now_utc: datetime.datetime = None):
     """
     Main hourly pipeline coordinating all hourly jobs.
     """
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if now_utc is None:
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
     logger.info(f"═══════════════════════════════════════════════════════════════════════")
     logger.info(f" ListMate Hourly Cron Pipeline - {now_utc.isoformat()}")
     logger.info(f" Configuration: dry_run={dry_run}, force_send={force_send}, target_hour={target_hour}")
@@ -67,12 +68,12 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         force_send=force_send
     )
 
-    # Task 2: Still Good AI Shelf-Life Batch Estimator (Runs once daily at 12a GMT / 00:00 UTC)
-    if now_utc.hour == 0 or force_send:
+    # Task 2: Still Good AI Shelf-Life Batch Estimator (Runs 4x daily at 12a, 6a, 12p, 6p GMT / 00:00, 06:00, 12:00, 18:00 UTC)
+    if now_utc.hour in (0, 6, 12, 18) or force_send:
         try:
             from still_good_ai import enhance_still_good_shelf_life_batch
             pipeline_results["still_good_ai"] = safe_execute_task(
-                "Still Good AI Shelf-Life Batch Estimator (12a GMT)",
+                "Still Good AI Shelf-Life Batch Estimator (12a/6a/12p/6p GMT)",
                 enhance_still_good_shelf_life_batch,
                 limit=50
             )
