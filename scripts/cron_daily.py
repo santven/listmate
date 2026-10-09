@@ -1705,8 +1705,228 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
     }
 
 
+def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = False, force_send: bool = False):
+    """
+    7:00 AM Local Time Morning Fridge Lunch Planning Push Reminder (Issue #610)
+
+    1. Evaluates candidate users at 7:00 AM local time based on their timezone
+       (auth_users.timezone, fallback America/Chicago).
+    2. Eligible households: Pro and active Pro Trial (subscription_status IN ('premium', 'active', 'trial')).
+       If trial, ensure trial_ends_at is valid and has not expired.
+    3. Requires active push subscription (permission_status = 'granted').
+    4. Household must have at least 1 active refrigerator item (location = 'fridge', status = 'active').
+    5. Dynamic copy based on fridge meal count:
+       - 1 item: "🍱 Packing lunch today?" / "You have {dish_name} in the fridge ready to enjoy before it expires."
+       - 2–3 items: "🍱 Packing lunch today?" / "You have {most_urgent_dish} and {remaining} other meal(s) waiting in the fridge."
+       - 4+ items: "🍱 Packing lunch today?" / "Your fridge has {count} meals waiting to be enjoyed. Check Still Good before heading out!"
+    6. Idempotency & Frequency Capping:
+       - Scoped via push_notifications_log with campaign = 'still_good_lunch_7am' on the current local calendar date.
+       - Max 1 reminder per user per local calendar day.
+    7. Deep link: /?screen=stillGood&source=push_lunch_7am
+    """
+    _init_schema()
+    from push_helper import send_push_to_user
+    import shared.auth as authmod
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Still Good morning fridge lunch pushes (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE (
+            h.subscription_status IN ('premium', 'active')
+            OR (
+                h.subscription_status = 'trial' 
+                AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+            )
+        )
+        {hour_clause}
+        AND EXISTS (
+            SELECT 1 FROM push_subscriptions ps
+            WHERE ps.user_id = u.id
+              AND ps.is_active = TRUE
+              AND ps.permission_status = 'granted'
+        )
+        AND EXISTS (
+            SELECT 1 FROM still_good_items sgi
+            WHERE sgi.household_id = h.id
+              AND sgi.status = 'active'
+              AND sgi.location = 'fridge'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'still_good_lunch_7am'
+              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+        )
+        ORDER BY h.id ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_still_good_fridge_lunch_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Still Good fridge lunch pushes.")
+    results = []
+    dispatched_count = 0
+
+    hh_fridge_cache = {}
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+
+        if hhid not in hh_fridge_cache:
+            try:
+                fridge_items = _run("""
+                    SELECT id, name, consume_by, date_added
+                    FROM still_good_items
+                    WHERE household_id = %s
+                      AND status = 'active'
+                      AND location = 'fridge'
+                    ORDER BY consume_by ASC NULLS LAST, id ASC
+                """, (hhid,))
+                hh_fridge_cache[hhid] = fridge_items or []
+            except Exception as item_err:
+                print(f"  [Warning] Failed to fetch fridge items for Household #{hhid}: {item_err}")
+                hh_fridge_cache[hhid] = []
+
+        items = hh_fridge_cache.get(hhid, [])
+        total_count = len(items)
+        if total_count == 0:
+            continue
+
+        title = "🍱 Packing lunch today?"
+        if total_count == 1:
+            dish_name = (items[0].get("name") or "").strip() or "leftovers"
+            body = f"You have {dish_name} in the fridge ready to enjoy before it expires."
+        elif total_count in (2, 3):
+            most_urgent = (items[0].get("name") or "").strip() or "leftovers"
+            remaining = total_count - 1
+            meal_word = "other meal" if remaining == 1 else "other meals"
+            body = f"You have {most_urgent} and {remaining} {meal_word} waiting in the fridge."
+        else:  # 4+
+            body = f"Your fridge has {total_count} meals waiting to be enjoyed. Check Still Good before heading out!"
+
+        deep_link_url = "/?screen=stillGood&source=push_lunch_7am"
+        push_data = {
+            "action": "open_screen",
+            "screen": "stillGood",
+            "campaign": "still_good_lunch_7am",
+            "source": "push_lunch_7am",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "fridge_count": str(total_count)
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'still_good_lunch_7am' to User #{uid} ({cand.get('user_email')}): '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_lunch_7am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'still_good_lunch_7am' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_lunch_7am",
+                "title": title,
+                "body": body,
+                "result": res,
+                "status": "sent"
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to dispatch push to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_lunch_7am",
+                "error": str(dispatch_err),
+                "status": "error"
+            })
+
+    return {
+        "ok": True,
+        "dispatched": dispatched_count,
+        "candidates": len(candidates),
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
 if __name__ == "__main__":
     import sys
+    if any(arg.startswith("--test-still-good-lunch") or arg == "--test-lunch-push" for arg in sys.argv):
+        dry = "--dry-run" in sys.argv
+        force = "--force" in sys.argv
+        target_h = 7
+        for arg in sys.argv:
+            if arg.startswith("--target-hour="):
+                try:
+                    target_h = int(arg.split("=", 1)[1])
+                except ValueError:
+                    target_h = 7
+        res = check_still_good_fridge_lunch_pushes(target_hour=target_h, dry_run=dry, force_send=force)
+        print(f"Still Good lunch pushes result: {res}")
+        sys.exit(0)
     if any(arg.startswith("--test-trial-pushes") or arg == "--test-trial-push" for arg in sys.argv):
         dry = "--dry-run" in sys.argv
         force = "--force" in sys.argv

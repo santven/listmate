@@ -260,6 +260,41 @@ A multi-segment announcement email campaign was created to introduce Still Good 
 
 ---
 
+## 4.10 7:00 AM Morning Fridge Lunch Push Reminder (Issue #610)
+
+**Issue**: [#610](https://github.com/santven/listmate/issues/610)  
+**Goal**: Proactively remind household members before they leave for work or school about cooked meals and leftovers waiting in the refrigerator, helping them pack lunch and avoid food waste.
+
+### Operational Principles
+1. **Timezone-Aware Evaluation (7:00 AM Local Time)**:
+   - Evaluated hourly via `scripts/cron_hourly.py` (Task 3).
+   - Evaluates each user at 7:00 AM in their local timezone (`auth_users.timezone`, fallback `America/Chicago`).
+2. **Pro & Active Trial Eligibility**:
+   - Gated to Pro and active Pro Trial households (`subscription_status IN ('premium', 'active', 'trial')`).
+   - Requires at least 1 active refrigerator dish (`location = 'fridge'` and `status = 'active'`).
+3. **Dynamic Copy Architecture**:
+   - **1 Item**:
+     - *Title*: `🍱 Packing lunch today?`
+     - *Body*: `You have {dish_name} in the fridge ready to enjoy before it expires.`
+   - **2–3 Items**:
+     - *Title*: `🍱 Packing lunch today?`
+     - *Body*: `You have {most_urgent_dish} and {remaining} other meal(s) waiting in the fridge.`
+   - **4+ Items**:
+     - *Title*: `🍱 Packing lunch today?`
+     - *Body*: `Your fridge has {count} meals waiting to be enjoyed. Check Still Good before heading out!`
+4. **Idempotency & Frequency Capping**:
+   - Logged in `push_notifications_log` with `campaign = 'still_good_lunch_7am'`.
+   - Capped at at most 1 reminder per member per local calendar day.
+5. **App Deep-Linking**:
+   - Deep-link URL: `/?screen=stillGood&source=push_lunch_7am`.
+   - Native push listener in `static/index.html` transitions immediately into the Still Good screen with refrigerator view active.
+6. **CLI Execution**:
+   - `python3 scripts/cron_hourly.py --still-good-lunch`
+   - `python3 scripts/cron_hourly.py --still-good-lunch --dry-run --force`
+   - `python3 scripts/cron_daily.py --test-still-good-lunch --dry-run --force`
+
+---
+
 ## 5. Future Roadmap & Iterations
 
 1. **Push Notifications**:
