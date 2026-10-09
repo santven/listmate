@@ -64,12 +64,12 @@ def enhance_still_good_shelf_life_batch(limit=50):
         if key:
             system_instruction = (
                 "You are an expert culinary and food safety authority. "
-                "For each leftover or prepared food item, evaluate its specific ingredients, storage location, and preparation type, "
+                "For each leftover, fresh produce, raw ingredient, or prepared food item, evaluate its specific ingredients, storage location, and preparation type, "
                 "and determine the safe conservative shelf life (in days) from the date stored, along with an optimal nudge window. "
                 "CRITICAL PRINCIPLE:\n"
                 "Be strictly conservative. Always prioritize food safety over shelf extension to prevent foodborne illness. "
                 "Use your full knowledge of microbial growth, food chemistry, moisture activity, and temperature to decide the safe shelf life and cap. "
-                "Provide a short 3-6 word practical tip (e.g., 'Reheat until steaming hot', 'Keep tightly sealed in freezer bag').\n"
+                "Provide a short 3-6 word practical tip (e.g., 'Reheat until steaming hot', 'Keep dry in crisper drawer', 'Keep tightly sealed in freezer bag').\n"
                 "Produce ONLY a valid JSON array of objects with keys: id, safe_days, tip. No markdown wrapping."
             )
 
@@ -151,6 +151,9 @@ def enhance_still_good_shelf_life_batch(limit=50):
                     if it["item_type"] == "restaurant":
                         safe_days = 30
                         tip = "Best within 1 month in freezer"
+                    elif it["item_type"] == "produce":
+                        safe_days = 90
+                        tip = "Blanch before freezing for best quality"
                     else:
                         safe_days = 60
                         tip = "Keep airtight to avoid freezer burn"
@@ -160,6 +163,9 @@ def enhance_still_good_shelf_life_batch(limit=50):
                 elif it["item_type"] == "batch_cook":
                     safe_days = 4
                     tip = "Portion out and reheat thoroughly"
+                elif it["item_type"] == "produce":
+                    safe_days = 5
+                    tip = "Keep dry in crisper drawer"
                 else:
                     safe_days = 3
                     tip = "Keep sealed and refrigerated"
