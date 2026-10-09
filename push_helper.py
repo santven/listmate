@@ -395,6 +395,22 @@ def send_push_to_household(household_id: int, title: str, body: str, data: Optio
     ex_uid = None if (exclude_user_id is None or exclude_user_id == 0) else int(exclude_user_id)
     token_rows = authmod.get_active_tokens_for_household(household_id, exclude_user_id=ex_uid)
     if not token_rows:
+        try:
+            authmod.log_push_dispatch(
+                target_type="household",
+                target_id=int(household_id),
+                title=title,
+                body=body,
+                url=(data or {}).get("url", "/"),
+                custom_data=data,
+                tokens_count=0,
+                sent_count=0,
+                failed_count=0,
+                errors=["No active push tokens for household"],
+                is_mock=False
+            )
+        except Exception as log_err:
+            logger.warning(f"[PushHelper] Failed to log empty household token dispatch: {log_err}")
         return {"sent": 0, "failed": 0, "message": "No active tokens for household"}
 
     tokens = [r["token"] for r in token_rows if r.get("token")]

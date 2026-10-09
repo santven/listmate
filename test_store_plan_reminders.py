@@ -160,5 +160,47 @@ class TestStorePlanReminders(unittest.TestCase):
             self.assertIn("Plan your trip to Costco Wholesale", html_val)
 
 
+    @patch("shared.auth.get_active_tokens_for_household")
+    @patch("shared.auth.log_push_dispatch")
+    def test_send_push_to_household_empty_tokens_audit_log(self, mock_log_dispatch, mock_get_tokens):
+        import push_helper
+        mock_get_tokens.return_value = []
+
+        res = push_helper.send_push_to_household(
+            household_id=25,
+            title="Plan trip",
+            body="Check items",
+            data={"url": "/?store_id=125"}
+        )
+
+        self.assertEqual(res["sent"], 0)
+        self.assertEqual(res["message"], "No active tokens for household")
+        mock_log_dispatch.assert_called_once()
+        kwargs = mock_log_dispatch.call_args[1]
+        self.assertEqual(kwargs["target_type"], "household")
+        self.assertEqual(kwargs["target_id"], 25)
+        self.assertEqual(kwargs["tokens_count"], 0)
+        self.assertEqual(kwargs["sent_count"], 0)
+        self.assertIn("No active push tokens for household", kwargs["errors"])
+
+    @patch("scripts.cron_hourly._run")
+    @patch("scripts.cron_hourly._one")
+    @patch("push_helper.send_push_to_household")
+    def test_cron_hourly_check_store_plan_push_reminders_no_tokens(self, mock_send_push, mock_one, mock_run):
+        import scripts.cron_hourly as cron_hourly
+        mock_run.return_value = [
+            {"store_id": 125, "store_name": "ValliProduce", "household_id": 25, "items_count": 10}
+        ]
+        mock_one.return_value = None
+        mock_send_push.return_value = {"sent": 0, "failed": 0, "message": "No active tokens for household"}
+
+        res = cron_hourly.check_store_plan_push_reminders(threshold_n=10, dry_run=False)
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 1)
+        self.assertEqual(res["dispatched"], 0)
+        self.assertEqual(res["results"][0]["status"], "skipped_no_tokens")
+
+
 if __name__ == "__main__":
     unittest.main()

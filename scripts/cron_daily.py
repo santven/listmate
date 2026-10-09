@@ -2205,10 +2205,19 @@ def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = Fal
             s.household_id,
             COUNT(li.id) AS items_count
         FROM stores s
+        JOIN auth_households h ON h.id = s.household_id
         JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
         WHERE li.purchased = FALSE
           AND s.planned_visit_date IS NULL
           AND LOWER(s.name) != 'general list'
+          AND (
+              h.is_premium = TRUE 
+              OR h.subscription_status IN ('premium', 'active')
+              OR (
+                  h.subscription_status = 'trial' 
+                  AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+              )
+          )
         GROUP BY s.id, s.name, s.household_id
         HAVING COUNT(li.id) >= %(threshold)s
         ORDER BY s.household_id ASC, items_count DESC
@@ -2276,12 +2285,18 @@ def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = Fal
                 res = send_push_to_household(hh_id, p_title, p_body, p_data)
                 sent_cnt = res.get("sent", 0)
                 mock_mode = res.get("mock", False)
-                print(f"  ✔ Sent plan reminder push to HH #{hh_id} for Store #{store_id} ({store_name}) (sent={sent_cnt}, mock={mock_mode})")
-                dispatched_count += 1
+                if sent_cnt > 0 or mock_mode:
+                    print(f"  ✔ Sent plan reminder push to HH #{hh_id} for Store #{store_id} ({store_name}) (sent={sent_cnt}, mock={mock_mode})")
+                    dispatched_count += 1
+                    status_str = "sent"
+                else:
+                    msg = res.get("message") or res.get("error") or "No active tokens for household"
+                    print(f"  ℹ Skipped plan reminder push to HH #{hh_id} for Store #{store_id} ({store_name}): {msg} (sent=0)")
+                    status_str = "skipped_no_tokens"
                 results.append({
                     "household_id": hh_id,
                     "store_id": store_id,
-                    "status": "sent",
+                    "status": status_str,
                     "result": res
                 })
             except Exception as send_err:
@@ -2326,10 +2341,19 @@ def check_store_plan_email_reminders(threshold_n: int = None, dry_run: bool = Fa
             s.household_id,
             COUNT(li.id) AS items_count
         FROM stores s
+        JOIN auth_households h ON h.id = s.household_id
         JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
         WHERE li.purchased = FALSE
           AND s.planned_visit_date IS NULL
           AND LOWER(s.name) != 'general list'
+          AND (
+              h.is_premium = TRUE 
+              OR h.subscription_status IN ('premium', 'active')
+              OR (
+                  h.subscription_status = 'trial' 
+                  AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+              )
+          )
         GROUP BY s.id, s.name, s.household_id
         HAVING COUNT(li.id) >= %(threshold)s
         ORDER BY s.household_id ASC, items_count DESC
