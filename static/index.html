@@ -767,7 +767,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <input type="text" id="catalogSearch" placeholder="Filter items or type new..." autocomplete="off" style="flex:2;">
       <input type="text" id="catalogQty" placeholder="Qty (opt)" autocomplete="off" style="flex:1; max-width:80px; padding:14px 12px; font-size:16px; border:1.5px solid var(--border); border-radius:12px; background:var(--card); outline:none;">
     </div>
-    <div class="catalog-group-by-bar" style="display:flex; align-items:center; justify-content:space-between; margin-top:-4px; margin-bottom:14px; padding:0 2px;">
+    <div class="catalog-group-by-bar" id="catalogGroupByBar" style="display:flex; align-items:center; justify-content:space-between; margin-top:-4px; margin-bottom:14px; padding:0 2px;">
       <span style="font-size:12px; font-weight:600; color:var(--muted); letter-spacing:0.3px;">Group by:</span>
       <div style="display:inline-flex; background:var(--card); border:1.5px solid var(--border); border-radius:10px; padding:3px; gap:4px;">
         <button id="btnGroupCategory" onclick="setCatalogGroupBy('category')" type="button" style="padding:6px 12px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; border:none; background:var(--green); color:#fff; transition:all 0.15s ease;">Category</button>
@@ -2395,10 +2395,15 @@ function setCatalogGroupBy(mode) {
 }
 
 function updateCatalogGroupByUI() {
+  const bar = $('#catalogGroupByBar') || document.querySelector('.catalog-group-by-bar');
+  const hasItemsOnList = currentStore ? list.some(l => l.store_id === currentStore.id && !l.purchased) : false;
+  if (bar) {
+    bar.style.display = hasItemsOnList ? 'flex' : 'none';
+  }
   const btnCat = $('#btnGroupCategory');
   const btnOnList = $('#btnGroupOnList');
   if (btnCat && btnOnList) {
-    if (currentCatalogGroupBy === 'on_list') {
+    if (hasItemsOnList && currentCatalogGroupBy === 'on_list') {
       btnCat.style.background = 'transparent';
       btnCat.style.color = 'var(--muted)';
       btnCat.style.fontWeight = '500';
@@ -2441,6 +2446,9 @@ async function openStore(sid) {
 
 function renderCatalog(filter) {
   if (!currentStore) return;
+  const hasItemsOnList = list.some(l => l.store_id === currentStore.id && !l.purchased);
+  updateCatalogGroupByUI();
+  const effectiveGroupBy = hasItemsOnList ? currentCatalogGroupBy : 'category';
   const items=allStoreItems[currentStore.id]||[];
   const onList=new Set(list.filter(i=>i.store_id===currentStore.id&&!i.purchased).map(i=>(i.name||'').toLowerCase().trim()));
   let filtered=filter?items.filter(i=>(i.name||'').toLowerCase().includes(filter.toLowerCase().trim())):items;
@@ -2474,7 +2482,7 @@ function renderCatalog(filter) {
     return true;
   };
 
-  if (currentCatalogGroupBy === 'on_list') {
+  if (effectiveGroupBy === 'on_list') {
     // Mode A: Group by Items on list - items on list show on top
     const validItems = filtered.filter(isItemValid);
     const onListItems = [];
