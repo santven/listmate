@@ -2717,7 +2717,9 @@ def still_good_create_endpoint():
             location = "fridge"
 
         item_type = (data.get("item_type") or "home_cooked").strip().lower()
-        if item_type not in ["restaurant", "home_cooked", "batch_cook", "other"]:
+        if item_type in ["fresh_produce", "fresh-produce", "produce"]:
+            item_type = "produce"
+        elif item_type not in ["restaurant", "home_cooked", "batch_cook", "produce", "other"]:
             item_type = "home_cooked"
 
         try:
@@ -2732,10 +2734,11 @@ def still_good_create_endpoint():
         today = date.today()
         if not consume_by:
             if location == "freezer":
-                consume_by = (today + timedelta(days=60)).strftime("%Y-%m-%d")
+                freeze_default = 90 if item_type == "produce" else 60
+                consume_by = (today + timedelta(days=freeze_default)).strftime("%Y-%m-%d")
             elif item_type == "restaurant":
                 consume_by = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-            elif item_type == "batch_cook":
+            elif item_type in ["batch_cook", "produce"]:
                 consume_by = (today + timedelta(days=5)).strftime("%Y-%m-%d")
             else:
                 consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
@@ -2811,15 +2814,16 @@ def still_good_action_endpoint(item_id):
             curr_loc = item["location"]
             item_type = item["item_type"] if "item_type" in item.keys() else "home_cooked"
             if curr_loc == "fridge":
-                freeze_days = 30 if item_type == "restaurant" else 60
+                freeze_days = 30 if item_type == "restaurant" else (90 if item_type == "produce" else 60)
                 db.execute(
                     "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
                     (freeze_days, item_id, hhid)
                 )
             else:
+                fridge_days = 1 if item_type == "restaurant" else (5 if item_type in ["produce", "batch_cook"] else 3)
                 db.execute(
-                    "UPDATE still_good_items SET location = 'fridge', thawing = FALSE, consume_by = CURRENT_DATE + INTERVAL '3 days', updated_at = NOW() WHERE id = ? AND household_id = ?",
-                    (item_id, hhid)
+                    "UPDATE still_good_items SET location = 'fridge', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    (fridge_days, item_id, hhid)
                 )
 
         return jsonify({"ok": True, "action": action, "item_id": item_id})
@@ -2848,7 +2852,7 @@ def still_good_vacation_freeze_endpoint():
         for r in rows:
             i_id = r["id"]
             itype = r["item_type"] if "item_type" in r.keys() else "home_cooked"
-            freeze_days = 30 if itype == "restaurant" else 60
+            freeze_days = 30 if itype == "restaurant" else (90 if itype == "produce" else 60)
             db.execute(
                 "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
                 (freeze_days, i_id, hhid)
@@ -2913,7 +2917,9 @@ def still_good_item_endpoint(item_id):
             updates.append("location = ?")
             params.append(location)
 
-        if item_type in ["home_cooked", "restaurant", "batch_cook"]:
+        if item_type in ["fresh_produce", "fresh-produce", "produce"]:
+            item_type = "produce"
+        if item_type in ["home_cooked", "restaurant", "batch_cook", "produce", "other"]:
             if item_type != (existing.get("item_type") or "").lower():
                 other_changed = True
             updates.append("item_type = ?")

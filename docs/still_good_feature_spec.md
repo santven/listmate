@@ -295,6 +295,37 @@ A multi-segment announcement email campaign was created to introduce Still Good 
 
 ---
 
+## 4.11 Fresh Produce Item Type & 10:00 AM Local Expiry Push Reminders (Issue #612)
+
+**Issue**: [#612](https://github.com/santven/listmate/issues/612)  
+**Goal**: Allow households to track raw ingredients, staples, and fresh produce (e.g., strawberries, herbs, greens, idly batter) alongside leftovers with custom shelf life targets, distinct badges, exclusion from lunch planning suggestions, and proactive 10:00 AM local expiry push reminders (1 day before and on the day of expiry).
+
+### Features
+1. **Fresh Produce Item Type (`produce`)**:
+   - UI selector button: `🥗 Fresh Produce` in the Add/Edit modal.
+   - Card badge: `🥗 Fresh Produce` (green badge styling `.sg-badge-produce`).
+   - Default shelf life: 5 days in refrigerator, 90 days in freezer.
+   - Integrated with Still Good AI prompt and conservative fallback rules.
+2. **Lunch Push Notification Filter (7:00 AM Local)**:
+   - Evaluated in `check_still_good_fridge_lunch_pushes` (`scripts/cron_hourly.py` Task 3).
+   - Fresh Produce items (`item_type = 'produce'`) are explicitly excluded from the 7:00 AM morning lunch push reminder query.
+   - Lunch suggestions focus strictly on cooked, prepared, or ready-to-eat meals (`home_cooked`, `restaurant`, `batch_cook`).
+3. **10:00 AM Local Expiry Push Reminders**:
+   - Evaluated hourly via `scripts/cron_hourly.py` (Task 4) at 10:00 AM local time for each user.
+   - Triggered for active Fresh Produce items expiring today or 1 day before (tomorrow) in the user's local timezone.
+   - **Dynamic Copy**:
+     * Expiring Today: `⏳ Fresh Produce: Use Today` / `Your {name} needs to be used today before it spoils.`
+     * Expiring Tomorrow: `🥗 Fresh Produce Reminder` / `Your {name} expires tomorrow. Plan to enjoy or use it soon!`
+     * Multi-item summaries when multiple produce items are expiring.
+   - Deep link: `/?screen=stillGood&source=push_produce_10am`.
+   - Frequency capping & idempotency: Logged as `still_good_produce_expiry_10am` in `push_notifications_log`, capped at 1 reminder per member per local calendar day.
+4. **CLI Execution**:
+   - `python3 scripts/cron_hourly.py --still-good-produce`
+   - `python3 scripts/cron_hourly.py --still-good-produce --dry-run --force`
+   - `python3 scripts/cron_daily.py --test-still-good-produce --dry-run --force`
+
+---
+
 ## 5. Future Roadmap & Iterations
 
 1. **Push Notifications**:

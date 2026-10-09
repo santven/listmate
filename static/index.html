@@ -544,6 +544,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .sg-badge-restaurant { background: #fef3c7; color: #92400e; }
 .sg-badge-home { background: #ecfdf5; color: #065f46; }
 .sg-badge-batch { background: #e0e7ff; color: #3730a3; }
+.sg-badge-produce { background: #dcfce7; color: #15803d; }
 .sg-badge-thawing { background: #dbeafe; color: #1e40af; }
 .sg-status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .sg-status-fresh { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
@@ -1044,9 +1045,12 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <!-- Type Selector -->
     <div style="margin-bottom:14px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Type of food</label>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+      <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px;">
         <button type="button" id="sgTypeHome" onclick="selectSgModalType('home_cooked')" style="padding:10px 6px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
           🍳 Home Meal
+        </button>
+        <button type="button" id="sgTypeProduce" onclick="selectSgModalType('produce')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          🥗 Fresh Produce
         </button>
         <button type="button" id="sgTypeRest" onclick="selectSgModalType('restaurant')" style="padding:10px 6px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
           🥡 Restaurant
@@ -4108,6 +4112,7 @@ function renderStillGoodItems() {
     var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home Meal</span>';
     if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
     else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch Cook</span>';
+    else if (item.item_type === 'produce') typeBadge = '<span class="sg-badge sg-badge-produce">🥗 Fresh Produce</span>';
 
     var statusPill = '';
     if (item.location === 'freezer') {
@@ -4393,6 +4398,8 @@ function selectSgModalLocation(loc) {
       setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
     } else if (sgModalType === 'batch_cook') {
       setSgModalDays(5, 'Eat within 5 days in fridge', 'Hearty stews, soups, or batch cooks in fridge');
+    } else if (sgModalType === 'produce') {
+      setSgModalDays(5, 'Eat within 5 days in fridge', 'Fresh produce, raw ingredients, greens, or batter');
     } else {
       setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
     }
@@ -4409,6 +4416,8 @@ function selectSgModalLocation(loc) {
     }
     if (sgModalType === 'restaurant') {
       setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
+    } else if (sgModalType === 'produce') {
+      setSgModalDays(90, 'Good for ~3 months in freezer', 'Blanched or frozen produce keeps for 3+ months');
     } else {
       setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
     }
@@ -4418,10 +4427,11 @@ function selectSgModalLocation(loc) {
 function selectSgModalType(type) {
   sgModalType = type;
   var hBtn = document.getElementById('sgTypeHome');
+  var pBtn = document.getElementById('sgTypeProduce');
   var rBtn = document.getElementById('sgTypeRest');
   var bBtn = document.getElementById('sgTypeBatch');
 
-  [hBtn, rBtn, bBtn].forEach(function(btn) {
+  [hBtn, pBtn, rBtn, bBtn].forEach(function(btn) {
     if (btn) {
       btn.style.background = '#fff';
       btn.style.borderColor = 'var(--border)';
@@ -4435,6 +4445,12 @@ function selectSgModalType(type) {
     hBtn.style.color = 'var(--green-dark)';
     if (sgModalLocation === 'freezer') setSgModalDays(60, 'Good for ~2 months in freezer', 'Freezing pauses spoilage; best within 2 months for flavor');
     else setSgModalDays(3, 'Eat within 3 days', 'USDA standard for home-cooked leftovers');
+  } else if (type === 'produce' && pBtn) {
+    pBtn.style.background = '#dcfce7';
+    pBtn.style.borderColor = '#22c55e';
+    pBtn.style.color = '#15803d';
+    if (sgModalLocation === 'freezer') setSgModalDays(90, 'Good for ~3 months in freezer', 'Blanched or frozen produce keeps for 3+ months');
+    else setSgModalDays(5, 'Eat within 5 days in fridge', 'Fresh produce, raw ingredients, greens, or batter');
   } else if (type === 'restaurant' && rBtn) {
     rBtn.style.background = '#fef3c7';
     rBtn.style.borderColor = '#f59e0b';
@@ -4606,6 +4622,7 @@ function renderVacationDrawerItems() {
     var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home</span>';
     if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
     else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch</span>';
+    else if (item.item_type === 'produce') typeBadge = '<span class="sg-badge sg-badge-produce">🥗 Produce</span>';
 
     var statusPill = '';
     if (item.urgency === 'urgent') {

@@ -1769,6 +1769,7 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
             WHERE sgi.household_id = h.id
               AND sgi.status = 'active'
               AND sgi.location = 'fridge'
+              AND sgi.item_type != 'produce'
         )
         AND NOT EXISTS (
             SELECT 1 FROM push_notifications_log pnl
@@ -1809,6 +1810,7 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
                     WHERE household_id = %s
                       AND status = 'active'
                       AND location = 'fridge'
+                      AND item_type != 'produce'
                     ORDER BY consume_by ASC NULLS LAST, id ASC
                 """, (hhid,))
                 hh_fridge_cache[hhid] = fridge_items or []
@@ -1912,8 +1914,273 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
     }
 
 
+def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool = False, force_send: bool = False):
+    """
+    10:00 AM Local Time Fresh Produce Expiry Push Reminder (Issue #612)
+
+    1. Evaluates candidate users at 10:00 AM local time based on their timezone
+       (auth_users.timezone, fallback America/Chicago).
+    2. Eligible households: Pro and active Pro Trial (subscription_status IN ('premium', 'active', 'trial')).
+       If trial, ensure trial_ends_at is valid and has not expired.
+    3. Requires active push subscription (permission_status = 'granted').
+    4. Household must have at least 1 active Fresh Produce item (item_type = 'produce', status = 'active')
+       whose consume_by date is today or tomorrow (1 day before expiry) in the user's local timezone.
+    5. Dynamic copy based on urgency:
+       - Expiring today takes precedence:
+         * 1 item: "⏳ Fresh Produce: Use Today" / "Your {name} needs to be used today before it spoils."
+         * 2 items: "⏳ Fresh Produce: Use Today" / "Your {name1} and {name2} expire today. Plan to use them up!"
+         * 3+ items: "⏳ Fresh Produce: Use Today" / "{name1} and {rem} other fresh produce items expire today. Check Still Good!"
+       - If items expire both today and tomorrow:
+         * "⏳ Fresh Produce: Use Today" / "{name1} expires today, plus {other_count} expiring tomorrow. Check Still Good!"
+       - If only expiring tomorrow (1-day before reminder):
+         * 1 item: "🥗 Fresh Produce Reminder" / "Your {name} expires tomorrow. Plan to enjoy or use it soon!"
+         * 2 items: "🥗 Fresh Produce Reminder" / "Your {name1} and {name2} expire tomorrow. Enjoy them before they spoil!"
+         * 3+ items: "🥗 Fresh Produce Reminder" / "You have {count} produce items (including {name1}) expiring tomorrow."
+    6. Idempotency & Frequency Capping:
+       - Scoped via push_notifications_log with campaign = 'still_good_produce_expiry_10am' on the current local calendar date.
+       - Max 1 produce reminder per user per local calendar day.
+    7. Deep link: /?screen=stillGood&source=push_produce_10am
+    """
+    _init_schema()
+    from push_helper import send_push_to_user
+    import shared.auth as authmod
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Still Good fresh produce expiry pushes (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date AS local_date,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE (
+            h.subscription_status IN ('premium', 'active')
+            OR (
+                h.subscription_status = 'trial' 
+                AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+            )
+        )
+        {hour_clause}
+        AND EXISTS (
+            SELECT 1 FROM push_subscriptions ps
+            WHERE ps.user_id = u.id
+              AND ps.is_active = TRUE
+              AND ps.permission_status = 'granted'
+        )
+        AND EXISTS (
+            SELECT 1 FROM still_good_items sgi
+            WHERE sgi.household_id = h.id
+              AND sgi.status = 'active'
+              AND sgi.item_type = 'produce'
+              AND sgi.consume_by IS NOT NULL
+              AND sgi.consume_by IN (
+                  (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date,
+                  (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date + 1
+              )
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'still_good_produce_expiry_10am'
+              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+        )
+        ORDER BY h.id ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_still_good_produce_expiry_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Still Good fresh produce expiry pushes.")
+    results = []
+    dispatched_count = 0
+
+    hh_produce_cache = {}
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+
+        local_date_str = str(cand.get("local_date") or "")
+        cache_key = (hhid, local_date_str)
+
+        if cache_key not in hh_produce_cache:
+            try:
+                produce_items = _run("""
+                    SELECT id, name, location, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by
+                    FROM still_good_items
+                    WHERE household_id = %s
+                      AND status = 'active'
+                      AND item_type = 'produce'
+                      AND consume_by IS NOT NULL
+                      AND consume_by >= %s::date
+                      AND consume_by <= (%s::date + INTERVAL '1 day')
+                    ORDER BY consume_by ASC, id ASC
+                """, (hhid, local_date_str, local_date_str))
+                hh_produce_cache[cache_key] = produce_items or []
+            except Exception as item_err:
+                print(f"  [Warning] Failed to fetch produce items for Household #{hhid}: {item_err}")
+                hh_produce_cache[cache_key] = []
+
+        items = hh_produce_cache.get(cache_key, [])
+        if not items:
+            continue
+
+        items_today = [i for i in items if (i.get("consume_by") or "") == local_date_str]
+        items_tomorrow = [i for i in items if (i.get("consume_by") or "") > local_date_str]
+
+        if items_today and items_tomorrow:
+            title = "⏳ Fresh Produce: Use Today"
+            first_name = (items_today[0].get("name") or "").strip() or "produce"
+            tom_count = len(items_tomorrow)
+            tom_text = f"{tom_count} more tomorrow" if tom_count > 1 else "1 more tomorrow"
+            if len(items_today) == 1:
+                body = f"Your {first_name} expires today, plus {tom_text}. Check Still Good!"
+            else:
+                body = f"{first_name} and {len(items_today) - 1} other produce expire today, plus {tom_text}."
+        elif items_today:
+            title = "⏳ Fresh Produce: Use Today"
+            first_name = (items_today[0].get("name") or "").strip() or "produce"
+            if len(items_today) == 1:
+                body = f"Your {first_name} needs to be used today before it spoils."
+            elif len(items_today) == 2:
+                second_name = (items_today[1].get("name") or "").strip() or "produce"
+                body = f"Your {first_name} and {second_name} expire today. Plan to use them up!"
+            else:
+                rem = len(items_today) - 1
+                body = f"{first_name} and {rem} other fresh produce items expire today. Check Still Good!"
+        elif items_tomorrow:
+            title = "🥗 Fresh Produce Reminder"
+            first_name = (items_tomorrow[0].get("name") or "").strip() or "produce"
+            if len(items_tomorrow) == 1:
+                body = f"Your {first_name} expires tomorrow. Plan to enjoy or use it soon!"
+            elif len(items_tomorrow) == 2:
+                second_name = (items_tomorrow[1].get("name") or "").strip() or "produce"
+                body = f"Your {first_name} and {second_name} expire tomorrow. Enjoy them before they spoil!"
+            else:
+                body = f"You have {len(items_tomorrow)} produce items (including {first_name}) expiring tomorrow."
+        else:
+            continue
+
+        deep_link_url = "/?screen=stillGood&source=push_produce_10am"
+        push_data = {
+            "action": "open_screen",
+            "screen": "stillGood",
+            "campaign": "still_good_produce_expiry_10am",
+            "source": "push_produce_10am",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "today_count": str(len(items_today)),
+            "tomorrow_count": str(len(items_tomorrow))
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'still_good_produce_expiry_10am' to User #{uid} ({cand.get('user_email')}): '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_produce_expiry_10am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'still_good_produce_expiry_10am' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_produce_expiry_10am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "result": res,
+                "status": "sent"
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to dispatch produce push to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_produce_expiry_10am",
+                "error": str(dispatch_err),
+                "status": "error"
+            })
+
+    return {
+        "ok": True,
+        "dispatched": dispatched_count,
+        "candidates": len(candidates),
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
 if __name__ == "__main__":
     import sys
+    if any(arg.startswith("--test-still-good-produce") or arg == "--test-produce-push" for arg in sys.argv):
+        dry = "--dry-run" in sys.argv
+        force = "--force" in sys.argv
+        target_h = 10
+        for arg in sys.argv:
+            if arg.startswith("--target-hour="):
+                try:
+                    target_h = int(arg.split("=", 1)[1])
+                except ValueError:
+                    target_h = 10
+        res = check_still_good_produce_expiry_pushes(target_hour=target_h, dry_run=dry, force_send=force)
+        print(f"Still Good produce pushes result: {res}")
+        sys.exit(0)
     if any(arg.startswith("--test-still-good-lunch") or arg == "--test-lunch-push" for arg in sys.argv):
         dry = "--dry-run" in sys.argv
         force = "--force" in sys.argv
