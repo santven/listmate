@@ -79,6 +79,16 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         except Exception as exc:
             logger.error(f"Still Good AI task failed to launch: {exc}")
 
+    # Task 3: Still Good Morning Fridge Lunch Push Reminder (7:00 AM local time)
+    from scripts.cron_daily import check_still_good_fridge_lunch_pushes
+    pipeline_results["still_good_lunch_pushes"] = safe_execute_task(
+        "Still Good Morning Fridge Lunch Push Reminder (7:00 AM local)",
+        check_still_good_fridge_lunch_pushes,
+        target_hour=7,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
     # -------------------------------------------------------------------------
     # Future Piggybacked Hourly Tasks can be added here cleanly:
     # e.g.,
@@ -116,6 +126,11 @@ def main():
         action="store_true",
         help="Run Still Good AI batch shelf-life enhancement immediately"
     )
+    parser.add_argument(
+        "--still-good-lunch",
+        action="store_true",
+        help="Run Still Good morning fridge lunch push reminders immediately"
+    )
 
     args = parser.parse_args()
 
@@ -127,6 +142,17 @@ def main():
             print(f"Still Good AI result: {stats}")
         except Exception as exc:
             print(f"Still Good AI failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
+    if args.still_good_lunch:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good morning fridge lunch push reminders via cron_hourly...")
+        try:
+            from scripts.cron_daily import check_still_good_fridge_lunch_pushes
+            stats = check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=args.dry_run, force_send=args.force)
+            print(f"Still Good lunch pushes result: {stats}")
+        except Exception as exc:
+            print(f"Still Good lunch pushes failed: {exc}")
         print("Done.")
         sys.exit(0)
 

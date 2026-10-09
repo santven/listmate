@@ -7699,6 +7699,22 @@ window.initPushNotifications = async function() {
         return;
       }
 
+      const isStillGoodPush = (action === 'open_screen' && (data.screen === 'stillGood' || data.screen === 'still_good')) ||
+                              data.campaign === 'still_good_lunch_7am' ||
+                              targetUrl.includes('screen=stillGood') ||
+                              targetUrl.includes('screen=still_good');
+      if (isStillGoodPush) {
+        console.log('[Push] Handled Still Good push tap. Opening Still Good screen directly.');
+        setTimeout(() => {
+          if (typeof showStillGoodScreen === 'function') {
+            showStillGoodScreen();
+          } else if (typeof showScreen === 'function') {
+            showScreen('stillGood');
+          }
+        }, 150);
+        return;
+      }
+
       if (targetUrl && targetUrl !== '/') {
         if (targetUrl.startsWith('#')) {
           window.location.hash = targetUrl;
