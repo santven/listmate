@@ -356,14 +356,14 @@ def run_cron(dry_run=False, mock_now=None):
         print(f"Warning: schema initialization check: {e}")
 
     try:
-        # Transition expired trials to 'expired' and set downgraded_at if unset
+        # Transition expired trials to free ('expired') and set downgraded_at if unset
         _run("""
             UPDATE auth_households
-            SET subscription_status = 'expired',
+            SET is_premium = FALSE,
+                subscription_status = 'expired',
                 downgraded_at = COALESCE(downgraded_at, trial_ends_at, NOW())
             WHERE subscription_status = 'trial'
               AND trial_ends_at <= NOW()
-              AND is_premium = FALSE
         """)
         _run("""
             UPDATE auth_households
@@ -437,7 +437,7 @@ def run_cron(dry_run=False, mock_now=None):
         (SELECT u_any.id FROM auth_users u_any WHERE u_any.household_id = h.id ORDER BY u_any.id ASC LIMIT 1)
     )
     LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
-    WHERE (h.is_premium = TRUE OR h.subscription_status = 'premium')
+    WHERE h.is_premium = TRUE AND h.subscription_status = 'premium'
       AND (h.email_lifetime_digest_sent_at IS NULL OR h.email_lifetime_digest_sent_at <= NOW() - INTERVAL '30 days')
       AND NOT EXISTS (
           SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
@@ -1529,7 +1529,8 @@ def test_lifetime_digest(target_hhid=1):
     print("==================================================")
     print(f"Target Recipient : {email} ({user_name})")
     print(f"Household        : #{household_id} ({household_name})")
-    print(f"Subscription     : status='{hh.get('subscription_status')}', is_premium={hh.get('is_premium')}")
+    is_lifetime_vip = bool(hh.get("is_premium") and hh.get("subscription_status") == "premium")
+    print(f"Subscription     : status='{hh.get('subscription_status')}', is_premium={hh.get('is_premium')}{' (LIFETIME PREMIUM)' if is_lifetime_vip else ' (WARNING: NOT LIFETIME PREMIUM — Lifetime requires is_premium=True and status=premium)'}")
     print(f"Selected Template: {'Template 1 (Active Metrics)' if stats['is_active'] else 'Template 2 (VIP Perks Re-engagement)'}")
     print("--------------------------------------------------")
     print(f"  • Members      : {stats['member_count']}")

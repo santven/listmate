@@ -1115,6 +1115,7 @@ def claim_trial_extension(household_id=None, user_id=None, tier=None):
     _run(f"""
         UPDATE {_HH}
         SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + INTERVAL '{ext_days} days',
+            is_premium = TRUE,
             subscription_status = 'trial',
             lifecycle_status = 'active',
             downgraded_at = NULL,
@@ -1325,8 +1326,8 @@ def _create_default_household_for_user(uid, email, name, marketing_opt_in=True):
     count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
     existing_cnt = count_row.get("cnt", 0) if count_row else 0
     is_early = existing_cnt < int(os.environ.get("EARLY_ADOPTER_LIMIT", 25))
-    prem_val = is_early
     status = 'premium' if is_early else 'trial'
+    prem_val = True  # Trial user (is_premium=True, status='trial') and Lifetime (is_premium=True, status='premium')
     trial_days = os.environ.get("TRIAL_PERIOD_DAYS", "15")
     trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
 
@@ -1861,8 +1862,8 @@ def register_auth_routes(app):
             if hh and hh.get("owner_id") == uid:
                 is_prem = hh.get("is_premium")
                 sub_status = hh.get("subscription_status")
-                is_early = bool(is_prem and sub_status == "premium" and hhid and int(hhid) <= int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25)))
-                if is_prem and not is_early and sub_status in ['active', 'premium']:
+                is_early = bool(is_prem and sub_status == "premium")
+                if is_prem and not is_early and sub_status == 'active':
                     return jsonify({"error": "You cannot delete your account while you have an active subscription as the household owner. Please cancel your subscription first."}), 403
 
 
@@ -1982,8 +1983,8 @@ def register_auth_routes(app):
         count_row = _one(f"SELECT COUNT(*) as cnt FROM {_HH}")
         existing_cnt = count_row.get("cnt", 0) if count_row else 0
         is_early = existing_cnt < int(__import__("os").environ.get("EARLY_ADOPTER_LIMIT", 25))
-        prem_val = is_early
         status = 'premium' if is_early else 'trial'
+        prem_val = True
         trial_days = __import__("os").environ.get("TRIAL_PERIOD_DAYS", "15")
         trial_expr = f"NOW() + INTERVAL '{trial_days} days'" if not is_early else "NULL"
         hhid = _insert(f"INSERT INTO {_HH} (name, invite_code, is_premium, subscription_status, trial_ends_at, owner_id, is_default) VALUES (?,?,?,?, {trial_expr}, ?, FALSE) RETURNING id", (hname, code, prem_val, status, uid))

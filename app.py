@@ -1980,7 +1980,7 @@ def premium_settings():
         if sub_ends_at and hasattr(sub_ends_at, 'isoformat'):
             sub_ends_at = sub_ends_at.isoformat()
 
-        is_early = bool(is_prem and sub_status == "premium" and not sub_ends_at)
+        is_early = bool(is_prem and sub_status == "premium")
 
 
 
@@ -1998,6 +1998,7 @@ def premium_settings():
                     is_prem = True
                 else:
                     sub_status = "expired"
+                    is_prem = False
             except:
                 pass
 
@@ -2017,7 +2018,7 @@ def premium_settings():
     data = request.get_json(silent=True) or {}
     is_premium = bool(data.get("is_premium", False))
     val = is_premium
-    status = "active" if is_premium else "free"
+    status = data.get("subscription_status") or ("active" if is_premium else "expired")
     authmod._run(f"UPDATE {authmod._HH} SET is_premium = ?, subscription_status = ? WHERE id = ?", (val, status, hhid))
     is_early = bool(is_premium and status == "premium")
     
