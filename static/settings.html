@@ -222,18 +222,18 @@
     <button class="burger-btn" id="burgerBtn" onclick="toggleBurger()" aria-label="Menu">☰</button>
     <div class="burger-overlay" id="burgerOverlay" onclick="toggleBurger()"></div>
     <div class="burger-dropdown" id="burgerMenu">
-      <a href="#" onclick="focusAddMember(); if(typeof toggleBurger==='function') toggleBurger(); return false;">👥 Add / Invite Members</a>
-      <a href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔗 Join a Household</a>
+      <a href="#" onclick="focusAddMember(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">👥 Add / Invite Members</a>
+      <a href="#" onclick="showJoinHouseholdModal(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🔗 Join a Household</a>
       <div class="divider"></div>
       <a href="/">📋 Grocery List</a>
       <a href="/?screen=globalVisits">🗓️ Store Visits</a>
       <a href="/?screen=analytics">📊 Analytics</a>
       <div class="divider"></div>
-      <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(); return false;">🔄 Refresh</a>
-      <a href="#" onclick="showHouseholdSwitcher(); return false;">🏠 Switch Household</a>
+      <a href="#" onclick="refreshData(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🔄 Refresh</a>
+      <a href="#" onclick="showHouseholdSwitcher(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🏠 Switch Household</a>
       <a href="/settings">⚙️ Settings</a>
       <a href="/?reset_tips=1">💡 Feature Discovery Tips</a>
-      <a href="#" onclick="showFeedbackModal(); return false;">💬 Send Feedback</a>
+      <a href="#" onclick="showFeedbackModal(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">💬 Send Feedback</a>
       <div class="divider"></div>
       <a href="/logout" class="danger">🚪 Log out</a>
     </div>
@@ -628,9 +628,16 @@
 <script>
 function escapeHtml(str) { if (!str) return ""; return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
-function toggleBurger() {
-  document.getElementById("burgerMenu").classList.toggle("show");
-  document.getElementById("burgerOverlay").classList.toggle("show");
+function toggleBurger(force) {
+  const menu = document.getElementById("burgerMenu");
+  const overlay = document.getElementById("burgerOverlay");
+  const shouldOpen = (typeof force === 'boolean') ? force : (menu ? !menu.classList.contains("show") : false);
+  if (menu) menu.classList.toggle("show", shouldOpen);
+  if (overlay) overlay.classList.toggle("show", shouldOpen);
+}
+
+function closeBurger() {
+  toggleBurger(false);
 }
 
 var householdData = null;
