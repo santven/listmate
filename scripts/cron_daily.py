@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add parent directory to path to import shared modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import _run, _init_schema, is_email_suppressed, prune_push_notifications_log
+from shared.auth import _run, _one, _init_schema, is_email_suppressed, prune_push_notifications_log
 from email_helper import (
     BASE_URL,
     send_subscription_notice,
@@ -1309,6 +1309,13 @@ def run_cron():
     except Exception as exc:
         print(f"Auto-categorization sweep failed: {exc}")
 
+    # Store Plan Email Reminders (for stores with >= n items without a plan date)
+    try:
+        plan_email_stats = check_store_plan_email_reminders(dry_run=False)
+        print(f"Store plan email reminders complete: {plan_email_stats}")
+    except Exception as exc:
+        print(f"Store plan email reminders routine failed: {exc}")
+
 
 def cleanup_abandoned_signups():
     """Prune unattached user registrations (Day 10+, no household) with engagement protection.
@@ -2174,8 +2181,309 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
     }
 
 
+def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = False, force_send: bool = False):
+    """
+    Store Plan Push Reminders (Hourly Evaluation):
+    If a store has >= threshold_n items on the active list (default 5, configurable via
+    STORE_PLAN_REMINDER_THRESHOLD) and has NO planned visit date, send a push notification
+    to the household once in a 24-hour period reminding them to plan their trip.
+    """
+    _init_schema()
+    from push_helper import send_push_to_household
+    import shared.auth as authmod
+
+    if threshold_n is None:
+        threshold_n = int(os.environ.get("STORE_PLAN_REMINDER_THRESHOLD", 5))
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking store plan push reminders (threshold={threshold_n}, dry_run={dry_run}, force_send={force_send})...")
+
+    # Query for stores that have >= threshold_n uncompleted list items and NO plan date
+    query = """
+        SELECT 
+            s.id AS store_id,
+            s.name AS store_name,
+            s.household_id,
+            COUNT(li.id) AS items_count
+        FROM stores s
+        JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
+        WHERE li.purchased = FALSE
+          AND s.planned_visit_date IS NULL
+          AND LOWER(s.name) != 'general list'
+        GROUP BY s.id, s.name, s.household_id
+        HAVING COUNT(li.id) >= %(threshold)s
+        ORDER BY s.household_id ASC, items_count DESC
+    """
+    try:
+        candidates = _run(query, {"threshold": threshold_n})
+    except Exception as e:
+        print(f"[check_store_plan_push_reminders] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate store(s) with >= {threshold_n} items and no plan date for push.")
+
+    dispatched_count = 0
+    skipped_24h = 0
+    results = []
+
+    for cand in candidates:
+        store_id = cand["store_id"]
+        store_name = cand["store_name"]
+        hh_id = cand["household_id"]
+        items_count = cand["items_count"]
+
+        # 24-hour deduplication check in push_notifications_log
+        if not force_send:
+            try:
+                dedup_check = _one("""
+                    SELECT 1 FROM push_notifications_log
+                    WHERE ((target_type = 'household' AND target_id = %s) OR (custom_data->>'household_id' = %s))
+                      AND custom_data->>'type' = 'store_plan_reminder'
+                      AND custom_data->>'store_id' = %s
+                      AND created_at >= NOW() - INTERVAL '24 hours'
+                """, (hh_id, str(hh_id), str(store_id)))
+            except Exception as d_err:
+                print(f"  [Warning] Deduplication check failed for Store #{store_id}: {d_err}")
+                dedup_check = None
+
+            if dedup_check:
+                skipped_24h += 1
+                continue
+
+        p_title = f"📅 Plan your trip to {store_name}"
+        p_body = f"You have {items_count} items on your {store_name} list. Pick a date to plan your shopping trip!"
+        p_data = {
+            "type": "store_plan_reminder",
+            "action": "open_store",
+            "store_id": str(store_id),
+            "store_name": store_name,
+            "household_id": str(hh_id),
+            "campaign": f"store_plan_reminder_{store_id}",
+            "url": f"/?store_id={store_id}&action=plan"
+        }
+
+        if dry_run:
+            print(f"  [DRY-RUN] Would send store plan push to HH #{hh_id} for Store '{store_name}' ({items_count} items): {p_title}")
+            dispatched_count += 1
+            results.append({
+                "household_id": hh_id,
+                "store_id": store_id,
+                "status": "dry_run",
+                "title": p_title,
+                "body": p_body
+            })
+        else:
+            try:
+                res = send_push_to_household(hh_id, p_title, p_body, p_data)
+                sent_cnt = res.get("sent", 0)
+                mock_mode = res.get("mock", False)
+                print(f"  ✔ Sent plan reminder push to HH #{hh_id} for Store #{store_id} ({store_name}) (sent={sent_cnt}, mock={mock_mode})")
+                dispatched_count += 1
+                results.append({
+                    "household_id": hh_id,
+                    "store_id": store_id,
+                    "status": "sent",
+                    "result": res
+                })
+            except Exception as send_err:
+                print(f"  [Error] Failed to send push to HH #{hh_id} for Store #{store_id}: {send_err}")
+                results.append({
+                    "household_id": hh_id,
+                    "store_id": store_id,
+                    "status": "error",
+                    "error": str(send_err)
+                })
+
+    return {
+        "ok": True,
+        "dispatched": dispatched_count,
+        "candidates": len(candidates),
+        "skipped_24h": skipped_24h,
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
+def check_store_plan_email_reminders(threshold_n: int = None, dry_run: bool = False):
+    """
+    Store Plan Email Reminders (Daily 3 AM Cron Evaluation):
+    If a store has >= threshold_n items on the active list (default 5, configurable via
+    STORE_PLAN_REMINDER_THRESHOLD) and has NO planned visit date, send an email reminder
+    once in a 24-hour period to household members.
+    """
+    _init_schema()
+    from email_helper import send_store_plan_reminder_email, is_email_suppressed_db
+
+    if threshold_n is None:
+        threshold_n = int(os.environ.get("STORE_PLAN_REMINDER_THRESHOLD", 5))
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking store plan email reminders (threshold={threshold_n}, dry_run={dry_run})...")
+
+    # Query for stores that have >= threshold_n uncompleted list items and NO plan date
+    query = """
+        SELECT 
+            s.id AS store_id,
+            s.name AS store_name,
+            s.household_id,
+            COUNT(li.id) AS items_count
+        FROM stores s
+        JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
+        WHERE li.purchased = FALSE
+          AND s.planned_visit_date IS NULL
+          AND LOWER(s.name) != 'general list'
+        GROUP BY s.id, s.name, s.household_id
+        HAVING COUNT(li.id) >= %(threshold)s
+        ORDER BY s.household_id ASC, items_count DESC
+    """
+    try:
+        candidates = _run(query, {"threshold": threshold_n})
+    except Exception as e:
+        print(f"[check_store_plan_email_reminders] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "sent": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate store(s) with >= {threshold_n} items and no plan date for email.")
+
+    sent_count = 0
+    skipped_24h = 0
+    results = []
+
+    for cand in candidates:
+        store_id = cand["store_id"]
+        store_name = cand["store_name"]
+        hh_id = cand["household_id"]
+        items_count = cand["items_count"]
+        campaign_name = f"store_plan_reminder_{store_id}"
+
+        # 24-hour deduplication check in email_events
+        try:
+            dedup_check = _one("""
+                SELECT 1 FROM email_events
+                WHERE household_id = %s
+                  AND campaign = %s
+                  AND created_at >= NOW() - INTERVAL '24 hours'
+            """, (hh_id, campaign_name))
+        except Exception as d_err:
+            print(f"  [Warning] Deduplication check failed for Store #{store_id}: {d_err}")
+            dedup_check = None
+
+        if dedup_check:
+            print(f"  -> Skipping Store #{store_id} ({store_name}) for HH #{hh_id}: email sent within last 24h.")
+            skipped_24h += 1
+            continue
+
+        # Get household members to email
+        try:
+            members = _run("""
+                SELECT u.id AS user_id, u.name AS user_name, u.email
+                FROM auth_users u
+                JOIN auth_household_members hm ON hm.user_id = u.id
+                WHERE hm.household_id = %s
+            """, (hh_id,))
+        except Exception:
+            members = []
+
+        if not members:
+            try:
+                members = _run("""
+                    SELECT u.id AS user_id, u.name AS user_name, u.email
+                    FROM auth_users u
+                    JOIN auth_households h ON h.owner_id = u.id
+                    WHERE h.id = %s
+                """, (hh_id,))
+            except Exception:
+                members = []
+
+        # Fetch sample items for this store
+        try:
+            item_rows = _run("""
+                SELECT name, quantity
+                FROM list_items
+                WHERE store_id = %s AND household_id = %s AND purchased = FALSE
+                ORDER BY id ASC
+                LIMIT 5
+            """, (store_id, hh_id))
+        except Exception:
+            item_rows = []
+
+        sample_items = [
+            f"{r['name']}" + (f" ({r['quantity']})" if r.get("quantity") else "")
+            for r in item_rows if r.get("name")
+        ]
+
+        store_dispatched = False
+        for m in members:
+            email = (m.get("email") or "").strip()
+            user_name = (m.get("user_name") or "there").strip()
+            user_id = m.get("user_id") or 0
+
+            if not email or is_email_suppressed_db(email):
+                continue
+
+            if dry_run:
+                print(f"  [DRY-RUN] Would send store plan reminder email to {user_name} <{email}> for Store '{store_name}' ({items_count} items)")
+                store_dispatched = True
+                results.append({
+                    "household_id": hh_id,
+                    "store_id": store_id,
+                    "email": email,
+                    "status": "dry_run"
+                })
+            else:
+                ok = send_store_plan_reminder_email(
+                    to_email=email,
+                    user_name=user_name,
+                    store_name=store_name,
+                    items_count=items_count,
+                    sample_items=sample_items,
+                    store_id=store_id,
+                    user_id=user_id,
+                    household_id=hh_id
+                )
+                if ok:
+                    try:
+                        _run("""
+                            INSERT INTO email_events (
+                                email, event_type, campaign, user_id, household_id, target_url, event_timestamp, created_at
+                            ) VALUES (%s, 'sent', %s, %s, %s, %s, NOW(), NOW())
+                        """, (email, campaign_name, user_id or None, hh_id, f"/?store_id={store_id}&action=plan"))
+                    except Exception as log_err:
+                        print(f"  [Warning] Failed to log email event: {log_err}")
+                    store_dispatched = True
+                    sent_count += 1
+                    print(f"  ✔ Sent plan reminder email to {email} for Store #{store_id} ({store_name})")
+                    results.append({
+                        "household_id": hh_id,
+                        "store_id": store_id,
+                        "email": email,
+                        "status": "sent"
+                    })
+
+        if store_dispatched and dry_run:
+            sent_count += 1
+
+    return {
+        "ok": True,
+        "sent": sent_count,
+        "candidates": len(candidates),
+        "skipped_24h": skipped_24h,
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
 if __name__ == "__main__":
     import sys
+    if any(arg in sys.argv for arg in ("--test-store-plan-emails", "--test-store-plan-email", "--plan-emails")):
+        dry = "--dry-run" in sys.argv
+        res = check_store_plan_email_reminders(dry_run=dry)
+        print(f"Store plan emails result: {res}")
+        sys.exit(0)
+
+    if any(arg in sys.argv for arg in ("--test-store-plan-pushes", "--test-store-plan-push", "--plan-pushes")):
+        dry = "--dry-run" in sys.argv
+        force = "--force" in sys.argv
+        res = check_store_plan_push_reminders(dry_run=dry, force_send=force)
+        print(f"Store plan pushes result: {res}")
+        sys.exit(0)
     if any(arg.startswith("--test-still-good-produce") or arg == "--test-produce-push" for arg in sys.argv):
         dry = "--dry-run" in sys.argv
         force = "--force" in sys.argv

@@ -100,6 +100,15 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         force_send=force_send
     )
 
+    # Task 5: Store Plan Push Reminders (for stores with >= n items lacking a plan date)
+    from scripts.cron_daily import check_store_plan_push_reminders
+    pipeline_results["store_plan_push_reminders"] = safe_execute_task(
+        "Store Plan Push Reminders",
+        check_store_plan_push_reminders,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
     # -------------------------------------------------------------------------
     # Future Piggybacked Hourly Tasks can be added here cleanly:
     # e.g.,
@@ -147,8 +156,24 @@ def main():
         action="store_true",
         help="Run Still Good fresh produce expiry push reminders immediately"
     )
+    parser.add_argument(
+        "--store-plan-pushes",
+        action="store_true",
+        help="Run store plan push reminders immediately"
+    )
 
     args = parser.parse_args()
+
+    if args.store_plan_pushes:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running store plan push reminders via cron_hourly...")
+        try:
+            from scripts.cron_daily import check_store_plan_push_reminders
+            stats = check_store_plan_push_reminders(dry_run=args.dry_run, force_send=args.force)
+            print(f"Store plan push reminders result: {stats}")
+        except Exception as exc:
+            print(f"Store plan push reminders failed: {exc}")
+        print("Done.")
+        sys.exit(0)
 
     if args.still_good_ai:
         print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good AI batch shelf-life enhancement via cron_hourly...")

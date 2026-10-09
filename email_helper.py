@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SendGrid email helper — shared by grocery and ListMate apps."""
 import os
+from html import escape
 from urllib.parse import quote
 
 FROM_EMAIL = os.environ.get("SENDGRID_FROM", "hello@grocerlist.app")
@@ -2425,4 +2426,110 @@ def send_trip_completed_email(
         },
     }
     return _send_via_api(api_key, payload)
+
+
+def send_store_plan_reminder_email(
+    to_email: str,
+    user_name: str,
+    store_name: str,
+    items_count: int,
+    sample_items: list,
+    store_id: int,
+    user_id: int = 0,
+    household_id: int = 0
+) -> bool:
+    """Send a friendly reminder to plan a grocery trip when an unplanned store has accumulated items."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not api_key:
+        print("WARNING: SENDGRID_API_KEY not set — skipping email")
+        return False
+
+    clean_user = (user_name or "there").strip()
+    clean_store = (store_name or "your store").strip()
+    campaign = f"store_plan_reminder_{store_id}"
+    app_url = f"{BASE_URL}/open?url={quote(f'/?store_id={store_id}&action=plan&source=email_plan_reminder')}"
+
+    app_store_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_store_badge.png"
+    google_play_img = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
+    ios_link = "https://apps.apple.com/us/app/grocerlistmate/id6795402710"
+    android_link = "https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share"
+
+    items_list_txt = "\n".join([f"• {item}" for item in sample_items])
+    remaining_count = max(0, items_count - len(sample_items))
+    if remaining_count > 0:
+        items_list_txt += f"\n• ...and {remaining_count} more items"
+
+    items_list_html = "".join([f'<li style="margin-bottom:6px;color:#334155;">{escape(item)}</li>' for item in sample_items])
+    if remaining_count > 0:
+        items_list_html += f'<li style="margin-bottom:6px;color:#64748b;font-style:italic;">...and {remaining_count} more item{"s" if remaining_count != 1 else ""}</li>'
+
+    subject = f"Plan your upcoming trip to {clean_store} ({items_count} items on list) 🛒"
+
+    plain_text = (
+        f"Hi {clean_user},\n\n"
+        f"You have {items_count} items waiting on your {clean_store} shopping list, but no trip planned yet.\n\n"
+        f"Items on your list:\n"
+        f"{items_list_txt}\n\n"
+        f"Pick a date for your trip so everyone in your household knows when groceries are coming:\n"
+        f"{app_url}\n\n"
+        f"— The ListMate Team"
+    )
+
+    body_html = (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px 20px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">'
+        f'<div style="text-align:center;margin-bottom:20px;">'
+        f'<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;">TRIP REMINDER</span>'
+        f'<h2 style="color:#0f172a;margin:12px 0 6px 0;font-size:22px;font-weight:700;">Plan your trip to {escape(clean_store)}</h2>'
+        f'</div>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">Hi {escape(clean_user)},</p>'
+        f'<p style="font-size:15px;color:#334155;line-height:1.5;">You have <strong>{items_count} items</strong> waiting on your <strong>{escape(clean_store)}</strong> shopping list without a scheduled trip date.</p>'
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:18px 0;">'
+        f'<div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:10px;letter-spacing:0.5px;">Items on list:</div>'
+        f'<ul style="margin:0;padding-left:18px;line-height:1.6;font-size:14px;">'
+        f'{items_list_html}'
+        f'</ul>'
+        f'</div>'
+        f'<p style="font-size:14px;color:#475569;line-height:1.5;">Pick a date so everyone in your household knows when to expect groceries and can finish adding their requests in time.</p>'
+        f'<div style="text-align:center;margin:26px 0 20px 0;">'
+        f'<a href="{app_url}" style="background:linear-gradient(135deg, #059669, #10b981);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 2px 6px rgba(16,185,129,0.3);">🗓️ Plan Trip to {escape(clean_store)} →</a>'
+        f'</div>'
+        f'<div style="text-align:center;margin:24px 0 10px 0;">'
+        f'<a href="{ios_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{app_store_img}" alt="App Store" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+        f'<a href="{android_link}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 6px;"><img src="{google_play_img}" alt="Google Play" width="125" height="38" border="0" style="height:38px;width:auto;border-radius:6px;"></a>'
+        f'</div>'
+        f'<p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:20px;">Thank you for using ListMate to keep your household organized.</p>'
+        f'</div>'
+    )
+
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "list reminders", "You received this email because you have active grocery items waiting in your ListMate household.")
+
+    payload = {
+        "from": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "personalizations": [{
+            "to": [{"email": to_email}],
+            "custom_args": {
+                "user_id": str(user_id) if user_id else "",
+                "household_id": str(household_id) if household_id else "",
+                "campaign": campaign,
+            },
+        }],
+        "categories": [campaign],
+        "custom_args": {
+            "user_id": str(user_id) if user_id else "",
+            "household_id": str(household_id) if household_id else "",
+            "campaign": campaign,
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text + unsub_txt},
+            {"type": "text/html", "value": body_html + unsub_html},
+        ],
+        "tracking_settings": {
+            "click_tracking": {"enable": True, "enable_text": False},
+            "open_tracking": {"enable": True},
+        },
+    }
+    return _send_via_api(api_key, payload)
+
 
