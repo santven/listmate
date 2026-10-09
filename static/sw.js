@@ -1,5 +1,5 @@
-// v37 — offline-first static shell caching
-const CACHE_NAME = 'listmate-static-v37';
+// v38 — offline-first static shell caching
+const CACHE_NAME = 'listmate-static-v38';
 const PRECACHE_ASSETS = [
   '/static/index.html',
   '/static/settings.html',

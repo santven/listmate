@@ -23,7 +23,7 @@ class TestStorePlanReminders(unittest.TestCase):
     @patch("scripts.cron_daily._run")
     @patch("scripts.cron_daily._one")
     @patch("push_helper.send_push_to_household")
-    def test_check_store_plan_push_reminders_success(self, mock_send_push, mock_one, mock_run):
+    def test_check_store_plan_push_reminders_single_store(self, mock_send_push, mock_one, mock_run):
         # Candidate store with 6 items, no plan date
         mock_run.return_value = [
             {"store_id": 12, "store_name": "Costco", "household_id": 5, "items_count": 6}
@@ -43,6 +43,82 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(args[0], 5)  # household_id
         self.assertIn("Costco", args[1])  # title
         self.assertIn("6 items", args[2])  # body
+        self.assertEqual(args[3]["url"], "/?store_id=12&action=plan")
+
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily._one")
+    @patch("push_helper.send_push_to_household")
+    def test_check_store_plan_push_reminders_multi_stores_combined(self, mock_send_push, mock_one, mock_run):
+        # Household has two qualifying stores: Indian Store (12) and Costco (10)
+        mock_run.return_value = [
+            {"store_id": 31, "store_name": "Indian Store", "household_id": 1, "items_count": 12},
+            {"store_id": 11, "store_name": "Costco", "household_id": 1, "items_count": 10}
+        ]
+        mock_one.return_value = None
+        mock_send_push.return_value = {"sent": 1, "mock": False}
+
+        res = cron_daily.check_store_plan_push_reminders(threshold_n=10, dry_run=False)
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 2)
+        self.assertEqual(res["dispatched"], 1)
+        self.assertEqual(len(res["results"]), 1)
+        mock_send_push.assert_called_once()
+        args, kwargs = mock_send_push.call_args
+        self.assertEqual(args[0], 1)  # household_id
+        self.assertEqual(args[1], "📅 Plan your shopping trips")
+        self.assertIn("Indian Store and Costco have 10+ items", args[2])
+        self.assertEqual(args[3]["action"], "plan_modal")
+        self.assertIn("/?action=plan_modal&stores=31,11", args[3]["url"])
+
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily._one")
+    @patch("push_helper.send_push_to_household")
+    def test_check_store_plan_push_reminders_general_list_only(self, mock_send_push, mock_one, mock_run):
+        # Household has only General List with >= 10 items
+        mock_run.return_value = [
+            {"store_id": 1, "store_name": "General List", "household_id": 1, "items_count": 14}
+        ]
+        mock_one.return_value = None
+        mock_send_push.return_value = {"sent": 1, "mock": False}
+
+        res = cron_daily.check_store_plan_push_reminders(threshold_n=10, dry_run=False)
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 1)
+        self.assertEqual(res["dispatched"], 1)
+        mock_send_push.assert_called_once()
+        args, kwargs = mock_send_push.call_args
+        self.assertEqual(args[0], 1)
+        self.assertEqual(args[1], "📋 Organize your General List")
+        self.assertIn("14 items in your General List", args[2])
+        self.assertEqual(args[3]["action"], "general_list_info")
+        self.assertIn("/?action=general_list_info&store_id=1", args[3]["url"])
+
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily._one")
+    @patch("push_helper.send_push_to_household")
+    def test_check_store_plan_push_reminders_general_list_excluded_from_multi(self, mock_send_push, mock_one, mock_run):
+        # Household has Costco (12), Indian Store (11), and General List (15)
+        mock_run.return_value = [
+            {"store_id": 1, "store_name": "General List", "household_id": 1, "items_count": 15},
+            {"store_id": 11, "store_name": "Costco", "household_id": 1, "items_count": 12},
+            {"store_id": 31, "store_name": "Indian Store", "household_id": 1, "items_count": 11}
+        ]
+        mock_one.return_value = None
+        mock_send_push.return_value = {"sent": 1, "mock": False}
+
+        res = cron_daily.check_store_plan_push_reminders(threshold_n=10, dry_run=False)
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 3)
+        self.assertEqual(res["dispatched"], 1)
+        mock_send_push.assert_called_once()
+        args, kwargs = mock_send_push.call_args
+        self.assertEqual(args[1], "📅 Plan your shopping trips")
+        # General list should be excluded from the multi-store push text
+        self.assertNotIn("General List", args[2])
+        self.assertIn("Costco and Indian Store", args[2])
 
     @patch("scripts.cron_daily._run")
     @patch("scripts.cron_daily._one")
@@ -200,6 +276,18 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(res["candidates"], 1)
         self.assertEqual(res["dispatched"], 0)
         self.assertEqual(res["results"][0]["status"], "skipped_no_tokens")
+
+    @patch("scripts.cron_hourly._run")
+    @patch("scripts.cron_hourly._one")
+    @patch("push_helper.send_push_to_household")
+    def test_dynamic_threshold_env_var(self, mock_send_push, mock_one, mock_run):
+        import scripts.cron_hourly as cron_hourly
+        mock_run.return_value = []
+        with patch.dict(os.environ, {"STORE_PLAN_REMINDER_THRESHOLD": "15"}):
+            cron_hourly.check_store_plan_push_reminders(dry_run=True)
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            self.assertEqual(args[1]["threshold"], 15)
 
 
 if __name__ == "__main__":

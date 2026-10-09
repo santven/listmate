@@ -667,6 +667,51 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       setTimeout(() => {
         showRecipesScreen();
       }, 500); // Wait briefly to let data load and premium state initialize
+    } else if (actionParam === 'plan_modal' || modalParam === 'plan_modal') {
+      const storesCsv = urlParams.get('stores');
+      const storeIds = storesCsv ? storesCsv.split(',').map(s => parseInt(s.trim())).filter(Boolean) : null;
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        cleanParams.delete('action');
+        cleanParams.delete('modal');
+        cleanParams.delete('stores');
+        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
+      } catch(e) {}
+      setTimeout(() => {
+        if (typeof window.openMultiStorePlanModal === 'function') {
+          window.openMultiStorePlanModal(storeIds);
+        }
+      }, 500);
+    } else if (actionParam === 'general_list_info' || modalParam === 'general_list_info') {
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        cleanParams.delete('action');
+        cleanParams.delete('modal');
+        cleanParams.delete('store_id');
+        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
+      } catch(e) {}
+      setTimeout(() => {
+        if (typeof window.openGeneralListInfoModal === 'function') {
+          window.openGeneralListInfoModal();
+        }
+      }, 500);
+    } else if ((actionParam === 'plan' || modalParam === 'plan') && urlParams.get('store_id')) {
+      const sid = parseInt(urlParams.get('store_id'));
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        cleanParams.delete('action');
+        cleanParams.delete('modal');
+        cleanParams.delete('store_id');
+        const newSearch = cleanParams.toString() ? '?' + cleanParams.toString() : '';
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch + window.location.hash);
+      } catch(e) {}
+      setTimeout(() => {
+        if (sid && typeof openHistoryModal === 'function') {
+          openHistoryModal(sid);
+        }
+      }, 500);
     }
   });
 </script>
@@ -2381,8 +2426,100 @@ async function savePlanDate(storeId, dateStr) {
       store.planned_visit_by = dateStr ? (window.userName || 'Someone') : null;
     }
     renderHome();
+    if (window._multiStorePlanFilter !== undefined) {
+      renderMultiStorePlanList(window._multiStorePlanFilter);
+    }
   } catch(e) {}
 }
+
+window.openMultiStorePlanModal = function(specificStoreIds = null) {
+  const modal = document.getElementById('multiStorePlanModal');
+  if (!modal) return;
+  window._multiStorePlanFilter = specificStoreIds;
+  modal.classList.add('active');
+  renderMultiStorePlanList(specificStoreIds);
+  setTimeout(() => {
+    if (modal.classList.contains('active')) {
+      renderMultiStorePlanList(window._multiStorePlanFilter);
+    }
+  }, 400);
+};
+
+window.renderMultiStorePlanList = function(specificStoreIds = null) {
+  const container = document.getElementById('multiStorePlanList');
+  if (!container) return;
+
+  // Filter out General List completely (General list has no plan option)
+  let candidateStores = (stores || []).filter(s => {
+    if (!s || !s.name) return false;
+    const sName = s.name.trim().toLowerCase();
+    if (sName === 'general list') return false;
+    if (specificStoreIds && Array.isArray(specificStoreIds) && specificStoreIds.length > 0) {
+      if (!specificStoreIds.includes(s.id)) return false;
+    }
+    const unpurchasedCount = (list || []).filter(i => i.store_id === s.id && !i.purchased).length;
+    return unpurchasedCount > 0 && !s.planned_visit_date;
+  });
+
+  if (candidateStores.length === 0 && specificStoreIds && specificStoreIds.length > 0) {
+    candidateStores = (stores || []).filter(s => s && s.name && s.name.trim().toLowerCase() !== 'general list' && specificStoreIds.includes(s.id) && !s.planned_visit_date);
+  }
+
+  if (candidateStores.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:28px 14px; color:var(--muted); font-size:14px; background:var(--card); border-radius:14px; border:1px dashed var(--border);">
+        <div style="font-size:32px; margin-bottom:8px;">🎉</div>
+        <div style="font-weight:700; color:var(--text); margin-bottom:4px; font-size:15px;">All caught up!</div>
+        <div style="font-size:13px; line-height:1.45;">All qualifying store visits are currently scheduled with planned dates.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = candidateStores.map(s => {
+    const unpurchasedCount = (list || []).filter(i => i.store_id === s.id && !i.purchased).length;
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:var(--card); border:1.5px solid var(--border); border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex; flex-direction:column; gap:3px;">
+          <div style="font-weight:700; font-size:15px; color:var(--text);">${escapeHtml(s.name)}</div>
+          <div style="font-size:12px; color:var(--muted); font-weight:500;">
+            <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10b981; margin-right:4px;"></span>
+            ${unpurchasedCount} item${unpurchasedCount === 1 ? '' : 's'} waiting
+          </div>
+        </div>
+        <button type="button" onclick="openPlanDateFromMultiModal(${s.id})" style="background:var(--green); color:#fff; border:none; padding:9px 15px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 4px rgba(5,150,105,0.25);">
+          <span>🗓️</span> Plan Date
+        </button>
+      </div>
+    `;
+  }).join('');
+};
+
+window.openPlanDateFromMultiModal = function(storeId) {
+  document.getElementById('multiStorePlanModal')?.classList.remove('active');
+  if (typeof openHistoryModal === 'function') {
+    openHistoryModal(storeId);
+  }
+};
+
+window.openGeneralListInfoModal = function() {
+  const modal = document.getElementById('generalListInfoModal');
+  if (modal) modal.classList.add('active');
+};
+
+window.goToGeneralListFromModal = function() {
+  document.getElementById('generalListInfoModal')?.classList.remove('active');
+  if (typeof showScreen === 'function') showScreen('home');
+  setTimeout(() => {
+    const titles = Array.from(document.querySelectorAll('.store-group-title'));
+    const genTitle = titles.find(t => t.textContent.toLowerCase().includes('general list'));
+    if (genTitle) {
+      genTitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      genTitle.parentElement?.classList.add('discovery-halo');
+      setTimeout(() => genTitle.parentElement?.classList.remove('discovery-halo'), 3000);
+    }
+  }, 250);
+};
 
 let currentCatalogGroupBy = localStorage.getItem('catalogGroupBy') || 'category';
 
@@ -6413,6 +6550,65 @@ async function deleteSavedRecipe(id) {
   </div>
 </div>
 
+<!-- Multi-Store Trip Planning Modal (Option C) -->
+<div class="modal-overlay" id="multiStorePlanModal">
+  <div class="modal-sheet" style="text-align:left; padding:24px 20px; border-radius:20px 20px 0 0; max-height:85vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:19px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px;">
+        <span>🗓️</span> Plan Your Store Visits
+      </h3>
+      <button onclick="document.getElementById('multiStorePlanModal').classList.remove('active')" style="background:none; border:none; font-size:24px; color:var(--muted); cursor:pointer; line-height:1;">×</button>
+    </div>
+    
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:12px 14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:600; color:#166534; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <span>✨</span> Why plan your shopping trips?
+      </div>
+      <div style="font-size:12px; color:#15803d; line-height:1.45;">
+        Planning dates gives your week structure, ensures nothing is forgotten, and coordinates your household so everyone knows when items will be picked up.
+      </div>
+    </div>
+
+    <div style="font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+      Stores Ready for Planning
+    </div>
+
+    <div id="multiStorePlanList" style="overflow-y:auto; flex-grow:1; display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+      <!-- Populated dynamically with store cards -->
+    </div>
+
+    <button onclick="document.getElementById('multiStorePlanModal').classList.remove('active')" style="width:100%; background:#f1f5f9; color:var(--text); border:none; padding:12px; border-radius:12px; font-size:14px; font-weight:600; cursor:pointer;">
+      Done
+    </button>
+  </div>
+</div>
+
+<!-- General List Informational Modal -->
+<div class="modal-overlay" id="generalListInfoModal">
+  <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0; text-align:center;">
+    <div style="font-size:42px; margin-bottom:10px;">📋</div>
+    <h3 style="margin:0 0 10px 0; font-size:19px; font-weight:700; color:var(--text);">
+      Organize Your General List
+    </h3>
+    <div style="font-size:13px; color:var(--muted); line-height:1.55; margin-bottom:16px; text-align:left; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px;">
+      <p style="margin:0 0 10px 0;">
+        <strong>General List</strong> is designed as a catch-all / fallback list for quick item capture when you haven't decided where to shop yet.
+      </p>
+      <p style="margin:0;">
+        Because it is a catch-all list, trip dates cannot be planned for General List. To schedule organized shopping trips, tap the green <strong style="color:#1b4332; background:#d8f3dc; padding:1px 6px; border-radius:4px;">⇄</strong> button next to any item to move it to a specific store (like Costco or Trader Joe's).
+      </p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button id="btnGoToGeneralList" onclick="goToGeneralListFromModal()" style="width:100%; background:var(--green); color:#fff; border:none; padding:12px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer;">
+        Go to General List
+      </button>
+      <button onclick="document.getElementById('generalListInfoModal').classList.remove('active')" style="width:100%; background:none; color:var(--muted); border:1px solid var(--border); padding:10px; border-radius:12px; font-size:13px; font-weight:600; cursor:pointer;">
+        Dismiss
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Feedback Modal -->
 
 <div class="modal-overlay" id="shareAppModal" onclick="closeShareAppModal(event)">
@@ -7818,6 +8014,41 @@ window.initPushNotifications = async function() {
             showStillGoodScreen();
           } else if (typeof showScreen === 'function') {
             showScreen('stillGood');
+          }
+        }, 150);
+        return;
+      }
+
+      const isMultiStorePlan = notifType === 'store_plan_reminder' && (action === 'plan_modal' || data.store_ids || targetUrl.includes('action=plan_modal'));
+      if (isMultiStorePlan) {
+        console.log('[Push] Handled multi-store plan push tap. Opening multi-store planning modal.');
+        setTimeout(() => {
+          if (typeof window.openMultiStorePlanModal === 'function') {
+            const storeIds = data.store_ids ? String(data.store_ids).split(',').map(s => parseInt(s.trim())).filter(Boolean) : null;
+            window.openMultiStorePlanModal(storeIds);
+          }
+        }, 150);
+        return;
+      }
+
+      const isGeneralListInfo = notifType === 'general_list_reminder' || action === 'general_list_info' || targetUrl.includes('action=general_list_info');
+      if (isGeneralListInfo) {
+        console.log('[Push] Handled general list info push tap. Opening informational modal.');
+        setTimeout(() => {
+          if (typeof window.openGeneralListInfoModal === 'function') {
+            window.openGeneralListInfoModal();
+          }
+        }, 150);
+        return;
+      }
+
+      const isStorePlan = notifType === 'store_plan_reminder' || action === 'open_store' || action === 'plan' || targetUrl.includes('action=plan');
+      if (isStorePlan && (data.store_id || notifObj.store_id)) {
+        const sid = parseInt(data.store_id || notifObj.store_id);
+        console.log('[Push] Handled store plan push tap for store', sid);
+        setTimeout(() => {
+          if (typeof openHistoryModal === 'function') {
+            openHistoryModal(sid);
           }
         }, 150);
         return;
