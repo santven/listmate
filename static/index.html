@@ -766,7 +766,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <div style="font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Grocery List</div>
         
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="btnPlanVisits" onclick="if(typeof openMultiStorePlanModal==='function'){openMultiStorePlanModal();}else{window.location.search='?action=plan_modal';}" style="background:var(--card); color:var(--text); border:1px solid var(--border); padding:7px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:all 0.15s ease;" title="Plan upcoming store visits">
+          📅 Plan Visits
+        </button>
         <button id="btnOpenStillGood" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onStillGoodClick(event)) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
           🍲 Still Good
         </button>
