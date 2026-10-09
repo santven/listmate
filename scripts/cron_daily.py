@@ -1793,6 +1793,7 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
     dispatched_count = 0
 
     hh_fridge_cache = {}
+    dispatched_uids = set()
 
     for cand in candidates:
         uid = cand.get("user_id")
@@ -1801,6 +1802,8 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
             continue
         uid = int(uid)
         hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
 
         if hhid not in hh_fridge_cache:
             try:
@@ -1886,6 +1889,7 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
                 )
 
             dispatched_count += 1
+            dispatched_uids.add(uid)
             results.append({
                 "user_id": uid,
                 "household_id": hhid,
@@ -2015,6 +2019,7 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
     dispatched_count = 0
 
     hh_produce_cache = {}
+    dispatched_uids = set()
 
     for cand in candidates:
         uid = cand.get("user_id")
@@ -2023,6 +2028,8 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
             continue
         uid = int(uid)
         hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
 
         local_date_str = str(cand.get("local_date") or "")
         cache_key = (hhid, local_date_str)
@@ -2137,6 +2144,7 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
                 )
 
             dispatched_count += 1
+            dispatched_uids.add(uid)
             results.append({
                 "user_id": uid,
                 "household_id": hhid,
