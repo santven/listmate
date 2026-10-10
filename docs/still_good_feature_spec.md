@@ -326,6 +326,34 @@ A multi-segment announcement email campaign was created to introduce Still Good 
 
 ---
 
+## 4.12 Freezer Storage 1-Week Expiry Push Reminders & Fridge-Only Cadence (Issue #616)
+
+**Goal**: Keep freezer meal management effortless and noise-free. Because items in the freezer keep safely for 30–90 days, daily lunch reminder cadences (Daily, 2 Days, 3 Days, Never) and snooze buttons apply strictly to refrigerated items (`location = 'fridge'`). Freezer items receive a single proactive reminder 1 week before expiry (best-by date) so households have ample time to thaw and enjoy them.
+
+### Features
+1. **Adaptive Modal Reminder UI**:
+   - Refrigerator items display the 4-option reminder cadence (`Daily`, `2 Days`, `3 Days`, `Never`).
+   - Freezer items hide daily cadence controls and display an informative notice: *"Reminded 1 week before expiry — Freezer meals stay preserved for months. We'll automatically remind you 1 week before best-by so you have plenty of time to thaw!"*.
+   - When switching between Refrigerator and Freezer in Add/Edit modal, the reminder UI toggles dynamically.
+2. **Item Card Display**:
+   - `⏰ Snooze` action button is strictly scoped to refrigerator cards.
+   - Freezer cards display thawing/status pills and a `❄️ 1-wk reminder` indicator when within 7 days of best-by.
+3. **9:00 AM Local Time Freezer 1-Week Expiry Push Reminders**:
+   - Evaluated hourly via `scripts/cron_hourly.py` (Task 4b) at 9:00 AM local time for each member (`check_still_good_freezer_expiry_pushes`).
+   - Dispatched to Pro and Pro Trial households with active push subscriptions when active freezer meals reach <= 7 days before `consume_by`.
+   - **Dynamic Copy**:
+     * 1 item: `❄️ Freezer Reminder` / `Your {name} in the freezer reaches its best-by date in 1 week. Consider thawing it soon!`
+     * 2 items: `❄️ Freezer Reminder` / `Your {name1} and {name2} reach best-by in 1 week. Plan to thaw and enjoy!`
+     * 3+ items: `❄️ Freezer Reminder` / `You have {count} freezer meals (including {name1}) reaching best-by in 1 week. Check Still Good to thaw!`
+   - Deep link: `/?screen=stillGood&tab=freezer&source=push_freezer_9am`.
+   - Frequency capping & idempotency: Logged as `still_good_freezer_expiry_9am` in `push_notifications_log`, capped at 1 reminder per member per local calendar day.
+4. **CLI Execution**:
+   - `python3 scripts/cron_hourly.py --still-good-freezer`
+   - `python3 scripts/cron_hourly.py --still-good-freezer --dry-run --force`
+   - `python3 scripts/cron_daily.py --test-still-good-freezer --dry-run --force`
+
+---
+
 ## 5. Future Roadmap & Iterations
 
 1. **Push Notifications**:
