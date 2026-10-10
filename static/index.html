@@ -577,6 +577,166 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .sg-action-sec:active { background: #e5e7eb; }
 .sg-action-danger { background: none; color: #9ca3af; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
 .sg-action-danger:hover, .sg-action-danger:active { color: #ef4444; background: #fee2e2; }
+
+/* ── Desktop Web Mobile App Download Drawer (Issue #615) ── */
+.desktop-mobile-drawer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.06);
+  z-index: 9995;
+  padding: 18px 20px;
+  font-family: inherit;
+  box-sizing: border-box;
+  animation: desktopDrawerSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@media (max-width: 767px) {
+  .desktop-mobile-drawer {
+    display: none !important;
+  }
+}
+@keyframes desktopDrawerSlideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.desktop-mobile-drawer .dmd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.desktop-mobile-drawer .dmd-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.desktop-mobile-drawer .dmd-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.3;
+}
+.desktop-mobile-drawer .dmd-close-btn {
+  background: #f1f5f9;
+  border: none;
+  color: #64748b;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.desktop-mobile-drawer .dmd-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.desktop-mobile-drawer .dmd-subtext {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 14px 0;
+  line-height: 1.45;
+}
+.desktop-mobile-drawer .dmd-tabs {
+  display: flex;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+.desktop-mobile-drawer .dmd-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.desktop-mobile-drawer .dmd-tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.desktop-mobile-drawer .dmd-qr-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.desktop-mobile-drawer .dmd-qr-img {
+  width: 150px;
+  height: 150px;
+  display: block;
+  margin: 0 auto 10px auto;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.desktop-mobile-drawer .dmd-scan-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.desktop-mobile-drawer .dmd-store-link {
+  font-size: 12px;
+  color: #059669;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.desktop-mobile-drawer .dmd-store-link:hover {
+  text-decoration: underline;
+}
+.desktop-mobile-drawer .dmd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+.desktop-mobile-drawer .dmd-compat-badge {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.desktop-mobile-drawer .dmd-dismiss-link {
+  font-size: 12px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.desktop-mobile-drawer .dmd-dismiss-link:hover {
+  color: #64748b;
+  text-decoration: underline;
+}
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -8342,5 +8502,148 @@ window.checkAppUpdatePrompt = async function() {
     </div>
   </div>
 </div>
+
+<!-- Desktop Web Mobile App Promo Drawer (Issue #615) -->
+<div id="desktopMobileAppDrawer" class="desktop-mobile-drawer" style="display:none;" aria-live="polite">
+  <div class="dmd-header">
+    <div class="dmd-title-wrap">
+      <span style="font-size:20px;">📱</span>
+      <h4 class="dmd-title">Get ListMate on your phone</h4>
+    </div>
+    <button class="dmd-close-btn" id="btnDesktopDrawerClose" onclick="dismissDesktopMobileDrawer(false)" aria-label="Close">✕</button>
+  </div>
+  <p class="dmd-subtext">Scan with your phone camera to take your lists, aisle sorting, and Still Good reminders to the store.</p>
+  
+  <div class="dmd-tabs">
+    <button type="button" class="dmd-tab-btn active" id="btnTabApple" onclick="setDesktopDrawerPlatform('apple')">
+      <span>🍏</span> Apple iOS
+    </button>
+    <button type="button" class="dmd-tab-btn" id="btnTabAndroid" onclick="setDesktopDrawerPlatform('android')">
+      <span>🤖</span> Android
+    </button>
+  </div>
+
+  <div class="dmd-qr-box">
+    <img id="desktopDrawerQrImg" class="dmd-qr-img" src="/static/qr-apple-appstore.svg" alt="App Store QR Code" />
+    <div id="desktopDrawerScanHint" class="dmd-scan-hint">Point your iPhone camera to download</div>
+    <a id="desktopDrawerStoreLink" class="dmd-store-link" href="https://apps.apple.com/us/app/grocerlistmate/id6795402710" target="_blank" rel="noopener noreferrer">
+      Open Apple App Store ↗
+    </a>
+  </div>
+
+  <div class="dmd-footer">
+    <span id="desktopDrawerCompat" class="dmd-compat-badge">iOS 16+ · iPhone & iPad</span>
+    <button type="button" class="dmd-dismiss-link" onclick="dismissDesktopMobileDrawer(true)">Don't show for 14 days</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const PLATFORMS = {
+    apple: {
+      qr: '/static/qr-apple-appstore.svg',
+      hint: 'Point your iPhone camera to download',
+      url: 'https://apps.apple.com/us/app/grocerlistmate/id6795402710',
+      linkText: 'Open Apple App Store ↗',
+      compat: 'iOS 16+ · iPhone & iPad'
+    },
+    android: {
+      qr: '/static/qr-google-play.svg',
+      hint: 'Point your Android camera to download',
+      url: 'https://play.google.com/store/apps/details?id=com.pvkslabs.listmate&pcampaignid=web_share',
+      linkText: 'Open Google Play Store ↗',
+      compat: 'Android 10+ · Phones & Tablets'
+    }
+  };
+
+  window.setDesktopDrawerPlatform = function(platform) {
+    const data = PLATFORMS[platform] || PLATFORMS.apple;
+    const btnApple = document.getElementById('btnTabApple');
+    const btnAndroid = document.getElementById('btnTabAndroid');
+    const qrImg = document.getElementById('desktopDrawerQrImg');
+    const hint = document.getElementById('desktopDrawerScanHint');
+    const link = document.getElementById('desktopDrawerStoreLink');
+    const compat = document.getElementById('desktopDrawerCompat');
+
+    if (btnApple) btnApple.classList.toggle('active', platform === 'apple');
+    if (btnAndroid) btnAndroid.classList.toggle('active', platform === 'android');
+    if (qrImg) qrImg.src = data.qr;
+    if (hint) hint.textContent = data.hint;
+    if (link) {
+      link.href = data.url;
+      link.textContent = data.linkText;
+    }
+    if (compat) compat.textContent = data.compat;
+  };
+
+  window.dismissDesktopMobileDrawer = function(longTerm) {
+    const drawer = document.getElementById('desktopMobileAppDrawer');
+    if (drawer) drawer.style.display = 'none';
+    try {
+      if (longTerm) {
+        localStorage.setItem('listmate_desktop_drawer_dismissed_at', String(Date.now()));
+      } else {
+        sessionStorage.setItem('listmate_desktop_drawer_session_dismissed', '1');
+      }
+    } catch(e) {}
+  };
+
+  function checkAndShowDesktopMobileDrawer() {
+    try {
+      // 1. Viewport check: Only desktop viewports >= 768px
+      if (window.innerWidth < 768) return;
+
+      // 2. Native Capacitor check: Never show inside native iOS/Android shell
+      const isNative = window.Capacitor && (
+        (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+        (typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() !== 'web')
+      );
+      if (isNative) return;
+
+      // 3. Frequency capping checks
+      if (sessionStorage.getItem('listmate_desktop_drawer_session_dismissed') === '1') return;
+      const dismissedAt = parseInt(localStorage.getItem('listmate_desktop_drawer_dismissed_at') || '0', 10);
+      const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+      if (Date.now() - dismissedAt < FOURTEEN_DAYS_MS) return;
+
+      // 4. Wait for user config to be populated
+      const cfg = window.currentCfg;
+      if (!cfg) {
+        setTimeout(checkAndShowDesktopMobileDrawer, 1000);
+        return;
+      }
+
+      // Check auth_users telemetry
+      const userInfo = cfg.user_info || {};
+      const lastVer = (userInfo.last_app_version || '').trim();
+      const lastPlat = (userInfo.last_app_platform || '').trim().toLowerCase();
+
+      // If user has ever logged in from a native mobile app version, do not prompt
+      if (lastVer && lastVer !== 'web/legacy' && (lastPlat === 'ios' || lastPlat === 'android' || lastVer.length > 0)) {
+        return;
+      }
+
+      // 5. Reveal smoothly after 1.8s delay
+      setTimeout(function() {
+        const drawer = document.getElementById('desktopMobileAppDrawer');
+        if (drawer && window.innerWidth >= 768) {
+          drawer.style.display = 'block';
+        }
+      }, 1800);
+    } catch(err) {
+      console.warn('[DesktopMobileDrawer] Check error:', err);
+    }
+  }
+
+  // Hook into load event
+  if (document.readyState === 'complete') {
+    setTimeout(checkAndShowDesktopMobileDrawer, 600);
+  } else {
+    window.addEventListener('load', function() {
+      setTimeout(checkAndShowDesktopMobileDrawer, 600);
+    });
+  }
+})();
+</script>
 </body>
 </html>
