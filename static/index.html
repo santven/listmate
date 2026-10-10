@@ -4523,12 +4523,14 @@ function attachSgSwipe(itemId) {
 
     if (diffX > 85) {
       card.style.transform = 'translateX(100vw)';
+      card.style.pointerEvents = 'none';
       setTimeout(function() {
         if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         stillGoodAction(itemId, 'consume');
       }, 150);
     } else if (diffX < -85) {
       card.style.transform = 'translateX(-100vw)';
+      card.style.pointerEvents = 'none';
       setTimeout(function() {
         if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         stillGoodAction(itemId, 'discard');
@@ -4545,8 +4547,11 @@ function attachSgSwipe(itemId) {
 }
 
 async function stillGoodAction(itemId, action, evt) {
+  var triggerEl = evt ? (evt.currentTarget || evt.target) : null;
   try {
-    var triggerEl = evt ? (evt.currentTarget || evt.target) : null;
+    if (triggerEl && triggerEl.disabled !== undefined) {
+      triggerEl.disabled = true;
+    }
     var card = document.getElementById('sgCard_' + itemId);
     var wrap = document.getElementById('sgWrap_' + itemId);
 
@@ -4596,11 +4601,13 @@ async function stillGoodAction(itemId, action, evt) {
       }
       loadStillGood();
     } else {
+      if (triggerEl && triggerEl.disabled !== undefined) triggerEl.disabled = false;
       if (typeof toast === 'function') toast('Could not update item.');
       loadStillGood();
     }
   } catch(e) {
     console.error('Action error:', e);
+    if (triggerEl && triggerEl.disabled !== undefined) triggerEl.disabled = false;
     loadStillGood();
   }
 }
