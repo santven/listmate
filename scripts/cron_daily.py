@@ -1854,6 +1854,10 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
               AND sgi.status = 'active'
               AND sgi.location = 'fridge'
               AND sgi.item_type != 'produce'
+              AND (
+                (COALESCE(sgi.remind_cadence, 'daily') != 'at_expiry' AND (sgi.snooze_until IS NULL OR sgi.snooze_until <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))))
+                OR (sgi.consume_by IS NOT NULL AND sgi.consume_by <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')))
+              )
         )
         AND NOT EXISTS (
             SELECT 1 FROM push_notifications_log pnl
@@ -1898,6 +1902,10 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
                       AND status = 'active'
                       AND location = 'fridge'
                       AND item_type != 'produce'
+                      AND (
+                        (COALESCE(remind_cadence, 'daily') != 'at_expiry' AND (snooze_until IS NULL OR snooze_until <= CURRENT_DATE))
+                        OR (consume_by IS NOT NULL AND consume_by <= CURRENT_DATE)
+                      )
                     ORDER BY consume_by ASC NULLS LAST, id ASC
                 """, (hhid,))
                 hh_fridge_cache[hhid] = fridge_items or []
@@ -2075,10 +2083,15 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
             WHERE sgi.household_id = h.id
               AND sgi.status = 'active'
               AND sgi.item_type = 'produce'
+              AND (sgi.location IS NULL OR sgi.location != 'freezer')
               AND sgi.consume_by IS NOT NULL
               AND sgi.consume_by IN (
                   (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date,
                   (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date + 1
+              )
+              AND (
+                  (COALESCE(sgi.remind_cadence, 'daily') != 'at_expiry' AND (sgi.snooze_until IS NULL OR sgi.snooze_until <= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date))
+                  OR (sgi.consume_by <= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date)
               )
         )
         AND NOT EXISTS (
@@ -2126,11 +2139,16 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
                     WHERE household_id = %s
                       AND status = 'active'
                       AND item_type = 'produce'
+                      AND (location IS NULL OR location != 'freezer')
                       AND consume_by IS NOT NULL
                       AND consume_by >= %s::date
                       AND consume_by <= (%s::date + INTERVAL '1 day')
+                      AND (
+                        (COALESCE(remind_cadence, 'daily') != 'at_expiry' AND (snooze_until IS NULL OR snooze_until <= %s::date))
+                        OR (consume_by <= %s::date)
+                      )
                     ORDER BY consume_by ASC, id ASC
-                """, (hhid, local_date_str, local_date_str))
+                """, (hhid, local_date_str, local_date_str, local_date_str, local_date_str))
                 hh_produce_cache[cache_key] = produce_items or []
             except Exception as item_err:
                 print(f"  [Warning] Failed to fetch produce items for Household #{hhid}: {item_err}")
@@ -2245,6 +2263,226 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
                 "user_id": uid,
                 "household_id": hhid,
                 "campaign": "still_good_produce_expiry_10am",
+                "error": str(dispatch_err),
+                "status": "error"
+            })
+
+    return {
+        "ok": True,
+        "dispatched": dispatched_count,
+        "candidates": len(candidates),
+        "results": results,
+        "dry_run": dry_run
+    }
+
+
+def check_still_good_freezer_expiry_pushes(target_hour: int = 9, dry_run: bool = False, force_send: bool = False):
+    """
+    9:00 AM Local Time Freezer 1-Week Expiry Push Reminder
+
+    1. Evaluates candidate users at 9:00 AM local time based on their timezone
+       (auth_users.timezone, fallback America/Chicago).
+    2. Eligible households: Pro and active Pro Trial (subscription_status IN ('premium', 'active', 'trial')).
+       If trial, ensure trial_ends_at is valid and has not expired.
+    3. Requires active push subscription (permission_status = 'granted').
+    4. Household must have at least 1 active freezer item (location = 'freezer', status = 'active')
+       whose consume_by date is 1 week away (within 7 days: consume_by <= local_date + 7 and consume_by >= local_date).
+    5. Dynamic copy:
+       - 1 item: "❄️ Freezer Reminder" / "Your {name} in the freezer reaches its best-by date in 1 week. Consider thawing it soon!"
+       - 2 items: "❄️ Freezer Reminder" / "Your {name1} and {name2} reach best-by in 1 week. Plan to thaw and enjoy!"
+       - 3+ items: "❄️ Freezer Reminder" / "You have {count} freezer meals (including {name1}) reaching best-by in 1 week. Check Still Good to thaw!"
+    6. Idempotency & Frequency Capping:
+       - Scoped via push_notifications_log with campaign = 'still_good_freezer_expiry_9am' on the current local calendar date.
+       - Max 1 reminder per user per local calendar day.
+    7. Deep link: /?screen=stillGood&tab=freezer&source=push_freezer_9am
+    """
+    _init_schema()
+    from push_helper import send_push_to_user
+    import shared.auth as authmod
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Still Good freezer 1-week expiry pushes (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date AS local_date,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE (
+            h.subscription_status IN ('premium', 'active')
+            OR (
+                h.subscription_status = 'trial' 
+                AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+            )
+        )
+        {hour_clause}
+        AND EXISTS (
+            SELECT 1 FROM push_subscriptions ps
+            WHERE ps.user_id = u.id
+              AND ps.is_active = TRUE
+              AND ps.permission_status = 'granted'
+        )
+        AND EXISTS (
+            SELECT 1 FROM still_good_items sgi
+            WHERE sgi.household_id = h.id
+              AND sgi.status = 'active'
+              AND sgi.location = 'freezer'
+              AND sgi.consume_by IS NOT NULL
+              AND sgi.consume_by <= ((NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date + 7)
+              AND sgi.consume_by >= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'still_good_freezer_expiry_9am'
+              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+        )
+        ORDER BY h.id ASC, u.id ASC
+    """
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_still_good_freezer_expiry_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Still Good freezer 1-week expiry pushes.")
+    results = []
+    dispatched_count = 0
+    hh_freezer_cache = {}
+    dispatched_uids = set()
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
+
+        local_date_str = str(cand.get("local_date") or "")
+        cache_key = (hhid, local_date_str)
+
+        if cache_key not in hh_freezer_cache:
+            try:
+                freezer_items = _run("""
+                    SELECT id, name, location, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by
+                    FROM still_good_items
+                    WHERE household_id = %s
+                      AND status = 'active'
+                      AND location = 'freezer'
+                      AND consume_by IS NOT NULL
+                      AND consume_by >= %s::date
+                      AND consume_by <= (%s::date + INTERVAL '7 days')
+                    ORDER BY consume_by ASC, id ASC
+                """, (hhid, local_date_str, local_date_str))
+                hh_freezer_cache[cache_key] = freezer_items or []
+            except Exception as item_err:
+                print(f"  [Warning] Failed to fetch freezer items for Household #{hhid}: {item_err}")
+                hh_freezer_cache[cache_key] = []
+
+        items = hh_freezer_cache.get(cache_key, [])
+        if not items:
+            continue
+
+        title = "❄️ Freezer Reminder"
+        first_name = (items[0].get("name") or "").strip() or "meal"
+        if len(items) == 1:
+            body = f"Your {first_name} in the freezer reaches its best-by date in 1 week. Consider thawing it soon!"
+        elif len(items) == 2:
+            second_name = (items[1].get("name") or "").strip() or "meal"
+            body = f"Your {first_name} and {second_name} reach best-by in 1 week. Plan to thaw and enjoy!"
+        else:
+            rem = len(items) - 1
+            body = f"You have {len(items)} freezer meals (including {first_name}) reaching best-by in 1 week. Check Still Good to thaw!"
+
+        deep_link_url = "/?screen=stillGood&tab=freezer&source=push_freezer_9am"
+        push_data = {
+            "action": "open_screen",
+            "screen": "stillGood",
+            "tab": "freezer",
+            "campaign": "still_good_freezer_expiry_9am",
+            "source": "push_freezer_9am",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "freezer_items_count": str(len(items))
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'still_good_freezer_expiry_9am' to User #{uid} ({cand.get('user_email')}): '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_freezer_expiry_9am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'still_good_freezer_expiry_9am' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            dispatched_uids.add(uid)
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_freezer_expiry_9am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "result": res,
+                "status": "sent"
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to dispatch freezer push to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_freezer_expiry_9am",
                 "error": str(dispatch_err),
                 "status": "error"
             })
@@ -2650,6 +2888,19 @@ if __name__ == "__main__":
                     target_h = 10
         res = check_still_good_produce_expiry_pushes(target_hour=target_h, dry_run=dry, force_send=force)
         print(f"Still Good produce pushes result: {res}")
+        sys.exit(0)
+    if any(arg.startswith("--test-still-good-freezer") or arg == "--test-freezer-push" for arg in sys.argv):
+        dry = "--dry-run" in sys.argv
+        force = "--force" in sys.argv
+        target_h = 9
+        for arg in sys.argv:
+            if arg.startswith("--target-hour="):
+                try:
+                    target_h = int(arg.split("=", 1)[1])
+                except ValueError:
+                    target_h = 9
+        res = check_still_good_freezer_expiry_pushes(target_hour=target_h, dry_run=dry, force_send=force)
+        print(f"Still Good freezer pushes result: {res}")
         sys.exit(0)
     if any(arg.startswith("--test-still-good-lunch") or arg == "--test-lunch-push" for arg in sys.argv):
         dry = "--dry-run" in sys.argv
