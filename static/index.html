@@ -535,9 +535,28 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 /* Still Good Styles */
 .still-good-screen { min-height: 80vh; }
 .sg-card-wrap { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 12px; background: #fff; touch-action: pan-y; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.sg-swipe-underlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; border-radius: 14px; z-index: 1; }
-.sg-swipe-left-bg { background: #10b981; color: #fff; display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; position: absolute; left: 0; top: 0; padding-left: 20px; font-weight: 700; font-size: 14px; }
-.sg-swipe-right-bg { background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; height: 100%; position: absolute; right: 0; top: 0; padding-right: 20px; font-weight: 700; font-size: 14px; }
+.sg-swipe-underlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; border-radius: 14px; z-index: 1; overflow: hidden; }
+.sg-swipe-left-bg { background: #10b981; color: #fff; display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; position: absolute; left: 0; top: 0; padding-left: 20px; font-weight: 700; font-size: 14px; opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.sg-swipe-right-bg { background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; height: 100%; position: absolute; right: 0; top: 0; padding-right: 20px; font-weight: 700; font-size: 14px; opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+.sg-card-wrap.swipe-enjoy .sg-swipe-left-bg { opacity: 1; z-index: 2; }
+.sg-card-wrap.swipe-discard .sg-swipe-right-bg { opacity: 1; z-index: 2; }
+@keyframes sgEnjoyPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); filter: brightness(1.12); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4); }
+  100% { transform: scale(1); }
+}
+.sg-btn-enjoying {
+  animation: sgEnjoyPop 0.35s ease-out forwards;
+  background: #059669 !important;
+}
+@keyframes sgCardCelebration {
+  0% { transform: scale(1); opacity: 1; }
+  30% { transform: scale(1.02); box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25); border-color: #10b981; }
+  100% { transform: scale(0.96) translateX(100vw); opacity: 0; }
+}
+.sg-card-celebrating {
+  animation: sgCardCelebration 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+}
 .sg-card { position: relative; z-index: 2; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; transition: transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1); user-select: none; }
 .sg-card.swiping { transition: none; }
 .sg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
@@ -4414,7 +4433,7 @@ function renderStillGoodItems() {
             (item.date_added ? 'Added ' + item.date_added : '') +
           '</div>' +
           '<div style="display:flex; align-items:center; gap:8px;">' +
-            '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\')" title="Mark as Enjoyed">✓ Enjoyed</button>' +
+            '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>' +
             secondaryActionBtn +
             '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>' +
           '</div>' +
@@ -4432,6 +4451,7 @@ function renderStillGoodItems() {
 
 function attachSgSwipe(itemId) {
   var card = document.getElementById('sgCard_' + itemId);
+  var wrap = document.getElementById('sgWrap_' + itemId);
   if (!card) return;
 
   var startX = 0;
@@ -4461,6 +4481,7 @@ function attachSgSwipe(itemId) {
       if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 8) {
         isScrolling = true;
         card.classList.remove('swiping');
+        if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         return;
       }
       if (Math.abs(diffX) > 10) {
@@ -4473,6 +4494,18 @@ function attachSgSwipe(itemId) {
       if (translation > 160) translation = 160 + (translation - 160) * 0.2;
       if (translation < -160) translation = -160 + (translation + 160) * 0.2;
       card.style.transform = 'translateX(' + translation + 'px)';
+
+      if (wrap) {
+        if (diffX > 0) {
+          wrap.classList.add('swipe-enjoy');
+          wrap.classList.remove('swipe-discard');
+        } else if (diffX < 0) {
+          wrap.classList.add('swipe-discard');
+          wrap.classList.remove('swipe-enjoy');
+        } else {
+          wrap.classList.remove('swipe-enjoy', 'swipe-discard');
+        }
+      }
     }
   }, { passive: true });
 
@@ -4480,6 +4513,7 @@ function attachSgSwipe(itemId) {
     if (!isSwiping) {
       card.classList.remove('swiping');
       card.style.transform = '';
+      if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
       return;
     }
     card.classList.remove('swiping');
@@ -4490,15 +4524,18 @@ function attachSgSwipe(itemId) {
     if (diffX > 85) {
       card.style.transform = 'translateX(100vw)';
       setTimeout(function() {
+        if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         stillGoodAction(itemId, 'consume');
       }, 150);
     } else if (diffX < -85) {
       card.style.transform = 'translateX(-100vw)';
       setTimeout(function() {
+        if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         stillGoodAction(itemId, 'discard');
       }, 150);
     } else {
       card.style.transform = 'translateX(0)';
+      if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
     }
     isSwiping = false;
   }
@@ -4507,15 +4544,38 @@ function attachSgSwipe(itemId) {
   card.addEventListener('touchcancel', endSwipe);
 }
 
-async function stillGoodAction(itemId, action) {
+async function stillGoodAction(itemId, action, evt) {
   try {
-    if (action === 'consume' && window.confetti) {
-      window.confetti({
-        particleCount: 45,
-        spread: 60,
-        origin: { y: 0.65 },
-        colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6']
-      });
+    var triggerEl = evt ? (evt.currentTarget || evt.target) : null;
+    var card = document.getElementById('sgCard_' + itemId);
+    var wrap = document.getElementById('sgWrap_' + itemId);
+
+    if (action === 'consume') {
+      if (triggerEl && triggerEl.classList) {
+        triggerEl.classList.add('sg-btn-enjoying');
+      }
+      if (wrap) {
+        wrap.classList.add('sg-card-celebrating');
+      }
+      if (window.confetti) {
+        var originX = 0.5;
+        var originY = 0.65;
+        if (triggerEl && triggerEl.getBoundingClientRect) {
+          var rect = triggerEl.getBoundingClientRect();
+          originX = Math.max(0.1, Math.min(0.9, (rect.left + rect.width / 2) / window.innerWidth));
+          originY = Math.max(0.1, Math.min(0.9, (rect.top + rect.height / 2) / window.innerHeight));
+        } else if (card && card.getBoundingClientRect) {
+          var cRect = card.getBoundingClientRect();
+          originX = Math.max(0.1, Math.min(0.9, (cRect.left + cRect.width / 2) / window.innerWidth));
+          originY = Math.max(0.1, Math.min(0.9, (cRect.top + cRect.height / 2) / window.innerHeight));
+        }
+        window.confetti({
+          particleCount: 50,
+          spread: 70,
+          origin: { x: originX, y: originY },
+          colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24']
+        });
+      }
     }
 
     var res = await fetch(API + '/still-good/' + itemId + '/action', {
