@@ -1842,6 +1842,10 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
               AND sgi.status = 'active'
               AND sgi.location = 'fridge'
               AND sgi.item_type != 'produce'
+              AND (
+                (COALESCE(sgi.remind_cadence, 'daily') != 'at_expiry' AND (sgi.snooze_until IS NULL OR sgi.snooze_until <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))))
+                OR (sgi.consume_by IS NOT NULL AND sgi.consume_by <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')))
+              )
         )
         AND NOT EXISTS (
             SELECT 1 FROM push_notifications_log pnl
@@ -1886,6 +1890,10 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
                       AND status = 'active'
                       AND location = 'fridge'
                       AND item_type != 'produce'
+                      AND (
+                        (COALESCE(remind_cadence, 'daily') != 'at_expiry' AND (snooze_until IS NULL OR snooze_until <= CURRENT_DATE))
+                        OR (consume_by IS NOT NULL AND consume_by <= CURRENT_DATE)
+                      )
                     ORDER BY consume_by ASC NULLS LAST, id ASC
                 """, (hhid,))
                 hh_fridge_cache[hhid] = fridge_items or []
@@ -2068,6 +2076,10 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
                   (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date,
                   (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date + 1
               )
+              AND (
+                  (COALESCE(sgi.remind_cadence, 'daily') != 'at_expiry' AND (sgi.snooze_until IS NULL OR sgi.snooze_until <= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date))
+                  OR (sgi.consume_by <= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::date)
+              )
         )
         AND NOT EXISTS (
             SELECT 1 FROM push_notifications_log pnl
@@ -2117,8 +2129,12 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
                       AND consume_by IS NOT NULL
                       AND consume_by >= %s::date
                       AND consume_by <= (%s::date + INTERVAL '1 day')
+                      AND (
+                        (COALESCE(remind_cadence, 'daily') != 'at_expiry' AND (snooze_until IS NULL OR snooze_until <= %s::date))
+                        OR (consume_by <= %s::date)
+                      )
                     ORDER BY consume_by ASC, id ASC
-                """, (hhid, local_date_str, local_date_str))
+                """, (hhid, local_date_str, local_date_str, local_date_str, local_date_str))
                 hh_produce_cache[cache_key] = produce_items or []
             except Exception as item_err:
                 print(f"  [Warning] Failed to fetch produce items for Household #{hhid}: {item_err}")
