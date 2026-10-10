@@ -2549,7 +2549,9 @@ def still_good_list_endpoint():
             "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_estimated_at TIMESTAMP",
             "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS shelf_life_days INTEGER",
-            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''"
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS ai_tip TEXT DEFAULT ''",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS snooze_until DATE",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS remind_cadence VARCHAR(16) DEFAULT 'daily'"
         ]:
             try:
                 db.execute(col_stmt)
@@ -2564,6 +2566,8 @@ def still_good_list_endpoint():
             "SELECT id, household_id, name, location, item_type, servings, "
             "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
             "TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, "
+            "TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, "
+            "COALESCE(remind_cadence, 'daily') as remind_cadence, "
             "status, consumed_at, discarded_at, thawing, notes, "
             "ai_estimated, ai_tip, shelf_life_days, created_at "
             "FROM still_good_items WHERE household_id = ?"
@@ -2578,7 +2582,7 @@ def still_good_list_endpoint():
             query += " AND location = ?"
             params.append(location)
 
-        query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, created_at DESC"
+        query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, id ASC"
 
         try:
             cur = db.execute(query, tuple(params))
@@ -2591,6 +2595,8 @@ def still_good_list_endpoint():
                 "SELECT id, household_id, name, location, item_type, servings, "
                 "TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, "
                 "TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, "
+                "TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, "
+                "COALESCE(remind_cadence, 'daily') as remind_cadence, "
                 "status, consumed_at, discarded_at, thawing, notes, created_at "
                 "FROM still_good_items WHERE household_id = ?"
             )
@@ -2601,7 +2607,7 @@ def still_good_list_endpoint():
             if location and location in ["fridge", "freezer"]:
                 fallback_query += " AND location = ?"
                 fallback_params.append(location)
-            fallback_query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, created_at DESC"
+            fallback_query += " ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, consume_by ASC NULLS LAST, id ASC"
             cur = db.execute(fallback_query, tuple(fallback_params))
             items = cur.fetchall() or []
 
@@ -2835,6 +2841,152 @@ def still_good_action_endpoint(item_id):
         db.close()
 
 
+@app.route("/api/still-good/<int:item_id>/snooze", methods=["POST"])
+@require_user
+def still_good_snooze_endpoint(item_id):
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
+
+        data = request.get_json(silent=True) or {}
+        days = data.get("days")
+        cadence = (data.get("cadence") or "").strip().lower()
+
+        # Ensure columns exist
+        for col_stmt in [
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS snooze_until DATE",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS remind_cadence VARCHAR(16) DEFAULT 'daily'"
+        ]:
+            try: db.execute(col_stmt)
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+
+        item = db.execute(
+            "SELECT id, consume_by, status FROM still_good_items WHERE id = ? AND household_id = ?",
+            (item_id, hhid)
+        ).fetchone()
+        if not item:
+            return jsonify({"ok": False, "error": "Item not found"}), 404
+
+        if days in [2, "2", "2d"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = CURRENT_DATE + INTERVAL '2 days', remind_cadence = 'daily', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        elif days in [3, "3", "3d"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = CURRENT_DATE + INTERVAL '3 days', remind_cadence = 'daily', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        elif days in ["never", "at_expiry"] or cadence == "at_expiry":
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = NULL, remind_cadence = 'at_expiry', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        elif days in [0, "0", "reset", "cancel"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = NULL, remind_cadence = 'daily', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                (item_id, hhid)
+            )
+        else:
+            try:
+                d_int = int(days)
+                if d_int > 0:
+                    db.execute(
+                        "UPDATE still_good_items SET snooze_until = CURRENT_DATE + (INTERVAL '1 day' * ?), remind_cadence = 'daily', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                        (d_int, item_id, hhid)
+                    )
+                else:
+                    db.execute(
+                        "UPDATE still_good_items SET snooze_until = NULL, remind_cadence = 'daily', updated_at = NOW() WHERE id = ? AND household_id = ?",
+                        (item_id, hhid)
+                    )
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "Invalid days parameter"}), 400
+
+        updated_row = db.execute(
+            "SELECT TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, remind_cadence FROM still_good_items WHERE id = ? AND household_id = ?",
+            (item_id, hhid)
+        ).fetchone()
+
+        return jsonify({
+            "ok": True,
+            "item_id": item_id,
+            "snooze_until": updated_row.get("snooze_until") if updated_row else None,
+            "remind_cadence": updated_row.get("remind_cadence") if updated_row else "daily"
+        })
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error snoozing item {item_id}: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/snooze-all", methods=["POST"])
+@require_user
+def still_good_snooze_all_endpoint():
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
+
+        data = request.get_json(silent=True) or {}
+        days = data.get("days")
+        cadence = (data.get("cadence") or "").strip().lower()
+
+        # Ensure columns exist
+        for col_stmt in [
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS snooze_until DATE",
+            "ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS remind_cadence VARCHAR(16) DEFAULT 'daily'"
+        ]:
+            try: db.execute(col_stmt)
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+
+        if days in [2, "2", "2d"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = CURRENT_DATE + INTERVAL '2 days', remind_cadence = 'daily', updated_at = NOW() WHERE household_id = ? AND status = 'active' AND location = 'fridge'",
+                (hhid,)
+            )
+        elif days in [3, "3", "3d"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = CURRENT_DATE + INTERVAL '3 days', remind_cadence = 'daily', updated_at = NOW() WHERE household_id = ? AND status = 'active' AND location = 'fridge'",
+                (hhid,)
+            )
+        elif days in ["never", "at_expiry"] or cadence == "at_expiry":
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = NULL, remind_cadence = 'at_expiry', updated_at = NOW() WHERE household_id = ? AND status = 'active' AND location = 'fridge'",
+                (hhid,)
+            )
+        elif days in [0, "0", "reset", "cancel"]:
+            db.execute(
+                "UPDATE still_good_items SET snooze_until = NULL, remind_cadence = 'daily', updated_at = NOW() WHERE household_id = ? AND status = 'active' AND location = 'fridge'",
+                (hhid,)
+            )
+        else:
+            try:
+                d_int = int(days)
+                if d_int > 0:
+                    db.execute(
+                        "UPDATE still_good_items SET snooze_until = CURRENT_DATE + (INTERVAL '1 day' * ?), remind_cadence = 'daily', updated_at = NOW() WHERE household_id = ? AND status = 'active' AND location = 'fridge'",
+                        (d_int, hhid)
+                    )
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "Invalid days parameter"}), 400
+
+        return jsonify({"ok": True, "household_id": hhid, "days": days})
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error snoozing all items: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/still-good/vacation-freeze", methods=["POST"])
 @require_user
 def still_good_vacation_freeze_endpoint():
@@ -2954,6 +3106,25 @@ def still_good_item_endpoint(item_id):
                 other_changed = True
             updates.append("notes = ?")
             params.append(clean_notes)
+
+        if "snooze_until" in data:
+            s_val = data.get("snooze_until")
+            if s_val:
+                try:
+                    from datetime import date
+                    valid_snooze = date.fromisoformat(str(s_val)[:10])
+                    updates.append("snooze_until = ?::date")
+                    params.append(str(valid_snooze))
+                except Exception:
+                    pass
+            else:
+                updates.append("snooze_until = NULL")
+
+        if "remind_cadence" in data:
+            c_val = (data.get("remind_cadence") or "").strip().lower()
+            if c_val in ["daily", "at_expiry"]:
+                updates.append("remind_cadence = ?")
+                params.append(c_val)
 
         # Rule: if only name changes, do nothing to AI estimation columns.
         # If anything other than name changes, if AI estimation was already done, null those values.
