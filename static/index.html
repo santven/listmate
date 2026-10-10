@@ -895,11 +895,17 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     } else if (screenParam === 'stillGood' || screenParam === 'still_good' || localStorage.getItem('open_still_good') === '1') {
       localStorage.removeItem('open_still_good');
       var sourceParam = urlParams.get('source');
+      var tabParam = urlParams.get('tab');
       if (sourceParam && sourceParam.indexOf('push') !== -1) {
-        sessionStorage.setItem('sg_push_prompt_active', '1');
+        if (sourceParam !== 'push_freezer_9am') {
+          sessionStorage.setItem('sg_push_prompt_active', '1');
+        }
       }
       setTimeout(() => {
         showStillGoodScreen();
+        if (tabParam === 'freezer' || (sourceParam && sourceParam.indexOf('freezer') !== -1)) {
+          switchSgTab('freezer');
+        }
       }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
       localStorage.removeItem('open_recipes');
@@ -1401,23 +1407,34 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <!-- Reminder Option (Issue #616) -->
-    <div style="margin-bottom:16px;">
+    <div id="sgReminderSection" style="margin-bottom:16px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Reminder</label>
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
-        <button type="button" id="sgRemindDaily" onclick="selectSgModalRemind('daily')" style="padding:10px 4px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:700; cursor:pointer; text-align:center;">
-          Daily
-        </button>
-        <button type="button" id="sgRemind2d" onclick="selectSgModalRemind('2d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
-          2 Days
-        </button>
-        <button type="button" id="sgRemind3d" onclick="selectSgModalRemind('3d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
-          3 Days
-        </button>
-        <button type="button" id="sgRemindNever" onclick="selectSgModalRemind('never')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
-          Never
-        </button>
+      <div id="sgFridgeRemindWrap">
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
+          <button type="button" id="sgRemindDaily" onclick="selectSgModalRemind('daily')" style="padding:10px 4px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:700; cursor:pointer; text-align:center;">
+            Daily
+          </button>
+          <button type="button" id="sgRemind2d" onclick="selectSgModalRemind('2d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+            2 Days
+          </button>
+          <button type="button" id="sgRemind3d" onclick="selectSgModalRemind('3d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+            3 Days
+          </button>
+          <button type="button" id="sgRemindNever" onclick="selectSgModalRemind('never')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+            Never
+          </button>
+        </div>
+        <div id="sgRemindHelp" style="font-size:11px; color:#64748b; margin-top:5px;">Daily reminders about this food</div>
       </div>
-      <div id="sgRemindHelp" style="font-size:11px; color:#64748b; margin-top:5px;">Daily reminders about this food</div>
+      <div id="sgFreezerRemindWrap" style="display:none; background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; padding:10px 12px; font-size:12px; color:#1e40af;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">❄️</span>
+          <div>
+            <div style="font-weight:700; color:#1d4ed8;">Reminded 1 week before expiry</div>
+            <div style="font-size:11px; color:#3b82f6; margin-top:2px;">Freezer meals stay preserved for months. We'll automatically remind you 1 week before best-by so you have plenty of time to thaw!</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Notes -->
@@ -4698,8 +4715,11 @@ function renderStillGoodItems() {
     if (item.location === 'freezer') {
       if (item.thawing) {
         statusPill = '<span class="sg-status-pill sg-badge-thawing">💧 Thawing</span>';
+      } else if (item.days_left !== null && item.days_left <= 7) {
+        var daysTxt = item.days_left <= 0 ? 'Best by today' : item.days_left + 'd left · Thaw soon';
+        statusPill = '<span class="sg-status-pill sg-status-soon">🟡 ' + daysTxt + '</span>';
       } else {
-        statusPill = '<span class="sg-status-pill sg-status-frozen">❄️ Frozen</span>';
+        statusPill = '<span class="sg-status-pill sg-status-frozen">❄️ Frozen' + (item.days_left !== null ? ' · ' + item.days_left + 'd' : '') + '</span>';
       }
     } else {
       if (item.urgency === 'urgent') {
@@ -4742,8 +4762,9 @@ function renderStillGoodItems() {
               '<span style="font-size:11px; font-weight:600; color:var(--muted); background:#f3f4f6; padding:3px 7px; border-radius:6px;">' + portionsText + '</span>' +
               (item.notes ? '<span style="font-size:11px; color:var(--muted); font-style:italic;">' + escapeHtml(item.notes) + '</span>' : '') +
               (item.ai_tip ? '<span style="font-size:11px; font-weight:600; color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; padding:2px 7px; border-radius:6px;" title="AI Conservative Safe Shelf-Life Tip">🤖 ' + escapeHtml(item.ai_tip) + '</span>' : '') +
-              (item.snooze_until ? '<span style="font-size:11px; font-weight:600; color:#92400e; background:#fef3c7; border:1px solid #fde68a; padding:2px 7px; border-radius:6px;" title="Reminders snoozed until ' + item.snooze_until + '">⏰ Snoozed · ' + item.snooze_until + '</span>' : '') +
-              (item.remind_cadence === 'at_expiry' ? '<span style="font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 7px; border-radius:6px;" title="Only reminds once when expired">🔕 Remind at expiry</span>' : '') +
+              (item.location === 'fridge' && item.snooze_until ? '<span style="font-size:11px; font-weight:600; color:#92400e; background:#fef3c7; border:1px solid #fde68a; padding:2px 7px; border-radius:6px;" title="Reminders snoozed until ' + item.snooze_until + '">⏰ Snoozed · ' + item.snooze_until + '</span>' : '') +
+              (item.location === 'fridge' && item.remind_cadence === 'at_expiry' ? '<span style="font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 7px; border-radius:6px;" title="Only reminds once when expired">🔕 Remind at expiry</span>' : '') +
+              (item.location === 'freezer' && item.days_left !== null && item.days_left <= 7 && item.days_left >= 0 ? '<span style="font-size:11px; font-weight:600; color:#1d4ed8; background:#eff6ff; border:1px solid #bfdbfe; padding:2px 7px; border-radius:6px;" title="Reminded 1 week before expiry">❄️ 1-wk reminder</span>' : '') +
             '</div>' +
           '</div>' +
           '<div style="flex-shrink:0;">' +
@@ -4756,7 +4777,7 @@ function renderStillGoodItems() {
           '</div>' +
           '<div style="display:flex; align-items:center; gap:6px;">' +
             '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>' +
-            '<button class="sg-action-btn sg-action-sec" onclick="openSnoozeItemModal(' + item.id + ')" title="Snooze reminder cadence">⏰ Snooze</button>' +
+            (item.location === 'fridge' ? '<button class="sg-action-btn sg-action-sec" onclick="openSnoozeItemModal(' + item.id + ')" title="Snooze reminder cadence">⏰ Snooze</button>' : '') +
             secondaryActionBtn +
             '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>' +
           '</div>' +
@@ -4884,46 +4905,41 @@ function fireStillGoodConfetti(targetEl) {
     } catch (e) {}
   }
 
-  var c = window.confetti;
-  if (!c) return;
+  var opts1 = {
+    particleCount: 80,
+    spread: 75,
+    startVelocity: 38,
+    origin: { x: originX, y: originY },
+    zIndex: 99999,
+    disableForReducedMotion: false,
+    colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24', '#f59e0b']
+  };
 
-  var instance = c;
-  if (typeof c.create === 'function') {
-    if (!window._sgConfettiInstance) {
-      try {
-        window._sgConfettiInstance = c.create(null, { resize: true, useWorker: false });
-      } catch (e) {
-        window._sgConfettiInstance = c;
-      }
+  try {
+    if (typeof window.confetti === 'function') {
+      window.confetti(opts1);
     }
-    instance = window._sgConfettiInstance || c;
-  }
+  } catch (e) {}
 
-  var fire = function(x, y, count, spread) {
-    var opts = {
-      particleCount: count || 70,
-      spread: spread || 75,
-      startVelocity: 38,
-      origin: { x: x, y: y },
+  setTimeout(function() {
+    var opts2 = {
+      particleCount: 55,
+      spread: 65,
+      startVelocity: 35,
+      origin: {
+        x: Math.max(0.15, Math.min(0.85, originX + (Math.random() * 0.1 - 0.05))),
+        y: Math.max(0.2, originY - 0.06)
+      },
       zIndex: 99999,
       disableForReducedMotion: false,
       colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24', '#f59e0b']
     };
     try {
-      instance(opts);
-    } catch (err1) {
-      try {
-        if (typeof window.confetti === 'function') {
-          window.confetti(opts);
-        }
-      } catch (err2) {}
-    }
-  };
-
-  fire(originX, originY, 70, 75);
-  setTimeout(function() {
-    fire(Math.max(0.15, Math.min(0.85, originX + (Math.random() * 0.1 - 0.05))), Math.max(0.2, originY - 0.06), 50, 65);
-  }, 130);
+      if (typeof window.confetti === 'function') {
+        window.confetti(opts2);
+      }
+    } catch (e) {}
+  }, 120);
 }
 
 async function stillGoodAction(itemId, action, evt) {
@@ -5130,21 +5146,23 @@ function openEditStillGoodModal(itemId) {
   selectSgModalType(sgModalType);
   updateSgModalServingsDisplay();
 
-  if (item.remind_cadence === 'at_expiry') {
-    selectSgModalRemind('never');
-  } else if (item.snooze_until) {
-    try {
-      var today = new Date();
-      var snoozeDate = new Date(item.snooze_until);
-      var diffDays = Math.round((snoozeDate - today) / (1000 * 60 * 60 * 24));
-      if (diffDays >= 3) selectSgModalRemind('3d');
-      else if (diffDays >= 2) selectSgModalRemind('2d');
-      else selectSgModalRemind('daily');
-    } catch(e) {
+  if (sgModalLocation === 'fridge') {
+    if (item.remind_cadence === 'at_expiry') {
+      selectSgModalRemind('never');
+    } else if (item.snooze_until) {
+      try {
+        var today = new Date();
+        var snoozeDate = new Date(item.snooze_until);
+        var diffDays = Math.round((snoozeDate - today) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 3) selectSgModalRemind('3d');
+        else if (diffDays >= 2) selectSgModalRemind('2d');
+        else selectSgModalRemind('daily');
+      } catch(e) {
+        selectSgModalRemind('daily');
+      }
+    } else {
       selectSgModalRemind('daily');
     }
-  } else {
-    selectSgModalRemind('daily');
   }
 
   var modal = document.getElementById('stillGoodAddModal');
@@ -5172,7 +5190,9 @@ function openAddStillGoodModal(preLocation) {
   selectSgModalLocation(sgModalLocation);
   selectSgModalType(sgModalType);
   updateSgModalServingsDisplay();
-  selectSgModalRemind('daily');
+  if (sgModalLocation === 'fridge') {
+    selectSgModalRemind('daily');
+  }
 
   var modal = document.getElementById('stillGoodAddModal');
   if (modal) modal.classList.add('active');
@@ -5197,6 +5217,8 @@ function selectSgModalLocation(loc) {
   sgModalLocation = loc;
   var fBtn = document.getElementById('sgLocFridgeBtn');
   var zBtn = document.getElementById('sgLocFreezerBtn');
+  var fridgeRemindWrap = document.getElementById('sgFridgeRemindWrap');
+  var freezerRemindWrap = document.getElementById('sgFreezerRemindWrap');
   if (loc === 'fridge') {
     if (fBtn) {
       fBtn.style.background = '#f0fdf4';
@@ -5208,6 +5230,9 @@ function selectSgModalLocation(loc) {
       zBtn.style.borderColor = 'var(--border)';
       zBtn.style.color = 'var(--muted)';
     }
+    if (fridgeRemindWrap) fridgeRemindWrap.style.display = 'block';
+    if (freezerRemindWrap) freezerRemindWrap.style.display = 'none';
+    selectSgModalRemind(sgModalRemindOption === '1_week_before' ? 'daily' : (sgModalRemindOption || 'daily'));
     if (sgModalType === 'restaurant') {
       setSgModalDays(1, 'Best within 24 hours (Eat by tomorrow)', 'Restaurant takeout degrades quickly in the fridge');
     } else if (sgModalType === 'batch_cook') {
@@ -5228,6 +5253,9 @@ function selectSgModalLocation(loc) {
       fBtn.style.borderColor = 'var(--border)';
       fBtn.style.color = 'var(--muted)';
     }
+    if (fridgeRemindWrap) fridgeRemindWrap.style.display = 'none';
+    if (freezerRemindWrap) freezerRemindWrap.style.display = 'block';
+    sgModalRemindOption = '1_week_before';
     if (sgModalType === 'restaurant') {
       setSgModalDays(30, 'Best within ~1 month in freezer', 'Conservative window for restaurant takeout to preserve flavor');
     } else if (sgModalType === 'produce') {
@@ -5385,7 +5413,7 @@ async function submitAddStillGood() {
       servings: sgModalServings,
       consume_by: sgModalConsumeBy,
       notes: notes,
-      remind_option: sgModalRemindOption || 'daily'
+      remind_option: (sgModalLocation === 'freezer') ? '1_week_before' : (sgModalRemindOption || 'daily')
     };
 
     var endpoint = isEdit ? (API + '/still-good/' + sgEditingItemId) : (API + '/still-good');

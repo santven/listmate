@@ -293,6 +293,16 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         force_send=force_send
     )
 
+    # Task 4b: Still Good Freezer 1-Week Expiry Push Reminder (9:00 AM local time)
+    from scripts.cron_daily import check_still_good_freezer_expiry_pushes
+    pipeline_results["still_good_freezer_pushes"] = safe_execute_task(
+        "Still Good Freezer 1-Week Expiry Push Reminder (9:00 AM local)",
+        check_still_good_freezer_expiry_pushes,
+        target_hour=9,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
     # Task 5: Store Plan Push Reminders (for stores with >= n items lacking a plan date)
     plan_fn = check_store_plan_push_reminders
     try:
@@ -356,6 +366,11 @@ def main():
         help="Run Still Good fresh produce expiry push reminders immediately"
     )
     parser.add_argument(
+        "--still-good-freezer",
+        action="store_true",
+        help="Run Still Good freezer 1-week expiry push reminders immediately"
+    )
+    parser.add_argument(
         "--store-plan-pushes", "--test-store-plan-pushes", "--test-store-plan-push", "--plan-pushes",
         dest="store_plan_pushes",
         action="store_true",
@@ -404,6 +419,17 @@ def main():
             print(f"Still Good produce pushes result: {stats}")
         except Exception as exc:
             print(f"Still Good produce pushes failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
+    if args.still_good_freezer:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good freezer 1-week expiry push reminders via cron_hourly...")
+        try:
+            from scripts.cron_daily import check_still_good_freezer_expiry_pushes
+            stats = check_still_good_freezer_expiry_pushes(target_hour=9, dry_run=args.dry_run, force_send=args.force)
+            print(f"Still Good freezer pushes result: {stats}")
+        except Exception as exc:
+            print(f"Still Good freezer pushes failed: {exc}")
         print("Done.")
         sys.exit(0)
 

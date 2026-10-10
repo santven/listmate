@@ -2750,21 +2750,25 @@ def still_good_create_endpoint():
             else:
                 consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
 
-        remind_opt = (data.get("remind_option") or data.get("remind_cadence") or "daily").strip().lower()
-        snooze_until = None
-        remind_cadence = "daily"
-        if remind_opt in ["2d", "2", 2]:
-            snooze_until = today + timedelta(days=2)
-            remind_cadence = "daily"
-        elif remind_opt in ["3d", "3", 3]:
-            snooze_until = today + timedelta(days=3)
-            remind_cadence = "daily"
-        elif remind_opt in ["never", "at_expiry"]:
+        if location == "freezer":
             snooze_until = None
-            remind_cadence = "at_expiry"
+            remind_cadence = "1_week_before"
         else:
+            remind_opt = (data.get("remind_option") or data.get("remind_cadence") or "daily").strip().lower()
             snooze_until = None
             remind_cadence = "daily"
+            if remind_opt in ["2d", "2", 2]:
+                snooze_until = today + timedelta(days=2)
+                remind_cadence = "daily"
+            elif remind_opt in ["3d", "3", 3]:
+                snooze_until = today + timedelta(days=3)
+                remind_cadence = "daily"
+            elif remind_opt in ["never", "at_expiry"]:
+                snooze_until = None
+                remind_cadence = "at_expiry"
+            else:
+                snooze_until = None
+                remind_cadence = "daily"
 
         cur = db.execute(
             "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, snooze_until, remind_cadence, status, notes) "
@@ -2841,13 +2845,13 @@ def still_good_action_endpoint(item_id):
             if curr_loc == "fridge":
                 freeze_days = 30 if item_type == "restaurant" else (90 if item_type == "produce" else 60)
                 db.execute(
-                    "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, snooze_until = NULL, remind_cadence = '1_week_before', consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
                     (freeze_days, item_id, hhid)
                 )
             else:
                 fridge_days = 1 if item_type == "restaurant" else (5 if item_type in ["produce", "batch_cook"] else 3)
                 db.execute(
-                    "UPDATE still_good_items SET location = 'fridge', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                    "UPDATE still_good_items SET location = 'fridge', thawing = FALSE, snooze_until = NULL, remind_cadence = 'daily', consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
                     (fridge_days, item_id, hhid)
                 )
 
@@ -2883,11 +2887,13 @@ def still_good_snooze_endpoint(item_id):
                 except Exception: pass
 
         item = db.execute(
-            "SELECT id, consume_by, status FROM still_good_items WHERE id = ? AND household_id = ?",
+            "SELECT id, location, consume_by, status FROM still_good_items WHERE id = ? AND household_id = ?",
             (item_id, hhid)
         ).fetchone()
         if not item:
             return jsonify({"ok": False, "error": "Item not found"}), 404
+        if item.get("location") == "freezer":
+            return jsonify({"ok": False, "error": "Freezer items are scheduled for reminder 1 week before expiry and do not have daily snooze."}), 400
 
         if days in [2, "2", "2d"]:
             db.execute(
@@ -3025,7 +3031,7 @@ def still_good_vacation_freeze_endpoint():
             itype = r["item_type"] if "item_type" in r.keys() else "home_cooked"
             freeze_days = 30 if itype == "restaurant" else (90 if itype == "produce" else 60)
             db.execute(
-                "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
+                "UPDATE still_good_items SET location = 'freezer', thawing = FALSE, snooze_until = NULL, remind_cadence = '1_week_before', consume_by = CURRENT_DATE + (INTERVAL '1 day' * ?), updated_at = NOW() WHERE id = ? AND household_id = ?",
                 (freeze_days, i_id, hhid)
             )
             moved_count += 1
@@ -3125,7 +3131,11 @@ def still_good_item_endpoint(item_id):
             updates.append("notes = ?")
             params.append(clean_notes)
 
-        if "remind_option" in data:
+        new_loc = location if (location in ["fridge", "freezer"]) else (existing.get("location") or "fridge")
+        if new_loc == "freezer":
+            updates.append("snooze_until = NULL")
+            updates.append("remind_cadence = '1_week_before'")
+        elif "remind_option" in data:
             remind_opt = (data.get("remind_option") or "daily").strip().lower()
             if remind_opt in ["2d", "2", 2]:
                 updates.append("snooze_until = CURRENT_DATE + INTERVAL '2 days'")
@@ -3139,6 +3149,9 @@ def still_good_item_endpoint(item_id):
             elif remind_opt in ["daily", "reset", "0", 0]:
                 updates.append("snooze_until = NULL")
                 updates.append("remind_cadence = 'daily'")
+        elif location == "fridge" and existing.get("location") == "freezer":
+            updates.append("remind_cadence = 'daily'")
+            updates.append("snooze_until = NULL")
         else:
             if "snooze_until" in data:
                 s_val = data.get("snooze_until")
