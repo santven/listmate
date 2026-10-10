@@ -2750,10 +2750,26 @@ def still_good_create_endpoint():
             else:
                 consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
 
+        remind_opt = (data.get("remind_option") or data.get("remind_cadence") or "daily").strip().lower()
+        snooze_until = None
+        remind_cadence = "daily"
+        if remind_opt in ["2d", "2", 2]:
+            snooze_until = today + timedelta(days=2)
+            remind_cadence = "daily"
+        elif remind_opt in ["3d", "3", 3]:
+            snooze_until = today + timedelta(days=3)
+            remind_cadence = "daily"
+        elif remind_opt in ["never", "at_expiry"]:
+            snooze_until = None
+            remind_cadence = "at_expiry"
+        else:
+            snooze_until = None
+            remind_cadence = "daily"
+
         cur = db.execute(
-            "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, status, notes) "
-            "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, 'active', ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by",
-            (hhid, name, location, item_type, servings, consume_by, notes)
+            "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, snooze_until, remind_cadence, status, notes) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, ?::date, ?, 'active', ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, remind_cadence",
+            (hhid, name, location, item_type, servings, consume_by, str(snooze_until) if snooze_until else None, remind_cadence, notes)
         )
         row = cur.fetchone()
         item_id = row["id"] if row else None
@@ -2767,6 +2783,8 @@ def still_good_create_endpoint():
                 "servings": servings,
                 "date_added": row["date_added"] if row else str(today),
                 "consume_by": row["consume_by"] if row else consume_by,
+                "snooze_until": row["snooze_until"] if row else None,
+                "remind_cadence": row["remind_cadence"] if row else remind_cadence,
                 "status": "active",
                 "notes": notes,
                 "thawing": False,
@@ -3107,24 +3125,39 @@ def still_good_item_endpoint(item_id):
             updates.append("notes = ?")
             params.append(clean_notes)
 
-        if "snooze_until" in data:
-            s_val = data.get("snooze_until")
-            if s_val:
-                try:
-                    from datetime import date
-                    valid_snooze = date.fromisoformat(str(s_val)[:10])
-                    updates.append("snooze_until = ?::date")
-                    params.append(str(valid_snooze))
-                except Exception:
-                    pass
-            else:
+        if "remind_option" in data:
+            remind_opt = (data.get("remind_option") or "daily").strip().lower()
+            if remind_opt in ["2d", "2", 2]:
+                updates.append("snooze_until = CURRENT_DATE + INTERVAL '2 days'")
+                updates.append("remind_cadence = 'daily'")
+            elif remind_opt in ["3d", "3", 3]:
+                updates.append("snooze_until = CURRENT_DATE + INTERVAL '3 days'")
+                updates.append("remind_cadence = 'daily'")
+            elif remind_opt in ["never", "at_expiry"]:
                 updates.append("snooze_until = NULL")
+                updates.append("remind_cadence = 'at_expiry'")
+            elif remind_opt in ["daily", "reset", "0", 0]:
+                updates.append("snooze_until = NULL")
+                updates.append("remind_cadence = 'daily'")
+        else:
+            if "snooze_until" in data:
+                s_val = data.get("snooze_until")
+                if s_val:
+                    try:
+                        from datetime import date
+                        valid_snooze = date.fromisoformat(str(s_val)[:10])
+                        updates.append("snooze_until = ?::date")
+                        params.append(str(valid_snooze))
+                    except Exception:
+                        pass
+                else:
+                    updates.append("snooze_until = NULL")
 
-        if "remind_cadence" in data:
-            c_val = (data.get("remind_cadence") or "").strip().lower()
-            if c_val in ["daily", "at_expiry"]:
-                updates.append("remind_cadence = ?")
-                params.append(c_val)
+            if "remind_cadence" in data:
+                c_val = (data.get("remind_cadence") or "").strip().lower()
+                if c_val in ["daily", "at_expiry"]:
+                    updates.append("remind_cadence = ?")
+                    params.append(c_val)
 
         # Rule: if only name changes, do nothing to AI estimation columns.
         # If anything other than name changes, if AI estimation was already done, null those values.

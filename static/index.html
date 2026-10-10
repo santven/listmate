@@ -1400,6 +1400,26 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
+    <!-- Reminder Option (Issue #616) -->
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Reminder</label>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
+        <button type="button" id="sgRemindDaily" onclick="selectSgModalRemind('daily')" style="padding:10px 4px; border-radius:10px; border:1.5px solid var(--green); background:#f0fdf4; color:var(--green-dark); font-size:12px; font-weight:700; cursor:pointer; text-align:center;">
+          Daily
+        </button>
+        <button type="button" id="sgRemind2d" onclick="selectSgModalRemind('2d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          2 Days
+        </button>
+        <button type="button" id="sgRemind3d" onclick="selectSgModalRemind('3d')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          3 Days
+        </button>
+        <button type="button" id="sgRemindNever" onclick="selectSgModalRemind('never')" style="padding:10px 4px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; text-align:center;">
+          Never
+        </button>
+      </div>
+      <div id="sgRemindHelp" style="font-size:11px; color:#64748b; margin-top:5px;">Daily reminders about this food</div>
+    </div>
+
     <!-- Notes -->
     <div style="margin-bottom:20px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Notes (optional)</label>
@@ -4827,6 +4847,8 @@ function attachSgSwipe(itemId) {
     if (diffX > 85) {
       card.style.transform = 'translateX(100vw)';
       card.style.pointerEvents = 'none';
+      if (wrap) wrap.classList.add('swipe-enjoy');
+      fireStillGoodConfetti(card);
       setTimeout(function() {
         if (wrap) wrap.classList.remove('swipe-enjoy', 'swipe-discard');
         stillGoodAction(itemId, 'consume');
@@ -4849,8 +4871,63 @@ function attachSgSwipe(itemId) {
   card.addEventListener('touchcancel', endSwipe);
 }
 
+function fireStillGoodConfetti(targetEl) {
+  var originX = 0.5;
+  var originY = 0.55;
+  if (targetEl && targetEl.getBoundingClientRect) {
+    try {
+      var rect = targetEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        originX = Math.max(0.1, Math.min(0.9, (rect.left + rect.width / 2) / (window.innerWidth || 360)));
+        originY = Math.max(0.1, Math.min(0.9, (rect.top + rect.height / 2) / (window.innerHeight || 640)));
+      }
+    } catch (e) {}
+  }
+
+  var c = window.confetti;
+  if (!c) return;
+
+  var instance = c;
+  if (typeof c.create === 'function') {
+    if (!window._sgConfettiInstance) {
+      try {
+        window._sgConfettiInstance = c.create(null, { resize: true, useWorker: false });
+      } catch (e) {
+        window._sgConfettiInstance = c;
+      }
+    }
+    instance = window._sgConfettiInstance || c;
+  }
+
+  var fire = function(x, y, count, spread) {
+    var opts = {
+      particleCount: count || 70,
+      spread: spread || 75,
+      startVelocity: 38,
+      origin: { x: x, y: y },
+      zIndex: 99999,
+      disableForReducedMotion: false,
+      colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24', '#f59e0b']
+    };
+    try {
+      instance(opts);
+    } catch (err1) {
+      try {
+        if (typeof window.confetti === 'function') {
+          window.confetti(opts);
+        }
+      } catch (err2) {}
+    }
+  };
+
+  fire(originX, originY, 70, 75);
+  setTimeout(function() {
+    fire(Math.max(0.15, Math.min(0.85, originX + (Math.random() * 0.1 - 0.05))), Math.max(0.2, originY - 0.06), 50, 65);
+  }, 130);
+}
+
 async function stillGoodAction(itemId, action, evt) {
-  var triggerEl = evt ? (evt.currentTarget || evt.target) : null;
+  var triggerEl = (evt && (evt.currentTarget || evt.target)) ? (evt.currentTarget || evt.target) : document.getElementById('sgCard_' + itemId);
   try {
     if (triggerEl && triggerEl.disabled !== undefined) {
       triggerEl.disabled = true;
@@ -4865,25 +4942,7 @@ async function stillGoodAction(itemId, action, evt) {
       if (wrap) {
         wrap.classList.add('sg-card-celebrating');
       }
-      if (window.confetti) {
-        var originX = 0.5;
-        var originY = 0.65;
-        if (triggerEl && triggerEl.getBoundingClientRect) {
-          var rect = triggerEl.getBoundingClientRect();
-          originX = Math.max(0.1, Math.min(0.9, (rect.left + rect.width / 2) / window.innerWidth));
-          originY = Math.max(0.1, Math.min(0.9, (rect.top + rect.height / 2) / window.innerHeight));
-        } else if (card && card.getBoundingClientRect) {
-          var cRect = card.getBoundingClientRect();
-          originX = Math.max(0.1, Math.min(0.9, (cRect.left + cRect.width / 2) / window.innerWidth));
-          originY = Math.max(0.1, Math.min(0.9, (cRect.top + cRect.height / 2) / window.innerHeight));
-        }
-        window.confetti({
-          particleCount: 50,
-          spread: 70,
-          origin: { x: originX, y: originY },
-          colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24']
-        });
-      }
+      fireStillGoodConfetti(triggerEl || card);
     }
 
     var res = await fetch(API + '/still-good/' + itemId + '/action', {
@@ -5071,6 +5130,23 @@ function openEditStillGoodModal(itemId) {
   selectSgModalType(sgModalType);
   updateSgModalServingsDisplay();
 
+  if (item.remind_cadence === 'at_expiry') {
+    selectSgModalRemind('never');
+  } else if (item.snooze_until) {
+    try {
+      var today = new Date();
+      var snoozeDate = new Date(item.snooze_until);
+      var diffDays = Math.round((snoozeDate - today) / (1000 * 60 * 60 * 24));
+      if (diffDays >= 3) selectSgModalRemind('3d');
+      else if (diffDays >= 2) selectSgModalRemind('2d');
+      else selectSgModalRemind('daily');
+    } catch(e) {
+      selectSgModalRemind('daily');
+    }
+  } else {
+    selectSgModalRemind('daily');
+  }
+
   var modal = document.getElementById('stillGoodAddModal');
   if (modal) modal.classList.add('active');
   if (nameInput) setTimeout(function() { nameInput.focus(); }, 150);
@@ -5096,6 +5172,7 @@ function openAddStillGoodModal(preLocation) {
   selectSgModalLocation(sgModalLocation);
   selectSgModalType(sgModalType);
   updateSgModalServingsDisplay();
+  selectSgModalRemind('daily');
 
   var modal = document.getElementById('stillGoodAddModal');
   if (modal) modal.classList.add('active');
@@ -5241,6 +5318,46 @@ function setSgModalDays(days, title, subtitle) {
   }
 }
 
+var sgModalRemindOption = 'daily';
+
+function selectSgModalRemind(opt) {
+  sgModalRemindOption = opt || 'daily';
+  var opts = ['daily', '2d', '3d', 'never'];
+  var ids = {
+    'daily': 'sgRemindDaily',
+    '2d': 'sgRemind2d',
+    '3d': 'sgRemind3d',
+    'never': 'sgRemindNever'
+  };
+  var helpText = {
+    'daily': 'Daily morning reminders about this food',
+    '2d': 'Pause reminders for 2 days, then remind',
+    '3d': 'Pause reminders for 3 days, then remind',
+    'never': 'Only remind once on the day this food expires'
+  };
+
+  opts.forEach(function(o) {
+    var btn = document.getElementById(ids[o]);
+    if (!btn) return;
+    if (o === sgModalRemindOption) {
+      btn.style.background = '#f0fdf4';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green-dark)';
+      btn.style.fontWeight = '700';
+    } else {
+      btn.style.background = '#fff';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--muted)';
+      btn.style.fontWeight = '600';
+    }
+  });
+
+  var helpEl = document.getElementById('sgRemindHelp');
+  if (helpEl) {
+    helpEl.textContent = helpText[sgModalRemindOption] || '';
+  }
+}
+
 async function submitAddStillGood() {
   var nameInput = document.getElementById('sgInputName');
   var name = nameInput ? nameInput.value.trim() : '';
@@ -5267,7 +5384,8 @@ async function submitAddStillGood() {
       item_type: sgModalType,
       servings: sgModalServings,
       consume_by: sgModalConsumeBy,
-      notes: notes
+      notes: notes,
+      remind_option: sgModalRemindOption || 'daily'
     };
 
     var endpoint = isEdit ? (API + '/still-good/' + sgEditingItemId) : (API + '/still-good');
