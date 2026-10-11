@@ -687,10 +687,8 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 42px;
-  min-height: 42px;
-  max-height: 42px;
-  padding: 0 4px 0 12px;
+  min-height: 48px;
+  padding: 8px 12px;
   border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
   gap: 8px;
@@ -783,6 +781,16 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   display: inline-block;
   vertical-align: middle;
   flex-shrink: 0;
+}
+.sg-crisper-tip-subline {
+  font-size: 11px;
+  color: #047857;
+  font-weight: 500;
+  margin-top: 2px;
+  margin-left: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sg-crisper-tip-pill {
   font-size: 10px;
@@ -5095,7 +5103,7 @@ function getCrisperItemIcon(name) {
 }
 
 function toggleCrisperDrawer() {
-  var isCurrentlyOpen = localStorage.getItem('sg_crisper_open') !== 'false';
+  var isCurrentlyOpen = localStorage.getItem('sg_crisper_open') === 'true';
   var nextState = !isCurrentlyOpen;
   localStorage.setItem('sg_crisper_open', nextState ? 'true' : 'false');
   var content = document.getElementById('sgCrisperContent');
@@ -5344,7 +5352,7 @@ function renderStillGoodItems() {
 
   // Render crisper_items inside collapsible Crisper Drawer container
   if (crisper_items.length > 0) {
-    var isCrisperOpen = localStorage.getItem('sg_crisper_open') !== 'false';
+    var isCrisperOpen = localStorage.getItem('sg_crisper_open') === 'true';
 
     // Urgency badge if any item expires in <= 2 days (excluding unestimated grocery items)
     var urgentProduce = crisper_items.filter(function(i) {
@@ -5396,19 +5404,21 @@ function renderStillGoodItems() {
         storeBadgeHtml = '<span class="sg-crisper-store-badge" style="font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 7px; border-radius:6px; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; display:inline-block;" title="' + escapeHtml(item.store_name) + '">🏬 ' + escapeHtml(item.store_name) + '</span>';
       }
 
-      var tipHtml = '';
+      var tipSublineHtml = '';
       if (item.ai_tip) {
-        tipHtml = '<span class="sg-crisper-tip-pill" style="font-size:10px; font-weight:600; color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; padding:1px 6px; border-radius:5px; white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis; display:inline-block;" title="AI Storage Tip: ' + escapeHtml(item.ai_tip) + '">🤖 ' + escapeHtml(item.ai_tip) + '</span>';
+        tipSublineHtml = '<div style="font-size:11px; color:#047857; font-weight:500; margin-top:2px; margin-left:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="AI Storage Tip: ' + escapeHtml(item.ai_tip) + '">🤖 ' + escapeHtml(item.ai_tip) + '</div>';
       }
 
-      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
-        '<div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">' +
-          '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
-          '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" title="' + escapeHtml(item.name) + '">' +
-            escapeHtml(item.name) +
-          '</span>' +
-          storeBadgeHtml +
-          tipHtml +
+      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '" style="min-height:48px; padding:8px 12px;">' +
+        '<div style="display:flex; flex-direction:column; justify-content:center; min-width:0; flex:1; padding-right:6px;">' +
+          '<div style="display:flex; align-items:center; gap:6px; min-width:0;">' +
+            '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
+            '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" title="' + escapeHtml(item.name) + '">' +
+              escapeHtml(item.name) +
+            '</span>' +
+            storeBadgeHtml +
+          '</div>' +
+          tipSublineHtml +
         '</div>' +
         '<div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">' +
           '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 7px; border-radius:6px; white-space:nowrap;">' +
