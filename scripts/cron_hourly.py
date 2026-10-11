@@ -26,6 +26,13 @@ logging.basicConfig(
 logger = logging.getLogger("cron_hourly")
 
 from shared.auth import _init_schema, _run, _one
+from push_helper import (
+    check_trial_expiration_pushes,
+    check_store_plan_push_reminders,
+    check_still_good_fridge_lunch_pushes,
+    check_still_good_produce_expiry_pushes,
+    check_still_good_freezer_expiry_pushes,
+)
 
 
 def safe_execute_task(task_name: str, task_fn, *args, **kwargs):
@@ -47,197 +54,6 @@ def safe_execute_task(task_name: str, task_fn, *args, **kwargs):
         return {"status": "error", "error": str(exc), "duration_ms": duration_ms}
 
 
-def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = False, force_send: bool = False):
-    """
-    Store Plan Push Reminders (Hourly Cron Evaluation):
-    If stores have >= threshold_n items on the active list (configurable via
-    STORE_PLAN_REMINDER_THRESHOLD, defaulting to 10) and have NO planned visit date, send
-    a consolidated push reminder once in a 24-hour period to active members of the household.
-    Restricted to premium, trial, and active households.
-    """
-    _init_schema()
-    from push_helper import send_push_to_household
-
-    if threshold_n is None:
-        env_val = os.environ.get("STORE_PLAN_REMINDER_THRESHOLD")
-        threshold_n = int(env_val) if env_val else 10
-
-    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking store plan push reminders (threshold={threshold_n}, dry_run={dry_run}, force_send={force_send})...")
-
-    # Query for stores that have >= threshold_n uncompleted list items and NO plan date
-    # Only for premium, trial (unexpired), and active households
-    query = """
-        SELECT 
-            s.id AS store_id,
-            s.name AS store_name,
-            s.household_id,
-            COUNT(li.id) AS items_count
-        FROM stores s
-        JOIN auth_households h ON h.id = s.household_id
-        JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
-        WHERE li.purchased = FALSE
-          AND s.planned_visit_date IS NULL
-          AND (
-              h.is_premium = TRUE 
-              OR h.subscription_status IN ('premium', 'active')
-              OR (
-                  h.subscription_status = 'trial' 
-                  AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
-              )
-          )
-        GROUP BY s.id, s.name, s.household_id
-        HAVING COUNT(li.id) >= %(threshold)s
-        ORDER BY s.household_id ASC, items_count DESC
-    """
-    try:
-        candidates = _run(query, {"threshold": threshold_n})
-    except Exception as e:
-        print(f"[check_store_plan_push_reminders] Query error: {e}", flush=True)
-        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
-
-    print(f"  -> Found {len(candidates)} candidate store(s) with >= {threshold_n} items and no plan date for push.")
-
-    # Group candidate stores by household
-    hh_groups = {}
-    for cand in candidates:
-        hh_id = cand["household_id"]
-        if hh_id not in hh_groups:
-            hh_groups[hh_id] = []
-        hh_groups[hh_id].append(cand)
-
-    dispatched_count = 0
-    skipped_24h = 0
-    results = []
-
-    for hh_id, stores_list in hh_groups.items():
-        # 24-hour deduplication check per household in push_notifications_log
-        if not force_send:
-            try:
-                dedup_check = _one("""
-                    SELECT 1 FROM push_notifications_log
-                    WHERE ((target_type = 'household' AND target_id = %s) OR (custom_data->>'household_id' = %s))
-                      AND (
-                          custom_data->>'type' = 'store_plan_reminder'
-                          OR custom_data->>'type' = 'general_list_reminder'
-                      )
-                      AND created_at >= NOW() - INTERVAL '24 hours'
-                """, (hh_id, str(hh_id)))
-            except Exception as d_err:
-                print(f"  [Warning] Deduplication check failed for HH #{hh_id}: {d_err}")
-                dedup_check = None
-
-            if dedup_check:
-                skipped_24h += 1
-                continue
-
-        regular_stores = [s for s in stores_list if s["store_name"].strip().lower() != "general list"]
-        general_stores = [s for s in stores_list if s["store_name"].strip().lower() == "general list"]
-
-        if len(regular_stores) >= 2:
-            # Case 1: Multiple regular stores -> Combine into one notification
-            names = [s["store_name"] for s in regular_stores]
-            if len(names) == 2:
-                stores_text = f"{names[0]} and {names[1]}"
-            else:
-                stores_text = f"{names[0]}, {names[1]}, and {len(names) - 2} other stores"
-            p_title = "📅 Plan your shopping trips"
-            p_body = f"{stores_text} have {threshold_n}+ items. Pick dates to plan your visits!"
-            store_ids_csv = ",".join(str(s["store_id"]) for s in regular_stores)
-            p_data = {
-                "type": "store_plan_reminder",
-                "action": "plan_modal",
-                "household_id": str(hh_id),
-                "store_ids": store_ids_csv,
-                "campaign": f"store_plan_reminder_multi_{hh_id}",
-                "url": f"/?action=plan_modal&stores={store_ids_csv}"
-            }
-            store_label = f"Multiple stores ({store_ids_csv})"
-            target_store_id = None
-        elif len(regular_stores) == 1:
-            # Case 2: Exactly 1 regular store
-            cand = regular_stores[0]
-            target_store_id = cand["store_id"]
-            store_name = cand["store_name"]
-            items_count = cand["items_count"]
-            p_title = f"📅 Plan your trip to {store_name}"
-            p_body = f"You have {items_count} items on your {store_name} list. Pick a date to plan your shopping trip!"
-            p_data = {
-                "type": "store_plan_reminder",
-                "action": "open_store",
-                "store_id": str(target_store_id),
-                "store_name": store_name,
-                "household_id": str(hh_id),
-                "campaign": f"store_plan_reminder_{target_store_id}",
-                "url": f"/?store_id={target_store_id}&action=plan"
-            }
-            store_label = f"Store #{target_store_id} ({store_name})"
-        elif len(general_stores) > 0:
-            # Case 3: Only General List qualifies
-            cand = general_stores[0]
-            target_store_id = cand["store_id"]
-            items_count = cand["items_count"]
-            p_title = "📋 Organize your General List"
-            p_body = f"You have {items_count} items in your General List. Move items to specific stores to plan your shopping trips!"
-            p_data = {
-                "type": "general_list_reminder",
-                "action": "general_list_info",
-                "store_id": str(target_store_id),
-                "household_id": str(hh_id),
-                "campaign": f"general_list_reminder_{hh_id}",
-                "url": f"/?action=general_list_info&store_id={target_store_id}"
-            }
-            store_label = f"General List #{target_store_id}"
-        else:
-            continue
-
-        if dry_run:
-            print(f"  [DRY-RUN] Would send store plan push to HH #{hh_id} for {store_label}: {p_title} | {p_body}")
-            dispatched_count += 1
-            results.append({
-                "household_id": hh_id,
-                "store_id": target_store_id,
-                "status": "dry_run",
-                "title": p_title,
-                "body": p_body
-            })
-        else:
-            try:
-                res = send_push_to_household(hh_id, p_title, p_body, p_data)
-                sent_cnt = res.get("sent", 0)
-                mock_mode = res.get("mock", False)
-                if sent_cnt > 0 or mock_mode:
-                    print(f"  ✔ Sent plan reminder push to HH #{hh_id} for {store_label} (sent={sent_cnt}, mock={mock_mode})")
-                    dispatched_count += 1
-                    status_str = "sent"
-                else:
-                    msg = res.get("message") or res.get("error") or "No active tokens for household"
-                    print(f"  ℹ Skipped plan reminder push to HH #{hh_id} for {store_label}: {msg} (sent=0)")
-                    status_str = "skipped_no_tokens"
-                results.append({
-                    "household_id": hh_id,
-                    "store_id": target_store_id,
-                    "status": status_str,
-                    "result": res
-                })
-            except Exception as send_err:
-                print(f"  [Error] Failed to send push to HH #{hh_id} for {store_label}: {send_err}")
-                results.append({
-                    "household_id": hh_id,
-                    "store_id": target_store_id,
-                    "status": "error",
-                    "error": str(send_err)
-                })
-
-    return {
-        "ok": True,
-        "dispatched": dispatched_count,
-        "candidates": len(candidates),
-        "skipped_24h": skipped_24h,
-        "results": results,
-        "dry_run": dry_run
-    }
-
-
 def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_hour: int = 8, now_utc: datetime.datetime = None):
     """
     Main hourly pipeline coordinating all hourly jobs.
@@ -252,7 +68,6 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     pipeline_results = {}
 
     # Task 1: Timezone-aware Pro Trial Expiration Push Reminders (8:00 AM local time)
-    from scripts.cron_daily import check_trial_expiration_pushes
     pipeline_results["trial_expiration_pushes"] = safe_execute_task(
         "Pro Trial Expiration Push Reminders",
         check_trial_expiration_pushes,
@@ -274,7 +89,6 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
             logger.error(f"Still Good AI task failed to launch: {exc}")
 
     # Task 3: Still Good Morning Fridge Lunch Push Reminder (7:00 AM local time)
-    from scripts.cron_daily import check_still_good_fridge_lunch_pushes
     pipeline_results["still_good_lunch_pushes"] = safe_execute_task(
         "Still Good Morning Fridge Lunch Push Reminder (7:00 AM local)",
         check_still_good_fridge_lunch_pushes,
@@ -284,7 +98,6 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     )
 
     # Task 4: Still Good Fresh Produce Expiry Push Reminder (10:00 AM local time)
-    from scripts.cron_daily import check_still_good_produce_expiry_pushes
     pipeline_results["still_good_produce_pushes"] = safe_execute_task(
         "Still Good Fresh Produce Expiry Push Reminder (10:00 AM local)",
         check_still_good_produce_expiry_pushes,
@@ -294,7 +107,6 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     )
 
     # Task 4b: Still Good Freezer 1-Week Expiry Push Reminder (9:00 AM local time)
-    from scripts.cron_daily import check_still_good_freezer_expiry_pushes
     pipeline_results["still_good_freezer_pushes"] = safe_execute_task(
         "Still Good Freezer 1-Week Expiry Push Reminder (9:00 AM local)",
         check_still_good_freezer_expiry_pushes,
@@ -304,16 +116,9 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     )
 
     # Task 5: Store Plan Push Reminders (for stores with >= n items lacking a plan date)
-    plan_fn = check_store_plan_push_reminders
-    try:
-        from scripts import cron_daily
-        if hasattr(cron_daily, "check_store_plan_push_reminders") and cron_daily.check_store_plan_push_reminders != check_store_plan_push_reminders:
-            plan_fn = cron_daily.check_store_plan_push_reminders
-    except Exception:
-        pass
     pipeline_results["store_plan_push_reminders"] = safe_execute_task(
         "Store Plan Push Reminders",
-        plan_fn,
+        check_store_plan_push_reminders,
         dry_run=dry_run,
         force_send=force_send
     )
@@ -403,7 +208,7 @@ def main():
     if args.still_good_lunch:
         print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good morning fridge lunch push reminders via cron_hourly...")
         try:
-            from scripts.cron_daily import check_still_good_fridge_lunch_pushes
+            from push_helper import check_still_good_fridge_lunch_pushes
             stats = check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=args.dry_run, force_send=args.force)
             print(f"Still Good lunch pushes result: {stats}")
         except Exception as exc:
@@ -414,7 +219,7 @@ def main():
     if args.still_good_produce:
         print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good fresh produce expiry push reminders via cron_hourly...")
         try:
-            from scripts.cron_daily import check_still_good_produce_expiry_pushes
+            from push_helper import check_still_good_produce_expiry_pushes
             stats = check_still_good_produce_expiry_pushes(target_hour=10, dry_run=args.dry_run, force_send=args.force)
             print(f"Still Good produce pushes result: {stats}")
         except Exception as exc:
@@ -425,7 +230,7 @@ def main():
     if args.still_good_freezer:
         print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Still Good freezer 1-week expiry push reminders via cron_hourly...")
         try:
-            from scripts.cron_daily import check_still_good_freezer_expiry_pushes
+            from push_helper import check_still_good_freezer_expiry_pushes
             stats = check_still_good_freezer_expiry_pushes(target_hour=9, dry_run=args.dry_run, force_send=args.force)
             print(f"Still Good freezer pushes result: {stats}")
         except Exception as exc:

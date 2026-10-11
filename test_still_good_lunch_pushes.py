@@ -49,8 +49,8 @@ class TestStillGoodLunchPushNotifications(unittest.TestCase):
         self.assertIn("5 meals waiting", body)
         self.assertIn("Check Still Good before heading out", body)
 
-    @patch("scripts.cron_daily._init_schema")
-    @patch("scripts.cron_daily._run")
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
     @patch("push_helper.send_push_to_user")
     def test_check_still_good_fridge_lunch_pushes_dispatch(self, mock_send_push, mock_run, mock_init_schema):
         """Verify candidate users are evaluated, fridge meals retrieved, and pushes dispatched."""
@@ -108,8 +108,8 @@ class TestStillGoodLunchPushNotifications(unittest.TestCase):
 
         self.assertEqual(mock_send_push.call_count, 2)
 
-    @patch("scripts.cron_daily.check_trial_expiration_pushes")
-    @patch("scripts.cron_daily.check_still_good_fridge_lunch_pushes")
+    @patch("scripts.cron_hourly.check_trial_expiration_pushes")
+    @patch("scripts.cron_hourly.check_still_good_fridge_lunch_pushes")
     def test_run_hourly_pipeline_includes_still_good_lunch(self, mock_lunch_pushes, mock_trial_pushes):
         """Verify run_hourly_pipeline coordinates the Still Good 7:00 AM push task."""
         mock_trial_pushes.return_value = {"ok": True, "dispatched": 0}
