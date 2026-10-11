@@ -685,13 +685,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 }
 .sg-crisper-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 48px;
-  padding: 8px 12px;
+  flex-direction: column;
+  padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
-  gap: 8px;
   touch-action: pan-y;
   box-sizing: border-box;
 }
@@ -701,67 +698,86 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .sg-crisper-row:hover {
   background: #fcfcfc;
 }
+.sg-crisper-top-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sg-crisper-item-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.sg-crisper-bottom-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+.sg-crisper-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* Unified 32x32px action buttons with rounded corners */
 .sg-crisper-btn {
-  width: 44px;
-  height: 42px;
-  min-width: 44px;
-  min-height: 42px;
-  border: none;
-  background: transparent;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
   padding: 0;
   margin: 0;
   transition: all 0.12s ease;
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+.sg-crisper-btn:active {
+  transform: scale(0.92);
 }
 .sg-crisper-btn-check {
-  color: #10b981;
-  font-size: 18px;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+  font-size: 15px;
   font-weight: 700;
 }
-.sg-crisper-btn-check:hover, .sg-crisper-btn-check:active {
-  background: #ecfdf5;
-  color: #059669;
+.sg-crisper-btn-check:hover {
+  background: #d1fae5;
 }
 .sg-crisper-btn-del {
-  color: #9ca3af;
-  font-size: 15px;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+  font-size: 13px;
 }
-.sg-crisper-btn-del:hover, .sg-crisper-btn-del:active {
+.sg-crisper-btn-del:hover {
   background: #fee2e2;
+  border-color: #fca5a5;
   color: #ef4444;
 }
 .sg-crisper-btn-relist {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
-  border-radius: 50% !important;
-  border: 1px solid #cbd5e1 !important;
-  background: #ffffff !important;
-  color: #475569 !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  cursor: pointer;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  padding: 0 !important;
-  margin: 0 !important;
-  transition: all 0.15s ease;
-  box-sizing: border-box;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
 }
 .sg-crisper-btn-relist:hover:not(:disabled) {
-  background: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
-  color: #0f172a !important;
-}
-.sg-crisper-btn-relist:active:not(:disabled) {
-  transform: scale(0.92);
+  background: #f1f5f9;
+  color: #0f172a;
 }
 .sg-crisper-btn-relist:disabled {
   cursor: default;
@@ -5406,27 +5422,35 @@ function renderStillGoodItems() {
 
       var tipSublineHtml = '';
       if (item.ai_tip) {
-        tipSublineHtml = '<div style="font-size:11px; color:#047857; font-weight:500; margin-top:2px; margin-left:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="AI Storage Tip: ' + escapeHtml(item.ai_tip) + '">🤖 ' + escapeHtml(item.ai_tip) + '</div>';
+        tipSublineHtml = '<div style="font-size:11px; color:#047857; font-weight:500; margin-left:22px; display:flex; align-items:center; gap:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="AI Storage Tip: ' + escapeHtml(item.ai_tip) + '">🤖 ' + escapeHtml(item.ai_tip) + '</div>';
+      } else {
+        tipSublineHtml = '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-left:22px;">Stashed from trip</div>';
       }
 
-      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '" style="min-height:48px; padding:8px 12px;">' +
-        '<div style="display:flex; flex-direction:column; justify-content:center; min-width:0; flex:1; padding-right:6px;">' +
-          '<div style="display:flex; align-items:center; gap:6px; min-width:0;">' +
-            '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
-            '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" title="' + escapeHtml(item.name) + '">' +
+      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
+        '<div class="sg-crisper-top-line">' +
+          '<div class="sg-crisper-item-info">' +
+            '<span style="font-size:17px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
+            '<span style="font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + escapeHtml(item.name) + '">' +
               escapeHtml(item.name) +
             '</span>' +
             storeBadgeHtml +
           '</div>' +
-          tipSublineHtml +
+          '<div style="flex-shrink:0;">' +
+            '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 8px; border-radius:6px; white-space:nowrap;">' +
+              expiryText +
+            '</span>' +
+          '</div>' +
         '</div>' +
-        '<div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">' +
-          '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 7px; border-radius:6px; white-space:nowrap;">' +
-            expiryText +
-          '</span>' +
-          '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
-          '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
-          '<button type="button" class="sg-crisper-btn sg-crisper-btn-del" onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+        '<div class="sg-crisper-bottom-line">' +
+          '<div style="min-width:0; flex:1; padding-right:8px;">' +
+            tipSublineHtml +
+          '</div>' +
+          '<div class="sg-crisper-actions-group">' +
+            '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
+            '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
+            '<button type="button" class="sg-crisper-btn sg-crisper-btn-del" onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+          '</div>' +
         '</div>' +
       '</div>';
     });
