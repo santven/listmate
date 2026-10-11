@@ -33,8 +33,8 @@ class TestCronHourly(unittest.TestCase):
         self.assertIn("Database connection timed out", res["error"])
         self.assertGreaterEqual(res["duration_ms"], 0)
 
-    @patch("scripts.cron_daily.check_store_plan_push_reminders")
-    @patch("scripts.cron_daily.check_trial_expiration_pushes")
+    @patch("scripts.cron_hourly.check_store_plan_push_reminders")
+    @patch("scripts.cron_hourly.check_trial_expiration_pushes")
     def test_run_hourly_pipeline_dispatch(self, mock_trial_pushes, mock_plan_pushes):
         mock_trial_pushes.return_value = {"ok": True, "dispatched": 2, "candidates": 2}
         mock_plan_pushes.return_value = {"ok": True, "dispatched": 1, "candidates": 1}
@@ -55,10 +55,10 @@ class TestCronHourly(unittest.TestCase):
             force_send=True
         )
 
-    @patch("scripts.cron_daily.check_store_plan_push_reminders")
-    @patch("scripts.cron_daily.check_trial_expiration_pushes")
-    @patch("scripts.cron_daily.check_still_good_fridge_lunch_pushes")
-    @patch("scripts.cron_daily.check_still_good_produce_expiry_pushes")
+    @patch("scripts.cron_hourly.check_store_plan_push_reminders")
+    @patch("scripts.cron_hourly.check_trial_expiration_pushes")
+    @patch("scripts.cron_hourly.check_still_good_fridge_lunch_pushes")
+    @patch("scripts.cron_hourly.check_still_good_produce_expiry_pushes")
     @patch("still_good_ai.enhance_still_good_shelf_life_batch")
     def test_still_good_ai_4x_daily_schedule(self, mock_ai, mock_produce, mock_lunch, mock_trial, mock_plan):
         """Verify Still Good AI runs at 00:00, 06:00, 12:00, 18:00 UTC (12a, 6a, 12p, 6p GMT) and skips other hours."""

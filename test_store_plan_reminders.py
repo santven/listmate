@@ -20,8 +20,8 @@ import email_helper
 
 class TestStorePlanReminders(unittest.TestCase):
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_single_store(self, mock_send_push, mock_one, mock_run):
         # Candidate store with 6 items, no plan date
@@ -45,8 +45,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertIn("6 items", args[2])  # body
         self.assertEqual(args[3]["url"], "/?store_id=12&action=plan")
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_multi_stores_combined(self, mock_send_push, mock_one, mock_run):
         # Household has two qualifying stores: Indian Store (12) and Costco (10)
@@ -71,8 +71,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(args[3]["action"], "plan_modal")
         self.assertIn("/?action=plan_modal&stores=31,11", args[3]["url"])
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_general_list_only(self, mock_send_push, mock_one, mock_run):
         # Household has only General List with >= 10 items
@@ -95,8 +95,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(args[3]["action"], "general_list_info")
         self.assertIn("/?action=general_list_info&store_id=1", args[3]["url"])
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_general_list_excluded_from_multi(self, mock_send_push, mock_one, mock_run):
         # Household has Costco (12), Indian Store (11), and General List (15)
@@ -120,8 +120,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertNotIn("General List", args[2])
         self.assertIn("Costco and Indian Store", args[2])
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_24h_dedup(self, mock_send_push, mock_one, mock_run):
         # Candidate store with 7 items
@@ -139,8 +139,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(res["skipped_24h"], 1)
         mock_send_push.assert_not_called()
 
-    @patch("scripts.cron_daily._run")
-    @patch("scripts.cron_daily._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_check_store_plan_push_reminders_dry_run(self, mock_send_push, mock_one, mock_run):
         mock_run.return_value = [
@@ -259,8 +259,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(kwargs["sent_count"], 0)
         self.assertIn("No active push tokens for household", kwargs["errors"])
 
-    @patch("scripts.cron_hourly._run")
-    @patch("scripts.cron_hourly._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_cron_hourly_check_store_plan_push_reminders_no_tokens(self, mock_send_push, mock_one, mock_run):
         import scripts.cron_hourly as cron_hourly
@@ -277,8 +277,8 @@ class TestStorePlanReminders(unittest.TestCase):
         self.assertEqual(res["dispatched"], 0)
         self.assertEqual(res["results"][0]["status"], "skipped_no_tokens")
 
-    @patch("scripts.cron_hourly._run")
-    @patch("scripts.cron_hourly._one")
+    @patch("push_helper._run")
+    @patch("push_helper._one")
     @patch("push_helper.send_push_to_household")
     def test_dynamic_threshold_env_var(self, mock_send_push, mock_one, mock_run):
         import scripts.cron_hourly as cron_hourly
