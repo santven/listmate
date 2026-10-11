@@ -742,17 +742,20 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .sg-post-trip-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 4px 10px 4px 6px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   user-select: none;
+  gap: 8px;
+  box-sizing: border-box;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .sg-post-trip-row:hover {
   background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 /* ── Desktop Web Mobile App Download Drawer (Issue #615) ── */
@@ -1726,7 +1729,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
 
     <!-- Item List with checkboxes -->
-    <div id="sgPostTripItemsList" style="max-height:45vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+    <div id="sgPostTripItemsList" style="max-height:48vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:12px 0; display:flex; flex-direction:column; gap:6px; padding-right:2px;">
       <!-- Populated dynamically -->
     </div>
 
@@ -4882,20 +4885,23 @@ function renderSgPostTripCandidates(candidates) {
 
   var html = '';
   candidates.forEach(function(item) {
+    var cat = item.category || 'Fresh';
     html += '<label class="sg-post-trip-row">' +
-      '<input type="checkbox" class="sg-stash-checkbox" data-id="' + item.id + '" checked onchange="updateSgPostTripSelectedCount()" style="width:18px; height:18px; accent-color:var(--green); cursor:pointer; flex-shrink:0;">' +
-      '<div style="flex:1; min-width:0;">' +
-        '<div style="font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+      '<div style="width:36px; height:36px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">' +
+        '<input type="checkbox" class="sg-stash-checkbox" data-id="' + item.id + '" checked onchange="updateSgPostTripSelectedCount()" style="width:18px; height:18px; accent-color:var(--green); cursor:pointer;">' +
+      '</div>' +
+      '<div style="flex:1; min-width:0; display:flex; align-items:center; gap:8px;">' +
+        '<span style="font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;" title="' + escapeHtml(item.name) + '">' +
           escapeHtml(item.name) +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">' +
-          '<span style="font-size:11px; font-weight:600; background:#f1f5f9; color:#475569; padding:2px 7px; border-radius:6px; border:1px solid #e2e8f0;">' +
-            escapeHtml(item.category || 'Produce') +
-          '</span>' +
-          '<span style="font-size:11px; font-weight:600; background:#ecfdf5; color:#047857; padding:2px 7px; border-radius:6px; border:1px solid #a7f3d0;">' +
-            '⏳ ~' + (item.shelf_life_days || 5) + ' days shelf life' +
-          '</span>' +
-        '</div>' +
+        '</span>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">' +
+        '<span style="font-size:11px; font-weight:600; background:#f1f5f9; color:#475569; padding:3px 7px; border-radius:6px; border:1px solid #e2e8f0; white-space:nowrap;">' +
+          escapeHtml(cat) +
+        '</span>' +
+        '<span style="font-size:11px; font-weight:600; background:#ecfdf5; color:#047857; padding:3px 8px; border-radius:6px; border:1px solid #a7f3d0; white-space:nowrap; display:inline-flex; align-items:center; gap:3px;">' +
+          '❄️ Crisper' +
+        '</span>' +
       '</div>' +
     '</label>';
   });
