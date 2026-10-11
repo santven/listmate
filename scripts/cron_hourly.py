@@ -32,6 +32,7 @@ from push_helper import (
     check_still_good_fridge_lunch_pushes,
     check_still_good_produce_expiry_pushes,
     check_still_good_freezer_expiry_pushes,
+    check_post_shopping_smart_stash_pushes,
 )
 
 
@@ -119,6 +120,14 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     pipeline_results["store_plan_push_reminders"] = safe_execute_task(
         "Store Plan Push Reminders",
         check_store_plan_push_reminders,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
+    # Task 6: Still Good Post-Shopping Smart Stash Push Reminder (Runs hourly for trips >= 3 hours ago)
+    pipeline_results["smart_stash_pushes"] = safe_execute_task(
+        "Still Good Post-Shopping Smart Stash Push (3h post-trip)",
+        check_post_shopping_smart_stash_pushes,
         dry_run=dry_run,
         force_send=force_send
     )
