@@ -634,6 +634,127 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   border-color: #e2e8f0;
 }
 
+/* ── Anti-Clutter Crisper Drawer (Issue #632) ── */
+#sgCrisperDrawer {
+  touch-action: pan-y;
+  background: #ffffff;
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.sg-crisper-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  background: #f0fdf4;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.sg-crisper-header:active {
+  background: #dcfce7;
+}
+.sg-crisper-urgency-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  line-height: 1.2;
+}
+.sg-crisper-toggle-btn {
+  display: inline-block;
+  background: #ffffff;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+.sg-crisper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+  gap: 8px;
+  touch-action: pan-y;
+  box-sizing: border-box;
+}
+.sg-crisper-row:last-child {
+  border-bottom: none;
+}
+.sg-crisper-row:hover {
+  background: #fcfcfc;
+}
+.sg-crisper-btn {
+  width: 44px;
+  height: 42px;
+  min-width: 44px;
+  min-height: 42px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+  margin: 0;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sg-crisper-btn-check {
+  color: #10b981;
+  font-size: 18px;
+  font-weight: 700;
+}
+.sg-crisper-btn-check:hover, .sg-crisper-btn-check:active {
+  background: #ecfdf5;
+  color: #059669;
+}
+.sg-crisper-btn-del {
+  color: #9ca3af;
+  font-size: 15px;
+}
+.sg-crisper-btn-del:hover, .sg-crisper-btn-del:active {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* ── Post-Shopping Smart Stash Bottom Drawer (Issue #632) ── */
+.sg-post-trip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.sg-post-trip-row:hover {
+  background: #f1f5f9;
+}
+
 /* ── Desktop Web Mobile App Download Drawer (Issue #615) ── */
 .desktop-mobile-drawer {
   position: fixed;
@@ -897,14 +1018,19 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       var sourceParam = urlParams.get('source');
       var tabParam = urlParams.get('tab');
       if (sourceParam && sourceParam.indexOf('push') !== -1) {
-        if (sourceParam !== 'push_freezer_9am') {
+        if (sourceParam !== 'push_freezer_9am' && sourceParam !== 'push_smart_stash_3h') {
           sessionStorage.setItem('sg_push_prompt_active', '1');
         }
+      }
+      if (tabParam === 'stash' || sourceParam === 'push_smart_stash_3h') {
+        localStorage.setItem('sg_crisper_open', 'true');
       }
       setTimeout(() => {
         showStillGoodScreen();
         if (tabParam === 'freezer' || (sourceParam && sourceParam.indexOf('freezer') !== -1)) {
           switchSgTab('freezer');
+        } else if (tabParam === 'stash' || sourceParam === 'push_smart_stash_3h') {
+          checkPostTripStashCandidates(true);
         }
       }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
@@ -1580,6 +1706,36 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 </div>
 
+<!-- Post-Shopping Smart Stash Bottom Drawer (Issue #632) -->
+<div class="modal-overlay" id="sgPostTripModal" style="z-index: 10045;" onclick="dismissSgPostTripModal(event)">
+  <div class="modal-sheet" style="padding:20px 18px calc(24px + env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; text-align:left; max-width:520px; margin:0 auto; box-shadow:0 -10px 25px rgba(0,0,0,0.18);" onclick="event.stopPropagation()">
+    <!-- Drag bar / handle -->
+    <div style="width:38px; height:4px; background:#cbd5e1; border-radius:2px; margin:0 auto 12px auto;"></div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+      <div>
+        <h3 id="sgPostTripTitle" style="margin:0; font-size:18px; font-weight:800; color:var(--text); line-height:1.3;">🛍️ Unpacked your groceries?</h3>
+        <p id="sgPostTripSubtitle" style="margin:6px 0 0 0; font-size:13px; color:var(--muted); line-height:1.45;">We found <span id="sgPostTripCount">0</span> fresh items from your recent shopping trip. Track them in your Crisper Drawer so nothing spoils:</p>
+      </div>
+      <button type="button" onclick="dismissSgPostTripModal()" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:8px;" aria-label="Close">✕</button>
+    </div>
+
+    <!-- Item List with checkboxes -->
+    <div id="sgPostTripItemsList" style="max-height:45vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:14px 0; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+      <!-- Populated dynamically -->
+    </div>
+
+    <!-- Actions / Buttons -->
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+      <button type="button" id="btnSgPostTripStash" onclick="submitSgPostTripStash()" style="width:100%; background:var(--green); color:#fff; border:none; padding:13px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(94,190,126,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span id="btnSgPostTripStashText">🍲 Stash Selected (0) to Crisper Drawer (1-Tap)</span>
+      </button>
+      <button type="button" id="btnSgPostTripDismiss" onclick="dismissSgPostTripModal()" style="width:100%; background:#f1f5f9; border:1px solid #e2e8f0; color:var(--muted); padding:11px; border-radius:12px; font-size:13px; font-weight:600; cursor:pointer;">
+        Remind Me Later / Dismiss
+      </button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="globalPlanModal">
   <div class="modal-sheet" style="padding:24px 20px; border-radius:20px 20px 0 0;">
@@ -2281,6 +2437,10 @@ async function loadData() {
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.checkAndApply();
   }
+
+  if (currentScreen === 'home') {
+    checkPostTripStashCandidates();
+  }
 }
 
 function updateFiltersUI() {
@@ -2667,6 +2827,10 @@ function renderHome() {
 
   if (window.featureDiscoveryEngine) {
     window.featureDiscoveryEngine.checkAndApply();
+  }
+
+  if (currentScreen === 'home') {
+    checkPostTripStashCandidates();
   }
 }
 
@@ -4660,6 +4824,211 @@ function updateSgBannerDisplay() {
   textEl.textContent = msg;
 }
 
+// ── Post-Shopping Smart Stash Bottom Drawer Logic (Issue #632) ──
+var isCheckingStashCandidates = false;
+var lastStashCheckTime = 0;
+
+async function checkPostTripStashCandidates(force) {
+  if (currentScreen !== 'home' && !force) return;
+  if (sessionStorage.getItem('dismissed_stash_candidates') && !force) return;
+  var modal = document.getElementById('sgPostTripModal');
+  if (modal && modal.classList.contains('active')) return;
+  if (isCheckingStashCandidates) return;
+  
+  var now = Date.now();
+  if (!force && now - lastStashCheckTime < 10000) return;
+  lastStashCheckTime = now;
+  isCheckingStashCandidates = true;
+
+  try {
+    var res = await fetch(API + '/still-good/stash-candidates').then(function(r) { return r.json(); }).catch(function() { return null; });
+    if (res && res.ok && Array.isArray(res.candidates) && res.candidates.length > 0) {
+      if ((currentScreen === 'home' || force) && (!sessionStorage.getItem('dismissed_stash_candidates') || force)) {
+        renderSgPostTripCandidates(res.candidates);
+        if (modal) modal.classList.add('active');
+      }
+    }
+  } catch (e) {
+    console.warn('Error checking post-trip stash candidates:', e);
+  } finally {
+    isCheckingStashCandidates = false;
+  }
+}
+window.checkPostTripStashCandidates = checkPostTripStashCandidates;
+
+function renderSgPostTripCandidates(candidates) {
+  var countEl = document.getElementById('sgPostTripCount');
+  if (countEl) countEl.textContent = candidates.length;
+
+  var subtitleEl = document.getElementById('sgPostTripSubtitle');
+  if (subtitleEl) {
+    subtitleEl.innerHTML = 'We found <span id="sgPostTripCount">' + candidates.length + '</span> fresh item' + (candidates.length === 1 ? '' : 's') + ' from your recent shopping trip. Track them in your Crisper Drawer so nothing spoils:';
+  }
+
+  var listEl = document.getElementById('sgPostTripItemsList');
+  if (!listEl) return;
+
+  var html = '';
+  candidates.forEach(function(item) {
+    html += '<label class="sg-post-trip-row">' +
+      '<input type="checkbox" class="sg-stash-checkbox" data-id="' + item.id + '" checked onchange="updateSgPostTripSelectedCount()" style="width:18px; height:18px; accent-color:var(--green); cursor:pointer; flex-shrink:0;">' +
+      '<div style="flex:1; min-width:0;">' +
+        '<div style="font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+          escapeHtml(item.name) +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">' +
+          '<span style="font-size:11px; font-weight:600; background:#f1f5f9; color:#475569; padding:2px 7px; border-radius:6px; border:1px solid #e2e8f0;">' +
+            escapeHtml(item.category || 'Produce') +
+          '</span>' +
+          '<span style="font-size:11px; font-weight:600; background:#ecfdf5; color:#047857; padding:2px 7px; border-radius:6px; border:1px solid #a7f3d0;">' +
+            '⏳ ~' + (item.shelf_life_days || 5) + ' days shelf life' +
+          '</span>' +
+        '</div>' +
+      '</div>' +
+    '</label>';
+  });
+
+  listEl.innerHTML = html;
+  updateSgPostTripSelectedCount();
+}
+
+function updateSgPostTripSelectedCount() {
+  var checked = document.querySelectorAll('.sg-stash-checkbox:checked');
+  var count = checked.length;
+  var btn = document.getElementById('btnSgPostTripStash');
+  var btnText = document.getElementById('btnSgPostTripStashText');
+
+  if (btnText) {
+    if (count > 0) {
+      btnText.textContent = '🍲 Stash Selected (' + count + ') to Crisper Drawer (1-Tap)';
+    } else {
+      btnText.textContent = 'Select items to Stash';
+    }
+  }
+  if (btn) {
+    btn.disabled = (count === 0);
+    btn.style.opacity = (count === 0) ? '0.6' : '1';
+    btn.style.cursor = (count === 0) ? 'not-allowed' : 'pointer';
+  }
+}
+window.updateSgPostTripSelectedCount = updateSgPostTripSelectedCount;
+
+async function submitSgPostTripStash() {
+  var checkboxes = document.querySelectorAll('.sg-stash-checkbox:checked');
+  var ids = [];
+  checkboxes.forEach(function(cb) {
+    var val = parseInt(cb.getAttribute('data-id'), 10);
+    if (val) ids.push(val);
+  });
+
+  if (ids.length === 0) {
+    if (typeof toast === 'function') toast('Please select at least one item to stash.');
+    return;
+  }
+
+  var btn = document.getElementById('btnSgPostTripStash');
+  var btnText = document.getElementById('btnSgPostTripStashText');
+  var origText = btnText ? btnText.textContent : '';
+
+  try {
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Stashing...';
+
+    var res = await fetch(API + '/still-good/stash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_ids: ids })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      sessionStorage.setItem('dismissed_stash_candidates', '1');
+      var modal = document.getElementById('sgPostTripModal');
+      if (modal) modal.classList.remove('active');
+
+      if (typeof fireCelebration === 'function') {
+        fireCelebration(false);
+      }
+      var count = res.stashed_count !== undefined ? res.stashed_count : ids.length;
+      if (typeof toast === 'function') {
+        toast('✅ Stashed ' + count + ' fresh item' + (count === 1 ? '' : 's') + ' into your Crisper Drawer!');
+      }
+
+      if (typeof loadStillGood === 'function') {
+        loadStillGood();
+      }
+    } else {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = origText;
+      if (typeof toast === 'function') {
+        toast((res && res.error) ? res.error : 'Could not stash items.');
+      }
+    }
+  } catch (err) {
+    console.error('Error stashing post-trip items:', err);
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = origText;
+    if (typeof toast === 'function') {
+      toast('Could not stash items. Please try again.');
+    }
+  }
+}
+window.submitSgPostTripStash = submitSgPostTripStash;
+
+function dismissSgPostTripModal(event) {
+  if (event && event.target && event.target.id !== 'sgPostTripModal' && event.target.tagName !== 'BUTTON') {
+    return;
+  }
+  sessionStorage.setItem('dismissed_stash_candidates', '1');
+  var modal = document.getElementById('sgPostTripModal');
+  if (modal) modal.classList.remove('active');
+}
+window.dismissSgPostTripModal = dismissSgPostTripModal;
+
+// ── Crisper Drawer Helpers (Issue #632) ──
+function getCrisperItemIcon(name) {
+  var n = (name || '').toLowerCase();
+  if (n.includes('apple')) return '🍎';
+  if (n.includes('banana')) return '🍌';
+  if (n.includes('strawberr') || n.includes('blueberr') || n.includes('raspberr') || n.includes('berry')) return '🍓';
+  if (n.includes('avocado')) return '🥑';
+  if (n.includes('tomato')) return '🍅';
+  if (n.includes('carrot')) return '🥕';
+  if (n.includes('broccoli')) return '🥦';
+  if (n.includes('onion') || n.includes('garlic')) return '🧅';
+  if (n.includes('potato')) return '🥔';
+  if (n.includes('salad') || n.includes('lettuce') || n.includes('spinach') || n.includes('kale') || n.includes('green') || n.includes('herb')) return '🥬';
+  if (n.includes('pepper')) return '🫑';
+  if (n.includes('lemon') || n.includes('lime') || n.includes('citrus')) return '🍋';
+  if (n.includes('orange') || n.includes('tangerine') || n.includes('clementine')) return '🍊';
+  if (n.includes('grape')) return '🍇';
+  if (n.includes('mushroom')) return '🍄';
+  if (n.includes('corn')) return '🌽';
+  if (n.includes('cucumber')) return '🥒';
+  if (n.includes('milk') || n.includes('cream') || n.includes('yogurt')) return '🥛';
+  if (n.includes('cheese')) return '🧀';
+  if (n.includes('bread') || n.includes('bakery') || n.includes('bagel')) return '🍞';
+  if (n.includes('egg')) return '🥚';
+  if (n.includes('meat') || n.includes('chicken') || n.includes('beef') || n.includes('turkey') || n.includes('pork') || n.includes('bacon')) return '🥩';
+  if (n.includes('fish') || n.includes('salmon') || n.includes('tuna') || n.includes('shrimp')) return '🐟';
+  return '🥬';
+}
+
+function toggleCrisperDrawer() {
+  var isCurrentlyOpen = localStorage.getItem('sg_crisper_open') === 'true';
+  var nextState = !isCurrentlyOpen;
+  localStorage.setItem('sg_crisper_open', nextState ? 'true' : 'false');
+  var content = document.getElementById('sgCrisperContent');
+  var arrow = document.getElementById('sgCrisperToggleArrow');
+  if (content) {
+    content.style.display = nextState ? 'flex' : 'none';
+  }
+  if (arrow) {
+    arrow.textContent = nextState ? 'Hide ▴' : 'Show ▾';
+  }
+}
+window.toggleCrisperDrawer = toggleCrisperDrawer;
+
+// ── Upgraded renderStillGoodItems() Implementation (Issue #632) ──
 function renderStillGoodItems() {
   var listEl = document.getElementById('sgItemsList');
   if (!listEl) return;
@@ -4696,8 +5065,27 @@ function renderStillGoodItems() {
     return;
   }
 
+  // Separate refrigerator items into meals and crisper_items
+  var meals = [];
+  var crisper_items = [];
+
+  if (sgActiveTab === 'fridge') {
+    currentItems.forEach(function(item) {
+      if (item.item_type === 'produce' || item.list_item_id) {
+        crisper_items.push(item);
+      } else {
+        meals.push(item);
+      }
+    });
+  } else {
+    meals = currentItems;
+    crisper_items = [];
+  }
+
   var html = '';
-  currentItems.forEach(function(item) {
+
+  // Render meals first as full cards
+  meals.forEach(function(item) {
     var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home Meal</span>';
     if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
     else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch Cook</span>';
@@ -4778,9 +5166,98 @@ function renderStillGoodItems() {
     '</div>';
   });
 
+  if (meals.length === 0 && crisper_items.length > 0) {
+    html += '<div style="text-align:center; padding:20px 16px; background:#fff; border-radius:14px; border:1px dashed var(--border); margin-bottom:12px;">' +
+      '<div style="font-size:24px; margin-bottom:4px;">🍲</div>' +
+      '<div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:2px;">No prepared leftovers</div>' +
+      '<div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Cooked a meal or got takeout? Add it to track alongside your groceries.</div>' +
+      '<button onclick="openAddStillGoodModal(\'fridge\')" style="background:var(--green); color:#fff; border:none; padding:8px 14px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer;">+ Add Fridge Leftover</button>' +
+    '</div>';
+  }
+
+  // Render crisper_items inside collapsible Crisper Drawer container
+  if (crisper_items.length > 0) {
+    var isCrisperOpen = localStorage.getItem('sg_crisper_open') === 'true';
+
+    // Urgency badge if any item expires in <= 2 days
+    var urgentProduce = crisper_items.filter(function(i) {
+      return i.days_left !== null && i.days_left !== undefined && i.days_left <= 2;
+    });
+    urgentProduce.sort(function(a, b) {
+      return (a.days_left || 0) - (b.days_left || 0);
+    });
+
+    var urgencyBadgeHtml = '';
+    if (urgentProduce.length > 0) {
+      var uItem = urgentProduce[0];
+      urgencyBadgeHtml = '<span class="sg-crisper-urgency-badge" title="' + escapeHtml(uItem.name) + ' expires soon">⚠️ ' + escapeHtml(uItem.name) + ' expires soon</span>';
+    }
+
+    var crisperRowsHtml = '';
+    crisper_items.forEach(function(item) {
+      var icon = getCrisperItemIcon(item.name);
+      var expiryText = '';
+      var badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
+
+      if (item.days_left !== null && item.days_left !== undefined) {
+        if (item.days_left < 0) {
+          expiryText = '⚠️ ' + Math.abs(item.days_left) + 'd past';
+          badgeStyle = 'background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;';
+        } else if (item.days_left === 0) {
+          expiryText = '⚠️ Today';
+          badgeStyle = 'background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;';
+        } else if (item.days_left === 1) {
+          expiryText = '⏳ 1 day left';
+          badgeStyle = 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;';
+        } else if (item.days_left === 2) {
+          expiryText = '⏳ 2 days left';
+          badgeStyle = 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;';
+        } else {
+          expiryText = '⏳ ' + item.days_left + ' days left';
+        }
+      } else {
+        expiryText = '⏳ Fresh';
+      }
+
+      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
+        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">' +
+          '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
+          '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;" title="' + escapeHtml(item.name) + '">' +
+            escapeHtml(item.name) +
+          '</span>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">' +
+          '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 7px; border-radius:6px; white-space:nowrap;">' +
+            expiryText +
+          '</span>' +
+          '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
+          '<button type="button" class="sg-crisper-btn sg-crisper-btn-del" onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+        '</div>' +
+      '</div>';
+    });
+
+    html += '<div id="sgCrisperDrawer" class="sg-crisper-drawer">' +
+      '<div class="sg-crisper-header" onclick="toggleCrisperDrawer()" role="button" tabindex="0">' +
+        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; flex-wrap:wrap;">' +
+          '<span style="font-size:14px; font-weight:700; color:#166534; white-space:nowrap;">🥬 Crisper Drawer (' + crisper_items.length + ')</span>' +
+          urgencyBadgeHtml +
+        '</div>' +
+        '<div style="flex-shrink:0;">' +
+          '<span id="sgCrisperToggleArrow" class="sg-crisper-toggle-btn">' +
+            (isCrisperOpen ? 'Hide ▴' : 'Show ▾') +
+          '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="sgCrisperContent" style="display:' + (isCrisperOpen ? 'flex' : 'none') + '; flex-direction:column; touch-action:pan-y;">' +
+        crisperRowsHtml +
+      '</div>' +
+    '</div>';
+  }
+
   listEl.innerHTML = html;
 
-  currentItems.forEach(function(item) {
+  // Gesture safety: Only meals have card swipe attached; crisper drawer items do not
+  meals.forEach(function(item) {
     attachSgSwipe(item.id);
   });
 }

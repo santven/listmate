@@ -3062,6 +3062,199 @@ def still_good_vacation_freeze_endpoint():
         db.close()
 
 
+def _is_stash_candidate_category(category):
+    if not category or not str(category).strip():
+        return True  # uncategorized fresh items
+    cat = str(category).strip().lower()
+    if cat in ("uncategorized", "other", "general", "misc", "miscellaneous"):
+        return True
+    perishables = ["produce", "dairy", "meat", "seafood", "refrigerated", "deli", "bakery"]
+    for p in perishables:
+        if p in cat:
+            return True
+    return False
+
+
+def _get_suggested_shelf_life(category):
+    if not category:
+        return 5
+    cat = str(category).strip().lower()
+    if "seafood" in cat:
+        return 2
+    if "meat" in cat:
+        return 3
+    if "bakery" in cat:
+        return 4
+    if "dairy" in cat:
+        return 5
+    if "produce" in cat:
+        return 5
+    if "refrigerated" in cat or "deli" in cat:
+        return 5
+    return 5
+
+
+@app.route("/api/still-good/stash-candidates", methods=["GET"])
+@require_user
+def still_good_stash_candidates_endpoint():
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
+
+        sql = """
+            SELECT id, name, category, quantity, store_id, purchased_at
+            FROM list_items
+            WHERE household_id = ?
+              AND purchased = TRUE
+              AND still_good_stashed_at IS NULL
+              AND (
+                (trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours')
+                OR (purchased_at <= NOW() - INTERVAL '3 hours')
+              )
+              AND purchased_at >= NOW() - INTERVAL '48 hours'
+            ORDER BY purchased_at DESC
+        """
+        cur = db.execute(sql, (hhid,))
+        rows = cur.fetchall() if cur else []
+
+        candidates = []
+        import datetime
+        for row in rows:
+            cat = row.get("category") or ""
+            if not _is_stash_candidate_category(cat):
+                continue
+
+            p_at = row.get("purchased_at")
+            if p_at:
+                if hasattr(p_at, "date"):
+                    p_date = p_at.date()
+                else:
+                    try:
+                        p_date = datetime.date.fromisoformat(str(p_at)[:10])
+                    except Exception:
+                        p_date = datetime.date.today()
+            else:
+                p_date = datetime.date.today()
+
+            shelf_life = _get_suggested_shelf_life(cat)
+            consume_by_date = p_date + datetime.timedelta(days=shelf_life)
+
+            candidates.append({
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "category": cat,
+                "quantity": row.get("quantity") or "",
+                "store_id": row.get("store_id"),
+                "purchased_at": p_at.isoformat() if hasattr(p_at, "isoformat") else str(p_at) if p_at else None,
+                "suggested_consume_by": consume_by_date.isoformat(),
+                "shelf_life_days": shelf_life,
+            })
+
+        return jsonify({"ok": True, "candidates": candidates})
+    except Exception as exc:
+        print(f"[STILL GOOD ERROR] Error fetching stash candidates: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/stash", methods=["POST"])
+@require_user
+def still_good_stash_endpoint():
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
+
+        data = request.get_json(silent=True) or {}
+        raw_ids = data.get("item_ids")
+        if raw_ids is None or not isinstance(raw_ids, list):
+            return jsonify({"ok": False, "error": "item_ids must be a list"}), 400
+
+        clean_ids = []
+        for i in raw_ids:
+            try:
+                val = int(i)
+                if val > 0:
+                    clean_ids.append(val)
+            except (ValueError, TypeError):
+                pass
+
+        if not clean_ids:
+            return jsonify({"ok": True, "stashed_count": 0, "items": []})
+
+        placeholders = ",".join("?" for _ in clean_ids)
+        update_sql = f"""
+            UPDATE list_items
+            SET still_good_stashed_at = NOW()
+            WHERE id IN ({placeholders})
+              AND household_id = ?
+              AND purchased = TRUE
+              AND still_good_stashed_at IS NULL
+            RETURNING id, name, category, purchased_at
+        """
+        cur = db.execute(update_sql, tuple(clean_ids) + (hhid,))
+        claimed = cur.fetchall() if cur else []
+
+        stashed = []
+        import datetime
+        for itm in claimed:
+            p_at = itm.get("purchased_at")
+            if p_at:
+                if hasattr(p_at, "date"):
+                    p_date = p_at.date()
+                else:
+                    try:
+                        p_date = datetime.date.fromisoformat(str(p_at)[:10])
+                    except Exception:
+                        p_date = datetime.date.today()
+            else:
+                p_date = datetime.date.today()
+
+            date_added_str = p_date.isoformat()
+            consume_by_date = p_date + datetime.timedelta(days=5)
+            consume_by_str = consume_by_date.isoformat()
+
+            insert_cur = db.execute(
+                """
+                INSERT INTO still_good_items 
+                (household_id, name, location, item_type, servings, date_added, consume_by, status, list_item_id, shelf_life_days)
+                VALUES (?, ?, 'fridge', 'produce', 1, ?::date, ?::date, 'active', ?, 5)
+                RETURNING id
+                """,
+                (hhid, itm["name"], date_added_str, consume_by_str, itm["id"])
+            )
+            sg_row = insert_cur.fetchone() if insert_cur else None
+            sg_id = sg_row["id"] if sg_row else None
+
+            stashed.append({
+                "id": sg_id,
+                "list_item_id": itm["id"],
+                "name": itm["name"],
+                "category": itm.get("category") or "",
+                "date_added": date_added_str,
+                "consume_by": consume_by_str,
+                "status": "active"
+            })
+
+        db.commit()
+        return jsonify({"ok": True, "stashed_count": len(stashed), "items": stashed})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[STILL GOOD ERROR] Error stashing items: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/still-good/<int:item_id>", methods=["PUT", "DELETE"])
 @require_user
 def still_good_item_endpoint(item_id):
@@ -3858,7 +4051,8 @@ def toggle_list_item(item_id):
             return jsonify({"error": "not found"}), 404
 
         if item["purchased"]:
-            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL WHERE id=?", (item_id,))
+            db.execute("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'", (item["id"], _hh()))
+            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL WHERE id=?", (item_id,))
         else:
             db.execute(
                 "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?",
@@ -4322,7 +4516,8 @@ def sync_offline_actions():
                     item = db.execute("SELECT * FROM list_items WHERE id = ? AND household_id = ?", (item_id, hh_id)).fetchone()
                     if item:
                         if item["purchased"]:
-                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL WHERE id=?", (item_id,))
+                            db.execute("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'", (item["id"], hh_id))
+                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL WHERE id=?", (item_id,))
                         else:
                             db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?", (display_name, current_uid, item_id))
                             db.execute("""
