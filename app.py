@@ -3105,19 +3105,32 @@ def still_good_stash_candidates_endpoint():
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
-        sql = """
-            SELECT id, name, category, quantity, store_id, purchased_at
-            FROM list_items
-            WHERE household_id = ?
-              AND purchased = TRUE
-              AND still_good_stashed_at IS NULL
-              AND (
-                (trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours')
-                OR (purchased_at <= NOW() - INTERVAL '3 hours')
-              )
-              AND purchased_at >= NOW() - INTERVAL '48 hours'
-            ORDER BY purchased_at DESC
-        """
+        skip_quarantine = request.args.get("skip_quarantine") in ("1", "true", "yes") or request.args.get("test") in ("1", "true") or request.args.get("test_stash") in ("1", "true")
+
+        if skip_quarantine:
+            sql = """
+                SELECT id, name, category, quantity, store_id, purchased_at
+                FROM list_items
+                WHERE household_id = ?
+                  AND purchased = TRUE
+                  AND still_good_stashed_at IS NULL
+                  AND purchased_at >= NOW() - INTERVAL '48 hours'
+                ORDER BY purchased_at DESC
+            """
+        else:
+            sql = """
+                SELECT id, name, category, quantity, store_id, purchased_at
+                FROM list_items
+                WHERE household_id = ?
+                  AND purchased = TRUE
+                  AND still_good_stashed_at IS NULL
+                  AND (
+                    (trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours')
+                    OR (purchased_at <= NOW() - INTERVAL '3 hours')
+                  )
+                  AND purchased_at >= NOW() - INTERVAL '48 hours'
+                ORDER BY purchased_at DESC
+            """
         cur = db.execute(sql, (hhid,))
         rows = cur.fetchall() if cur else []
 

@@ -1033,6 +1033,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           checkPostTripStashCandidates(true);
         }
       }, 500);
+    } else if (modalParam === 'stash' || actionParam === 'stash' || urlParams.get('test_stash') === '1' || urlParams.get('skip_quarantine') === '1') {
+      sessionStorage.removeItem('dismissed_stash_candidates');
+      setTimeout(() => {
+        checkPostTripStashCandidates(true, true);
+      }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
       localStorage.removeItem('open_recipes');
       setTimeout(() => {
@@ -4828,22 +4833,29 @@ function updateSgBannerDisplay() {
 var isCheckingStashCandidates = false;
 var lastStashCheckTime = 0;
 
-async function checkPostTripStashCandidates(force) {
-  if (currentScreen !== 'home' && !force) return;
-  if (sessionStorage.getItem('dismissed_stash_candidates') && !force) return;
+async function checkPostTripStashCandidates(force, bypassQuarantine) {
+  var urlParams = new URLSearchParams(window.location.search);
+  var isTest = Boolean(bypassQuarantine || urlParams.get('test_stash') === '1' || urlParams.get('skip_quarantine') === '1' || urlParams.get('modal') === 'stash');
+  if (isTest) {
+    sessionStorage.removeItem('dismissed_stash_candidates');
+  }
+
+  if (currentScreen !== 'home' && !force && !isTest) return;
+  if (sessionStorage.getItem('dismissed_stash_candidates') && !force && !isTest) return;
   var modal = document.getElementById('sgPostTripModal');
   if (modal && modal.classList.contains('active')) return;
   if (isCheckingStashCandidates) return;
   
   var now = Date.now();
-  if (!force && now - lastStashCheckTime < 10000) return;
+  if (!force && !isTest && now - lastStashCheckTime < 10000) return;
   lastStashCheckTime = now;
   isCheckingStashCandidates = true;
 
   try {
-    var res = await fetch(API + '/still-good/stash-candidates').then(function(r) { return r.json(); }).catch(function() { return null; });
+    var queryParam = isTest ? '?skip_quarantine=1' : '';
+    var res = await fetch(API + '/still-good/stash-candidates' + queryParam).then(function(r) { return r.json(); }).catch(function() { return null; });
     if (res && res.ok && Array.isArray(res.candidates) && res.candidates.length > 0) {
-      if ((currentScreen === 'home' || force) && (!sessionStorage.getItem('dismissed_stash_candidates') || force)) {
+      if ((currentScreen === 'home' || force || isTest) && (!sessionStorage.getItem('dismissed_stash_candidates') || force || isTest)) {
         renderSgPostTripCandidates(res.candidates);
         if (modal) modal.classList.add('active');
       }
