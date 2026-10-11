@@ -149,7 +149,7 @@ class PgConnection:
 _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS stores (id SERIAL PRIMARY KEY, name TEXT NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS store_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1)",
-    "CREATE TABLE IF NOT EXISTS list_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL DEFAULT '', added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, added_at TIMESTAMP NOT NULL DEFAULT NOW(), purchased BOOLEAN NOT NULL DEFAULT FALSE, purchased_by TEXT, purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, purchased_at TIMESTAMP, quantity TEXT DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1)",
+    "CREATE TABLE IF NOT EXISTS list_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL DEFAULT '', added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, added_at TIMESTAMP NOT NULL DEFAULT NOW(), purchased BOOLEAN NOT NULL DEFAULT FALSE, purchased_by TEXT, purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, purchased_at TIMESTAMP, quantity TEXT DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1, still_good_stashed_at TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS store_visits (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), household_id INTEGER NOT NULL DEFAULT 1, visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
     "CREATE INDEX IF NOT EXISTS idx_si_store ON store_items(store_id, household_id)",
@@ -167,11 +167,13 @@ _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS app_invites (id SERIAL PRIMARY KEY, sender_email TEXT, household_id INTEGER, recipient_email TEXT NOT NULL, sent_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS item_taxonomy (id SERIAL PRIMARY KEY, normalized_name VARCHAR(120) UNIQUE NOT NULL, category VARCHAR(60) NOT NULL, source VARCHAR(30) DEFAULT 'manual', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_item_taxonomy_norm ON item_taxonomy(normalized_name)",
-    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, snooze_until DATE, remind_cadence VARCHAR(16) NOT NULL DEFAULT 'daily', status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', ai_estimated BOOLEAN NOT NULL DEFAULT FALSE, ai_estimated_at TIMESTAMP, shelf_life_days INTEGER, ai_tip TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, snooze_until DATE, remind_cadence VARCHAR(16) NOT NULL DEFAULT 'daily', status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', ai_estimated BOOLEAN NOT NULL DEFAULT FALSE, ai_estimated_at TIMESTAMP, shelf_life_days INTEGER, ai_tip TEXT DEFAULT '', list_item_id INTEGER REFERENCES list_items(id) ON DELETE SET NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_status ON still_good_items(household_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_id, location)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_snooze ON still_good_items(household_id, snooze_until)",
+    "CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)",
 ]
 
 def init_db():
@@ -233,6 +235,25 @@ def init_db():
         _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS remind_cadence VARCHAR(16) DEFAULT 'daily'")
         _safe_exec("CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)")
         _safe_exec("CREATE INDEX IF NOT EXISTS idx_still_good_snooze ON still_good_items(household_id, snooze_until)")
+
+        try:
+            db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS still_good_stashed_at TIMESTAMP")
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+
+        try:
+            db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS list_item_id INTEGER REFERENCES list_items(id) ON DELETE SET NULL")
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+
+        try:
+            db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)")
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
 
         # Migrate still_good_items: drop default and enforce foreign key
         try:
