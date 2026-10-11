@@ -737,6 +737,53 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   background: #fee2e2;
   color: #ef4444;
 }
+.sg-crisper-btn-relist {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 50% !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  margin: 0 !important;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+.sg-crisper-btn-relist:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+.sg-crisper-btn-relist:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.sg-crisper-btn-relist:disabled {
+  cursor: default;
+}
+.sg-crisper-store-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
 
 /* ── Post-Shopping Smart Stash Bottom Drawer (Issue #632) ── */
 .sg-post-trip-row {
@@ -5046,6 +5093,92 @@ function toggleCrisperDrawer() {
 }
 window.toggleCrisperDrawer = toggleCrisperDrawer;
 
+// ── Crisper Drawer 1-Tap Re-order (Issue #632 Iteration 2) ──
+async function stillGoodAddToList(sgItemId, event) {
+  if (event) {
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+  }
+
+  var btn = document.getElementById('sgReorderBtn_' + sgItemId);
+  var origHtml = btn ? btn.innerHTML : '🛒+';
+  var origTitle = btn ? btn.title : '';
+  var origBg = btn ? btn.style.background : '';
+  var origBorder = btn ? btn.style.borderColor : '';
+  var origColor = btn ? btn.style.color : '';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '✓';
+    btn.style.background = '#ecfdf5';
+    btn.style.borderColor = '#a7f3d0';
+    btn.style.color = '#047857';
+  }
+
+  try {
+    var res = await fetch(API + '/still-good/' + sgItemId + '/add-to-list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      if (res.already_on_list) {
+        if (typeof toast === 'function') {
+          toast('ℹ️ ' + (res.message || 'Already on your shopping list'));
+        }
+        if (btn) {
+          btn.disabled = true;
+          btn.title = 'Already on list';
+        }
+      } else if (res.added) {
+        var storeTxt = res.store_name || 'shopping';
+        var itemTxt = res.name || 'item';
+        if (typeof toast === 'function') {
+          toast('🛒 Added "' + itemTxt + '" to ' + storeTxt + ' list!');
+        }
+        if (btn) {
+          btn.disabled = true;
+          btn.title = 'Added to list';
+        }
+      } else {
+        if (typeof toast === 'function') {
+          toast('🛒 Added item to list!');
+        }
+        if (btn) {
+          btn.disabled = true;
+        }
+      }
+    } else {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        btn.title = origTitle;
+        btn.style.background = origBg;
+        btn.style.borderColor = origBorder;
+        btn.style.color = origColor;
+      }
+      var errMsg = (res && res.error) ? res.error : 'Could not add item to list.';
+      if (typeof toast === 'function') {
+        toast('⚠️ ' + errMsg);
+      }
+    }
+  } catch (err) {
+    console.error('Error adding still good item back to list:', err);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+      btn.title = origTitle;
+      btn.style.background = origBg;
+      btn.style.borderColor = origBorder;
+      btn.style.color = origColor;
+    }
+    if (typeof toast === 'function') {
+      toast('⚠️ Could not add item to list. Please try again.');
+    }
+  }
+}
+window.stillGoodAddToList = stillGoodAddToList;
+
 // ── Upgraded renderStillGoodItems() Implementation (Issue #632) ──
 function renderStillGoodItems() {
   var listEl = document.getElementById('sgItemsList');
@@ -5217,7 +5350,7 @@ function renderStillGoodItems() {
       var expiryText = '';
       var badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
 
-      if (item.list_item_id && !item.ai_estimated) {
+      if (item.list_item_id && (!item.ai_estimated || (item.days_left !== null && item.days_left !== undefined && item.days_left > 2))) {
         expiryText = '🌱 Fresher';
         badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
       } else if (item.days_left !== null && item.days_left !== undefined) {
@@ -5235,22 +5368,31 @@ function renderStillGoodItems() {
           badgeStyle = 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;';
         } else {
           expiryText = '⏳ ' + item.days_left + ' days left';
+          badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
         }
       } else {
         expiryText = '🌱 Fresher';
+        badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
+      }
+
+      var storeBadgeHtml = '';
+      if (item.store_name) {
+        storeBadgeHtml = '<span class="sg-crisper-store-badge" style="font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 7px; border-radius:6px; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; display:inline-block;" title="' + escapeHtml(item.store_name) + '">🏬 ' + escapeHtml(item.store_name) + '</span>';
       }
 
       crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
-        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">' +
+        '<div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">' +
           '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
-          '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;" title="' + escapeHtml(item.name) + '">' +
+          '<span style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;" title="' + escapeHtml(item.name) + '">' +
             escapeHtml(item.name) +
           '</span>' +
+          storeBadgeHtml +
         '</div>' +
         '<div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">' +
           '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 7px; border-radius:6px; white-space:nowrap;">' +
             expiryText +
           '</span>' +
+          '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
           '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
           '<button type="button" class="sg-crisper-btn sg-crisper-btn-del" onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
         '</div>' +

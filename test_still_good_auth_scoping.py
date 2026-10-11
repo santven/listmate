@@ -41,8 +41,10 @@ class InMemoryStillGoodDb:
         self.items = {}  # id -> dict
         self.users = {}  # user_id -> dict
         self.list_items = {}  # id -> dict
+        self.stores = {}  # id -> dict
         self.now = datetime.datetime(2026, 10, 11, 14, 0, 0)
         self.next_id = 1
+        self.next_list_id = 1000
         self._cur_result = None
         self._last_rowcount = 0
         self.executed_queries = []
@@ -94,7 +96,8 @@ class InMemoryStillGoodDb:
                             "id": item["id"],
                             "name": item["name"],
                             "category": item.get("category", ""),
-                            "purchased_at": item.get("purchased_at")
+                            "purchased_at": item.get("purchased_at"),
+                            "store_id": item.get("store_id")
                         })
             self._cur_result = claimed
             self._last_rowcount = len(claimed)
@@ -139,14 +142,98 @@ class InMemoryStillGoodDb:
                 self._cur_result = []
             return self
 
-        # List items query
-        if "SELECT id, household_id, name, location" in sql_clean:
+        # Store lookups
+        if "SELECT id, name FROM stores WHERE id = ? AND household_id = ?" in sql_clean:
+            sid, hhid = params
+            store = self.stores.get(sid)
+            if store and store.get("household_id") == hhid:
+                self._cur_result = [{"id": store["id"], "name": store["name"]}]
+            else:
+                self._cur_result = []
+            return self
+
+        if "SELECT id, name FROM stores WHERE household_id = ? AND name = 'General List' LIMIT 1" in sql_clean:
             hhid = params[0]
-            matched = [dict(v) for v in self.items.values() if v.get("household_id") == hhid]
-            if "AND status = ?" in sql_clean:
+            matched = [s for s in self.stores.values() if s.get("household_id") == hhid and s.get("name") == "General List"]
+            self._cur_result = matched[:1]
+            return self
+
+        if "SELECT id, name FROM stores WHERE household_id = ? ORDER BY id ASC LIMIT 1" in sql_clean:
+            hhid = params[0]
+            matched = sorted([s for s in self.stores.values() if s.get("household_id") == hhid], key=lambda x: x["id"])
+            self._cur_result = matched[:1]
+            return self
+
+        if sql_clean.startswith("INSERT INTO stores"):
+            hhid = params[-1]
+            sid = max(self.stores.keys(), default=0) + 1
+            self.stores[sid] = {"id": sid, "name": "General List", "household_id": hhid}
+            self._cur_result = [{"id": sid, "name": "General List"}]
+            self._last_rowcount = 1
+            return self
+
+        # List items deduplication check
+        if "FROM list_items" in sql_clean and "purchased = FALSE" in sql_clean and "LOWER(TRIM(name)) = LOWER(TRIM(?))" in sql_clean:
+            sid, hhid, name = params
+            matched = []
+            for li in self.list_items.values():
+                if li.get("household_id") == hhid and li.get("store_id") == sid and not li.get("purchased"):
+                    if (li.get("name") or "").strip().lower() == (name or "").strip().lower():
+                        matched.append({"id": li["id"]})
+            self._cur_result = matched
+            return self
+
+        # List items category lookup
+        if "SELECT category FROM list_items WHERE id = ? AND household_id = ?" in sql_clean:
+            li_id, hhid = params
+            li = self.list_items.get(li_id)
+            if li and li.get("household_id") == hhid:
+                self._cur_result = [{"category": li.get("category", "")}]
+            else:
+                self._cur_result = []
+            return self
+
+        # Insert list item
+        if sql_clean.startswith("INSERT INTO list_items"):
+            hhid, sid, name, cat, added_by, added_by_uid = params
+            new_id = getattr(self, "next_list_id", 1000)
+            self.next_list_id = new_id + 1
+            self.list_items[new_id] = {
+                "id": new_id,
+                "household_id": hhid,
+                "store_id": sid,
+                "name": name,
+                "category": cat,
+                "quantity": "1",
+                "added_by": added_by,
+                "added_by_user_id": added_by_uid,
+                "purchased": False,
+                "purchased_at": None,
+                "trip_notified_at": None,
+                "still_good_stashed_at": None
+            }
+            self._cur_result = [{"id": new_id}]
+            self._last_rowcount = 1
+            return self
+
+        # List items query
+        if ("SELECT id, household_id, name, location" in sql_clean or "SELECT sgi.id, sgi.household_id, sgi.name, sgi.location" in sql_clean) and "FROM still_good_items" in sql_clean:
+            hhid = params[0]
+            matched = []
+            for v in self.items.values():
+                if v.get("household_id") != hhid:
+                    continue
+                row = dict(v)
+                sid = row.get("store_id")
+                if sid and sid in self.stores:
+                    row["store_name"] = self.stores[sid].get("name", "")
+                elif "store_name" not in row:
+                    row["store_name"] = ""
+                matched.append(row)
+            if "AND status = ?" in sql_clean or "AND sgi.status = ?" in sql_clean:
                 st = params[1]
                 matched = [m for m in matched if m.get("status") == st]
-            if "AND location = ?" in sql_clean:
+            if "AND location = ?" in sql_clean or "AND sgi.location = ?" in sql_clean:
                 loc = params[-1]
                 matched = [m for m in matched if m.get("location") == loc]
             self._cur_result = matched
@@ -169,12 +256,18 @@ class InMemoryStillGoodDb:
         # Insert item
         if sql_clean.startswith("INSERT INTO still_good_items"):
             if "list_item_id" in sql_clean:
-                hhid, name, date_added, consume_by, list_item_id = params
+                if len(params) == 7:
+                    hhid, store_id, name, date_added, consume_by, list_item_id, shelf_life_days = params
+                else:
+                    hhid, name, date_added, consume_by, list_item_id = params
+                    store_id = None
+                    shelf_life_days = 5
                 item_id = self.next_id
                 self.next_id += 1
                 item = {
                     "id": item_id,
                     "household_id": hhid,
+                    "store_id": store_id,
                     "name": name,
                     "location": "fridge",
                     "item_type": "produce",
@@ -190,7 +283,7 @@ class InMemoryStillGoodDb:
                     "notes": "",
                     "ai_estimated": False,
                     "ai_estimated_at": None,
-                    "shelf_life_days": 5,
+                    "shelf_life_days": shelf_life_days,
                     "ai_tip": "",
                     "list_item_id": list_item_id,
                     "created_at": "2026-10-10 12:00:00",
@@ -242,7 +335,8 @@ class InMemoryStillGoodDb:
         if "SELECT id, location, item_type, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
            "SELECT id, location, consume_by, status FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
            "SELECT name, location, item_type, servings, notes, consume_by, ai_estimated FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
-           "SELECT id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean:
+           "SELECT id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
+           "SELECT id, name, category, store_id, list_item_id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean:
             i_id, hhid = params
             item = self.items.get(i_id)
             if item and item.get("household_id") == hhid:
@@ -471,6 +565,7 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             ("DELETE", "/api/still-good/1", None),
             ("GET", "/api/still-good/stash-candidates", None),
             ("POST", "/api/still-good/stash", {"item_ids": [1]}),
+            ("POST", "/api/still-good/1/add-to-list", None),
         ]
         for method, url, data in endpoints:
             with self.subTest(method=method, url=url):
@@ -502,6 +597,7 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             ("DELETE", "/api/still-good/1", None),
             ("GET", "/api/still-good/stash-candidates", None),
             ("POST", "/api/still-good/stash", {"item_ids": [1]}),
+            ("POST", "/api/still-good/1/add-to-list", None),
         ]
 
         for method, url, data in endpoints:
@@ -590,6 +686,12 @@ class TestStillGoodAuthScoping(unittest.TestCase):
 
         # 5. Household A attempting to delete Household B item returns 404
         res = self.client.delete("/api/still-good/200")
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(res.get_json()["ok"])
+        self.assertEqual(res.get_json()["error"], "Item not found")
+
+        # 6. Household A attempting to add Household B item to list returns 404
+        res = self.client.post("/api/still-good/200/add-to-list")
         self.assertEqual(res.status_code, 404)
         self.assertFalse(res.get_json()["ok"])
         self.assertEqual(res.get_json()["error"], "Item not found")
@@ -719,6 +821,12 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         body = res.get_json()
         self.assertFalse(body["ok"])
         self.assertTrue(body["paywall_required"])
+
+        res_add = self.client.post("/api/still-good/1/add-to-list")
+        self.assertEqual(res_add.status_code, 403)
+        body_add = res_add.get_json()
+        self.assertFalse(body_add["ok"])
+        self.assertTrue(body_add["paywall_required"])
 
     # ─────────────────────────────────────────────────────────────
     # 7. Smart Stash Crisper Drawer Tests (Issue #632)
@@ -1161,6 +1269,92 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         self.assertEqual(len(res["results"]), 1)
         self.assertEqual(res["results"][0]["status"], "dry_run")
         self.assertIn("Organic Milk", res["results"][0]["body"])
+
+    # ─────────────────────────────────────────────────────────────
+    # 8. Add to List from Crisper Drawer (Iteration 2)
+    # ─────────────────────────────────────────────────────────────
+
+    def test_add_to_list_success_with_store(self):
+        """Item with store_id adds to that store list with category, returning 200 and added=True."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[2] = {"id": 2, "name": "Trader Joe's", "household_id": 10}
+        self.mock_db.items[701] = {
+            "id": 701, "household_id": 10, "store_id": 2, "name": "Organic Honeycrisp Apples",
+            "category": "Produce", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+
+        res = self.client.post("/api/still-good/701/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertTrue(data.get("added"))
+        self.assertFalse(data.get("already_on_list"))
+        self.assertEqual(data.get("store_id"), 2)
+        self.assertEqual(data.get("store_name"), "Trader Joe's")
+        new_li_id = data.get("list_item_id")
+        self.assertIsNotNone(new_li_id)
+
+        # Verify list item exists in mock db
+        li = self.mock_db.list_items[new_li_id]
+        self.assertEqual(li["name"], "Organic Honeycrisp Apples")
+        self.assertEqual(li["store_id"], 2)
+        self.assertEqual(li["household_id"], 10)
+        self.assertEqual(li["category"], "Produce")
+        self.assertFalse(li["purchased"])
+
+    def test_add_to_list_deduplication(self):
+        """If item is already on active unpurchased list for target store, return already_on_list=True and do not duplicate."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[2] = {"id": 2, "name": "Trader Joe's", "household_id": 10}
+        self.mock_db.items[702] = {
+            "id": 702, "household_id": 10, "store_id": 2, "name": "Baby Spinach",
+            "category": "Produce", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+        # Prepopulate active list item in store 2
+        self.mock_db.list_items[801] = {
+            "id": 801, "household_id": 10, "store_id": 2, "name": "Baby Spinach",
+            "category": "Produce", "purchased": False
+        }
+
+        res = self.client.post("/api/still-good/702/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertFalse(data.get("added"))
+        self.assertTrue(data.get("already_on_list"))
+        self.assertEqual(data.get("list_item_id"), 801)
+        self.assertEqual(data.get("store_id"), 2)
+        self.assertEqual(data.get("store_name"), "Trader Joe's")
+        self.assertIn("already on your Trader Joe's list", data.get("message", ""))
+
+    def test_add_to_list_fallback_to_general_list_and_category_inference(self):
+        """If item has no store_id, resolve to household General List and infer category."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[1] = {"id": 1, "name": "General List", "household_id": 10}
+        # Item with no store_id and no category
+        self.mock_db.items[703] = {
+            "id": 703, "household_id": 10, "store_id": None, "name": "Bananas",
+            "category": "", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+
+        res = self.client.post("/api/still-good/703/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertTrue(data.get("added"))
+        self.assertEqual(data.get("store_id"), 1)
+        self.assertEqual(data.get("store_name"), "General List")
+
+        new_li = self.mock_db.list_items[data.get("list_item_id")]
+        self.assertEqual(new_li["store_id"], 1)
+        self.assertEqual(new_li["name"], "Bananas")
+        self.assertTrue(len(new_li["category"]) > 0)
 
 
 if __name__ == "__main__":

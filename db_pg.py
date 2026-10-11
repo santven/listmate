@@ -167,12 +167,13 @@ _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS app_invites (id SERIAL PRIMARY KEY, sender_email TEXT, household_id INTEGER, recipient_email TEXT NOT NULL, sent_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS item_taxonomy (id SERIAL PRIMARY KEY, normalized_name VARCHAR(120) UNIQUE NOT NULL, category VARCHAR(60) NOT NULL, source VARCHAR(30) DEFAULT 'manual', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_item_taxonomy_norm ON item_taxonomy(normalized_name)",
-    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, snooze_until DATE, remind_cadence VARCHAR(16) NOT NULL DEFAULT 'daily', status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', ai_estimated BOOLEAN NOT NULL DEFAULT FALSE, ai_estimated_at TIMESTAMP, shelf_life_days INTEGER, ai_tip TEXT DEFAULT '', list_item_id INTEGER REFERENCES list_items(id) ON DELETE SET NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
+    "CREATE TABLE IF NOT EXISTS still_good_items (id SERIAL PRIMARY KEY, household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE, name TEXT NOT NULL, location TEXT NOT NULL DEFAULT 'fridge', item_type TEXT NOT NULL DEFAULT 'home_cooked', servings INTEGER NOT NULL DEFAULT 1, date_added DATE NOT NULL DEFAULT CURRENT_DATE, consume_by DATE, snooze_until DATE, remind_cadence VARCHAR(16) NOT NULL DEFAULT 'daily', status TEXT NOT NULL DEFAULT 'active', consumed_at TIMESTAMP, discarded_at TIMESTAMP, thawing BOOLEAN NOT NULL DEFAULT FALSE, notes TEXT DEFAULT '', ai_estimated BOOLEAN NOT NULL DEFAULT FALSE, ai_estimated_at TIMESTAMP, shelf_life_days INTEGER, ai_tip TEXT DEFAULT '', list_item_id INTEGER REFERENCES list_items(id) ON DELETE SET NULL, store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL, category TEXT DEFAULT '', created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_status ON still_good_items(household_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_hh_loc ON still_good_items(household_id, location)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_snooze ON still_good_items(household_id, snooze_until)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_still_good_store ON still_good_items(store_id)",
     "CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)",
 ]
 
@@ -251,6 +252,23 @@ def init_db():
         try:
             db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)")
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+
+        try:
+            db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL")
+            db.execute("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS category TEXT DEFAULT ''")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_store ON still_good_items(store_id)")
+            # Idempotent backfill from list_items
+            db.execute("""
+                UPDATE still_good_items sgi
+                SET store_id = li.store_id
+                FROM list_items li
+                WHERE sgi.list_item_id = li.id
+                  AND sgi.store_id IS NULL
+                  AND sgi.household_id = li.household_id
+            """)
         except Exception:
             try: db.rollback()
             except Exception: pass
