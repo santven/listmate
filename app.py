@@ -3064,10 +3064,10 @@ def still_good_vacation_freeze_endpoint():
 
 def _is_stash_candidate_category(category):
     if not category or not str(category).strip():
-        return True  # uncategorized fresh items
+        return False  # Disregard empty category list items
     cat = str(category).strip().lower()
     if cat in ("uncategorized", "other", "general", "misc", "miscellaneous"):
-        return True
+        return False
     perishables = ["produce", "dairy", "meat", "seafood", "refrigerated", "deli", "bakery"]
     for p in perishables:
         if p in cat:

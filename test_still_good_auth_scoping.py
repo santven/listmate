@@ -812,9 +812,9 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             "still_good_stashed_at": ref_now - datetime.timedelta(hours=2)
         }
 
-        # 9. 4h ago, Uncategorized fresh item: INCLUDED
+        # 9. 4h ago, Empty category item: EXCLUDED
         self.mock_db.list_items[109] = {
-            "id": 109, "store_id": 1, "name": "Farmers Market Heirloom Squash", "category": "",
+            "id": 109, "store_id": 1, "name": "Haldiram Nutcracker Snack", "category": "",
             "quantity": "2", "household_id": 10, "purchased": True,
             "purchased_at": ref_now - datetime.timedelta(hours=4),
             "trip_notified_at": ref_now - datetime.timedelta(hours=4),
@@ -840,13 +840,13 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         self.assertIn(102, candidate_ids, "Organic Milk (Dairy, 5h ago) must be included")
         self.assertIn(103, candidate_ids, "Wild Salmon (Meat & Seafood, 10h ago) must be included")
         self.assertIn(104, candidate_ids, "Sourdough Bread (Bakery, 20h ago) must be included")
-        self.assertIn(109, candidate_ids, "Uncategorized Heirloom Squash (4h ago) must be included")
 
         self.assertNotIn(101, candidate_ids, "1h old item must be excluded by 3h quarantine")
         self.assertNotIn(105, candidate_ids, "Pantry item must be excluded")
         self.assertNotIn(106, candidate_ids, "Household item must be excluded")
         self.assertNotIn(107, candidate_ids, "Item > 48h old must be excluded")
         self.assertNotIn(108, candidate_ids, "Already stashed item must be excluded")
+        self.assertNotIn(109, candidate_ids, "Empty category item must be excluded")
         self.assertNotIn(110, candidate_ids, "Unpurchased item must be excluded")
 
         # Verify suggested consume_by dates
@@ -971,22 +971,22 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         self.assertEqual(res_coerce.get_json()["stashed_count"], 1)
         self.assertIsNotNone(self.mock_db.list_items[250]["still_good_stashed_at"])
 
-        # 7. Candidate item with NULL category & whitespace category are treated as uncategorized perishable
+        # 7. Candidate item with NULL category & whitespace category are excluded (CEO directive: disregard empty category)
         self.mock_db.list_items[251] = {
-            "id": 251, "store_id": 1, "name": "Mystery Herb", "category": None,
+            "id": 251, "store_id": 1, "name": "Mystery Item", "category": None,
             "quantity": "1 bunch", "household_id": 10, "purchased": True,
             "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
         }
         self.mock_db.list_items[252] = {
-            "id": 252, "store_id": 1, "name": "Sprouted Lentils", "category": "   ",
+            "id": 252, "store_id": 1, "name": "Haldiram Nutcracker Snack", "category": "   ",
             "quantity": "1 container", "household_id": 10, "purchased": True,
             "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
         }
         res_cand = self.client.get("/api/still-good/stash-candidates")
         self.assertEqual(res_cand.status_code, 200)
         cand_ids = [c["id"] for c in res_cand.get_json().get("candidates", [])]
-        self.assertIn(251, cand_ids)
-        self.assertIn(252, cand_ids)
+        self.assertNotIn(251, cand_ids)
+        self.assertNotIn(252, cand_ids)
 
 
     def test_uncheck_rollback_cascade_active_vs_consumed_discarded(self):

@@ -1746,9 +1746,7 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
               )
               AND li.purchased_at >= NOW() - INTERVAL '48 hours'
               AND (
-                li.category IS NULL OR li.category = ''
-                OR LOWER(li.category) IN ('uncategorized', 'other', 'general')
-                OR LOWER(li.category) LIKE '%produce%'
+                LOWER(li.category) LIKE '%produce%'
                 OR LOWER(li.category) LIKE '%dairy%'
                 OR LOWER(li.category) LIKE '%meat%'
                 OR LOWER(li.category) LIKE '%seafood%'
@@ -1815,9 +1813,9 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
                 perishables = []
                 for it in (unstashed_items or []):
                     cat = (it.get("category") or "").strip().lower()
-                    if not cat or cat in ('uncategorized', 'other', 'general'):
-                        perishables.append(it)
-                    elif any(p in cat for p in ['produce', 'dairy', 'meat', 'seafood', 'refrigerated', 'deli', 'bakery']):
+                    if not cat or cat in ('uncategorized', 'other', 'general', 'misc', 'miscellaneous'):
+                        continue
+                    if any(p in cat for p in ['produce', 'dairy', 'meat', 'seafood', 'refrigerated', 'deli', 'bakery']):
                         perishables.append(it)
 
                 hh_items_cache[hhid] = perishables
