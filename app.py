@@ -2474,18 +2474,20 @@ def add_recipe_to_list_endpoint():
 
 def _resolve_still_good_hh(db):
     hhid = _hh()
-    if not hhid or hhid <= 0:
-        try:
-            import shared.auth as authmod_local
-            uid = authmod_local.get_user_id()
-            if uid:
-                u_row = db.execute("SELECT household_id FROM auth_users WHERE id = ?", (uid,)).fetchone()
-                if u_row and u_row.get("household_id") and u_row["household_id"] > 0:
-                    return u_row["household_id"]
-        except Exception:
-            pass
-        return 1
-    return hhid
+    if hhid is not None and hhid > 0:
+        return hhid
+    try:
+        import shared.auth as authmod_local
+        uid = authmod_local.get_user_id()
+        if uid is not None and uid > 0:
+            u_row = db.execute("SELECT household_id FROM auth_users WHERE id = ?", (uid,)).fetchone()
+            if u_row:
+                user_hh = u_row.get("household_id")
+                if user_hh is not None and user_hh > 0:
+                    return user_hh
+    except Exception:
+        pass
+    return None
 
 
 def _can_household_access_still_good(db, hhid):
@@ -2541,6 +2543,8 @@ def still_good_list_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -2709,6 +2713,8 @@ def still_good_create_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -2807,6 +2813,8 @@ def still_good_action_endpoint(item_id):
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -2821,7 +2829,7 @@ def still_good_action_endpoint(item_id):
             (item_id, hhid)
         ).fetchone()
         if not item:
-            return jsonify({"error": "Item not found"}), 404
+            return jsonify({"ok": False, "error": "Item not found"}), 404
 
         if action == "consume":
             db.execute(
@@ -2869,6 +2877,8 @@ def still_good_snooze_endpoint(item_id):
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -2955,6 +2965,8 @@ def still_good_snooze_all_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -3017,6 +3029,8 @@ def still_good_vacation_freeze_endpoint():
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
@@ -3054,10 +3068,15 @@ def still_good_item_endpoint(item_id):
     db = get_db()
     try:
         hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
         if not _can_household_access_still_good(db, hhid):
             return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
 
         if request.method == "DELETE":
+            existing = db.execute("SELECT id FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid)).fetchone()
+            if not existing:
+                return jsonify({"ok": False, "error": "Item not found"}), 404
             db.execute("DELETE FROM still_good_items WHERE id = ? AND household_id = ?", (item_id, hhid))
             return jsonify({"ok": True})
 
