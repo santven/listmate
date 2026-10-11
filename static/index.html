@@ -1130,27 +1130,19 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   <!-- STILL GOOD SCREEN -->
   <div class="still-good-screen" id="screenStillGood" style="display:none; padding-bottom:40px;">
     <!-- Top Nav Bar -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:6px; flex-wrap:wrap;">
-      <button onclick="showScreen('home')" style="background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
-        ← Back to List
+    <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:12px; gap:6px; flex-wrap:wrap;">
+      <button onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.startInteractiveFlow();" style="background:#fef3c7; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Still Good Feature Discovery Tips">
+        💡 Tips
       </button>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <button onclick="toggleStillGoodPushBanner()" style="background:#fffbeb; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Fridge Reminder Options">
-          ⏰ Reminders
-        </button>
-        <button onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.startInteractiveFlow();" style="background:#fef3c7; border:1px solid #fde68a; color:#b45309; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Still Good Feature Discovery Tips">
-          💡 Tips
-        </button>
-        <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="View Wins">
-          🏆 Wins
-        </button>
-        <button onclick="openStillGoodVacationModal()" id="btnStillGoodVacation" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Vacation Mode: Review fridge items before trip">
-          ✈️ Vacation
-        </button>
-        <button id="btnStillGoodAddItem" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onAddBtnClicked(); openAddStillGoodModal();" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          + Add Item
-        </button>
-      </div>
+      <button onclick="openStillGoodWinsModal()" style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="View Wins">
+        🏆 Wins
+      </button>
+      <button onclick="openStillGoodVacationModal()" id="btnStillGoodVacation" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; padding:8px 10px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Vacation Mode: Review fridge items before trip">
+        ✈️ Vacation
+      </button>
+      <button id="btnStillGoodAddItem" onclick="if(window.stillGoodDiscoveryTour) window.stillGoodDiscoveryTour.onAddBtnClicked(); openAddStillGoodModal();" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; padding:8px 12px; border-radius:10px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
+        + Add Item
+      </button>
     </div>
 
     <!-- Daily Thoughtful Kitchen Motivation Banner -->
