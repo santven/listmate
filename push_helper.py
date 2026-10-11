@@ -1684,3 +1684,236 @@ def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = Fal
         "results": results,
         "dry_run": dry_run
     }
+
+
+def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bool = False):
+    """
+    Post-Shopping Smart Stash Crisper Drawer Push Reminder (Issue #632)
+
+    1. Evaluates candidate households/users with unstashed fresh grocery items from shopping trips completed >= 3 hours ago.
+    2. Eligible households: Pro and active Pro Trial (subscription_status IN ('premium', 'active', 'trial')).
+       If trial, ensure trial_ends_at is valid and has not expired.
+    3. Requires active push subscription (permission_status = 'granted').
+    4. Household must have at least 1 unstashed perishable candidate from a trip >= 3 hours ago:
+       - purchased = TRUE
+       - still_good_stashed_at IS NULL
+       - ((trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours') OR (purchased_at <= NOW() - INTERVAL '3 hours'))
+       - purchased_at >= NOW() - INTERVAL '48 hours'
+       - Perishable categories: produce, dairy, meat, seafood, refrigerated, deli, bakery, or uncategorized.
+    5. Frequency capping & Idempotency:
+       - Scoped via push_notifications_log with campaign = 'still_good_smart_stash_3h'.
+       - Max 1 reminder per user per local calendar day.
+    6. Deep link: /?screen=stillGood&tab=stash&source=push_smart_stash_3h
+    """
+    _init_schema()
+
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Still Good post-shopping smart stash pushes (dry_run={dry_run}, force_send={force_send})...")
+
+    candidate_query = """
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE (
+            h.subscription_status IN ('premium', 'active')
+            OR (
+                h.subscription_status = 'trial' 
+                AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+            )
+        )
+        AND EXISTS (
+            SELECT 1 FROM push_subscriptions ps
+            WHERE ps.user_id = u.id
+              AND ps.is_active = TRUE
+              AND ps.permission_status = 'granted'
+        )
+        AND EXISTS (
+            SELECT 1 FROM list_items li
+            WHERE li.household_id = h.id
+              AND li.purchased = TRUE
+              AND li.still_good_stashed_at IS NULL
+              AND (
+                (li.trip_notified_at IS NOT NULL AND li.trip_notified_at <= NOW() - INTERVAL '3 hours')
+                OR (li.purchased_at <= NOW() - INTERVAL '3 hours')
+              )
+              AND li.purchased_at >= NOW() - INTERVAL '48 hours'
+              AND (
+                LOWER(li.category) LIKE '%produce%'
+                OR LOWER(li.category) LIKE '%dairy%'
+                OR LOWER(li.category) LIKE '%meat%'
+                OR LOWER(li.category) LIKE '%seafood%'
+                OR LOWER(li.category) LIKE '%refrigerated%'
+                OR LOWER(li.category) LIKE '%deli%'
+                OR LOWER(li.category) LIKE '%bakery%'
+              )
+        )
+    """
+
+    if not force_send:
+        candidate_query += """
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'still_good_smart_stash_3h'
+              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+        )
+        """
+
+    candidate_query += " ORDER BY h.id ASC, u.id ASC"
+
+    try:
+        candidates = _run(candidate_query)
+    except Exception as e:
+        print(f"[check_post_shopping_smart_stash_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Still Good post-shopping smart stash pushes.")
+    results = []
+    dispatched_count = 0
+
+    hh_items_cache = {}
+    dispatched_uids = set()
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
+
+        if hhid not in hh_items_cache:
+            try:
+                unstashed_items = _run("""
+                    SELECT id, name, category, purchased_at
+                    FROM list_items
+                    WHERE household_id = %s
+                      AND purchased = TRUE
+                      AND still_good_stashed_at IS NULL
+                      AND (
+                        (trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours')
+                        OR (purchased_at <= NOW() - INTERVAL '3 hours')
+                      )
+                      AND purchased_at >= NOW() - INTERVAL '48 hours'
+                    ORDER BY purchased_at DESC
+                """, (hhid,))
+
+                perishables = []
+                for it in (unstashed_items or []):
+                    cat = (it.get("category") or "").strip().lower()
+                    if not cat or cat in ('uncategorized', 'other', 'general', 'misc', 'miscellaneous'):
+                        continue
+                    if any(p in cat for p in ['produce', 'dairy', 'meat', 'seafood', 'refrigerated', 'deli', 'bakery']):
+                        perishables.append(it)
+
+                hh_items_cache[hhid] = perishables
+            except Exception as item_err:
+                print(f"  [Warning] Failed to fetch unstashed candidates for Household #{hhid}: {item_err}")
+                hh_items_cache[hhid] = []
+
+        items = hh_items_cache.get(hhid, [])
+        total_count = len(items)
+        if total_count == 0:
+            continue
+
+        title = "🥬 Stash your fresh groceries?"
+        first_name = (items[0].get("name") or "").strip() or "item"
+        if total_count == 1:
+            body = f"Keep track of your {first_name} before it expires. Stash it in Still Good with one tap!"
+        elif total_count in (2, 3):
+            remaining = total_count - 1
+            other_word = "other item" if remaining == 1 else "other items"
+            body = f"Keep track of {first_name} and {remaining} {other_word} in Still Good to prevent food waste."
+        else:
+            body = f"You have {total_count} fresh grocery items from your recent trip. Add them to Still Good to track freshness!"
+
+        deep_link_url = "/?screen=stillGood&tab=stash&source=push_smart_stash_3h"
+        push_data = {
+            "action": "open_screen",
+            "screen": "stillGood",
+            "campaign": "still_good_smart_stash_3h",
+            "source": "push_smart_stash_3h",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "candidate_count": str(total_count)
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'still_good_smart_stash_3h' to User #{uid} ({cand.get('user_email')}): '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_smart_stash_3h",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'still_good_smart_stash_3h' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            dispatched_uids.add(uid)
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_smart_stash_3h",
+                "title": title,
+                "body": body,
+                "status": "sent" if (sent_cnt > 0 or mock_mode) else "skipped_no_tokens",
+                "result": res
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to send 'still_good_smart_stash_3h' to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "still_good_smart_stash_3h",
+                "status": "error",
+                "error": str(dispatch_err)
+            })
+
+    return {
+        "ok": True,
+        "candidates": len(candidates),
+        "dispatched": dispatched_count,
+        "results": results
+    }
+

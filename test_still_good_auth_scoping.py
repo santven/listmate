@@ -31,6 +31,8 @@ os.environ["DATABASE_URL"] = os.environ.get("DATABASE_URL", "postgresql://dummy:
 
 from app import app, _resolve_still_good_hh
 import shared.auth as authmod
+import datetime
+import push_helper
 
 
 class InMemoryStillGoodDb:
@@ -38,7 +40,11 @@ class InMemoryStillGoodDb:
     def __init__(self):
         self.items = {}  # id -> dict
         self.users = {}  # user_id -> dict
+        self.list_items = {}  # id -> dict
+        self.stores = {}  # id -> dict
+        self.now = datetime.datetime(2026, 10, 11, 14, 0, 0)
         self.next_id = 1
+        self.next_list_id = 1000
         self._cur_result = None
         self._last_rowcount = 0
         self.executed_queries = []
@@ -50,7 +56,80 @@ class InMemoryStillGoodDb:
         self._cur_result = None
         self._last_rowcount = 0
 
-        if sql_clean.startswith("ALTER TABLE"):
+        if sql_clean.startswith("ALTER TABLE") or sql_clean.startswith("CREATE INDEX"):
+            return self
+
+        # Stash candidates query
+        if "FROM list_items" in sql_clean and "still_good_stashed_at IS NULL" in sql_clean and "SELECT id, name, category, quantity, store_id, purchased_at" in sql_clean:
+            hhid = params[0]
+            three_hours_ago = self.now - datetime.timedelta(hours=3)
+            forty_eight_hours_ago = self.now - datetime.timedelta(hours=48)
+            matched = []
+            for item in self.list_items.values():
+                if item.get("household_id") != hhid:
+                    continue
+                if not item.get("purchased"):
+                    continue
+                if item.get("still_good_stashed_at") is not None:
+                    continue
+                p_at = item.get("purchased_at")
+                t_at = item.get("trip_notified_at")
+                quarantine_ok = (t_at is not None and t_at <= three_hours_ago) or (p_at is not None and p_at <= three_hours_ago)
+                window_ok = (p_at is not None and p_at >= forty_eight_hours_ago)
+                if quarantine_ok and window_ok:
+                    matched.append(dict(item))
+            matched.sort(key=lambda x: x.get("purchased_at") or self.now, reverse=True)
+            self._cur_result = matched
+            self._last_rowcount = len(matched)
+            return self
+
+        # Stash atomic UPDATE query
+        if sql_clean.startswith("UPDATE list_items SET still_good_stashed_at = NOW()"):
+            hhid = params[-1]
+            target_ids = set(params[:-1])
+            claimed = []
+            for item_id, item in self.list_items.items():
+                if item_id in target_ids and item.get("household_id") == hhid:
+                    if item.get("purchased") and item.get("still_good_stashed_at") is None:
+                        item["still_good_stashed_at"] = self.now
+                        claimed.append({
+                            "id": item["id"],
+                            "name": item["name"],
+                            "category": item.get("category", ""),
+                            "purchased_at": item.get("purchased_at"),
+                            "store_id": item.get("store_id")
+                        })
+            self._cur_result = claimed
+            self._last_rowcount = len(claimed)
+            return self
+
+        # Delete on uncheck
+        if sql_clean.startswith("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'"):
+            li_id, hhid = params
+            deleted = [sg_id for sg_id, sg in list(self.items.items()) if sg.get("list_item_id") == li_id and sg.get("household_id") == hhid and sg.get("status") == "active"]
+            for d in deleted:
+                del self.items[d]
+            self._last_rowcount = len(deleted)
+            return self
+
+        # Toggle list item lookups & updates
+        if "SELECT * FROM list_items WHERE id = ? AND household_id = ?" in sql_clean:
+            item_id, hhid = params
+            item = self.list_items.get(item_id)
+            if item and item.get("household_id") == hhid:
+                self._cur_result = [dict(item)]
+            else:
+                self._cur_result = []
+            return self
+
+        if "UPDATE list_items SET purchased=FALSE" in sql_clean:
+            item_id = params[0]
+            if item_id in self.list_items:
+                self.list_items[item_id]["purchased"] = False
+                self.list_items[item_id]["purchased_at"] = None
+                self.list_items[item_id]["trip_notified_at"] = None
+                self.list_items[item_id]["still_good_stashed_at"] = None
+                self._last_rowcount = 1
             return self
 
         # User household resolution
@@ -63,14 +142,98 @@ class InMemoryStillGoodDb:
                 self._cur_result = []
             return self
 
-        # List items query
-        if "SELECT id, household_id, name, location" in sql_clean:
+        # Store lookups
+        if "SELECT id, name FROM stores WHERE id = ? AND household_id = ?" in sql_clean:
+            sid, hhid = params
+            store = self.stores.get(sid)
+            if store and store.get("household_id") == hhid:
+                self._cur_result = [{"id": store["id"], "name": store["name"]}]
+            else:
+                self._cur_result = []
+            return self
+
+        if "SELECT id, name FROM stores WHERE household_id = ? AND name = 'General List' LIMIT 1" in sql_clean:
             hhid = params[0]
-            matched = [dict(v) for v in self.items.values() if v.get("household_id") == hhid]
-            if "AND status = ?" in sql_clean:
+            matched = [s for s in self.stores.values() if s.get("household_id") == hhid and s.get("name") == "General List"]
+            self._cur_result = matched[:1]
+            return self
+
+        if "SELECT id, name FROM stores WHERE household_id = ? ORDER BY id ASC LIMIT 1" in sql_clean:
+            hhid = params[0]
+            matched = sorted([s for s in self.stores.values() if s.get("household_id") == hhid], key=lambda x: x["id"])
+            self._cur_result = matched[:1]
+            return self
+
+        if sql_clean.startswith("INSERT INTO stores"):
+            hhid = params[-1]
+            sid = max(self.stores.keys(), default=0) + 1
+            self.stores[sid] = {"id": sid, "name": "General List", "household_id": hhid}
+            self._cur_result = [{"id": sid, "name": "General List"}]
+            self._last_rowcount = 1
+            return self
+
+        # List items deduplication check
+        if "FROM list_items" in sql_clean and "purchased = FALSE" in sql_clean and "LOWER(TRIM(name)) = LOWER(TRIM(?))" in sql_clean:
+            sid, hhid, name = params
+            matched = []
+            for li in self.list_items.values():
+                if li.get("household_id") == hhid and li.get("store_id") == sid and not li.get("purchased"):
+                    if (li.get("name") or "").strip().lower() == (name or "").strip().lower():
+                        matched.append({"id": li["id"]})
+            self._cur_result = matched
+            return self
+
+        # List items category lookup
+        if "SELECT category FROM list_items WHERE id = ? AND household_id = ?" in sql_clean:
+            li_id, hhid = params
+            li = self.list_items.get(li_id)
+            if li and li.get("household_id") == hhid:
+                self._cur_result = [{"category": li.get("category", "")}]
+            else:
+                self._cur_result = []
+            return self
+
+        # Insert list item
+        if sql_clean.startswith("INSERT INTO list_items"):
+            hhid, sid, name, cat, added_by, added_by_uid = params
+            new_id = getattr(self, "next_list_id", 1000)
+            self.next_list_id = new_id + 1
+            self.list_items[new_id] = {
+                "id": new_id,
+                "household_id": hhid,
+                "store_id": sid,
+                "name": name,
+                "category": cat,
+                "quantity": "1",
+                "added_by": added_by,
+                "added_by_user_id": added_by_uid,
+                "purchased": False,
+                "purchased_at": None,
+                "trip_notified_at": None,
+                "still_good_stashed_at": None
+            }
+            self._cur_result = [{"id": new_id}]
+            self._last_rowcount = 1
+            return self
+
+        # List items query
+        if ("SELECT id, household_id, name, location" in sql_clean or "SELECT sgi.id, sgi.household_id, sgi.name, sgi.location" in sql_clean) and "FROM still_good_items" in sql_clean:
+            hhid = params[0]
+            matched = []
+            for v in self.items.values():
+                if v.get("household_id") != hhid:
+                    continue
+                row = dict(v)
+                sid = row.get("store_id")
+                if sid and sid in self.stores:
+                    row["store_name"] = self.stores[sid].get("name", "")
+                elif "store_name" not in row:
+                    row["store_name"] = ""
+                matched.append(row)
+            if "AND status = ?" in sql_clean or "AND sgi.status = ?" in sql_clean:
                 st = params[1]
                 matched = [m for m in matched if m.get("status") == st]
-            if "AND location = ?" in sql_clean:
+            if "AND location = ?" in sql_clean or "AND sgi.location = ?" in sql_clean:
                 loc = params[-1]
                 matched = [m for m in matched if m.get("location") == loc]
             self._cur_result = matched
@@ -92,6 +255,45 @@ class InMemoryStillGoodDb:
 
         # Insert item
         if sql_clean.startswith("INSERT INTO still_good_items"):
+            if "list_item_id" in sql_clean:
+                if len(params) == 7:
+                    hhid, store_id, name, date_added, consume_by, list_item_id, shelf_life_days = params
+                else:
+                    hhid, name, date_added, consume_by, list_item_id = params
+                    store_id = None
+                    shelf_life_days = 5
+                item_id = self.next_id
+                self.next_id += 1
+                item = {
+                    "id": item_id,
+                    "household_id": hhid,
+                    "store_id": store_id,
+                    "name": name,
+                    "location": "fridge",
+                    "item_type": "produce",
+                    "servings": 1,
+                    "date_added": str(date_added)[:10],
+                    "consume_by": str(consume_by)[:10],
+                    "snooze_until": None,
+                    "remind_cadence": "daily",
+                    "status": "active",
+                    "consumed_at": None,
+                    "discarded_at": None,
+                    "thawing": False,
+                    "notes": "",
+                    "ai_estimated": False,
+                    "ai_estimated_at": None,
+                    "shelf_life_days": shelf_life_days,
+                    "ai_tip": "",
+                    "list_item_id": list_item_id,
+                    "created_at": "2026-10-10 12:00:00",
+                    "updated_at": "2026-10-10 12:00:00"
+                }
+                self.items[item_id] = item
+                self._cur_result = [{"id": item_id}]
+                self._last_rowcount = 1
+                return self
+
             hhid, name, loc, itype, servings, consume_by, snooze_until, remind_cadence, notes = params
             item_id = self.next_id
             self.next_id += 1
@@ -133,7 +335,8 @@ class InMemoryStillGoodDb:
         if "SELECT id, location, item_type, thawing, status FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
            "SELECT id, location, consume_by, status FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
            "SELECT name, location, item_type, servings, notes, consume_by, ai_estimated FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
-           "SELECT id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean:
+           "SELECT id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean or \
+           "SELECT id, name, category, store_id, list_item_id FROM still_good_items WHERE id = ? AND household_id = ?" in sql_clean:
             i_id, hhid = params
             item = self.items.get(i_id)
             if item and item.get("household_id") == hhid:
@@ -360,6 +563,9 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             ("POST", "/api/still-good/vacation-freeze", {}),
             ("PUT", "/api/still-good/1", {"name": "Renamed"}),
             ("DELETE", "/api/still-good/1", None),
+            ("GET", "/api/still-good/stash-candidates", None),
+            ("POST", "/api/still-good/stash", {"item_ids": [1]}),
+            ("POST", "/api/still-good/1/add-to-list", None),
         ]
         for method, url, data in endpoints:
             with self.subTest(method=method, url=url):
@@ -389,6 +595,9 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             ("POST", "/api/still-good/vacation-freeze", {}),
             ("PUT", "/api/still-good/1", {"name": "Compromised Lasagna"}),
             ("DELETE", "/api/still-good/1", None),
+            ("GET", "/api/still-good/stash-candidates", None),
+            ("POST", "/api/still-good/stash", {"item_ids": [1]}),
+            ("POST", "/api/still-good/1/add-to-list", None),
         ]
 
         for method, url, data in endpoints:
@@ -477,6 +686,12 @@ class TestStillGoodAuthScoping(unittest.TestCase):
 
         # 5. Household A attempting to delete Household B item returns 404
         res = self.client.delete("/api/still-good/200")
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(res.get_json()["ok"])
+        self.assertEqual(res.get_json()["error"], "Item not found")
+
+        # 6. Household A attempting to add Household B item to list returns 404
+        res = self.client.post("/api/still-good/200/add-to-list")
         self.assertEqual(res.status_code, 404)
         self.assertFalse(res.get_json()["ok"])
         self.assertEqual(res.get_json()["error"], "Item not found")
@@ -606,6 +821,540 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         body = res.get_json()
         self.assertFalse(body["ok"])
         self.assertTrue(body["paywall_required"])
+
+        res_add = self.client.post("/api/still-good/1/add-to-list")
+        self.assertEqual(res_add.status_code, 403)
+        body_add = res_add.get_json()
+        self.assertFalse(body_add["ok"])
+        self.assertTrue(body_add["paywall_required"])
+
+    # ─────────────────────────────────────────────────────────────
+    # 7. Smart Stash Crisper Drawer Tests (Issue #632)
+    # ─────────────────────────────────────────────────────────────
+
+    def test_stash_candidates_quarantine_window_and_perishable_filter(self):
+        """
+        Verify:
+        - Items purchased < 3 hours ago: EXCLUDED.
+        - Items purchased 3h to 48h ago: INCLUDED.
+        - Items purchased > 48h ago: EXCLUDED.
+        - Already stashed items: EXCLUDED.
+        - Non-perishable items: EXCLUDED.
+        - Unchecked (purchased=False) items: EXCLUDED.
+        - Suggested consume_by dates calculated properly.
+        """
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        ref_now = self.mock_db.now
+
+        # 1. < 3h ago: excluded
+        self.mock_db.list_items[101] = {
+            "id": 101, "store_id": 1, "name": "Fresh Spinach", "category": "Produce",
+            "quantity": "1 bag", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=1),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=1),
+            "still_good_stashed_at": None
+        }
+
+        # 2. 5h ago, Dairy: INCLUDED
+        self.mock_db.list_items[102] = {
+            "id": 102, "store_id": 1, "name": "Organic Milk", "category": "Dairy",
+            "quantity": "1 gal", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=5),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=5),
+            "still_good_stashed_at": None
+        }
+
+        # 3. 10h ago, Meat & Seafood: INCLUDED
+        self.mock_db.list_items[103] = {
+            "id": 103, "store_id": 1, "name": "Wild Salmon", "category": "Meat & Seafood",
+            "quantity": "2 fillets", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=10),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=10),
+            "still_good_stashed_at": None
+        }
+
+        # 4. 20h ago, Bakery: INCLUDED
+        self.mock_db.list_items[104] = {
+            "id": 104, "store_id": 1, "name": "Sourdough Bread", "category": "Bakery",
+            "quantity": "1 loaf", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=20),
+            "trip_notified_at": None,
+            "still_good_stashed_at": None
+        }
+
+        # 5. 5h ago, Pantry (non-perishable): EXCLUDED
+        self.mock_db.list_items[105] = {
+            "id": 105, "store_id": 1, "name": "Canned Crushed Tomatoes", "category": "Pantry",
+            "quantity": "2 cans", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=5),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=5),
+            "still_good_stashed_at": None
+        }
+
+        # 6. 5h ago, Household (non-perishable): EXCLUDED
+        self.mock_db.list_items[106] = {
+            "id": 106, "store_id": 1, "name": "Paper Towels", "category": "Household",
+            "quantity": "1 pack", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=5),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=5),
+            "still_good_stashed_at": None
+        }
+
+        # 7. > 48h ago (55h ago): EXCLUDED
+        self.mock_db.list_items[107] = {
+            "id": 107, "store_id": 1, "name": "Old Blueberries", "category": "Produce",
+            "quantity": "1 pint", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=55),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=55),
+            "still_good_stashed_at": None
+        }
+
+        # 8. 6h ago, but already stashed: EXCLUDED
+        self.mock_db.list_items[108] = {
+            "id": 108, "store_id": 1, "name": "Fuji Apples", "category": "Produce",
+            "quantity": "3 lbs", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=6),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=6),
+            "still_good_stashed_at": ref_now - datetime.timedelta(hours=2)
+        }
+
+        # 9. 4h ago, Empty category item: EXCLUDED
+        self.mock_db.list_items[109] = {
+            "id": 109, "store_id": 1, "name": "Haldiram Nutcracker Snack", "category": "",
+            "quantity": "2", "household_id": 10, "purchased": True,
+            "purchased_at": ref_now - datetime.timedelta(hours=4),
+            "trip_notified_at": ref_now - datetime.timedelta(hours=4),
+            "still_good_stashed_at": None
+        }
+
+        # 10. Not purchased: EXCLUDED
+        self.mock_db.list_items[110] = {
+            "id": 110, "store_id": 1, "name": "Romaine Lettuce", "category": "Produce",
+            "quantity": "3 heads", "household_id": 10, "purchased": False,
+            "purchased_at": None,
+            "trip_notified_at": None,
+            "still_good_stashed_at": None
+        }
+
+        res = self.client.get("/api/still-good/stash-candidates")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        candidates = data.get("candidates", [])
+
+        candidate_ids = [c["id"] for c in candidates]
+        self.assertIn(102, candidate_ids, "Organic Milk (Dairy, 5h ago) must be included")
+        self.assertIn(103, candidate_ids, "Wild Salmon (Meat & Seafood, 10h ago) must be included")
+        self.assertIn(104, candidate_ids, "Sourdough Bread (Bakery, 20h ago) must be included")
+
+        self.assertNotIn(101, candidate_ids, "1h old item must be excluded by 3h quarantine")
+        self.assertNotIn(105, candidate_ids, "Pantry item must be excluded")
+        self.assertNotIn(106, candidate_ids, "Household item must be excluded")
+        self.assertNotIn(107, candidate_ids, "Item > 48h old must be excluded")
+        self.assertNotIn(108, candidate_ids, "Already stashed item must be excluded")
+        self.assertNotIn(109, candidate_ids, "Empty category item must be excluded")
+        self.assertNotIn(110, candidate_ids, "Unpurchased item must be excluded")
+
+        # Verify suggested consume_by dates
+        item_102 = next(c for c in candidates if c["id"] == 102)
+        p102_date = (ref_now - datetime.timedelta(hours=5)).date()
+        exp102_date = (p102_date + datetime.timedelta(days=5)).isoformat()
+        self.assertEqual(item_102["suggested_consume_by"], exp102_date)
+
+    def test_atomic_batch_stash_anchored_dates_and_idempotency(self):
+        """
+        Verify:
+        - Stashing list items atomically marks list_items.still_good_stashed_at = NOW().
+        - Creates corresponding still_good_items records anchored to purchased_at::date.
+        - Repeated calls are idempotent (stashed_count=0, no duplicate Still Good records).
+        """
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        ref_now = self.mock_db.now
+        p_time = ref_now - datetime.timedelta(hours=6)
+        self.mock_db.list_items[201] = {
+            "id": 201, "store_id": 1, "name": "Organic Strawberries", "category": "Produce",
+            "quantity": "2 boxes", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+        self.mock_db.list_items[202] = {
+            "id": 202, "store_id": 1, "name": "Greek Yogurt", "category": "Dairy",
+            "quantity": "32 oz", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+
+        # First stash call
+        res = self.client.post("/api/still-good/stash", json={"item_ids": [201, 202]})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertEqual(data.get("stashed_count"), 2)
+        self.assertEqual(len(data.get("items")), 2)
+
+        # Verify list_items updated
+        self.assertIsNotNone(self.mock_db.list_items[201]["still_good_stashed_at"])
+        self.assertIsNotNone(self.mock_db.list_items[202]["still_good_stashed_at"])
+
+        # Verify still_good_items created
+        sg_records = [r for r in self.mock_db.items.values() if r.get("list_item_id") in [201, 202]]
+        self.assertEqual(len(sg_records), 2)
+
+        sg_strawberries = next(r for r in sg_records if r["list_item_id"] == 201)
+        self.assertEqual(sg_strawberries["household_id"], 10)
+        self.assertEqual(sg_strawberries["name"], "Organic Strawberries")
+        self.assertEqual(sg_strawberries["location"], "fridge")
+        self.assertEqual(sg_strawberries["item_type"], "produce")
+        self.assertEqual(sg_strawberries["status"], "active")
+        self.assertEqual(sg_strawberries["shelf_life_days"], 5)
+        # Date anchoring: date_added = purchased_at::date, consume_by = date_added + 5 days
+        expected_added = p_time.date().isoformat()
+        expected_consume = (p_time.date() + datetime.timedelta(days=5)).isoformat()
+        self.assertEqual(sg_strawberries["date_added"], expected_added)
+        self.assertEqual(sg_strawberries["consume_by"], expected_consume)
+
+        # Second stash call (Idempotency test): should claim 0 items without duplicating
+        res_repeat = self.client.post("/api/still-good/stash", json={"item_ids": [201, 202]})
+        self.assertEqual(res_repeat.status_code, 200)
+        data_repeat = res_repeat.get_json()
+        self.assertTrue(data_repeat.get("ok"))
+        self.assertEqual(data_repeat.get("stashed_count"), 0)
+        self.assertEqual(data_repeat.get("items"), [])
+
+        # Total still_good_items for these list items must remain 2
+        sg_records_after = [r for r in self.mock_db.items.values() if r.get("list_item_id") in [201, 202]]
+        self.assertEqual(len(sg_records_after), 2)
+
+    def test_smart_stash_destructive_edge_cases(self):
+        """
+        Destructive Edge-Case Testing (QA Gate):
+        - Null, empty, and malformed payloads
+        - Non-list and missing item_ids keys
+        - Coercion of string IDs ('250') and filtering of invalid values (0, negative, non-numeric)
+        - Empty list_items table returns empty candidates cleanly
+        - Candidate items with NULL or whitespace category correctly treated as uncategorized perishable
+        """
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        # 1. Missing body / empty JSON
+        res_empty = self.client.post("/api/still-good/stash", json={})
+        self.assertEqual(res_empty.status_code, 400)
+        self.assertFalse(res_empty.get_json()["ok"])
+
+        # 2. item_ids is None / null
+        res_null = self.client.post("/api/still-good/stash", json={"item_ids": None})
+        self.assertEqual(res_null.status_code, 400)
+        self.assertFalse(res_null.get_json()["ok"])
+
+        # 3. item_ids is a string instead of a list
+        res_str = self.client.post("/api/still-good/stash", json={"item_ids": "201"})
+        self.assertEqual(res_str.status_code, 400)
+        self.assertFalse(res_str.get_json()["ok"])
+
+        # 4. item_ids is empty list
+        res_emptylist = self.client.post("/api/still-good/stash", json={"item_ids": []})
+        self.assertEqual(res_emptylist.status_code, 200)
+        self.assertEqual(res_emptylist.get_json()["stashed_count"], 0)
+        self.assertEqual(res_emptylist.get_json()["items"], [])
+
+        # 5. item_ids contains invalid values (0, negative, non-numeric)
+        res_invalid = self.client.post("/api/still-good/stash", json={"item_ids": [0, -10, "invalid_string", None]})
+        self.assertEqual(res_invalid.status_code, 200)
+        self.assertEqual(res_invalid.get_json()["stashed_count"], 0)
+        self.assertEqual(res_invalid.get_json()["items"], [])
+
+        # 6. item_ids contains valid string-coercible ID
+        ref_now = self.mock_db.now
+        p_time = ref_now - datetime.timedelta(hours=4)
+        self.mock_db.list_items[250] = {
+            "id": 250, "store_id": 1, "name": "Coerced Blueberries", "category": "Produce",
+            "quantity": "1 pint", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+        res_coerce = self.client.post("/api/still-good/stash", json={"item_ids": ["250"]})
+        self.assertEqual(res_coerce.status_code, 200)
+        self.assertEqual(res_coerce.get_json()["stashed_count"], 1)
+        self.assertIsNotNone(self.mock_db.list_items[250]["still_good_stashed_at"])
+
+        # 7. Candidate item with NULL category & whitespace category are excluded (CEO directive: disregard empty category)
+        self.mock_db.list_items[251] = {
+            "id": 251, "store_id": 1, "name": "Mystery Item", "category": None,
+            "quantity": "1 bunch", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+        self.mock_db.list_items[252] = {
+            "id": 252, "store_id": 1, "name": "Haldiram Nutcracker Snack", "category": "   ",
+            "quantity": "1 container", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+        res_cand = self.client.get("/api/still-good/stash-candidates")
+        self.assertEqual(res_cand.status_code, 200)
+        cand_ids = [c["id"] for c in res_cand.get_json().get("candidates", [])]
+        self.assertNotIn(251, cand_ids)
+        self.assertNotIn(252, cand_ids)
+
+
+    def test_uncheck_rollback_cascade_active_vs_consumed_discarded(self):
+        """
+        Verify:
+        - When an item is unchecked (toggled to purchased=FALSE):
+          * If Still Good item is 'active', it is DELETED.
+          * If Still Good item is 'consumed' or 'discarded', it is NOT deleted.
+          * list_items.still_good_stashed_at is reset to NULL.
+        """
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        ref_now = self.mock_db.now
+        p_time = ref_now - datetime.timedelta(hours=4)
+
+        # Item 301: active Still Good item
+        self.mock_db.list_items[301] = {
+            "id": 301, "store_id": 1, "name": "Fresh Broccoli", "category": "Produce",
+            "quantity": "2 heads", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": ref_now
+        }
+        self.mock_db.items[401] = {
+            "id": 401, "household_id": 10, "name": "Fresh Broccoli", "location": "fridge",
+            "item_type": "produce", "status": "active", "list_item_id": 301
+        }
+
+        # Item 302: consumed Still Good item
+        self.mock_db.list_items[302] = {
+            "id": 302, "store_id": 1, "name": "Organic Eggs", "category": "Dairy",
+            "quantity": "1 dozen", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": ref_now
+        }
+        self.mock_db.items[402] = {
+            "id": 402, "household_id": 10, "name": "Organic Eggs", "location": "fridge",
+            "item_type": "produce", "status": "consumed", "list_item_id": 302
+        }
+
+        # Item 303: discarded Still Good item
+        self.mock_db.list_items[303] = {
+            "id": 303, "store_id": 1, "name": "Fresh Cilantro", "category": "Produce",
+            "quantity": "1 bunch", "household_id": 10, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": ref_now
+        }
+        self.mock_db.items[403] = {
+            "id": 403, "household_id": 10, "name": "Fresh Cilantro", "location": "fridge",
+            "item_type": "produce", "status": "discarded", "list_item_id": 303
+        }
+
+        # 1. Uncheck Item 301 (Active) -> Still Good item 401 MUST be deleted
+        res301 = self.client.post("/api/list/301/toggle")
+        self.assertEqual(res301.status_code, 200)
+        self.assertFalse(self.mock_db.list_items[301]["purchased"])
+        self.assertIsNone(self.mock_db.list_items[301]["still_good_stashed_at"])
+        self.assertNotIn(401, self.mock_db.items, "Active Still Good item 401 must be deleted on uncheck")
+
+        # 2. Uncheck Item 302 (Consumed) -> Still Good item 402 must NOT be deleted
+        res302 = self.client.post("/api/list/302/toggle")
+        self.assertEqual(res302.status_code, 200)
+        self.assertFalse(self.mock_db.list_items[302]["purchased"])
+        self.assertIsNone(self.mock_db.list_items[302]["still_good_stashed_at"])
+        self.assertIn(402, self.mock_db.items, "Consumed Still Good item 402 must NOT be deleted")
+        self.assertEqual(self.mock_db.items[402]["status"], "consumed")
+
+        # 3. Uncheck Item 303 (Discarded) -> Still Good item 403 must NOT be deleted
+        res303 = self.client.post("/api/list/303/toggle")
+        self.assertEqual(res303.status_code, 200)
+        self.assertFalse(self.mock_db.list_items[303]["purchased"])
+        self.assertIsNone(self.mock_db.list_items[303]["still_good_stashed_at"])
+        self.assertIn(403, self.mock_db.items, "Discarded Still Good item 403 must NOT be deleted")
+        self.assertEqual(self.mock_db.items[403]["status"], "discarded")
+
+    def test_multi_tenant_isolation_stash_and_candidates(self):
+        """
+        Verify:
+        - Household A cannot see Household B's stash candidates.
+        - Household A cannot stash Household B's list items.
+        - Household B's items remain untouched when Household A attempts cross-household mutation.
+        """
+        ref_now = self.mock_db.now
+        p_time = ref_now - datetime.timedelta(hours=5)
+
+        # Household B item (household_id=20)
+        self.mock_db.list_items[501] = {
+            "id": 501, "store_id": 1, "name": "Household B Avocados", "category": "Produce",
+            "quantity": "4", "household_id": 20, "purchased": True,
+            "purchased_at": p_time, "trip_notified_at": p_time, "still_good_stashed_at": None
+        }
+
+        # Log in as Household A (household_id=10)
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        # 1. Candidate lookup: Household A must not see Item 501
+        res_cand = self.client.get("/api/still-good/stash-candidates")
+        self.assertEqual(res_cand.status_code, 200)
+        data_cand = res_cand.get_json()
+        cand_ids = [c["id"] for c in data_cand.get("candidates", [])]
+        self.assertNotIn(501, cand_ids, "Household A must not see Household B candidates")
+
+        # 2. Cross-household stash attempt: Household A attempts to stash Item 501
+        res_stash = self.client.post("/api/still-good/stash", json={"item_ids": [501]})
+        self.assertEqual(res_stash.status_code, 200)
+        data_stash = res_stash.get_json()
+        self.assertEqual(data_stash.get("stashed_count"), 0)
+        self.assertEqual(data_stash.get("items"), [])
+
+        # Item 501 must remain unstashed
+        self.assertIsNone(self.mock_db.list_items[501]["still_good_stashed_at"])
+        self.assertNotIn(501, [r.get("list_item_id") for r in self.mock_db.items.values()])
+
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
+    @patch("push_helper.send_push_to_user")
+    def test_check_post_shopping_smart_stash_pushes_dispatch(self, mock_send_push, mock_run, mock_init_schema):
+        """Verify post-shopping smart stash push reminder evaluates unstashed items and dispatches."""
+        mock_run.side_effect = [
+            # 1. Candidate query returns user 101 in household 10
+            [
+                {
+                    "user_id": 101,
+                    "household_id": 10,
+                    "user_name": "Alice",
+                    "user_email": "alice@example.com",
+                    "user_timezone": "America/New_York"
+                }
+            ],
+            # 2. Unstashed items query for household 10
+            [
+                {"id": 20, "name": "Fresh Spinach", "category": "Produce", "purchased_at": "2026-10-11 10:00:00"},
+                {"id": 21, "name": "Strawberries", "category": "Produce", "purchased_at": "2026-10-11 10:00:00"}
+            ]
+        ]
+        mock_send_push.return_value = {"sent": 1, "failed": 0, "mock": False}
+
+        res = push_helper.check_post_shopping_smart_stash_pushes(dry_run=False, force_send=True)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 1)
+        self.assertEqual(res["dispatched"], 1)
+
+        mock_send_push.assert_called_once()
+        call_kwargs = mock_send_push.call_args[1]
+        self.assertEqual(call_kwargs["user_id"], 101)
+        self.assertIn("Stash your fresh groceries", call_kwargs["title"])
+        self.assertIn("Fresh Spinach", call_kwargs["body"])
+        self.assertEqual(call_kwargs["data"]["campaign"], "still_good_smart_stash_3h")
+        self.assertEqual(call_kwargs["data"]["source"], "push_smart_stash_3h")
+
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
+    def test_check_post_shopping_smart_stash_pushes_dry_run(self, mock_run, mock_init_schema):
+        """Verify dry-run mode returns candidate copy without dispatching."""
+        mock_run.side_effect = [
+            [
+                {
+                    "user_id": 102,
+                    "household_id": 10,
+                    "user_name": "Bob",
+                    "user_email": "bob@example.com",
+                    "user_timezone": "America/Chicago"
+                }
+            ],
+            [
+                {"id": 25, "name": "Organic Milk", "category": "Dairy", "purchased_at": "2026-10-11 10:00:00"}
+            ]
+        ]
+
+        res = push_helper.check_post_shopping_smart_stash_pushes(dry_run=True, force_send=True)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 1)
+        self.assertEqual(res["dispatched"], 0)
+        self.assertEqual(len(res["results"]), 1)
+        self.assertEqual(res["results"][0]["status"], "dry_run")
+        self.assertIn("Organic Milk", res["results"][0]["body"])
+
+    # ─────────────────────────────────────────────────────────────
+    # 8. Add to List from Crisper Drawer (Iteration 2)
+    # ─────────────────────────────────────────────────────────────
+
+    def test_add_to_list_success_with_store(self):
+        """Item with store_id adds to that store list with category, returning 200 and added=True."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[2] = {"id": 2, "name": "Trader Joe's", "household_id": 10}
+        self.mock_db.items[701] = {
+            "id": 701, "household_id": 10, "store_id": 2, "name": "Organic Honeycrisp Apples",
+            "category": "Produce", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+
+        res = self.client.post("/api/still-good/701/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertTrue(data.get("added"))
+        self.assertFalse(data.get("already_on_list"))
+        self.assertEqual(data.get("store_id"), 2)
+        self.assertEqual(data.get("store_name"), "Trader Joe's")
+        new_li_id = data.get("list_item_id")
+        self.assertIsNotNone(new_li_id)
+
+        # Verify list item exists in mock db
+        li = self.mock_db.list_items[new_li_id]
+        self.assertEqual(li["name"], "Organic Honeycrisp Apples")
+        self.assertEqual(li["store_id"], 2)
+        self.assertEqual(li["household_id"], 10)
+        self.assertEqual(li["category"], "Produce")
+        self.assertFalse(li["purchased"])
+
+    def test_add_to_list_deduplication(self):
+        """If item is already on active unpurchased list for target store, return already_on_list=True and do not duplicate."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[2] = {"id": 2, "name": "Trader Joe's", "household_id": 10}
+        self.mock_db.items[702] = {
+            "id": 702, "household_id": 10, "store_id": 2, "name": "Baby Spinach",
+            "category": "Produce", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+        # Prepopulate active list item in store 2
+        self.mock_db.list_items[801] = {
+            "id": 801, "household_id": 10, "store_id": 2, "name": "Baby Spinach",
+            "category": "Produce", "purchased": False
+        }
+
+        res = self.client.post("/api/still-good/702/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertFalse(data.get("added"))
+        self.assertTrue(data.get("already_on_list"))
+        self.assertEqual(data.get("list_item_id"), 801)
+        self.assertEqual(data.get("store_id"), 2)
+        self.assertEqual(data.get("store_name"), "Trader Joe's")
+        self.assertIn("already on your Trader Joe's list", data.get("message", ""))
+
+    def test_add_to_list_fallback_to_general_list_and_category_inference(self):
+        """If item has no store_id, resolve to household General List and infer category."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 101, "household_id": 10, "email": "user101@example.com"}
+
+        self.mock_db.stores[1] = {"id": 1, "name": "General List", "household_id": 10}
+        # Item with no store_id and no category
+        self.mock_db.items[703] = {
+            "id": 703, "household_id": 10, "store_id": None, "name": "Bananas",
+            "category": "", "location": "fridge", "item_type": "produce", "status": "active"
+        }
+
+        res = self.client.post("/api/still-good/703/add-to-list")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertTrue(data.get("added"))
+        self.assertEqual(data.get("store_id"), 1)
+        self.assertEqual(data.get("store_name"), "General List")
+
+        new_li = self.mock_db.list_items[data.get("list_item_id")]
+        self.assertEqual(new_li["store_id"], 1)
+        self.assertEqual(new_li["name"], "Bananas")
+        self.assertTrue(len(new_li["category"]) > 0)
 
 
 if __name__ == "__main__":
