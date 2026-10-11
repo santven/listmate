@@ -42,8 +42,8 @@ class TestStillGoodProducePushNotifications(unittest.TestCase):
         self.assertIn("Strawberries", body)
         self.assertIn("1 more tomorrow", body)
 
-    @patch("scripts.cron_daily._init_schema")
-    @patch("scripts.cron_daily._run")
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
     @patch("push_helper.send_push_to_user")
     def test_check_still_good_produce_expiry_pushes_dispatch(self, mock_send_push, mock_run, mock_init_schema):
         """Verify candidate users are evaluated, expiring produce retrieved, and pushes dispatched."""
@@ -107,9 +107,9 @@ class TestStillGoodProducePushNotifications(unittest.TestCase):
 
         self.assertEqual(mock_send_push.call_count, 2)
 
-    @patch("scripts.cron_daily.check_trial_expiration_pushes")
-    @patch("scripts.cron_daily.check_still_good_fridge_lunch_pushes")
-    @patch("scripts.cron_daily.check_still_good_produce_expiry_pushes")
+    @patch("scripts.cron_hourly.check_trial_expiration_pushes")
+    @patch("scripts.cron_hourly.check_still_good_fridge_lunch_pushes")
+    @patch("scripts.cron_hourly.check_still_good_produce_expiry_pushes")
     def test_run_hourly_pipeline_includes_produce_pushes(self, mock_produce_pushes, mock_lunch_pushes, mock_trial_pushes):
         """Verify run_hourly_pipeline coordinates the Still Good 10:00 AM produce expiry push task."""
         mock_trial_pushes.return_value = {"ok": True, "dispatched": 0}
