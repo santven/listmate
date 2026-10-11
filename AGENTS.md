@@ -71,3 +71,35 @@ To prevent regressions and edge-case bugs in production, all code modifications 
 ### Front-End & API Contract
 *   **Race Conditions**: Never assume frontend state updates are synchronous. Use React functional state updates or debounce rapid interactions (like button clicks).
 *   **Graceful Failures**: All API calls must have `.catch()` blocks or `try/except` wrappers. Never let an unhandled promise rejection crash the SPA.
+
+## 7. The Clockwork Multi-Agent Execution Protocol
+Whenever a feature is requested or an issue is investigated and fixed, the system executes like clockwork through this standardized lifecycle without needing repetitive prompting:
+
+### Step 1: Product Reality & Skepticism Check (PM Agent)
+* When a new feature is proposed, `listmate_pm` rigorously challenges whether it creates real customer value or introduces friction/anti-patterns for one-handed supermarket shoppers.
+* Never act as a 'yes-man'. Always evaluate: Is this an anti-pattern? Does it fit in-aisle cognitive mode? Can it be solved 10x cheaper with zero LLM runtime overhead?
+
+### Step 2: Issue Creation First (Release Agent)
+* Before touching any code or creating branches, `listmate_release` creates an issue in `santven/listmate` via GitHub API to secure `#<issue-number>`.
+
+### Step 3: Dedicated Branch Creation (Release Agent)
+* `listmate_release` checks out latest `origin/staging` and creates:
+  `git checkout -b <feat|fix>/<issue-number>-<short-description>`
+
+### Step 4: Pre-Implementation Blast-Radius & Scoped Regression Plan (Architect + QA)
+* `listmate_architect` traces the blast radius: which files, DB tables, and routes are touched.
+* `listmate_qa` outputs the targeted regression checklist: the exact 2 to 4 tests or UI checks to run. Never run the entire test suite across unrelated domains.
+
+### Step 5: Engineering Implementation (Backend / Frontend)
+* `listmate_backend` and/or `listmate_frontend` implement the solution on the dedicated branch.
+
+### Step 6: Two-Layer Pre-Merge Audit Gate (Architect + QA)
+* `listmate_architect` reviews the diff from the inside out: checking N+1 queries, connection pool safety, `0` vs `None` falsiness, and `household_id` scoping.
+* `listmate_qa` reviews from the outside in: running only the scoped regression checks and edge cases identified in Step 4.
+
+### Step 7: PR & Staging Merge (Release Agent)
+* `listmate_release` pushes the branch, opens the PR linking `Closes #<issue-number>`, and merges into `staging`.
+
+### Step 8: Production Promotion (Release Agent)
+* Only when the user explicitly commands "merge to main" or gives a "GO", `listmate_release` cherry-picks the verified commit(s) into `main` with `EXPLICIT_MAIN_PUSH=1` and drafts dual release notes.
+
