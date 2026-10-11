@@ -784,6 +784,22 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   vertical-align: middle;
   flex-shrink: 0;
 }
+.sg-crisper-tip-pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 1px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
 
 /* ── Post-Shopping Smart Stash Bottom Drawer (Issue #632) ── */
 .sg-post-trip-row {
@@ -5079,7 +5095,7 @@ function getCrisperItemIcon(name) {
 }
 
 function toggleCrisperDrawer() {
-  var isCurrentlyOpen = localStorage.getItem('sg_crisper_open') === 'true';
+  var isCurrentlyOpen = localStorage.getItem('sg_crisper_open') !== 'false';
   var nextState = !isCurrentlyOpen;
   localStorage.setItem('sg_crisper_open', nextState ? 'true' : 'false');
   var content = document.getElementById('sgCrisperContent');
@@ -5328,7 +5344,7 @@ function renderStillGoodItems() {
 
   // Render crisper_items inside collapsible Crisper Drawer container
   if (crisper_items.length > 0) {
-    var isCrisperOpen = localStorage.getItem('sg_crisper_open') === 'true';
+    var isCrisperOpen = localStorage.getItem('sg_crisper_open') !== 'false';
 
     // Urgency badge if any item expires in <= 2 days (excluding unestimated grocery items)
     var urgentProduce = crisper_items.filter(function(i) {
@@ -5350,7 +5366,7 @@ function renderStillGoodItems() {
       var expiryText = '';
       var badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
 
-      if (item.list_item_id && (!item.ai_estimated || (item.days_left !== null && item.days_left !== undefined && item.days_left > 2))) {
+      if (!item.ai_estimated) {
         expiryText = '🌱 Fresher';
         badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
       } else if (item.days_left !== null && item.days_left !== undefined) {
@@ -5380,6 +5396,11 @@ function renderStillGoodItems() {
         storeBadgeHtml = '<span class="sg-crisper-store-badge" style="font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 7px; border-radius:6px; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; display:inline-block;" title="' + escapeHtml(item.store_name) + '">🏬 ' + escapeHtml(item.store_name) + '</span>';
       }
 
+      var tipHtml = '';
+      if (item.ai_tip) {
+        tipHtml = '<span class="sg-crisper-tip-pill" style="font-size:10px; font-weight:600; color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; padding:1px 6px; border-radius:5px; white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis; display:inline-block;" title="AI Storage Tip: ' + escapeHtml(item.ai_tip) + '">🤖 ' + escapeHtml(item.ai_tip) + '</span>';
+      }
+
       crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
         '<div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">' +
           '<span style="font-size:16px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
@@ -5387,6 +5408,7 @@ function renderStillGoodItems() {
             escapeHtml(item.name) +
           '</span>' +
           storeBadgeHtml +
+          tipHtml +
         '</div>' +
         '<div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">' +
           '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 7px; border-radius:6px; white-space:nowrap;">' +
