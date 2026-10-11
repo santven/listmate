@@ -59,12 +59,13 @@ class TestSmartStashCrisperFrontend(unittest.TestCase):
         self.assertTrue("⏳ 2 days left" in self.html_content)
         self.assertTrue("⏳ ' + item.days_left + ' days left'" in self.html_content)
 
-    def test_ai_tip_pill_rendering_and_escaping(self):
-        """Verify that ai_tip renders a pill with '🤖' and is escaped."""
-        self.assertTrue("sg-crisper-tip-pill" in self.html_content)
+    def test_ai_tip_subline_rendering_and_escaping(self):
+        """Verify that ai_tip renders on its own subline with '🤖' and is escaped (Issue #636)."""
         self.assertTrue("if (item.ai_tip)" in self.html_content)
         self.assertTrue("🤖 ' + escapeHtml(item.ai_tip)" in self.html_content)
         self.assertTrue("title=\"AI Storage Tip: ' + escapeHtml(item.ai_tip)" in self.html_content)
+        self.assertTrue("margin-left:22px" in self.html_content)
+        self.assertTrue("tipSublineHtml" in self.html_content)
 
     def test_store_badge_rendering_and_escaping(self):
         """Verify that store_name renders a pill with '🏬' and is escaped."""
@@ -77,9 +78,9 @@ class TestSmartStashCrisperFrontend(unittest.TestCase):
         self.assertTrue("title=\"' + escapeHtml(item.name) + '\"" in self.html_content)
         self.assertTrue("escapeHtml(item.name)" in self.html_content)
 
-    def test_crisper_drawer_default_open(self):
-        """Verify crisper drawer defaults to open unless explicitly collapsed ('false')."""
-        self.assertTrue("localStorage.getItem('sg_crisper_open') !== 'false'" in self.html_content)
+    def test_crisper_drawer_default_collapsed(self):
+        """Verify crisper drawer defaults to collapsed unless explicitly opened ('true') (Issue #636)."""
+        self.assertTrue("localStorage.getItem('sg_crisper_open') === 'true'" in self.html_content)
 
 
 class TestSmartStashCrisperApi(unittest.TestCase):
