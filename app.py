@@ -5358,7 +5358,7 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
                 break
 
         # Strict Lite Models Only — User directive: stick strictly to lite models to preserve token/daily limits
-        raw_models = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-2.5-flash-lite")
+        raw_models = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.0-flash-lite")
         models_to_try = []
         for m in raw_models.split(","):
             clean_m = m.strip().strip("'").strip('"')
@@ -5366,8 +5366,11 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
                 clean_m = clean_m[len("models/"):]
             if clean_m and "lite" in clean_m.lower() and clean_m not in models_to_try:
                 models_to_try.append(clean_m)
-        if not models_to_try:
-            models_to_try = ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
+
+        # Always guarantee secondary and tertiary lite fallbacks so a Google 503 on 3.1 doesn't kill the request
+        for fallback_lite in ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]:
+            if fallback_lite not in models_to_try:
+                models_to_try.append(fallback_lite)
 
         insight_text = None
         last_error = None
@@ -5376,7 +5379,6 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
             body = {
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                 "systemInstruction": {
-                    "role": "system",
                     "parts": [{
                         "text": (
                             "You are a frugal shopping and household food planner expert. "
@@ -5405,8 +5407,8 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
                     }
                 )
                 try:
-                    print(f"[GEMINI REQUEST] Model: {model_name} (AI Insights) | Timeout: 25s", flush=True)
-                    with urllib.request.urlopen(req, timeout=25) as resp:
+                    print(f"[GEMINI REQUEST] Model: {model_name} (AI Insights) | Timeout: 14s", flush=True)
+                    with urllib.request.urlopen(req, timeout=14) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
                         candidates = data.get("candidates", [])
                         if candidates:
@@ -5417,6 +5419,13 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
                 except Exception as e:
                     last_error = str(e)
                     print(f"[GEMINI ERROR] Call to {model_name} failed: {e}", flush=True)
+                    try:
+                        fp = getattr(e, "fp", None)
+                        if fp is not None:
+                            err_detail = fp.read().decode("utf-8")
+                            print(f"[GEMINI ERROR DETAIL] {err_detail}", flush=True)
+                    except Exception:
+                        pass
                     continue
         else:
             last_error = "No Gemini API key configured"

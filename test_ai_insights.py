@@ -115,11 +115,11 @@ class TestAIInsights(unittest.TestCase):
             self.assertTrue(data.get("ok"))
             self.assertIn("Still Good", data.get("insight"))
 
-            # Verify Gemini was called with strictly lite model and 25s timeout
+            # Verify Gemini was called with strictly lite model and 14s timeout
             mock_urlopen.assert_called_once()
             req_obj = mock_urlopen.call_args[0][0]
             timeout_val = mock_urlopen.call_args[1].get("timeout")
-            self.assertEqual(timeout_val, 25)
+            self.assertEqual(timeout_val, 14)
 
             # URL must use gemini-3.1-flash-lite and NOT gemini-pro or gemini-flash-latest
             self.assertIn("gemini-3.1-flash-lite", req_obj.full_url)
@@ -133,6 +133,66 @@ class TestAIInsights(unittest.TestCase):
             self.assertIn("Meals/Items Enjoyed (Consumed): 5 (~$40 saved)", prompt_text)
             self.assertIn("Items Spoiled/Discarded: 2 (~$16 wasted)", prompt_text)
             self.assertEqual(req_body["generationConfig"]["maxOutputTokens"], 600)
+
+    @patch("urllib.request.urlopen")
+    @patch("app.get_db")
+    @patch("shared.auth._one")
+    @patch("shared.auth.is_logged_in", return_value=True)
+    @patch("app._hh")
+    def test_analytics_ai_recovers_from_503_on_primary_with_secondary_lite_model(
+        self, mock_hh, mock_logged_in, mock_one, mock_db, mock_urlopen
+    ):
+        mock_hh.return_value = 10
+        mock_one.return_value = {"is_premium": True}
+
+        db_mock = MagicMock()
+        mock_db.return_value = db_mock
+
+        def fake_execute(query, params=None):
+            m = MagicMock()
+            if "ai_insights_cache" in query:
+                m.fetchone.return_value = None
+            elif "store_visits" in query:
+                m.fetchall.return_value = [{"store": "Costco", "visit_date": "2026-10-10", "items_count": 10}]
+            elif "item_purchase_stats" in query:
+                m.fetchall.return_value = [{"name": "Eggs", "total_purchases": 3}]
+            elif "still_good_items" in query:
+                m.fetchone.return_value = {"consumed_28d": 2, "discarded_28d": 1, "active_count": 1}
+            return m
+
+        db_mock.execute.side_effect = fake_execute
+
+        # 1st call (gemini-3.1-flash-lite) raises HTTP 503 Service Unavailable
+        # 2nd call (gemini-2.5-flash-lite) succeeds!
+        import urllib.error
+        import io
+        http_503_err = urllib.error.HTTPError("http://example.com", 503, "Service Unavailable", {}, io.BytesIO(b'{"error": "Service Unavailable"}'))
+
+        gemini_success = MagicMock()
+        gemini_success.read.return_value = json.dumps({
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": "Conversational AI Insight from Gemini 2.5: Your grocery pacing is efficient!"}]
+                }
+            }]
+        }).encode("utf-8")
+        success_ctx = MagicMock()
+        success_ctx.__enter__.return_value = gemini_success
+
+        mock_urlopen.side_effect = [http_503_err, success_ctx]
+
+        res = self.client.post("/api/analytics/ai")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("ok"))
+        self.assertEqual(data.get("insight"), "Conversational AI Insight from Gemini 2.5: Your grocery pacing is efficient!")
+
+        # Assert two attempts made: 3.1 then 2.5
+        self.assertEqual(mock_urlopen.call_count, 2)
+        first_call_url = mock_urlopen.call_args_list[0][0][0].full_url
+        second_call_url = mock_urlopen.call_args_list[1][0][0].full_url
+        self.assertIn("gemini-3.1-flash-lite", first_call_url)
+        self.assertIn("gemini-2.5-flash-lite", second_call_url)
 
     @patch("urllib.request.urlopen")
     @patch("app.get_db")
