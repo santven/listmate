@@ -149,7 +149,7 @@ class PgConnection:
 _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS stores (id SERIAL PRIMARY KEY, name TEXT NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS store_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1)",
-    "CREATE TABLE IF NOT EXISTS list_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL DEFAULT '', added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, added_at TIMESTAMP NOT NULL DEFAULT NOW(), purchased BOOLEAN NOT NULL DEFAULT FALSE, purchased_by TEXT, purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, purchased_at TIMESTAMP, quantity TEXT DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1, still_good_stashed_at TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS list_items (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', added_by TEXT NOT NULL DEFAULT '', added_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, added_at TIMESTAMP NOT NULL DEFAULT NOW(), purchased BOOLEAN NOT NULL DEFAULT FALSE, purchased_by TEXT, purchased_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL, purchased_at TIMESTAMP, quantity TEXT DEFAULT '', household_id INTEGER NOT NULL DEFAULT 1, still_good_stashed_at TIMESTAMP, stash_notified_at TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS store_visits (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES stores(id), household_id INTEGER NOT NULL DEFAULT 1, visit_date DATE NOT NULL, items_count INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
     "CREATE TABLE IF NOT EXISTS store_enrich_queue (id SERIAL PRIMARY KEY, store_id INTEGER NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT NOW(), processed_at TIMESTAMP)",
     "CREATE INDEX IF NOT EXISTS idx_si_store ON store_items(store_id, household_id)",
@@ -239,6 +239,7 @@ def init_db():
 
         try:
             db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS still_good_stashed_at TIMESTAMP")
+            db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS stash_notified_at TIMESTAMP")
         except Exception:
             try: db.rollback()
             except Exception: pass
@@ -252,6 +253,7 @@ def init_db():
         try:
             db.execute("CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_list_items_stash_notified ON list_items(household_id, purchased, stash_notified_at)")
         except Exception:
             try: db.rollback()
             except Exception: pass
