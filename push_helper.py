@@ -1522,15 +1522,18 @@ def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = Fal
 
     print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking store plan push reminders (threshold={threshold_n}, dry_run={dry_run}, force_send={force_send})...")
 
-    # Query for stores that have >= threshold_n uncompleted list items and NO plan date
+    # Query for stores that have >= threshold_n uncompleted list items and NO plan date,
+    # constrained to 7:00 AM - 9:00 PM local time in the user's timezone (Issue #651)
     query = """
         SELECT 
             s.id AS store_id,
             s.name AS store_name,
             s.household_id,
-            COUNT(li.id) AS items_count
+            COUNT(DISTINCT li.id) AS items_count
         FROM stores s
         JOIN auth_households h ON h.id = s.household_id
+        LEFT JOIN auth_household_members hm ON hm.household_id = h.id
+        LEFT JOIN auth_users u ON u.id = hm.user_id
         JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
         WHERE li.purchased = FALSE
           AND s.planned_visit_date IS NULL
@@ -1542,12 +1545,16 @@ def check_store_plan_push_reminders(threshold_n: int = None, dry_run: bool = Fal
                   AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
               )
           )
+          AND (
+              %(force_send)s = TRUE
+              OR EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) BETWEEN 7 AND 21
+          )
         GROUP BY s.id, s.name, s.household_id
-        HAVING COUNT(li.id) >= %(threshold)s
+        HAVING COUNT(DISTINCT li.id) >= %(threshold)s
         ORDER BY s.household_id ASC, items_count DESC
     """
     try:
-        candidates = _run(query, {"threshold": threshold_n})
+        candidates = _run(query, {"threshold": threshold_n, "force_send": force_send})
     except Exception as e:
         print(f"[check_store_plan_push_reminders] Query error: {e}", flush=True)
         return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}

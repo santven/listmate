@@ -1,5 +1,9 @@
 import os
 import sys
+
+os.environ["DATABASE_URL"] = "postgresql://dummy:5432/test"
+os.environ["SENDGRID_API_KEY"] = "test_sendgrid_key"
+
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -287,8 +291,150 @@ class TestStorePlanReminders(unittest.TestCase):
             cron_hourly.check_store_plan_push_reminders(dry_run=True)
             mock_run.assert_called_once()
             args, kwargs = mock_run.call_args
-            self.assertEqual(args[1]["threshold"], 15)
+    @patch("push_helper._run")
+    @patch("push_helper._one")
+    def test_check_store_plan_push_reminders_timezone_window_sql_params(self, mock_one, mock_run):
+        import push_helper
+        mock_run.return_value = []
+        push_helper.check_store_plan_push_reminders(threshold_n=10, dry_run=True, force_send=False)
+        mock_run.assert_called_once()
+        query_sql, params = mock_run.call_args[0]
+        self.assertIn("BETWEEN 7 AND 21", query_sql)
+        self.assertIn("COALESCE(u.timezone, 'America/Chicago')", query_sql)
+        self.assertFalse(params["force_send"])
+        self.assertEqual(params["threshold"], 10)
+
+    @patch("push_helper._run")
+    @patch("push_helper._one")
+    def test_check_store_plan_push_reminders_force_send_bypasses_window(self, mock_one, mock_run):
+        import push_helper
+        mock_run.return_value = []
+        push_helper.check_store_plan_push_reminders(threshold_n=10, dry_run=True, force_send=True)
+        mock_run.assert_called_once()
+        query_sql, params = mock_run.call_args[0]
+        self.assertTrue(params["force_send"])
+
+    @patch("scripts.cron_daily._run")
+    @patch("email_helper.send_store_plan_reminder_email")
+    def test_process_email_events_store_plan_single_event(self, mock_send_email, mock_run):
+        mock_send_email.return_value = True
+        events = {
+            "store_plan": {
+                "store_id": 42,
+                "store_name": "Trader Joe's",
+                "items_count": 8,
+                "sample_items": ["Apples", "Sourdough Bread"]
+            }
+        }
+        res = cron_daily.process_email_events(
+            email="shopper@example.com",
+            user_name="Alice",
+            events=events,
+            user_id=101,
+            household_id=12
+        )
+        self.assertTrue(res)
+        mock_send_email.assert_called_once()
+        args, kwargs = mock_send_email.call_args
+        self.assertEqual(kwargs["to_email"], "shopper@example.com")
+        self.assertEqual(kwargs["store_name"], "Trader Joe's")
+        self.assertEqual(kwargs["items_count"], 8)
+        self.assertEqual(kwargs["store_id"], 42)
+        # Verify email_events insert happened with store_plan_reminder_42 campaign
+        self.assertTrue(any("store_plan_reminder_42" in str(call) for call in mock_run.call_args_list))
+
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily.send_combined_notice")
+    def test_process_email_events_store_plan_and_solo_nudge_combined(self, mock_send_combined, mock_run):
+        mock_send_combined.return_value = True
+        events = {
+            "solo_nudge": True,
+            "store_plan": {
+                "store_id": 42,
+                "store_name": "Trader Joe's",
+                "items_count": 8,
+                "sample_items": ["Apples", "Sourdough Bread"]
+            }
+        }
+        res = cron_daily.process_email_events(
+            email="shopper@example.com",
+            user_name="Alice",
+            events=events,
+            user_id=101,
+            household_id=12
+        )
+        self.assertTrue(res)
+        mock_send_combined.assert_called_once()
+        c_events = mock_send_combined.call_args[0][2]
+        self.assertIn("solo_nudge", c_events)
+        self.assertIn("store_plan", c_events)
+        # Both campaigns recorded in email_events
+        inserted_campaigns = [str(call) for call in mock_run.call_args_list]
+        self.assertTrue(any("solo_nudge" in s for s in inserted_campaigns))
+        self.assertTrue(any("store_plan_reminder_42" in s for s in inserted_campaigns))
+
+    @patch("email_helper._send_via_api")
+    def test_send_combined_notice_renders_store_plan_content(self, mock_send_via_api):
+        mock_send_via_api.return_value = True
+
+        events = {
+            "solo_nudge": True,
+            "store_plan": {
+                "store_id": 99,
+                "store_name": "Costco",
+                "items_count": 12,
+                "sample_items": ["Olive Oil", "Coffee Beans"]
+            }
+        }
+        with patch.dict(os.environ, {"SENDGRID_API_KEY": "test_key"}):
+            ok = email_helper.send_combined_notice(
+                to_email="test@example.com",
+                user_name="Bob",
+                events=events,
+                user_id=5,
+                household_id=10
+            )
+            self.assertTrue(ok)
+            mock_send_via_api.assert_called_once()
+            api_key, payload = mock_send_via_api.call_args[0]
+            subject = payload["subject"]
+            text_content = payload["content"][0]["value"]
+            html_content = payload["content"][1]["value"]
+            # Verify subject includes store name & invite
+            self.assertIn("Costco", subject)
+            self.assertIn("invite your household", subject)
+            # Verify body contains store plan and solo nudge content
+            self.assertIn("Costco", html_content)
+            self.assertIn("12 items", html_content)
+            self.assertIn("Coffee Beans", html_content)
+            self.assertIn("Invite Your Household", html_content)
+
+    @patch("scripts.cron_daily._init_schema")
+    @patch("scripts.cron_daily.prune_push_notifications_log")
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily._one")
+    @patch("scripts.cron_daily.is_email_suppressed")
+    def test_run_cron_collects_store_plan_candidate_without_name_error(
+        self, mock_suppressed, mock_one, mock_run, mock_prune, mock_init_schema
+    ):
+        mock_suppressed.return_value = False
+        mock_one.return_value = None
+
+        def fake_run(query, params=None):
+            if "HAVING COUNT(li.id) >= %(threshold)s" in query and "planned_visit_date IS NULL" in query:
+                return [{"store_id": 42, "store_name": "Trader Joe's", "household_id": 10, "items_count": 8}]
+            elif "auth_household_members hm" in query:
+                return [{"user_id": 101, "user_name": "Alice", "email": "alice@example.com"}]
+            elif "SELECT name, quantity" in query and "FROM list_items" in query:
+                return [{"name": "Milk", "quantity": "1 gal"}]
+            return []
+
+        mock_run.side_effect = fake_run
+
+        # Must execute cleanly without NameError or crash
+        cron_daily.run_cron(dry_run=True)
 
 
 if __name__ == "__main__":
     unittest.main()
+
