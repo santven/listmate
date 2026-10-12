@@ -1393,7 +1393,7 @@ def run_cron(dry_run=False, mock_now=None):
             m_email = (m.get("email") or "").strip()
             m_name = (m.get("user_name") or "there").strip()
             m_uid = m.get("user_id") or 0
-            if not m_email or is_email_suppressed_db(m_email):
+            if not m_email or is_email_suppressed(m_email):
                 continue
 
             sp_dedup = _one("""

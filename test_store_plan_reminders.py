@@ -409,6 +409,31 @@ class TestStorePlanReminders(unittest.TestCase):
             self.assertIn("Coffee Beans", html_content)
             self.assertIn("Invite Your Household", html_content)
 
+    @patch("scripts.cron_daily._init_schema")
+    @patch("scripts.cron_daily.prune_push_notifications_log")
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily._one")
+    @patch("scripts.cron_daily.is_email_suppressed")
+    def test_run_cron_collects_store_plan_candidate_without_name_error(
+        self, mock_suppressed, mock_one, mock_run, mock_prune, mock_init_schema
+    ):
+        mock_suppressed.return_value = False
+        mock_one.return_value = None
+
+        def fake_run(query, params=None):
+            if "HAVING COUNT(li.id) >= %(threshold)s" in query and "planned_visit_date IS NULL" in query:
+                return [{"store_id": 42, "store_name": "Trader Joe's", "household_id": 10, "items_count": 8}]
+            elif "auth_household_members hm" in query:
+                return [{"user_id": 101, "user_name": "Alice", "email": "alice@example.com"}]
+            elif "SELECT name, quantity" in query and "FROM list_items" in query:
+                return [{"name": "Milk", "quantity": "1 gal"}]
+            return []
+
+        mock_run.side_effect = fake_run
+
+        # Must execute cleanly without NameError or crash
+        cron_daily.run_cron(dry_run=True)
+
 
 if __name__ == "__main__":
     unittest.main()
