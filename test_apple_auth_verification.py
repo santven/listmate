@@ -146,7 +146,7 @@ class TestAppleAuthVerification(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
         data = resp.get_json()
         self.assertFalse(data.get("ok", True))
-        self.assertIn("Invalid or unverified Apple id_token", data.get("error", ""))
+        self.assertIn("Invalid or unverified Apple identity token", data.get("error", ""))
 
 
 if __name__ == "__main__":
