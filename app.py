@@ -223,98 +223,118 @@ def login_page():
             import json
             import secrets
             import shared.auth as authmod
+            apple_sub = None
+            token_email = ""
+            claims = {}
             try:
                 claims = authmod.verify_apple_id_token(id_token_str)
                 apple_sub = claims.get("sub")
-                token_email = claims.get("email", "")
+                token_email = (claims.get("email") or "").strip().lower()
+            except Exception as jwte:
+                import traceback
+                print(f"[Apple Auth Verification Error] {jwte}", flush=True)
+                return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in failed</title></head>
+                <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#d94a4a;">
+                <h2>⚠️ Sign in failed</h2><p style="color:#555;margin-top:10px;">Invalid or unverified Apple identity token.</p>
+                <p style="margin-top:20px;"><a href="/login" style="color:#5ebe7e;text-decoration:none;font-weight:600;">← Back to Login</a></p>
+                </body></html>''', 401
+
+            if not apple_sub:
+                return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in failed</title></head>
+                <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#d94a4a;">
+                <h2>⚠️ Sign in failed</h2><p style="color:#555;margin-top:10px;">Invalid Apple identity token: missing subject.</p>
+                <p style="margin-top:20px;"><a href="/login" style="color:#5ebe7e;text-decoration:none;font-weight:600;">← Back to Login</a></p>
+                </body></html>''', 401
+
+            try:
+                authmod._init_schema()
+                
+                client_user = {}
+                if user_json:
+                    try: client_user = json.loads(user_json)
+                    except: pass
+                
+                # SECURITY FIX (B1/S1): NEVER use client_user.get("email") for identity or account lookup/linking.
+                # Apple identity token claims['email'] is the single source of truth for email.
+                email = token_email
+                name_obj = client_user.get("name") or {}
+                first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
+                last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
+                name_from_client = f"{first} {last}".strip()
+                if not name_from_client:
+                    name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
+                else:
+                    name = name_from_client
+                
+                gid_alias = f"apple_{apple_sub}"
+                user = None
                 if apple_sub:
-                    authmod._init_schema()
+                    user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE apple_id = ?", (apple_sub,))
+                # Only match by email if Apple cryptographically verified the email
+                is_email_verified = claims.get("email_verified") in (True, "true", "True", 1)
+                if not user and email and is_email_verified:
+                    user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
+                if not user:
+                    user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
                     
-                    client_user = {}
-                    if user_json:
-                        try: client_user = json.loads(user_json)
-                        except: pass
-                    
-                    client_email = client_user.get("email") or ""
-                    email = (client_email or token_email or "").strip().lower()
-                    name_obj = client_user.get("name") or {}
-                    first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
-                    last = name_obj.get("lastName", "") if isinstance(name_obj, dict) else ""
-                    name_from_client = f"{first} {last}".strip()
-                    if not name_from_client:
-                        name = (email.split("@")[0] if email else f"User_{apple_sub[:6]}").capitalize()
-                    else:
-                        name = name_from_client
-                    
-                    gid_alias = f"apple_{apple_sub}"
-                    user = None
-                    if apple_sub:
-                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE apple_id = ?", (apple_sub,))
-                    # Only match by email if Apple cryptographically verified the email
-                    is_email_verified = claims.get("email_verified") in (True, "true", "True", 1)
-                    if not user and email and is_email_verified:
-                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE LOWER(email) = LOWER(?)", (email,))
-                    if not user:
-                        user = authmod._one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {authmod._USERS} WHERE google_id = ?", (gid_alias,))
-                        
-                    is_new_user = False
-                    if not user:
-                        is_new_user = True
-                        authmod._run(f"INSERT INTO {authmod._USERS} (google_id, apple_id, email, name, household_id) VALUES (?,?,?,?,0)", (gid_alias, apple_sub, email, name))
-                        user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE apple_id = ? OR google_id = ?", (apple_sub, gid_alias))
-                    
-                    if user and (not user.get("apple_id") or user.get("apple_id") == ""):
-                        try:
-                            authmod._run(f"UPDATE {authmod._USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
-                            user["apple_id"] = apple_sub
-                        except Exception: pass
-                    
-                    if user:
-                        uid = user["id"]
-                        hh_id = user.get("household_id", 0) or 0
-                        hh_name = ""
-                        if not is_new_user and hh_id == 0:
-                            owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
-                            if owned:
-                                hh_id = owned["household_id"]
+                is_new_user = False
+                if not user:
+                    is_new_user = True
+                    authmod._run(f"INSERT INTO {authmod._USERS} (google_id, apple_id, email, name, household_id) VALUES (?,?,?,?,0)", (gid_alias, apple_sub, email, name))
+                    user = authmod._one(f"SELECT id, email, name, household_id, google_id, apple_id FROM {authmod._USERS} WHERE apple_id = ? OR google_id = ?", (apple_sub, gid_alias))
+                
+                if user and (not user.get("apple_id") or user.get("apple_id") == ""):
+                    try:
+                        authmod._run(f"UPDATE {authmod._USERS} SET apple_id = ? WHERE id = ?", (apple_sub, user["id"]))
+                        user["apple_id"] = apple_sub
+                    except Exception: pass
+                
+                if user:
+                    uid = user["id"]
+                    hh_id = user.get("household_id", 0) or 0
+                    hh_name = ""
+                    if not is_new_user and hh_id == 0:
+                        owned = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? AND role = 'owner' LIMIT 1", (uid,))
+                        if owned:
+                            hh_id = owned["household_id"]
+                            authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
+                        else:
+                            mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
+                            if mem:
+                                hh_id = mem["household_id"]
                                 authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                            else:
-                                mem = authmod._one("SELECT household_id FROM auth_household_members WHERE user_id = ? LIMIT 1", (uid,))
-                                if mem:
-                                    hh_id = mem["household_id"]
-                                    authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, uid))
-                        if not hh_id:
-                            hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
-                            if hh_count and hh_count.get("cnt", 0) == 0:
-                                code = secrets.token_hex(4).upper()
-                                prem_val = True
-                                authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
-                                hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
-                                hh_id = hh["id"] if hh else 1
-                                hh_name = hh["name"] if hh else "Root Household"
-                                authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
-                        if hh_id and not hh_name:
-                            hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
-                            hh_name = hh.get("name", "") if hh else ""
-                        authmod._set(user["id"], email, name, hh_id, hh_name)
-                        
-                        if state_str and state_str.startswith("intent_"):
-                            intent_id = state_str.split("intent_")[1].replace("_web", "")
-                            if intent_id:
-                                authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
-                        
-                        code_token = secrets.token_urlsafe(32)
-                        authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", ("code_" + code_token, user["id"]))
-                        
-                        return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authenticating...</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authenticating...</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>window.location.replace("/auth/callback?code={code_token}");</script></body></html>"""
+                    if not hh_id:
+                        hh_count = authmod._one(f"SELECT COUNT(*) as cnt FROM {authmod._HH}", None)
+                        if hh_count and hh_count.get("cnt", 0) == 0:
+                            code = secrets.token_hex(4).upper()
+                            prem_val = True
+                            authmod._run(f"INSERT INTO {authmod._HH} (name, invite_code, is_premium, subscription_status) VALUES (?,?,?,?)", ("Root Household", code, prem_val, "premium"))
+                            hh = authmod._one(f"SELECT id, name FROM {authmod._HH} ORDER BY id DESC LIMIT 1", None)
+                            hh_id = hh["id"] if hh else 1
+                            hh_name = hh["name"] if hh else "Root Household"
+                            authmod._run(f"UPDATE {authmod._USERS} SET household_id = ? WHERE id = ?", (hh_id, user["id"]))
+                    if hh_id and not hh_name:
+                        hh = authmod._one(f"SELECT name FROM {authmod._HH} WHERE id = ?", (hh_id,))
+                        hh_name = hh.get("name", "") if hh else ""
+                    authmod._set(user["id"], email, name, hh_id, hh_name)
+                    
+                    if state_str and state_str.startswith("intent_"):
+                        intent_id = state_str.split("intent_")[1].replace("_web", "")
+                        if intent_id:
+                            authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", (intent_id, user["id"]))
+                    
+                    code_token = secrets.token_urlsafe(32)
+                    authmod._run("INSERT INTO login_intents (id, user_id) VALUES (?, ?)", ("code_" + code_token, user["id"]))
+                    
+                    return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authenticating...</title></head><body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#2c2c2c;"><h2>✅ Authenticating...</h2><p style="color:#888;margin-top:20px;">Redirecting to ListMate...</p><script>window.location.replace("/auth/callback?code={code_token}");</script></body></html>"""
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+                return f'''<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authentication Error</title></head>
                 <body style="text-align:center;font-family:sans-serif;padding-top:40px;background:#f0f4ed;color:#d94a4a;">
-                <h2>⚠️ Sign in failed</h2><p style="color:#555;margin-top:10px;">Invalid or unverified Apple identity token: {e}</p>
+                <h2>⚠️ Authentication Error</h2><p style="color:#555;margin-top:10px;">An internal error occurred while completing login. Please try again.</p>
                 <p style="margin-top:20px;"><a href="/login" style="color:#5ebe7e;text-decoration:none;font-weight:600;">← Back to Login</a></p>
-                </body></html>''', 401
+                </body></html>''', 500
             
     html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
     html = html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)

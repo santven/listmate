@@ -31,7 +31,7 @@ def get_apple_jwk_client():
     global _apple_jwk_client
     if _apple_jwk_client is None:
         import jwt
-        _apple_jwk_client = jwt.PyJWKClient(APPLE_JWKS_URL, cache_keys=True, max_cached_keys=16)
+        _apple_jwk_client = jwt.PyJWKClient(APPLE_JWKS_URL, cache_keys=True, max_cached_keys=16, timeout=5)
     return _apple_jwk_client
 
 def get_allowed_apple_audiences():
@@ -44,12 +44,45 @@ def verify_apple_id_token(id_token_str: str) -> dict:
     """
     Cryptographically verifies an Apple Sign-In identity token using Apple's JWKS.
     Enforces signature verification, expiration, issuer, and authorized audience.
+    Supports APPLE_JWT_ENFORCE env var ('enforce' [default], 'report', 'off'/'disabled').
     Returns verified token claims dict on success; raises an exception on failure.
     """
     if not id_token_str or not isinstance(id_token_str, str):
         raise ValueError("Missing or invalid id_token string.")
 
     import jwt
+
+    enforce_mode = os.environ.get("APPLE_JWT_ENFORCE", "enforce").strip().lower()
+
+    if enforce_mode in ("off", "disabled", "false", "0"):
+        print("[APPLE_AUTH] WARN: APPLE_JWT_ENFORCE is disabled; decoding token without signature verification.", flush=True)
+        return jwt.decode(id_token_str, options={"verify_signature": False})
+
+    allowed_audiences = list(get_allowed_apple_audiences())
+
+    if enforce_mode == "report":
+        try:
+            client = get_apple_jwk_client()
+            signing_key = client.get_signing_key_from_jwt(id_token_str)
+            return jwt.decode(
+                id_token_str,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=allowed_audiences,
+                issuer="https://appleid.apple.com",
+                leeway=60,
+                options={
+                    "verify_signature": True,
+                    "verify_exp": True,
+                    "verify_iss": True,
+                    "verify_aud": True,
+                    "require": ["exp", "iss", "aud", "sub"]
+                }
+            )
+        except Exception as e:
+            print(f"[APPLE_AUTH_REPORT_MODE_FAILURE] Verification failed: {e}", flush=True)
+            return jwt.decode(id_token_str, options={"verify_signature": False})
+
     client = get_apple_jwk_client()
     signing_key = client.get_signing_key_from_jwt(id_token_str)
 
@@ -57,13 +90,15 @@ def verify_apple_id_token(id_token_str: str) -> dict:
         id_token_str,
         signing_key.key,
         algorithms=["RS256"],
-        audience=list(get_allowed_apple_audiences()),
+        audience=allowed_audiences,
         issuer="https://appleid.apple.com",
+        leeway=60,
         options={
             "verify_signature": True,
             "verify_exp": True,
             "verify_iss": True,
-            "verify_aud": True
+            "verify_aud": True,
+            "require": ["exp", "iss", "aud", "sub"]
         }
     )
     return claims
@@ -1545,27 +1580,27 @@ def register_auth_routes(app):
 
     @app.route("/api/auth/apple", methods=["POST"])
     def auth_apple():
+        data = request.get_json(silent=True) or {}
+        id_token_str = data.get("id_token") or (data.get("authorization") and data.get("authorization").get("id_token"))
+        if not id_token_str:
+            return jsonify({"ok": False, "error": "Missing id_token"}), 400
+
+        apple_sub = None
+        token_email = ""
+        claims = {}
+
         try:
-            data = request.get_json(silent=True) or {}
-            id_token_str = data.get("id_token") or (data.get("authorization") and data.get("authorization").get("id_token"))
-            if not id_token_str:
-                return jsonify({"error": "Missing id_token"}), 400
+            claims = verify_apple_id_token(id_token_str)
+            apple_sub = claims.get("sub")
+            token_email = (claims.get("email") or "").strip().lower()
+        except Exception as jwte:
+            print(f"[Apple Auth Verification Error] {jwte}", flush=True)
+            return jsonify({"ok": False, "error": "Invalid or unverified Apple identity token"}), 401
 
-            apple_sub = None
-            token_email = ""
-            claims = {}
+        if not apple_sub:
+            return jsonify({"ok": False, "error": "Invalid Apple identity token: missing subject"}), 401
 
-            try:
-                claims = verify_apple_id_token(id_token_str)
-                apple_sub = claims.get("sub")
-                token_email = claims.get("email", "")
-            except Exception as jwte:
-                print(f"[Apple Auth Verification Error] {jwte}", flush=True)
-                return jsonify({"ok": False, "error": f"Invalid or unverified Apple id_token: {jwte}"}), 401
-
-            if not apple_sub:
-                return jsonify({"ok": False, "error": "Invalid or unparseable Apple id_token: missing subject"}), 401
-
+        try:
             client_user = data.get("user") or {}
             if isinstance(client_user, str):
                 try:
@@ -1573,8 +1608,9 @@ def register_auth_routes(app):
                 except Exception:
                     client_user = {}
 
-            client_email = client_user.get("email") or ""
-            email = (client_email or token_email or "").strip().lower()
+            # SECURITY FIX (B1/S1): NEVER use client_user.get("email") for identity or account lookup/linking.
+            # Apple identity token claims['email'] is the single source of truth for email.
+            email = token_email
 
             name_obj = client_user.get("name") or {}
             first = name_obj.get("firstName", "") if isinstance(name_obj, dict) else ""
@@ -1629,7 +1665,7 @@ def register_auth_routes(app):
             })
         except Exception as e:
             traceback.print_exc()
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"ok": False, "error": "Internal server error processing account"}), 500
 
     @app.route("/api/auth/login", methods=["POST"])
     def auth_login(): return auth_google()
