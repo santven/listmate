@@ -220,6 +220,24 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                 sent = sent or sent_rem
                 if sent_rem and household_id:
                     db_updates.append(("UPDATE auth_households SET email_lifetime_digest_sent_at = NOW() WHERE id = %s", (household_id,)))
+            elif 'store_plan' in events:
+                plan_data = events['store_plan']
+                sp_store_id = plan_data.get('store_id', 0)
+                sp_cname = f"store_plan_reminder_{sp_store_id}"
+                campaign_names.append(sp_cname)
+                print(f"[{email}] Sending specific store plan reminder notice for Store #{sp_store_id} ({plan_data.get('store_name')}).")
+                from email_helper import send_store_plan_reminder_email
+                sent_rem = send_store_plan_reminder_email(
+                    to_email=email,
+                    user_name=user_name,
+                    store_name=plan_data.get('store_name', 'your store'),
+                    items_count=plan_data.get('items_count', 0),
+                    sample_items=plan_data.get('sample_items', []),
+                    store_id=sp_store_id,
+                    user_id=user_id,
+                    household_id=household_id
+                )
+                sent = sent or sent_rem
         else:
             # If there are multiple events, send the combined template
             print(f"[{email}] Sending COMBINED notice for remaining events: {list(events.keys())}")
@@ -230,6 +248,9 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
                     is_trial = ev_val.get('is_trial', False)
                     days_left = ev_val.get('days_left', 0)
                     campaign_names.append(f"{'trial' if is_trial else 'sub'}_exp_{'today' if days_left == 0 else f'{days_left}days'}")
+                elif ev_key == 'store_plan':
+                    sp_id = ev_val.get('store_id', 0)
+                    campaign_names.append(f"store_plan_reminder_{sp_id}")
                 else:
                     campaign_names.append(ev_key)
                 if ev_key == 'trial_lapsed_day2' and household_id:
@@ -1305,6 +1326,100 @@ def run_cron(dry_run=False, mock_now=None):
             household_id=0,
         )
 
+    # --- 10. Store Plan Reminder Candidates (Stores with >= threshold uncompleted items & no plan date) ---
+    print("Fetching Store Plan Reminder candidates...")
+    store_plan_thresh_env = os.environ.get("STORE_PLAN_REMINDER_THRESHOLD")
+    store_plan_thresh = int(store_plan_thresh_env) if store_plan_thresh_env else 5
+    query_sp = """
+    SELECT 
+        s.id AS store_id,
+        s.name AS store_name,
+        s.household_id,
+        COUNT(li.id) AS items_count
+    FROM stores s
+    JOIN auth_households h ON h.id = s.household_id
+    JOIN list_items li ON li.store_id = s.id AND li.household_id = s.household_id
+    WHERE li.purchased = FALSE
+      AND s.planned_visit_date IS NULL
+      AND LOWER(s.name) != 'general list'
+      AND (
+          h.is_premium = TRUE 
+          OR h.subscription_status IN ('premium', 'active')
+          OR (
+              h.subscription_status = 'trial' 
+              AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+          )
+      )
+    GROUP BY s.id, s.name, s.household_id
+    HAVING COUNT(li.id) >= %(threshold)s
+    ORDER BY s.household_id ASC, items_count DESC
+    """
+    store_plan_cands = _run(query_sp, {"threshold": store_plan_thresh})
+    print(f"  -> Found {len(store_plan_cands)} store(s) eligible for store plan reminders.")
+    for sp in store_plan_cands:
+        sp_id = sp["store_id"]
+        sp_name = sp["store_name"]
+        sp_hhid = sp["household_id"]
+        sp_count = sp["items_count"]
+        sp_campaign = f"store_plan_reminder_{sp_id}"
+
+        sp_members = _run("""
+            SELECT u.id AS user_id, u.name AS user_name, u.email
+            FROM auth_users u
+            JOIN auth_household_members hm ON hm.user_id = u.id
+            WHERE hm.household_id = %s
+        """, (sp_hhid,))
+        if not sp_members:
+            sp_members = _run("""
+                SELECT u.id AS user_id, u.name AS user_name, u.email
+                FROM auth_users u
+                JOIN auth_households h ON h.owner_id = u.id
+                WHERE h.id = %s
+            """, (sp_hhid,))
+
+        sample_rows = _run("""
+            SELECT name, quantity
+            FROM list_items
+            WHERE store_id = %s AND household_id = %s AND purchased = FALSE
+            ORDER BY id ASC
+            LIMIT 5
+        """, (sp_id, sp_hhid))
+        sp_sample_items = [
+            f"{r['name']}" + (f" ({r['quantity']})" if r.get("quantity") else "")
+            for r in sample_rows if r.get("name")
+        ]
+
+        for m in sp_members:
+            m_email = (m.get("email") or "").strip()
+            m_name = (m.get("user_name") or "there").strip()
+            m_uid = m.get("user_id") or 0
+            if not m_email or is_email_suppressed(m_email):
+                continue
+
+            sp_dedup = _one("""
+                SELECT 1 FROM email_events
+                WHERE (household_id = %s OR email = %s)
+                  AND campaign = %s
+                  AND created_at >= NOW() - INTERVAL '24 hours'
+            """, (sp_hhid, m_email, sp_campaign))
+            if sp_dedup:
+                continue
+
+            add_user_event(
+                m_email,
+                m_name,
+                'store_plan',
+                {
+                    'store_id': sp_id,
+                    'store_name': sp_name,
+                    'items_count': sp_count,
+                    'sample_items': sp_sample_items,
+                    'household_id': sp_hhid
+                },
+                m_uid,
+                sp_hhid
+            )
+
     print(f"\nFound {len(users_to_notify)} unique users to notify.")
 
     if users_to_notify:
@@ -1364,13 +1479,6 @@ def run_cron(dry_run=False, mock_now=None):
             print(f"Auto-categorization sweep failed: {exc}")
     else:
         print("[DRY-RUN] Skipping auto-categorization sweep.")
-
-    # Store Plan Email Reminders (for stores with >= n items without a plan date)
-    try:
-        plan_email_stats = check_store_plan_email_reminders(dry_run=dry_run)
-        print(f"Store plan email reminders complete: {plan_email_stats}")
-    except Exception as exc:
-        print(f"Store plan email reminders routine failed: {exc}")
 
     _run = saved_cron_run
     _one = saved_cron_one

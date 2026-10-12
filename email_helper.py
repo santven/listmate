@@ -1397,6 +1397,12 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
         subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
     elif 'breakup_day60' in events:
         subject = "Should we stop emailing you? (Quick check-in from ListMate)"
+    elif 'solo_nudge' in events and 'store_plan' in events:
+        store_n = (events['store_plan'].get('store_name') or 'your store').strip()
+        subject = f"Plan your trip to {store_n} & invite your household 🛒"
+    elif 'store_plan' in events:
+        store_n = (events['store_plan'].get('store_name') or 'your store').strip()
+        subject = f"Plan your upcoming trip to {store_n} & updates from ListMate 🛒"
     elif 'solo_nudge' in events:
         subject = "Get the most out of ListMate: Invite your household 🛒"
     else:
@@ -1454,6 +1460,32 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
             f'<div style="background:#f0fdf4;border-left:4px solid #5ebe7e;padding:12px 16px;margin:14px 0;border-radius:4px;">'
             f'<strong style="color:#166534;display:block;margin-bottom:4px;">👥 Invite Your Household:</strong>'
             f'<span style="color:#274c36;font-size:14px;line-height:1.5;">ListMate works best when shared with your partner, family, or roommates. Only the household pays for a Pro plan ($1.99/mo or $9.99/yr)—all invited members sync 100% free!</span>'
+            f'</div>'
+        )
+
+    if 'store_plan' in events:
+        plan_data = events['store_plan']
+        st_name = (plan_data.get('store_name') or 'your store').strip()
+        st_cnt = plan_data.get('items_count', 0)
+        st_id = plan_data.get('store_id', 0)
+        st_items = plan_data.get('sample_items', [])
+        st_url = f"{BASE_URL}/open?url={quote(f'/?store_id={st_id}&action=plan&source=email_combined')}"
+
+        items_bullet_plain = "\n".join([f"• {it}" for it in st_items]) if st_items else ""
+        items_bullet_html = "".join([f'<li style="margin-bottom:4px;color:#334155;">{escape(it)}</li>' for it in st_items]) if st_items else ""
+
+        text_sections.append(
+            f"Plan your trip to {st_name} ({st_cnt} items on list):\n"
+            f"You have {st_cnt} items waiting on your {st_name} shopping list without a scheduled trip date.\n"
+            + (f"Items include:\n{items_bullet_plain}\n" if items_bullet_plain else "")
+            + f"Plan Trip: {st_url}"
+        )
+        html_sections.append(
+            f'<div style="background:#f0fdf4;border-left:4px solid #10b981;padding:12px 16px;margin:14px 0;border-radius:4px;">'
+            f'<strong style="color:#065f46;display:block;margin-bottom:4px;">🛒 Plan Your Trip to {escape(st_name)}:</strong>'
+            f'<span style="color:#047857;font-size:14px;line-height:1.5;">You have <strong>{st_cnt} items</strong> waiting on your list without a scheduled trip date:</span>'
+            + (f'<ul style="margin:8px 0 10px 20px;padding:0;font-size:13px;">{items_bullet_html}</ul>' if items_bullet_html else '')
+            + f'<div style="margin-top:10px;"><a href="{st_url}" style="display:inline-block;background:#10b981;color:#ffffff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:bold;">🗓️ Plan Trip to {escape(st_name)} &rarr;</a></div>'
             f'</div>'
         )
 
