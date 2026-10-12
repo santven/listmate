@@ -72,6 +72,12 @@ To prevent regressions and edge-case bugs in production, all code modifications 
 *   **Race Conditions**: Never assume frontend state updates are synchronous. Use React functional state updates or debounce rapid interactions (like button clicks).
 *   **Graceful Failures**: All API calls must have `.catch()` blocks or `try/except` wrappers. Never let an unhandled promise rejection crash the SPA.
 
+### PostgreSQL Timezone Invariant & Notification Anti-Reentry Rule
+*   **TIMESTAMP WITHOUT TIME ZONE Gotcha**: In ListMate, all `created_at` timestamp columns in PostgreSQL are `TIMESTAMP WITHOUT TIME ZONE` stored in UTC. In PostgreSQL, applying `AT TIME ZONE '<zone>'` directly to a `TIMESTAMP WITHOUT TIME ZONE` treats the timestamp as *already local* and converts it *to UTC* (e.g., UTC 20:00 becomes UTC 02:00 next day for US/Denver).
+*   **The Mandatory UTC Cast**: You MUST **ALWAYS** explicitly cast the source column to UTC first: `(ts AT TIME ZONE 'UTC') AT TIME ZONE '<target_zone>'`. Never write `DATE(ts AT TIME ZONE '<zone>')` without the inner `'UTC'` cast.
+*   **Mandatory Sliding Window Guard**: Any time-based deduplication in `push_notifications_log` or `email_events` MUST include a raw interval cooldown (e.g., `created_at >= NOW() - INTERVAL '20 hours'`) in addition to any local calendar date comparisons.
+*   **Dual-Layer Notification Locking**: Where applicable, notifications MUST maintain entity-level locking (e.g. `trip_notified_at`, `stash_notified_at` on `list_items`) so that once an entity is prompted, the underlying entity records that it has been notified and can NEVER qualify for the same campaign twice in its lifetime.
+
 ## 7. The Clockwork Multi-Agent Execution Protocol
 Whenever a feature is requested or an issue is investigated and fixed, the system executes like clockwork through this standardized lifecycle without needing repetitive prompting:
 
