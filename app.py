@@ -5191,6 +5191,52 @@ def get_analytics():
     finally:
         db.close()
 
+def _generate_fallback_ai_insights(last_7_days, prior_weeks, top_items, still_good_stats=None):
+    """Generate high-quality heuristic shopping & food freshness insights when AI service is unavailable."""
+    sections = []
+
+    # 1. Trip Frequency & Spending Trend
+    cnt_7d = len(last_7_days)
+    items_7d = sum(v.get("items_count", 0) for v in last_7_days)
+    cnt_prior = len(prior_weeks)
+    avg_prior_per_week = round(cnt_prior / 3.0, 1) if cnt_prior else 0
+
+    if cnt_7d == 0:
+        sections.append("You had no grocery trips recorded in the past 7 days. Planning an upcoming visit with **Plan Trip** can help keep your household stocked without spontaneous last-minute runs.")
+    elif cnt_7d > avg_prior_per_week and avg_prior_per_week > 0:
+        sections.append(f"In the last 7 days, your household made {cnt_7d} trips ({items_7d} total items) compared to an average of {avg_prior_per_week} trips per week previously. Consolidating into fewer, store-focused trips can save both travel time and impulse spending.")
+    else:
+        sections.append(f"Your grocery trip frequency is steady at {cnt_7d} {'trip' if cnt_7d == 1 else 'trips'} in the past 7 days ({items_7d} items). Consistent trip pacing helps prevent overbuying.")
+
+    # 2. Still Good Food Savings & Waste
+    if still_good_stats:
+        consumed = still_good_stats.get("consumed_28d") or 0
+        discarded = still_good_stats.get("discarded_28d") or 0
+        active = still_good_stats.get("active_count") or 0
+        if consumed > 0 or discarded > 0:
+            saved_dlr = consumed * 8
+            wasted_dlr = discarded * 8
+            if discarded > 0:
+                sections.append(f"In Still Good, your household saved approximately **${saved_dlr}** by enjoying {consumed} tracked {'meal' if consumed == 1 else 'meals'}, but lost about **${wasted_dlr}** from {discarded} discarded {'item' if discarded == 1 else 'items'}. Using **Still Good** reminders can help catch produce and leftovers before they expire.")
+            else:
+                sections.append(f"Great work with food preservation! In Still Good, you've saved **${saved_dlr}** by consuming {consumed} tracked {'meal' if consumed == 1 else 'meals'} with zero discarded items recorded in the last 28 days.")
+        elif active > 0:
+            sections.append(f"You have {active} fresh items or leftovers currently tracked in **Still Good**. Check your crisper drawer and fridge before your next shopping run to use those ingredients first.")
+        else:
+            sections.append("You don't have any meals or fresh produce currently tracked in **Still Good**. Tracking leftovers and perishable groceries helps cut food waste and saves the average household $30+ a month.")
+    else:
+        sections.append("Consider using **Still Good** to track leftovers and fresh groceries in your fridge so ingredients don't get forgotten and discarded.")
+
+    # 3. Top Items & Recipe Optimization
+    if top_items:
+        top_names = [t.get("name", "") for t in top_items[:3] if t.get("name")]
+        if top_names:
+            names_str = ", ".join(top_names)
+            sections.append(f"Your most frequently purchased staples are **{names_str}**. Try our **Recipe Planner & Chef AI** to turn these go-to items into delicious home-cooked meals before buying duplicates.")
+
+    return "\n\n".join(sections)
+
+
 @app.route("/api/analytics/ai", methods=["POST"])
 @require_user
 def get_analytics_ai():
@@ -5221,17 +5267,32 @@ def get_analytics_ai():
         recent_visits = db.execute("SELECT s.name as store, v.visit_date, v.items_count FROM store_visits v JOIN stores s ON s.id = v.store_id WHERE v.household_id = ? AND v.visit_date >= CURRENT_DATE - INTERVAL '28 days' ORDER BY v.visit_date DESC", (hhid,)).fetchall()
         top_items = db.execute("SELECT name, total_purchases FROM item_purchase_stats WHERE household_id = ? ORDER BY total_purchases DESC LIMIT 5", (hhid,)).fetchall()
 
-        if not recent_visits and not top_items:
-            insight = "Not enough data yet. Complete a few grocery trips to unlock personalized money-saving insights!"
+        # Fetch Still Good metrics (last 28 days)
+        still_good_stats = None
+        try:
+            still_good_stats = db.execute("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE status = 'consumed' AND consumed_at >= CURRENT_DATE - INTERVAL '28 days') as consumed_28d,
+                    COUNT(*) FILTER (WHERE status = 'discarded' AND discarded_at >= CURRENT_DATE - INTERVAL '28 days') as discarded_28d,
+                    COUNT(*) FILTER (WHERE status = 'active') as active_count
+                FROM still_good_items WHERE household_id = ?
+            """, (hhid,)).fetchone()
+        except Exception as e:
+            print(f"[api_analytics_ai] Still Good stats query notice: {e}", flush=True)
+
+        has_sg_data = bool(still_good_stats and (still_good_stats['consumed_28d'] or still_good_stats['discarded_28d'] or still_good_stats['active_count']))
+        if not recent_visits and not top_items and not has_sg_data:
+            insight = "Not enough data yet. Complete a few grocery trips or track meals in Still Good to unlock personalized money-saving insights!"
             return jsonify({"ok": True, "insight": insight})
 
-        prompt = """Act as a financial and household planner. Analyze the following grocery shopping trip data. Compare the household's behavior from the last 7 days against the previous 3 weeks to identify emerging trends, changes in trip frequency, or new spending habits. Provide genuine, actionable money-saving tips and shopping optimization insights based on this trend analysis. Be concise (under 300 words).
+        prompt = """Act as a financial and household planner. Analyze the following grocery shopping trip and food freshness data. Compare the household's behavior from the last 7 days against the previous 3 weeks to identify emerging trends, changes in trip frequency, or new spending habits. Evaluate food waste prevention and money saved by enjoying meals versus money wasted discarding expired food. Provide genuine, actionable money-saving tips and shopping optimization insights based on this analysis. Be concise (under 300 words).
 
-Step 1: Formulate your advice strictly on their real-world grocery habits. Highlight how their recent week compares to their historical baseline (e.g., more frequent small trips, or successfully consolidating trips).
+Step 1: Formulate your advice strictly on their real-world grocery habits and Still Good food utilization. Highlight how their recent week compares to their historical baseline (e.g., more frequent small trips, or successfully consolidating trips) and note money saved or lost through food waste.
 Step 2: Review your advice against the ListMate app features below.
 Step 3: You may weave in a MAXIMUM OF ONE OR TWO ListMate features into your final response, and ONLY if they naturally solve a specific problem you identified in Step 1. Do not sound like an advertisement.
 
 ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
+- Still Good (track leftovers & fresh groceries in your fridge/freezer so food isn't wasted)
 - Store-Specific Lists (organize items by store)
 - Plan Trip (set a target date for your next visit)
 - Recipe Planner & Chef AI (generate recipes to use up ingredients)
@@ -5240,21 +5301,20 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
 - Analytics Dashboard (view shopping habits)
 """
 
-        import datetime
         now = datetime.datetime.utcnow().date()
         last_7_days = []
         prior_weeks = []
-        
+
         for v in recent_visits:
             v_date = v['visit_date']
             if isinstance(v_date, str):
                 try:
                     v_date = datetime.datetime.strptime(v_date.split(" ")[0], "%Y-%m-%d").date()
-                except:
+                except Exception:
                     v_date = now
             elif isinstance(v_date, datetime.datetime):
                 v_date = v_date.date()
-                
+
             if (now - v_date).days <= 7:
                 last_7_days.append(v)
             else:
@@ -5265,17 +5325,27 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
             prompt += "- No trips recorded\n"
         for v in last_7_days:
             prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
-            
+
         prompt += "\nTrips in the Prior 3 Weeks:\n"
         if not prior_weeks:
             prompt += "- No trips recorded\n"
         for v in prior_weeks:
             prompt += f"- {v['visit_date']}: {v['store']} ({v['items_count']} items)\n"
-            
+
         prompt += "\nTop Purchased Items (All Time):\n"
         for t in top_items:
             prompt += f"- {t['name']} ({t['total_purchases']} times)\n"
-        
+
+        prompt += "\nStill Good Food Freshness & Waste Stats (Last 28 Days):\n"
+        if has_sg_data:
+            c_cnt = (still_good_stats["consumed_28d"] or 0) if still_good_stats else 0
+            d_cnt = (still_good_stats["discarded_28d"] or 0) if still_good_stats else 0
+            a_cnt = (still_good_stats["active_count"] or 0) if still_good_stats else 0
+            prompt += f"- Meals/Items Enjoyed (Consumed): {c_cnt} (~${c_cnt * 8} saved)\n"
+            prompt += f"- Items Spoiled/Discarded: {d_cnt} (~${d_cnt * 8} wasted)\n"
+            prompt += f"- Currently Tracked in Fridge/Freezer: {a_cnt} active items\n"
+        else:
+            prompt += "- No items currently tracked in Still Good\n"
 
         import os
         import json
@@ -5286,37 +5356,76 @@ ListMate Features available to mention (CHOOSE UP TO 2 MAXIMUM):
             if k and not k.startswith("dev-") and not k.startswith("secret-"):
                 key = k
                 break
-        
-        if not key:
-            return jsonify({"error": "Gemini API key not configured"}), 500
-        
-        body = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "systemInstruction": {"role": "system", "parts": [{"text": "You are a frugal shopping expert. Your goal is to provide helpful, actionable grocery shopping insights while actively promoting the user's digital grocery list app features (like store-specific lists, recipe planning, and trip planning) over physical methods like whiteboards or paper."}]}
-        }
-        model_name = __import__("os").environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-flash-latest").split(",")[0].strip()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": key,
-                "User-Agent": "aistudio-build"
-            }
-        )
-        insight_text = "Analysis completed."
-        try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                candidates = data.get("candidates", [])
-                if candidates:
-                    insight_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-        except Exception as e:
-            print(f"[GEMINI ERROR] Call to {model_name} failed: {e}", flush=True)
-            return jsonify({"error": "AI generation failed: " + str(e)}), 500
 
-        
+        # Strict Lite Models Only — User directive: stick strictly to lite models to preserve token/daily limits
+        raw_models = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite,gemini-2.5-flash-lite")
+        models_to_try = []
+        for m in raw_models.split(","):
+            clean_m = m.strip().strip("'").strip('"')
+            if clean_m.startswith("models/"):
+                clean_m = clean_m[len("models/"):]
+            if clean_m and "lite" in clean_m.lower() and clean_m not in models_to_try:
+                models_to_try.append(clean_m)
+        if not models_to_try:
+            models_to_try = ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
+
+        insight_text = None
+        last_error = None
+
+        if key:
+            body = {
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "systemInstruction": {
+                    "role": "system",
+                    "parts": [{
+                        "text": (
+                            "You are a frugal shopping and household food planner expert. "
+                            "Your goal is to provide helpful, actionable grocery shopping and food waste insights. "
+                            "Acknowledge money saved by enjoying meals and point out opportunities to cut food waste. "
+                            "Actively promote the user's digital grocery list and food freshness app features "
+                            "(like Still Good, store-specific lists, recipe planning, and trip planning) over physical methods like whiteboards or paper."
+                        )
+                    }]
+                },
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "maxOutputTokens": 600
+                }
+            }
+
+            for model_name in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(body).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": key,
+                        "User-Agent": "aistudio-build"
+                    }
+                )
+                try:
+                    print(f"[GEMINI REQUEST] Model: {model_name} (AI Insights) | Timeout: 25s", flush=True)
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            text_part = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                            if text_part:
+                                insight_text = text_part
+                                break
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"[GEMINI ERROR] Call to {model_name} failed: {e}", flush=True)
+                    continue
+        else:
+            last_error = "No Gemini API key configured"
+            print(f"[api_analytics_ai] {last_error}", flush=True)
+
+        if not insight_text:
+            print(f"[api_analytics_ai] Falling back to heuristic insights generator (last error: {last_error})", flush=True)
+            insight_text = _generate_fallback_ai_insights(last_7_days, prior_weeks, top_items, still_good_stats)
+
         # Save to cache
         db.execute("""
             INSERT INTO ai_insights_cache (household_id, insight_text, generated_at)
