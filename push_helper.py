@@ -1749,6 +1749,7 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
             WHERE li.household_id = h.id
               AND li.purchased = TRUE
               AND li.still_good_stashed_at IS NULL
+              AND li.stash_notified_at IS NULL
               AND (
                 (li.trip_notified_at IS NOT NULL AND li.trip_notified_at <= NOW() - INTERVAL '3 hours')
                 OR (li.purchased_at <= NOW() - INTERVAL '3 hours')
@@ -1814,6 +1815,7 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
                     WHERE household_id = %s
                       AND purchased = TRUE
                       AND still_good_stashed_at IS NULL
+                      AND stash_notified_at IS NULL
                       AND (
                         (trip_notified_at IS NOT NULL AND trip_notified_at <= NOW() - INTERVAL '3 hours')
                         OR (purchased_at <= NOW() - INTERVAL '3 hours')
@@ -1903,6 +1905,16 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
 
             dispatched_count += 1
             dispatched_uids.add(uid)
+
+            # Stamp candidate items so this grocery trip can never be prompted again
+            if not dry_run and items:
+                try:
+                    p_ids = [int(p["id"]) for p in items if p.get("id")]
+                    if p_ids:
+                        _run("UPDATE list_items SET stash_notified_at = NOW() WHERE household_id = %s AND id = ANY(%s)", (hhid, p_ids))
+                except Exception as stamp_err:
+                    print(f"  [Warning] Failed to stamp stash_notified_at for Household #{hhid}: {stamp_err}")
+
             results.append({
                 "user_id": uid,
                 "household_id": hhid,

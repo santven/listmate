@@ -4205,7 +4205,7 @@ def toggle_list_item(item_id):
 
         if item["purchased"]:
             db.execute("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'", (item["id"], _hh()))
-            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL WHERE id=?", (item_id,))
+            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL, stash_notified_at=NULL WHERE id=?", (item_id,))
         else:
             db.execute(
                 "UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?",
@@ -4670,7 +4670,7 @@ def sync_offline_actions():
                     if item:
                         if item["purchased"]:
                             db.execute("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'", (item["id"], hh_id))
-                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL WHERE id=?", (item_id,))
+                            db.execute("UPDATE list_items SET purchased=FALSE, purchased_by=NULL, purchased_by_user_id=NULL, purchased_at=NULL, trip_notified_at=NULL, still_good_stashed_at=NULL, stash_notified_at=NULL WHERE id=?", (item_id,))
                         else:
                             db.execute("UPDATE list_items SET purchased=TRUE, purchased_by=?, purchased_by_user_id=?, purchased_at=NOW() WHERE id=?", (display_name, current_uid, item_id))
                             db.execute("""
