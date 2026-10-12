@@ -870,8 +870,11 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
             WHERE pnl.target_type = 'user'
               AND pnl.target_id = u.id
               AND pnl.custom_data->>'campaign' = 'still_good_lunch_7am'
-              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
-                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
         )
         ORDER BY h.id ASC, u.id ASC
     """
@@ -1103,8 +1106,11 @@ def check_still_good_produce_expiry_pushes(target_hour: int = 10, dry_run: bool 
             WHERE pnl.target_type = 'user'
               AND pnl.target_id = u.id
               AND pnl.custom_data->>'campaign' = 'still_good_produce_expiry_10am'
-              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
-                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
         )
         ORDER BY h.id ASC, u.id ASC
     """
@@ -1353,8 +1359,11 @@ def check_still_good_freezer_expiry_pushes(target_hour: int = 9, dry_run: bool =
             WHERE pnl.target_type = 'user'
               AND pnl.target_id = u.id
               AND pnl.custom_data->>'campaign' = 'still_good_freezer_expiry_9am'
-              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
-                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
         )
         ORDER BY h.id ASC, u.id ASC
     """
@@ -1764,8 +1773,11 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
             WHERE pnl.target_type = 'user'
               AND pnl.target_id = u.id
               AND pnl.custom_data->>'campaign' = 'still_good_smart_stash_3h'
-              AND DATE(pnl.created_at AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
-                  DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
         )
         """
 
