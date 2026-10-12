@@ -24,6 +24,50 @@ COOKIE_NAME = "listmate_session"
 COOKIE_SECURE = False
 _schema_done = False
 
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+_apple_jwk_client = None
+
+def get_apple_jwk_client():
+    global _apple_jwk_client
+    if _apple_jwk_client is None:
+        import jwt
+        _apple_jwk_client = jwt.PyJWKClient(APPLE_JWKS_URL, cache_keys=True, max_cached_keys=16)
+    return _apple_jwk_client
+
+def get_allowed_apple_audiences():
+    web_id = os.environ.get("SSO_APPLE_CLIENT_ID", "").strip() or \
+             os.environ.get("APPLE_CLIENT_ID", "").strip() or \
+             "com.pvkslabs.listmate.web"
+    return {web_id, "com.pvkslabs.listmate.web", "com.pvkslabs.listmate"}
+
+def verify_apple_id_token(id_token_str: str) -> dict:
+    """
+    Cryptographically verifies an Apple Sign-In identity token using Apple's JWKS.
+    Enforces signature verification, expiration, issuer, and authorized audience.
+    Returns verified token claims dict on success; raises an exception on failure.
+    """
+    if not id_token_str or not isinstance(id_token_str, str):
+        raise ValueError("Missing or invalid id_token string.")
+
+    import jwt
+    client = get_apple_jwk_client()
+    signing_key = client.get_signing_key_from_jwt(id_token_str)
+
+    claims = jwt.decode(
+        id_token_str,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=list(get_allowed_apple_audiences()),
+        issuer="https://appleid.apple.com",
+        options={
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_iss": True,
+            "verify_aud": True
+        }
+    )
+    return claims
+
 # ── DB: unified PostgreSQL interface ───────────────────────
 import psycopg2
 from psycopg2 import extras as _extras
@@ -1509,17 +1553,18 @@ def register_auth_routes(app):
 
             apple_sub = None
             token_email = ""
+            claims = {}
 
             try:
-                import jwt
-                claims = jwt.decode(id_token_str, options={"verify_signature": False})
+                claims = verify_apple_id_token(id_token_str)
                 apple_sub = claims.get("sub")
                 token_email = claims.get("email", "")
             except Exception as jwte:
-                print(f"[Apple Auth JWT decode error] {jwte}", flush=True)
+                print(f"[Apple Auth Verification Error] {jwte}", flush=True)
+                return jsonify({"ok": False, "error": f"Invalid or unverified Apple id_token: {jwte}"}), 401
 
             if not apple_sub:
-                return jsonify({"error": f"Invalid or unparseable Apple id_token: {jwte}" if "jwte" in locals() else "Invalid or unparseable Apple id_token"}), 400
+                return jsonify({"ok": False, "error": "Invalid or unparseable Apple id_token: missing subject"}), 401
 
             client_user = data.get("user") or {}
             if isinstance(client_user, str):
@@ -1548,7 +1593,9 @@ def register_auth_routes(app):
             user = None
             if apple_sub:
                 user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE apple_id = ?", (apple_sub,))
-            if not user and email:
+            # Only match by email if Apple cryptographically verified the email
+            is_email_verified = claims.get("email_verified") in (True, "true", "True", 1)
+            if not user and email and is_email_verified:
                 user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE LOWER(email) = LOWER(?)", (email,))
             if not user:
                 user = _one(f"SELECT id, google_id, apple_id, email, name, household_id FROM {_USERS} WHERE google_id = ?", (gid_alias,))
