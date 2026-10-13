@@ -558,7 +558,23 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   animation: sgCardCelebration 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
 }
 .sg-card { position: relative; z-index: 2; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; transition: transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1); user-select: none; }
-.sg-card-inactive { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; opacity: 0.88; }
+.sg-card-inactive {
+  background: #f1f5f9 !important;
+  border: 1.5px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+.sg-card-inactive .sg-card-bw-content {
+  filter: grayscale(100%);
+  opacity: 0.75;
+}
+.sg-crisper-row-inactive {
+  background: #f1f5f9 !important;
+  border: 1.5px solid #cbd5e1 !important;
+}
+.sg-crisper-row-inactive .sg-crisper-bw-content {
+  filter: grayscale(100%);
+  opacity: 0.75;
+}
 .sg-card.swiping { transition: none; }
 .sg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
 .sg-badge-restaurant { background: #fef3c7; color: #92400e; }
@@ -692,11 +708,6 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   background: #ffffff;
   touch-action: pan-y;
   box-sizing: border-box;
-}
-.sg-crisper-row-inactive {
-  background: #f8fafc !important;
-  border: 1px solid #e2e8f0 !important;
-  opacity: 0.88;
 }
 .sg-crisper-row:last-child {
   border-bottom: none;
@@ -5294,6 +5305,11 @@ function renderStillGoodItems() {
   });
 
   currentItems.sort(function(a, b) {
+    var inactA = (a.is_inactive === true || a.lifecycle_status === 'inactive') ? 1 : 0;
+    var inactB = (b.is_inactive === true || b.lifecycle_status === 'inactive') ? 1 : 0;
+    if (inactA !== inactB) {
+      return inactA - inactB;
+    }
     var ca = a.consume_by || '9999-99-99';
     var cb = b.consume_by || '9999-99-99';
     if (ca !== cb) {
@@ -5350,7 +5366,7 @@ function renderStillGoodItems() {
 
     var statusPill = '';
     if (isInactive) {
-      statusPill = '<span class="sg-status-pill" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-weight:600; font-size:11px; padding:3px 8px; border-radius:8px;">⚪ Inactive · Expired 7d+</span>';
+      statusPill = '<span class="sg-status-pill" style="background:#e2e8f0; color:#475569; border:1px solid #cbd5e1; font-weight:700; font-size:11px; padding:3px 8px; border-radius:8px;">⚪ Inactive · Expired 7d+</span>';
     } else if (item.location === 'freezer') {
       if (item.thawing) {
         statusPill = '<span class="sg-status-pill sg-badge-thawing">💧 Thawing</span>';
@@ -5385,19 +5401,24 @@ function renderStillGoodItems() {
     }
 
     var discardBtn = isInactive
-      ? '<button class="sg-action-danger" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; font-weight:700; min-width:44px; min-height:44px; padding:8px 12px; border-radius:10px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:14px; gap:4px;" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard inactive item" aria-label="Discard inactive item">🗑 Discard</button>'
+      ? '<button class="sg-action-danger" style="background:#ef4444; color:#ffffff; border:none; font-weight:700; min-width:44px; min-height:44px; padding:8px 14px; border-radius:10px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:14px; gap:6px; box-shadow:0 2px 8px rgba(239,68,68,0.4);" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard inactive item" aria-label="Discard inactive item">🗑 Discard</button>'
       : '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>';
+
+    var enjoyBtn = isInactive
+      ? '<button class="sg-action-btn" style="background:#e2e8f0; color:#475569; border:1px solid #cbd5e1; font-weight:600; min-height:44px; padding:8px 12px; border-radius:8px; cursor:pointer;" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>'
+      : '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>';
 
     html += '<div class="sg-card-wrap" id="sgWrap_' + item.id + '">' +
       '<div class="sg-swipe-underlay">' +
         '<div class="sg-swipe-left-bg"><span>✓ Enjoyed! 🎉</span></div>' +
         '<div class="sg-swipe-right-bg"><span>🗑 Discard</span></div>' +
       '</div>' +
-      '<div class="sg-card' + (isInactive ? ' sg-card-inactive' : '') + '" id="sgCard_' + item.id + '" data-id="' + item.id + '"' + (isInactive ? ' style="background:#f8fafc; border:1px solid #e2e8f0; opacity:0.88;"' : '') + '>' +
+      '<div class="sg-card' + (isInactive ? ' sg-card-inactive' : '') + '" id="sgCard_' + item.id + '" data-id="' + item.id + '">' +
+        (isInactive ? '<div class="sg-card-bw-content">' : '') +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">' +
           '<div style="min-width:0; flex:1;">' +
             '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">' +
-              '<span style="font-size:16px; font-weight:700; color:var(--text); word-break:break-word;">' + escapeHtml(item.name) + '</span>' +
+              '<span style="font-size:16px; font-weight:700; color:' + (isInactive ? '#475569' : 'var(--text)') + '; word-break:break-word;">' + escapeHtml(item.name) + '</span>' +
               '<button type="button" class="btn-sg-edit" onclick="openEditStillGoodModal(' + item.id + ')" title="Edit item" style="background:transparent; border:none; cursor:pointer; font-size:13px; color:var(--muted); padding:2px 4px; border-radius:4px; display:inline-flex; align-items:center;">✏️</button>' +
             '</div>' +
             '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
@@ -5414,12 +5435,13 @@ function renderStillGoodItems() {
             statusPill +
           '</div>' +
         '</div>' +
+        (isInactive ? '</div>' : '') +
         '<div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f3f4f6; padding-top:10px; margin-top:10px;">' +
-          '<div style="font-size:11px; color:#9ca3af;">' +
+          '<div' + (isInactive ? ' class="sg-card-bw-content"' : '') + ' style="font-size:11px; color:#9ca3af;">' +
             (item.date_added ? 'Added ' + item.date_added : '') +
           '</div>' +
           '<div style="display:flex; align-items:center; gap:6px;">' +
-            '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>' +
+            enjoyBtn +
             (!isInactive && item.location === 'fridge' ? '<button class="sg-action-btn sg-action-sec" onclick="openSnoozeItemModal(' + item.id + ')" title="Snooze reminder cadence">⏰ Snooze</button>' : '') +
             (!isInactive ? secondaryActionBtn : '') +
             discardBtn +
@@ -5464,7 +5486,7 @@ function renderStillGoodItems() {
       var badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
 
       if (isInactive) {
-        badgeStyle = 'background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1;';
+        badgeStyle = 'background:#e2e8f0; color:#475569; border:1px solid #cbd5e1;';
         expiryText = '⚪ Inactive · Expired 7d+';
       } else if (!item.ai_estimated) {
         expiryText = '🌱 Fresher';
@@ -5503,35 +5525,65 @@ function renderStillGoodItems() {
         tipSublineHtml = '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-left:22px;">Stashed from trip</div>';
       }
 
-      var crisperRowStyle = isInactive ? ' style="background:#f8fafc; border:1px solid #e2e8f0; opacity:0.88;"' : '';
-      var delBtnStyle = isInactive ? ' style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; min-width:44px; min-height:44px; border-radius:8px; cursor:pointer; font-size:15px;"' : '';
+      var delBtnStyle = isInactive ? ' style="background:#ef4444; color:#ffffff; border:none; min-width:44px; min-height:44px; border-radius:8px; cursor:pointer; font-size:15px; box-shadow:0 2px 6px rgba(239,68,68,0.4);"' : '';
 
-      crisperRowsHtml += '<div class="sg-crisper-row' + (isInactive ? ' sg-crisper-row-inactive' : '') + '" id="sgCrisperRow_' + item.id + '"' + crisperRowStyle + '>' +
-        '<div class="sg-crisper-top-line">' +
-          '<div class="sg-crisper-item-info">' +
-            '<span style="font-size:17px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
-            '<span style="font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + escapeHtml(item.name) + '">' +
-              escapeHtml(item.name) +
-            '</span>' +
-            storeBadgeHtml +
+      if (isInactive) {
+        crisperRowsHtml += '<div class="sg-crisper-row sg-crisper-row-inactive" id="sgCrisperRow_' + item.id + '">' +
+          '<div class="sg-crisper-bw-content" style="flex:1; min-width:0;">' +
+            '<div class="sg-crisper-top-line">' +
+              '<div class="sg-crisper-item-info">' +
+                '<span style="font-size:17px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
+                '<span style="font-size:14px; font-weight:700; color:#475569; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + escapeHtml(item.name) + '">' +
+                  escapeHtml(item.name) +
+                '</span>' +
+                storeBadgeHtml +
+              '</div>' +
+              '<div style="flex-shrink:0;">' +
+                '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 8px; border-radius:6px; white-space:nowrap;">' +
+                  expiryText +
+                '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div style="min-width:0; flex:1; padding-right:8px;">' +
+              tipSublineHtml +
+            '</div>' +
           '</div>' +
-          '<div style="flex-shrink:0;">' +
-            '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 8px; border-radius:6px; white-space:nowrap;">' +
-              expiryText +
-            '</span>' +
+          '<div class="sg-crisper-bottom-line" style="justify-content:flex-end;">' +
+            '<div class="sg-crisper-actions-group">' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        '<div class="sg-crisper-bottom-line">' +
-          '<div style="min-width:0; flex:1; padding-right:8px;">' +
-            tipSublineHtml +
+        '</div>';
+      } else {
+        crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
+          '<div class="sg-crisper-top-line">' +
+            '<div class="sg-crisper-item-info">' +
+              '<span style="font-size:17px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
+              '<span style="font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + escapeHtml(item.name) + '">' +
+                escapeHtml(item.name) +
+              '</span>' +
+              storeBadgeHtml +
+            '</div>' +
+            '<div style="flex-shrink:0;">' +
+              '<span style="font-size:11px; font-weight:600; ' + badgeStyle + ' padding:2px 8px; border-radius:6px; white-space:nowrap;">' +
+                expiryText +
+              '</span>' +
+            '</div>' +
           '</div>' +
-          '<div class="sg-crisper-actions-group">' +
-            '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
-            '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
-            '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+          '<div class="sg-crisper-bottom-line">' +
+            '<div style="min-width:0; flex:1; padding-right:8px;">' +
+              tipSublineHtml +
+            '</div>' +
+            '<div class="sg-crisper-actions-group">' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
+              '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-      '</div>';
+        '</div>';
+      }
     });
 
     html += '<div id="sgCrisperDrawer" class="sg-crisper-drawer">' +
