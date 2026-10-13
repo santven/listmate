@@ -149,6 +149,283 @@ class TestSmartStashCrisperApi(unittest.TestCase):
             self.assertEqual(item2.get("ai_tip"), "Wrap in foil to stay crisp")
             self.assertEqual(item2.get("days_left"), 4)
 
+    @patch("shared.auth.get_user_id", return_value=1)
+    @patch("shared.auth._reconcile_session", side_effect=lambda s: s)
+    @patch("app._resolve_still_good_hh", return_value=1)
+    @patch("app._can_household_access_still_good", return_value=True)
+    def test_partial_stash_and_dismiss_sentinel(self, mock_can_access, mock_hh, mock_reconcile, mock_uid):
+        """
+        Partial stash: User passes item_ids=[id1], dismiss_ids=[id2].
+        Assert:
+        - id1 is stashed in still_good_items with current timestamp in list_items
+        - id2 has still_good_stashed_at == 1970-01-01 in list_items and is NOT in still_good_items
+        - Subsequent call to GET /api/still-good/stash-candidates returns 0 candidates!
+        """
+        mock_db = MockCrisperDb()
+        p_time = mock_db.now - datetime.timedelta(hours=4)
+        id1, id2 = 501, 502
+
+        mock_db.list_items[id1] = {
+            "id": id1,
+            "name": "Organic Honeycrisp Apples",
+            "category": "Produce",
+            "quantity": "3 lbs",
+            "household_id": 1,
+            "store_id": 10,
+            "purchased": True,
+            "purchased_at": p_time,
+            "trip_notified_at": p_time,
+            "still_good_stashed_at": None,
+        }
+        mock_db.list_items[id2] = {
+            "id": id2,
+            "name": "Greek Yogurt",
+            "category": "Dairy",
+            "quantity": "32 oz",
+            "household_id": 1,
+            "store_id": 10,
+            "purchased": True,
+            "purchased_at": p_time,
+            "trip_notified_at": p_time,
+            "still_good_stashed_at": None,
+        }
+
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 1, "household_id": 1, "email": "test@example.com"}
+
+        with patch("app.get_db", return_value=mock_db):
+            # Verify initial candidate check returns both items
+            cand_res = self.client.get("/api/still-good/stash-candidates")
+            self.assertEqual(cand_res.status_code, 200)
+            cand_data = cand_res.get_json()
+            self.assertTrue(cand_data.get("ok"))
+            self.assertEqual(len(cand_data.get("candidates", [])), 2)
+
+            # Partial stash: stash id1, dismiss id2
+            res = self.client.post("/api/still-good/stash", json={
+                "item_ids": [id1],
+                "dismiss_ids": [id2]
+            })
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data.get("ok"))
+            self.assertEqual(data.get("stashed_count"), 1)
+            self.assertEqual(data.get("dismissed_count"), 1)
+            self.assertEqual(len(data.get("items", [])), 1)
+            self.assertEqual(data["items"][0]["list_item_id"], id1)
+
+            # Assert id1 is stashed in still_good_items with current timestamp in list_items
+            self.assertEqual(mock_db.list_items[id1]["still_good_stashed_at"], mock_db.now)
+            stashed_list_item_ids = [sg["list_item_id"] for sg in mock_db.still_good_items.values()]
+            self.assertIn(id1, stashed_list_item_ids)
+
+            # Assert id2 has still_good_stashed_at == 1970-01-01 in list_items and is NOT in still_good_items
+            self.assertEqual(mock_db.list_items[id2]["still_good_stashed_at"], "1970-01-01 00:00:00")
+            self.assertNotIn(id2, stashed_list_item_ids)
+
+            # Subsequent call to GET /api/still-good/stash-candidates returns 0 candidates!
+            cand_res_after = self.client.get("/api/still-good/stash-candidates")
+            self.assertEqual(cand_res_after.status_code, 200)
+            cand_data_after = cand_res_after.get_json()
+            self.assertTrue(cand_data_after.get("ok"))
+            self.assertEqual(len(cand_data_after.get("candidates", [])), 0)
+
+    @patch("shared.auth.get_user_id", return_value=1)
+    @patch("shared.auth._reconcile_session", side_effect=lambda s: s)
+    @patch("app._resolve_still_good_hh", return_value=1)
+    @patch("app._can_household_access_still_good", return_value=True)
+    def test_explicit_dismiss_candidates(self, mock_can_access, mock_hh, mock_reconcile, mock_uid):
+        """
+        Explicit POST /api/still-good/dismiss-candidates: Call with item_ids=[id1, id2].
+        Assert both receive 1970-01-01 sentinel and subsequent candidate check returns 0.
+        """
+        mock_db = MockCrisperDb()
+        p_time = mock_db.now - datetime.timedelta(hours=4)
+        id1, id2 = 601, 602
+
+        mock_db.list_items[id1] = {
+            "id": id1,
+            "name": "Strawberries",
+            "category": "Produce",
+            "quantity": "1 lb",
+            "household_id": 1,
+            "store_id": 10,
+            "purchased": True,
+            "purchased_at": p_time,
+            "trip_notified_at": p_time,
+            "still_good_stashed_at": None,
+        }
+        mock_db.list_items[id2] = {
+            "id": id2,
+            "name": "Baby Spinach",
+            "category": "Produce",
+            "quantity": "16 oz",
+            "household_id": 1,
+            "store_id": 10,
+            "purchased": True,
+            "purchased_at": p_time,
+            "trip_notified_at": p_time,
+            "still_good_stashed_at": None,
+        }
+
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 1, "household_id": 1, "email": "test@example.com"}
+
+        with patch("app.get_db", return_value=mock_db):
+            # Verify candidate check returns 2 candidates initially
+            cand_res = self.client.get("/api/still-good/stash-candidates")
+            self.assertEqual(cand_res.status_code, 200)
+            self.assertEqual(len(cand_res.get_json().get("candidates", [])), 2)
+
+            # Explicit dismiss call
+            res = self.client.post("/api/still-good/dismiss-candidates", json={
+                "item_ids": [id1, id2]
+            })
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data.get("ok"))
+            self.assertEqual(data.get("dismissed_count"), 2)
+
+            # Assert both receive 1970-01-01 sentinel
+            self.assertEqual(mock_db.list_items[id1]["still_good_stashed_at"], "1970-01-01 00:00:00")
+            self.assertEqual(mock_db.list_items[id2]["still_good_stashed_at"], "1970-01-01 00:00:00")
+            self.assertEqual(len(mock_db.still_good_items), 0)
+
+            # Subsequent candidate check returns 0 candidates
+            cand_res_after = self.client.get("/api/still-good/stash-candidates")
+            self.assertEqual(cand_res_after.status_code, 200)
+            cand_data_after = cand_res_after.get_json()
+            self.assertTrue(cand_data_after.get("ok"))
+            self.assertEqual(len(cand_data_after.get("candidates", [])), 0)
+
+    @patch("shared.auth.get_user_id", return_value=1)
+    @patch("shared.auth._reconcile_session", side_effect=lambda s: s)
+    @patch("app._resolve_still_good_hh", return_value=1)
+    @patch("app._can_household_access_still_good", return_value=True)
+    def test_dismiss_candidates_empty_and_no_ids(self, mock_can_access, mock_hh, mock_reconcile, mock_uid):
+        """Verify empty item_ids or empty request body returns ok with dismissed_count=0."""
+        mock_db = MockCrisperDb()
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 1, "household_id": 1, "email": "test@example.com"}
+
+        with patch("app.get_db", return_value=mock_db):
+            res_empty = self.client.post("/api/still-good/dismiss-candidates", json={"item_ids": []})
+            self.assertEqual(res_empty.status_code, 200)
+            self.assertTrue(res_empty.get_json().get("ok"))
+            self.assertEqual(res_empty.get_json().get("dismissed_count"), 0)
+
+            res_none = self.client.post("/api/still-good/dismiss-candidates", json={})
+            self.assertEqual(res_none.status_code, 200)
+            self.assertTrue(res_none.get_json().get("ok"))
+            self.assertEqual(res_none.get_json().get("dismissed_count"), 0)
+
+
+class MockCrisperDb:
+    """In-memory mock database for stash candidates and sentinel snooze testing."""
+
+    def __init__(self):
+        self.list_items = {}
+        self.still_good_items = {}
+        self.now = datetime.datetime(2026, 10, 13, 12, 0, 0)
+        self.next_sg_id = 1
+        self._cur_result = None
+        self._last_rowcount = 0
+
+    def execute(self, sql, params=None):
+        params = params or ()
+        sql_clean = " ".join(sql.strip().split())
+        self._cur_result = None
+        self._last_rowcount = 0
+
+        # Stash candidates query
+        if "FROM list_items" in sql_clean and "still_good_stashed_at IS NULL" in sql_clean and "SELECT id, name, category" in sql_clean:
+            hhid = params[0]
+            matched = []
+            for itm in self.list_items.values():
+                if itm.get("household_id") == hhid and itm.get("purchased") and itm.get("still_good_stashed_at") is None:
+                    matched.append(dict(itm))
+            matched.sort(key=lambda x: x.get("purchased_at") or self.now, reverse=True)
+            self._cur_result = matched
+            self._last_rowcount = len(matched)
+            return self
+
+        # Dismiss sentinel UPDATE query
+        if "UPDATE list_items" in sql_clean and "still_good_stashed_at = '1970-01-01 00:00:00'" in sql_clean:
+            hhid = params[-1]
+            target_ids = set(params[:-1])
+            count = 0
+            for itm_id, itm in self.list_items.items():
+                if itm_id in target_ids and itm.get("household_id") == hhid:
+                    if itm.get("purchased") and itm.get("still_good_stashed_at") is None:
+                        itm["still_good_stashed_at"] = "1970-01-01 00:00:00"
+                        count += 1
+            self._cur_result = []
+            self._last_rowcount = count
+            return self
+
+        # Stash atomic UPDATE query
+        if "UPDATE list_items" in sql_clean and "still_good_stashed_at = NOW()" in sql_clean:
+            hhid = params[-1]
+            target_ids = set(params[:-1])
+            claimed = []
+            for itm_id, itm in self.list_items.items():
+                if itm_id in target_ids and itm.get("household_id") == hhid:
+                    if itm.get("purchased") and itm.get("still_good_stashed_at") is None:
+                        itm["still_good_stashed_at"] = self.now
+                        claimed.append({
+                            "id": itm["id"],
+                            "name": itm["name"],
+                            "category": itm.get("category", ""),
+                            "purchased_at": itm.get("purchased_at"),
+                            "store_id": itm.get("store_id")
+                        })
+            self._cur_result = claimed
+            self._last_rowcount = len(claimed)
+            return self
+
+        # Insert into still_good_items
+        if sql_clean.startswith("INSERT INTO still_good_items"):
+            hhid, store_id, name, date_added, consume_by, list_item_id, shelf_life = params
+            sg_id = self.next_sg_id
+            self.next_sg_id += 1
+            self.still_good_items[sg_id] = {
+                "id": sg_id,
+                "household_id": hhid,
+                "store_id": store_id,
+                "name": name,
+                "date_added": date_added,
+                "consume_by": consume_by,
+                "list_item_id": list_item_id,
+                "shelf_life_days": shelf_life,
+                "status": "active"
+            }
+            self._cur_result = [{"id": sg_id}]
+            self._last_rowcount = 1
+            return self
+
+        return self
+
+    def fetchall(self):
+        return self._cur_result if self._cur_result is not None else []
+
+    def fetchone(self):
+        if self._cur_result:
+            return self._cur_result[0]
+        return None
+
+    @property
+    def rowcount(self):
+        return self._last_rowcount
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
 
 if __name__ == "__main__":
     unittest.main()
