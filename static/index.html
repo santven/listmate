@@ -1812,7 +1812,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <h3 id="sgPostTripTitle" style="margin:0; font-size:18px; font-weight:800; color:var(--text); line-height:1.3;">🛍️ Unpacked your groceries?</h3>
         <p id="sgPostTripSubtitle" style="margin:6px 0 0 0; font-size:13px; color:var(--muted); line-height:1.45;">We found <span id="sgPostTripCount">0</span> fresh items from your recent shopping trip. If you stashed them in the fridge, track them in Still Good so we can remind you before they spoil:</p>
       </div>
-      <button type="button" onclick="dismissSgPostTripModal()" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:8px;" aria-label="Close">✕</button>
+      <button type="button" onclick="dismissSgPostTripModal()" style="background:#f1f5f9; border:none; width:44px; height:44px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:8px;" aria-label="Close">✕</button>
     </div>
 
     <!-- Item List with checkboxes -->
@@ -1822,11 +1822,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
     <!-- Actions / Buttons -->
     <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
-      <button type="button" id="btnSgPostTripStash" onclick="submitSgPostTripStash()" style="width:100%; background:var(--green); color:#fff; border:none; padding:13px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(94,190,126,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">
-        <span id="btnSgPostTripStashText">🍲 Track Selected (0) in Still Good (1-Tap)</span>
+      <button type="button" id="btnSgPostTripStash" onclick="submitSgPostTripStash()" style="width:100%; min-height:46px; background:var(--green); color:#fff; border:none; padding:12px 16px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(94,190,126,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span id="btnSgPostTripStashText">🍲 Track Selected (0) in Still Good</span>
       </button>
-      <button type="button" id="btnSgPostTripDismiss" onclick="dismissSgPostTripModal()" style="width:100%; background:#f1f5f9; border:1px solid #e2e8f0; color:var(--muted); padding:11px; border-radius:12px; font-size:13px; font-weight:600; cursor:pointer;">
-        Remind Me Later / Dismiss
+      <button type="button" id="btnSgPostTripRemind" onclick="remindLaterSgPostTripModal()" style="width:100%; min-height:44px; background:#f1f5f9; border:1px solid #cbd5e1; color:var(--text); padding:11px 16px; border-radius:12px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        ⏰ Remind Me Later
+      </button>
+      <button type="button" id="btnSgPostTripDismiss" onclick="dismissSgPostTripModal()" style="width:100%; min-height:44px; background:transparent; border:none; color:var(--muted); padding:11px 16px; border-radius:12px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+        Don't Ask Again for These Items
       </button>
     </div>
   </div>
@@ -4922,13 +4925,18 @@ function updateSgBannerDisplay() {
 // ── Post-Shopping Smart Stash Bottom Drawer Logic (Issue #632) ──
 var isCheckingStashCandidates = false;
 var lastStashCheckTime = 0;
+window.currentStashCandidateIds = [];
 
 async function checkPostTripStashCandidates(force, bypassQuarantine) {
   var urlParams = new URLSearchParams(window.location.search);
   var isTest = Boolean(bypassQuarantine || urlParams.get('test_stash') === '1' || urlParams.get('skip_quarantine') === '1' || urlParams.get('modal') === 'stash');
-  if (isTest) {
+  if (isTest || force) {
     sessionStorage.removeItem('dismissed_stash_candidates');
+    localStorage.removeItem('sg_stash_snooze_until');
   }
+
+  var snoozeUntil = parseInt(localStorage.getItem('sg_stash_snooze_until') || '0', 10);
+  if (Date.now() < snoozeUntil && !force && !isTest) return;
 
   if (currentScreen !== 'home' && !force && !isTest) return;
   if (sessionStorage.getItem('dismissed_stash_candidates') && !force && !isTest) return;
@@ -4959,6 +4967,8 @@ async function checkPostTripStashCandidates(force, bypassQuarantine) {
 window.checkPostTripStashCandidates = checkPostTripStashCandidates;
 
 function renderSgPostTripCandidates(candidates) {
+  window.currentStashCandidateIds = Array.isArray(candidates) ? candidates.map(function(c) { return c.id; }) : [];
+
   var countEl = document.getElementById('sgPostTripCount');
   if (countEl) countEl.textContent = candidates.length;
 
@@ -5005,7 +5015,7 @@ function updateSgPostTripSelectedCount() {
 
   if (btnText) {
     if (count > 0) {
-      btnText.textContent = '🍲 Track Selected (' + count + ') in Still Good (1-Tap)';
+      btnText.textContent = '🍲 Track Selected (' + count + ') in Still Good';
     } else {
       btnText.textContent = 'Select items to Track';
     }
@@ -5020,16 +5030,20 @@ window.updateSgPostTripSelectedCount = updateSgPostTripSelectedCount;
 
 async function submitSgPostTripStash() {
   var checkboxes = document.querySelectorAll('.sg-stash-checkbox:checked');
-  var ids = [];
+  var selectedIds = [];
   checkboxes.forEach(function(cb) {
     var val = parseInt(cb.getAttribute('data-id'), 10);
-    if (val) ids.push(val);
+    if (val) selectedIds.push(val);
   });
 
-  if (ids.length === 0) {
+  if (selectedIds.length === 0) {
     if (typeof toast === 'function') toast('Please select at least one item to stash.');
     return;
   }
+
+  var unselectedIds = (window.currentStashCandidateIds || []).filter(function(id) {
+    return !selectedIds.includes(id);
+  });
 
   var btn = document.getElementById('btnSgPostTripStash');
   var btnText = document.getElementById('btnSgPostTripStashText');
@@ -5042,18 +5056,19 @@ async function submitSgPostTripStash() {
     var res = await fetch(API + '/still-good/stash', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_ids: ids })
+      body: JSON.stringify({ item_ids: selectedIds, dismiss_ids: unselectedIds })
     }).then(function(r) { return r.json(); });
 
     if (res && res.ok) {
       sessionStorage.setItem('dismissed_stash_candidates', '1');
+      localStorage.removeItem('sg_stash_snooze_until');
       var modal = document.getElementById('sgPostTripModal');
       if (modal) modal.classList.remove('active');
 
       if (typeof fireCelebration === 'function') {
         fireCelebration(false);
       }
-      var count = res.stashed_count !== undefined ? res.stashed_count : ids.length;
+      var count = res.stashed_count !== undefined ? res.stashed_count : selectedIds.length;
       if (typeof toast === 'function') {
         toast('✅ Added ' + count + ' fresh item' + (count === 1 ? '' : 's') + ' to Still Good!');
       }
@@ -5079,13 +5094,47 @@ async function submitSgPostTripStash() {
 }
 window.submitSgPostTripStash = submitSgPostTripStash;
 
-function dismissSgPostTripModal(event) {
-  if (event && event.target && event.target.id !== 'sgPostTripModal' && event.target.tagName !== 'BUTTON') {
+function remindLaterSgPostTripModal() {
+  localStorage.setItem('sg_stash_snooze_until', Date.now() + (4 * 3600 * 1000));
+  sessionStorage.setItem('dismissed_stash_candidates', '1');
+  var modal = document.getElementById('sgPostTripModal');
+  if (modal) modal.classList.remove('active');
+  if (typeof toast === 'function') {
+    toast("⏰ We'll remind you in 4 hours.");
+  }
+}
+window.remindLaterSgPostTripModal = remindLaterSgPostTripModal;
+
+async function dismissSgPostTripModal(event) {
+  if (event && event.target && event.target.id !== 'sgPostTripModal' && !event.target.closest('button')) {
     return;
   }
   sessionStorage.setItem('dismissed_stash_candidates', '1');
   var modal = document.getElementById('sgPostTripModal');
   if (modal) modal.classList.remove('active');
+
+  var dismissBtn = document.getElementById('btnSgPostTripDismiss');
+  if (dismissBtn) dismissBtn.disabled = true;
+
+  var candidateIds = (window.currentStashCandidateIds && Array.isArray(window.currentStashCandidateIds))
+    ? window.currentStashCandidateIds
+    : [];
+
+  try {
+    await fetch(API + '/still-good/dismiss-candidates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_ids: candidateIds })
+    });
+  } catch (err) {
+    console.warn('Error dismissing stash candidates:', err);
+  } finally {
+    if (dismissBtn) dismissBtn.disabled = false;
+  }
+
+  if (typeof toast === 'function') {
+    toast('Item suggestions dismissed.');
+  }
 }
 window.dismissSgPostTripModal = dismissSgPostTripModal;
 

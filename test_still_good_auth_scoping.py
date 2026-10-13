@@ -103,6 +103,20 @@ class InMemoryStillGoodDb:
             self._last_rowcount = len(claimed)
             return self
 
+        # Dismiss sentinel UPDATE query
+        if sql_clean.startswith("UPDATE list_items SET still_good_stashed_at = '1970-01-01 00:00:00'"):
+            hhid = params[-1]
+            target_ids = set(params[:-1])
+            dismissed_count = 0
+            for item_id, item in self.list_items.items():
+                if item_id in target_ids and item.get("household_id") == hhid:
+                    if item.get("purchased") and item.get("still_good_stashed_at") is None:
+                        item["still_good_stashed_at"] = "1970-01-01 00:00:00"
+                        dismissed_count += 1
+            self._cur_result = []
+            self._last_rowcount = dismissed_count
+            return self
+
         # Delete on uncheck
         if sql_clean.startswith("DELETE FROM still_good_items WHERE list_item_id = ? AND household_id = ? AND status = 'active'"):
             li_id, hhid = params

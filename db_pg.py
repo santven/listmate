@@ -145,6 +145,7 @@ class PgConnection:
             self._conn.rollback()
 
     total_changes = property(lambda self: self._last_rowcount)
+    rowcount = property(lambda self: self._last_rowcount)
 
 _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS stores (id SERIAL PRIMARY KEY, name TEXT NOT NULL, household_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP NOT NULL DEFAULT NOW())",
