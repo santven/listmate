@@ -2609,7 +2609,17 @@ def still_good_list_endpoint():
             query += " AND sgi.location = ?"
             params.append(location)
 
-        query += " ORDER BY CASE WHEN sgi.status = 'active' THEN 0 ELSE 1 END, sgi.consume_by ASC NULLS LAST, sgi.id ASC"
+        order_by_clause = (
+            " ORDER BY "
+            "CASE "
+            "  WHEN sgi.status = 'active' AND (sgi.consume_by IS NULL OR sgi.consume_by >= CURRENT_DATE - INTERVAL '7 days') THEN 0 "
+            "  WHEN sgi.status = 'active' AND sgi.consume_by < CURRENT_DATE - INTERVAL '7 days' THEN 1 "
+            "  ELSE 2 "
+            "END ASC, "
+            "sgi.consume_by ASC NULLS LAST, "
+            "sgi.id ASC"
+        )
+        query += order_by_clause
 
         try:
             cur = db.execute(query, tuple(params))
@@ -2637,15 +2647,22 @@ def still_good_list_endpoint():
             if location and location in ["fridge", "freezer"]:
                 fallback_query += " AND sgi.location = ?"
                 fallback_params.append(location)
-            fallback_query += " ORDER BY CASE WHEN sgi.status = 'active' THEN 0 ELSE 1 END, sgi.consume_by ASC NULLS LAST, sgi.id ASC"
+            fallback_query += order_by_clause
             cur = db.execute(fallback_query, tuple(fallback_params))
             items = cur.fetchall() or []
 
-        from datetime import date, datetime
+        from datetime import date, datetime, timedelta
         today = date.today()
+        seven_days_ago_date = today - timedelta(days=7)
+        seven_days_ago_str = seven_days_ago_date.isoformat()
         formatted_items = []
         for r in items:
             item = dict(r)
+            consume_by_val = item.get("consume_by")
+            consume_by_str = str(consume_by_val) if consume_by_val else None
+            is_inactive = bool(item.get("status") == "active" and consume_by_str and consume_by_str < seven_days_ago_str)
+            item["is_inactive"] = is_inactive
+            item["lifecycle_status"] = "inactive" if is_inactive else item.get("status")
             consume_by_str = item.get("consume_by")
             days_left = None
             urgency = "fresh"

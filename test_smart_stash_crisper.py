@@ -153,6 +153,102 @@ class TestSmartStashCrisperApi(unittest.TestCase):
     @patch("shared.auth._reconcile_session", side_effect=lambda s: s)
     @patch("app._resolve_still_good_hh", return_value=1)
     @patch("app._can_household_access_still_good", return_value=True)
+    def test_still_good_sinks_inactive_items_past_7_days(self, mock_can_access, mock_hh, mock_reconcile, mock_uid):
+        """Test 4: GET /api/still-good marks items past 7 days with is_inactive=True and sinks them below active items."""
+        mock_db = MagicMock()
+        today = datetime.date.today()
+        today_str = today.isoformat()
+        active_expired_3d_str = (today - datetime.timedelta(days=3)).isoformat()
+        inactive_expired_10d_str = (today - datetime.timedelta(days=10)).isoformat()
+        inactive_expired_8d_str = (today - datetime.timedelta(days=8)).isoformat()
+
+        fake_rows = [
+            # 1. Active item expiring today (priority 0)
+            {
+                "id": 1, "household_id": 1, "name": "Fresh Milk", "location": "fridge",
+                "item_type": "dairy", "servings": 1, "date_added": today_str,
+                "consume_by": today_str, "snooze_until": None, "remind_cadence": "daily",
+                "status": "active", "consumed_at": None, "discarded_at": None, "thawing": False,
+                "notes": "", "ai_estimated": False, "ai_tip": None, "shelf_life_days": 3,
+                "list_item_id": None, "store_id": None, "store_name": ""
+            },
+            # 2. Active item expired 3 days ago (priority 0, <= 7 days post-expiry)
+            {
+                "id": 2, "household_id": 1, "name": "Yogurt", "location": "fridge",
+                "item_type": "dairy", "servings": 1, "date_added": today_str,
+                "consume_by": active_expired_3d_str, "snooze_until": None, "remind_cadence": "daily",
+                "status": "active", "consumed_at": None, "discarded_at": None, "thawing": False,
+                "notes": "", "ai_estimated": False, "ai_tip": None, "shelf_life_days": 5,
+                "list_item_id": None, "store_id": None, "store_name": ""
+            },
+            # 3. Active item expired 10 days ago (priority 1, > 7 days post-expiry -> INACTIVE)
+            {
+                "id": 3, "household_id": 1, "name": "Old Pasta", "location": "fridge",
+                "item_type": "meal", "servings": 1, "date_added": today_str,
+                "consume_by": inactive_expired_10d_str, "snooze_until": None, "remind_cadence": "daily",
+                "status": "active", "consumed_at": None, "discarded_at": None, "thawing": False,
+                "notes": "", "ai_estimated": False, "ai_tip": None, "shelf_life_days": 3,
+                "list_item_id": None, "store_id": None, "store_name": ""
+            },
+            # 4. Consumed item expired 8 days ago (priority 2, non-active status)
+            {
+                "id": 4, "household_id": 1, "name": "Ate Sandwich", "location": "fridge",
+                "item_type": "meal", "servings": 1, "date_added": today_str,
+                "consume_by": inactive_expired_8d_str, "snooze_until": None, "remind_cadence": "daily",
+                "status": "consumed", "consumed_at": today_str, "discarded_at": None, "thawing": False,
+                "notes": "", "ai_estimated": False, "ai_tip": None, "shelf_life_days": 2,
+                "list_item_id": None, "store_id": None, "store_name": ""
+            }
+        ]
+
+        mock_cur = MagicMock()
+        mock_cur.fetchall.return_value = fake_rows
+        mock_cur.fetchone.return_value = {
+            "active_fridge": 3, "active_freezer": 0, "thawing_count": 0,
+            "wins_7d": 1, "wins_this_month": 1, "total_wins": 1
+        }
+        mock_db.execute.return_value = mock_cur
+
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 1, "household_id": 1, "email": "test@example.com"}
+
+        with patch("app.get_db", return_value=mock_db):
+            res = self.client.get("/api/still-good?status=all")
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data.get("ok"))
+            items = data.get("items", [])
+            self.assertEqual(len(items), 4)
+
+            # Check SQL ORDER BY query contains the sinking CASE expression
+            select_calls = [c[0][0] for c in mock_db.execute.call_args_list if "SELECT sgi.id" in c[0][0]]
+            self.assertTrue(len(select_calls) > 0)
+            executed_sql = select_calls[0]
+            self.assertIn("ORDER BY", executed_sql)
+            self.assertIn("WHEN sgi.status = 'active' AND (sgi.consume_by IS NULL OR sgi.consume_by >= CURRENT_DATE - INTERVAL '7 days') THEN 0", executed_sql)
+            self.assertIn("WHEN sgi.status = 'active' AND sgi.consume_by < CURRENT_DATE - INTERVAL '7 days' THEN 1", executed_sql)
+            self.assertIn("ELSE 2", executed_sql)
+
+            # Item 1: Active, expiring today -> not inactive
+            self.assertFalse(items[0]["is_inactive"])
+            self.assertEqual(items[0]["lifecycle_status"], "active")
+
+            # Item 2: Active, expired 3 days ago (<= 7 days) -> not inactive
+            self.assertFalse(items[1]["is_inactive"])
+            self.assertEqual(items[1]["lifecycle_status"], "active")
+
+            # Item 3: Active, expired 10 days ago (> 7 days) -> INACTIVE
+            self.assertTrue(items[2]["is_inactive"])
+            self.assertEqual(items[2]["lifecycle_status"], "inactive")
+
+            # Item 4: Consumed -> not inactive (already consumed lifecycle status)
+            self.assertFalse(items[3]["is_inactive"])
+            self.assertEqual(items[3]["lifecycle_status"], "consumed")
+
+    @patch("shared.auth.get_user_id", return_value=1)
+    @patch("shared.auth._reconcile_session", side_effect=lambda s: s)
+    @patch("app._resolve_still_good_hh", return_value=1)
+    @patch("app._can_household_access_still_good", return_value=True)
     def test_partial_stash_and_dismiss_sentinel(self, mock_can_access, mock_hh, mock_reconcile, mock_uid):
         """
         Partial stash: User passes item_ids=[id1], dismiss_ids=[id2].

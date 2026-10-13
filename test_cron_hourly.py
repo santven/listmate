@@ -94,5 +94,123 @@ class TestCronHourly(unittest.TestCase):
             self.assertNotIn("still_good_ai", results, f"Still Good AI should NOT run at {h}:00 UTC")
 
 
+class TestStillGoodFridgeLunchCadenceAndPostExpiry(unittest.TestCase):
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
+    @patch("push_helper.send_push_to_user")
+    def test_morning_push_suppresses_items_expired_yesterday(self, mock_send_push, mock_run, mock_init_schema):
+        """Test 1: Morning push suppresses items expired yesterday (consume_by < today)."""
+        import push_helper
+        captured_queries = []
+
+        def fake_run(query, params=None):
+            captured_queries.append(query)
+            if "FROM auth_users u" in query:
+                # Return 1 candidate user
+                return [{
+                    "user_id": 101,
+                    "household_id": 201,
+                    "user_name": "Alice",
+                    "user_email": "alice@example.com",
+                    "user_timezone": "America/Chicago"
+                }]
+            elif "FROM still_good_items" in query and "household_id = %s" in query:
+                # In SQL, items where consume_by < CURRENT_DATE are filtered out,
+                # so if the fridge only has expired items, empty list is returned.
+                return []
+            return []
+
+        mock_run.side_effect = fake_run
+
+        res = push_helper.check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=False, force_send=False)
+
+        # Verify candidate query contains post-expiry suppression check
+        cand_q = captured_queries[0]
+        self.assertIn("sgi.consume_by >= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::DATE", cand_q)
+
+        # Verify fridge items query contains post-expiry suppression check
+        fridge_q = captured_queries[1]
+        self.assertIn("consume_by >= CURRENT_DATE", fridge_q)
+
+        # Candidate user has no unexpired fridge items, so no push is sent
+        self.assertEqual(res["dispatched"], 0)
+        self.assertEqual(mock_send_push.call_count, 0)
+
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
+    @patch("push_helper.send_push_to_user")
+    def test_morning_push_respects_alternate_day_throttle(self, mock_send_push, mock_run, mock_init_schema):
+        """Test 2: Morning push respects alternate-day throttle (skipped if pushed yesterday when no item expires today)."""
+        import push_helper
+        captured_queries = []
+
+        def fake_run(query, params=None):
+            captured_queries.append(query)
+            # Candidate query filters out user because they were pushed yesterday and have no day-0 item
+            return []
+
+        mock_run.side_effect = fake_run
+
+        res = push_helper.check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=False, force_send=False)
+
+        # Verify candidate query contains the alternate-day throttle check
+        cand_q = captured_queries[0]
+        self.assertIn("pnl_y.created_at >= NOW() - INTERVAL '36 hours'", cand_q)
+        self.assertIn("sgi_today.consume_by = DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))", cand_q)
+
+        self.assertEqual(res["candidates"], 0)
+        self.assertEqual(res["dispatched"], 0)
+        self.assertEqual(mock_send_push.call_count, 0)
+
+        # Verify force_send=True bypasses cadence checks
+        captured_queries.clear()
+        res_forced = push_helper.check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=False, force_send=True)
+        forced_q = captured_queries[0]
+        self.assertNotIn("pnl_y.created_at >= NOW() - INTERVAL '36 hours'", forced_q)
+
+    @patch("push_helper._init_schema")
+    @patch("push_helper._run")
+    @patch("push_helper.send_push_to_user")
+    def test_day_0_override_pings_user_even_if_pushed_yesterday(self, mock_send_push, mock_run, mock_init_schema):
+        """Test 3: Day-0 override pings user even if pushed yesterday when an item expires today!"""
+        import push_helper
+        import datetime
+        today_str = datetime.date.today().isoformat()
+        mock_send_push.return_value = {"sent": 1, "failed": 0, "mock": False}
+
+        def fake_run(query, params=None):
+            if "FROM auth_users u" in query:
+                # User qualified because sgi_today.consume_by = today matched the override!
+                return [{
+                    "user_id": 105,
+                    "household_id": 205,
+                    "user_name": "Charlie",
+                    "user_email": "charlie@example.com",
+                    "user_timezone": "America/Chicago"
+                }]
+            elif "FROM still_good_items" in query and "household_id = %s" in query:
+                return [{
+                    "id": 88,
+                    "name": "Roast Chicken",
+                    "consume_by": today_str,
+                    "date_added": today_str
+                }]
+            return []
+
+        mock_run.side_effect = fake_run
+
+        res = push_helper.check_still_good_fridge_lunch_pushes(target_hour=7, dry_run=False, force_send=False)
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["candidates"], 1)
+        self.assertEqual(res["dispatched"], 1)
+        self.assertEqual(len(res["results"]), 1)
+        dispatched_push = res["results"][0]
+        self.assertEqual(dispatched_push["user_id"], 105)
+        self.assertIn("Roast Chicken", dispatched_push["body"])
+        self.assertIn("ready to enjoy before it expires", dispatched_push["body"])
+        mock_send_push.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
