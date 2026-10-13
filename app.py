@@ -2542,11 +2542,11 @@ def _can_household_access_still_good(db, hhid):
                     pass
             return True
 
-        # Premium and active subscribers
-        if sub_status in ["premium", "active"]:
+        # Premium, active, and lifetime subscribers
+        if sub_status in ["premium", "active", "lifetime"]:
             return True
 
-        if is_prem and sub_status not in ["expired", "canceled", "free"]:
+        if is_prem and sub_status not in ["expired", "canceled"]:
             return True
 
         return False
