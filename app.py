@@ -3217,83 +3217,171 @@ def still_good_stash_endpoint():
 
         data = request.get_json(silent=True) or {}
         raw_ids = data.get("item_ids")
-        if raw_ids is None or not isinstance(raw_ids, list):
+        raw_dismiss_ids = data.get("dismiss_ids") if "dismiss_ids" in data else data.get("dismissed_ids")
+
+        if raw_ids is None and raw_dismiss_ids is None:
             return jsonify({"ok": False, "error": "item_ids must be a list"}), 400
 
+        if raw_ids is not None and not isinstance(raw_ids, list):
+            return jsonify({"ok": False, "error": "item_ids must be a list"}), 400
+
+        if raw_dismiss_ids is not None and not isinstance(raw_dismiss_ids, list):
+            return jsonify({"ok": False, "error": "dismiss_ids must be a list"}), 400
+
         clean_ids = []
-        for i in raw_ids:
-            try:
-                val = int(i)
-                if val > 0:
-                    clean_ids.append(val)
-            except (ValueError, TypeError):
-                pass
+        if isinstance(raw_ids, list):
+            for i in raw_ids:
+                try:
+                    val = int(i)
+                    if val > 0:
+                        clean_ids.append(val)
+                except (ValueError, TypeError):
+                    pass
 
-        if not clean_ids:
-            return jsonify({"ok": True, "stashed_count": 0, "items": []})
+        clean_dismiss_ids = []
+        if isinstance(raw_dismiss_ids, list):
+            for i in raw_dismiss_ids:
+                try:
+                    val = int(i)
+                    if val > 0:
+                        clean_dismiss_ids.append(val)
+                except (ValueError, TypeError):
+                    pass
 
-        placeholders = ",".join("?" for _ in clean_ids)
-        update_sql = f"""
-            UPDATE list_items
-            SET still_good_stashed_at = NOW()
-            WHERE id IN ({placeholders})
-              AND household_id = ?
-              AND purchased = TRUE
-              AND still_good_stashed_at IS NULL
-            RETURNING id, name, category, purchased_at, store_id
-        """
-        cur = db.execute(update_sql, tuple(clean_ids) + (hhid,))
-        claimed = cur.fetchall() if cur else []
+        if not clean_ids and not clean_dismiss_ids:
+            return jsonify({"ok": True, "stashed_count": 0, "dismissed_count": 0, "items": []})
+
+        if clean_dismiss_ids:
+            dismiss_placeholders = ",".join("?" for _ in clean_dismiss_ids)
+            dismiss_sql = f"""
+                UPDATE list_items
+                SET still_good_stashed_at = '1970-01-01 00:00:00'
+                WHERE id IN ({dismiss_placeholders})
+                  AND household_id = ?
+                  AND purchased = TRUE
+                  AND still_good_stashed_at IS NULL
+            """
+            db.execute(dismiss_sql, tuple(clean_dismiss_ids) + (hhid,))
 
         stashed = []
-        import datetime
-        for itm in claimed:
-            p_at = itm.get("purchased_at")
-            if p_at:
-                if hasattr(p_at, "date"):
-                    p_date = p_at.date()
+        if clean_ids:
+            placeholders = ",".join("?" for _ in clean_ids)
+            update_sql = f"""
+                UPDATE list_items
+                SET still_good_stashed_at = NOW()
+                WHERE id IN ({placeholders})
+                  AND household_id = ?
+                  AND purchased = TRUE
+                  AND still_good_stashed_at IS NULL
+                RETURNING id, name, category, purchased_at, store_id
+            """
+            cur = db.execute(update_sql, tuple(clean_ids) + (hhid,))
+            claimed = cur.fetchall() if cur else []
+
+            import datetime
+            for itm in claimed:
+                p_at = itm.get("purchased_at")
+                if p_at:
+                    if hasattr(p_at, "date"):
+                        p_date = p_at.date()
+                    else:
+                        try:
+                            p_date = datetime.date.fromisoformat(str(p_at)[:10])
+                        except Exception:
+                            p_date = datetime.date.today()
                 else:
-                    try:
-                        p_date = datetime.date.fromisoformat(str(p_at)[:10])
-                    except Exception:
-                        p_date = datetime.date.today()
-            else:
-                p_date = datetime.date.today()
+                    p_date = datetime.date.today()
 
-            date_added_str = p_date.isoformat()
-            shelf_life = _get_suggested_shelf_life(itm.get("category") or "")
-            consume_by_date = p_date + datetime.timedelta(days=shelf_life)
-            consume_by_str = consume_by_date.isoformat()
+                date_added_str = p_date.isoformat()
+                shelf_life = _get_suggested_shelf_life(itm.get("category") or "")
+                consume_by_date = p_date + datetime.timedelta(days=shelf_life)
+                consume_by_str = consume_by_date.isoformat()
 
-            insert_cur = db.execute(
-                """
-                INSERT INTO still_good_items 
-                (household_id, store_id, name, location, item_type, servings, date_added, consume_by, status, list_item_id, shelf_life_days)
-                VALUES (?, ?, ?, 'fridge', 'produce', 1, ?::date, ?::date, 'active', ?, ?)
-                RETURNING id
-                """,
-                (hhid, itm.get("store_id"), itm["name"], date_added_str, consume_by_str, itm["id"], shelf_life)
-            )
-            sg_row = insert_cur.fetchone() if insert_cur else None
-            sg_id = sg_row["id"] if sg_row else None
+                insert_cur = db.execute(
+                    """
+                    INSERT INTO still_good_items 
+                    (household_id, store_id, name, location, item_type, servings, date_added, consume_by, status, list_item_id, shelf_life_days)
+                    VALUES (?, ?, ?, 'fridge', 'produce', 1, ?::date, ?::date, 'active', ?, ?)
+                    RETURNING id
+                    """,
+                    (hhid, itm.get("store_id"), itm["name"], date_added_str, consume_by_str, itm["id"], shelf_life)
+                )
+                sg_row = insert_cur.fetchone() if insert_cur else None
+                sg_id = sg_row["id"] if sg_row else None
 
-            stashed.append({
-                "id": sg_id,
-                "list_item_id": itm["id"],
-                "store_id": itm.get("store_id"),
-                "name": itm["name"],
-                "category": itm.get("category") or "",
-                "date_added": date_added_str,
-                "consume_by": consume_by_str,
-                "status": "active"
-            })
+                stashed.append({
+                    "id": sg_id,
+                    "list_item_id": itm["id"],
+                    "store_id": itm.get("store_id"),
+                    "name": itm["name"],
+                    "category": itm.get("category") or "",
+                    "date_added": date_added_str,
+                    "consume_by": consume_by_str,
+                    "status": "active"
+                })
 
         db.commit()
-        return jsonify({"ok": True, "stashed_count": len(stashed), "items": stashed})
+        return jsonify({
+            "ok": True,
+            "stashed_count": len(stashed),
+            "dismissed_count": len(clean_dismiss_ids),
+            "items": stashed
+        })
     except Exception as exc:
         try: db.rollback()
         except Exception: pass
         print(f"[STILL GOOD ERROR] Error stashing items: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/still-good/dismiss-candidates", methods=["POST"])
+@require_user
+def still_good_dismiss_candidates_endpoint():
+    db = get_db()
+    try:
+        hhid = _resolve_still_good_hh(db)
+        if not hhid or hhid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required: no household associated with user"}), 401
+        if not _can_household_access_still_good(db, hhid):
+            return jsonify({"ok": False, "error": "Still Good is a Premium feature. Upgrade to access.", "paywall_required": True}), 403
+
+        data = request.get_json(silent=True) or {}
+        raw_ids = data.get("item_ids")
+        if raw_ids is not None and not isinstance(raw_ids, list):
+            return jsonify({"ok": False, "error": "item_ids must be a list"}), 400
+
+        clean_ids = []
+        if isinstance(raw_ids, list):
+            for i in raw_ids:
+                try:
+                    val = int(i)
+                    if val > 0:
+                        clean_ids.append(val)
+                except (ValueError, TypeError):
+                    pass
+
+        if not clean_ids:
+            return jsonify({"ok": True, "dismissed_count": 0})
+
+        placeholders = ",".join("?" for _ in clean_ids)
+        sql = f"""
+            UPDATE list_items
+            SET still_good_stashed_at = '1970-01-01 00:00:00'
+            WHERE id IN ({placeholders})
+              AND household_id = ?
+              AND purchased = TRUE
+              AND still_good_stashed_at IS NULL
+        """
+        cur = db.execute(sql, tuple(clean_ids) + (hhid,))
+        db.commit()
+        dismissed_count = cur.rowcount if hasattr(cur, "rowcount") and isinstance(cur.rowcount, int) else len(clean_ids)
+        return jsonify({"ok": True, "dismissed_count": dismissed_count})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[STILL GOOD ERROR] Error dismissing candidates: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
