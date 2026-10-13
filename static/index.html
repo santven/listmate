@@ -558,6 +558,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   animation: sgCardCelebration 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
 }
 .sg-card { position: relative; z-index: 2; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; transition: transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1); user-select: none; }
+.sg-card-inactive { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; opacity: 0.88; }
 .sg-card.swiping { transition: none; }
 .sg-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
 .sg-badge-restaurant { background: #fef3c7; color: #92400e; }
@@ -570,12 +571,12 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .sg-status-soon { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
 .sg-status-urgent { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
 .sg-status-frozen { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-.sg-action-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease; }
+.sg-action-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: all 0.15s ease; min-height: 44px; box-sizing: border-box; }
 .sg-action-enjoy { background: #10b981; color: #fff; }
 .sg-action-enjoy:active { background: #059669; transform: scale(0.97); }
 .sg-action-sec { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
 .sg-action-sec:active { background: #e5e7eb; }
-.sg-action-danger { background: none; color: #9ca3af; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
+.sg-action-danger { background: none; color: #9ca3af; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .sg-action-danger:hover, .sg-action-danger:active { color: #ef4444; background: #fee2e2; }
 
 /* ── Still Good Push Reminder Banner & Snooze Modal (Issue #616) ── */
@@ -692,6 +693,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   touch-action: pan-y;
   box-sizing: border-box;
 }
+.sg-crisper-row-inactive {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  opacity: 0.88;
+}
 .sg-crisper-row:last-child {
   border-bottom: none;
 }
@@ -727,6 +733,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 }
 /* Unified 32x32px action buttons with rounded corners */
 .sg-crisper-btn {
+  position: relative;
   width: 32px;
   height: 32px;
   min-width: 32px;
@@ -743,6 +750,15 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   transition: all 0.12s ease;
   -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
+}
+.sg-crisper-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
 }
 .sg-crisper-btn:active {
   transform: scale(0.92);
@@ -5326,13 +5342,16 @@ function renderStillGoodItems() {
 
   // Render meals first as full cards
   meals.forEach(function(item) {
+    var isInactive = item.is_inactive === true || item.lifecycle_status === 'inactive';
     var typeBadge = '<span class="sg-badge sg-badge-home">🍳 Home Meal</span>';
     if (item.item_type === 'restaurant') typeBadge = '<span class="sg-badge sg-badge-restaurant">🥡 Restaurant</span>';
     else if (item.item_type === 'batch_cook') typeBadge = '<span class="sg-badge sg-badge-batch">🍲 Batch Cook</span>';
     else if (item.item_type === 'produce') typeBadge = '<span class="sg-badge sg-badge-produce">🥗 Fresh Produce</span>';
 
     var statusPill = '';
-    if (item.location === 'freezer') {
+    if (isInactive) {
+      statusPill = '<span class="sg-status-pill" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-weight:600; font-size:11px; padding:3px 8px; border-radius:8px;">⚪ Inactive · Expired 7d+</span>';
+    } else if (item.location === 'freezer') {
       if (item.thawing) {
         statusPill = '<span class="sg-status-pill sg-badge-thawing">💧 Thawing</span>';
       } else if (item.days_left !== null && item.days_left <= 7) {
@@ -5365,12 +5384,16 @@ function renderStillGoodItems() {
       }
     }
 
+    var discardBtn = isInactive
+      ? '<button class="sg-action-danger" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; font-weight:700; min-width:44px; min-height:44px; padding:8px 12px; border-radius:10px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:14px; gap:4px;" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard inactive item" aria-label="Discard inactive item">🗑 Discard</button>'
+      : '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>';
+
     html += '<div class="sg-card-wrap" id="sgWrap_' + item.id + '">' +
       '<div class="sg-swipe-underlay">' +
         '<div class="sg-swipe-left-bg"><span>✓ Enjoyed! 🎉</span></div>' +
         '<div class="sg-swipe-right-bg"><span>🗑 Discard</span></div>' +
       '</div>' +
-      '<div class="sg-card" id="sgCard_' + item.id + '" data-id="' + item.id + '">' +
+      '<div class="sg-card' + (isInactive ? ' sg-card-inactive' : '') + '" id="sgCard_' + item.id + '" data-id="' + item.id + '"' + (isInactive ? ' style="background:#f8fafc; border:1px solid #e2e8f0; opacity:0.88;"' : '') + '>' +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">' +
           '<div style="min-width:0; flex:1;">' +
             '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">' +
@@ -5397,9 +5420,9 @@ function renderStillGoodItems() {
           '</div>' +
           '<div style="display:flex; align-items:center; gap:6px;">' +
             '<button class="sg-action-btn sg-action-enjoy" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed">✓ Enjoyed</button>' +
-            (item.location === 'fridge' ? '<button class="sg-action-btn sg-action-sec" onclick="openSnoozeItemModal(' + item.id + ')" title="Snooze reminder cadence">⏰ Snooze</button>' : '') +
-            secondaryActionBtn +
-            '<button class="sg-action-danger" onclick="stillGoodAction(' + item.id + ', \'discard\')" title="Discard">🗑</button>' +
+            (!isInactive && item.location === 'fridge' ? '<button class="sg-action-btn sg-action-sec" onclick="openSnoozeItemModal(' + item.id + ')" title="Snooze reminder cadence">⏰ Snooze</button>' : '') +
+            (!isInactive ? secondaryActionBtn : '') +
+            discardBtn +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -5419,9 +5442,9 @@ function renderStillGoodItems() {
   if (crisper_items.length > 0) {
     var isCrisperOpen = localStorage.getItem('sg_crisper_open') === 'true';
 
-    // Urgency badge if any item expires in <= 2 days (excluding unestimated grocery items)
+    // Urgency badge if any item expires in <= 2 days (excluding unestimated grocery items and inactive items)
     var urgentProduce = crisper_items.filter(function(i) {
-      return (i.ai_estimated || !i.list_item_id) && i.days_left !== null && i.days_left !== undefined && i.days_left <= 2;
+      return !(i.is_inactive === true || i.lifecycle_status === 'inactive') && (i.ai_estimated || !i.list_item_id) && i.days_left !== null && i.days_left !== undefined && i.days_left <= 2;
     });
     urgentProduce.sort(function(a, b) {
       return (a.days_left || 0) - (b.days_left || 0);
@@ -5435,11 +5458,15 @@ function renderStillGoodItems() {
 
     var crisperRowsHtml = '';
     crisper_items.forEach(function(item) {
+      var isInactive = item.is_inactive === true || item.lifecycle_status === 'inactive';
       var icon = getCrisperItemIcon(item.name);
       var expiryText = '';
       var badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
 
-      if (!item.ai_estimated) {
+      if (isInactive) {
+        badgeStyle = 'background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1;';
+        expiryText = '⚪ Inactive · Expired 7d+';
+      } else if (!item.ai_estimated) {
         expiryText = '🌱 Fresher';
         badgeStyle = 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;';
       } else if (item.days_left !== null && item.days_left !== undefined) {
@@ -5476,7 +5503,10 @@ function renderStillGoodItems() {
         tipSublineHtml = '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-left:22px;">Stashed from trip</div>';
       }
 
-      crisperRowsHtml += '<div class="sg-crisper-row" id="sgCrisperRow_' + item.id + '">' +
+      var crisperRowStyle = isInactive ? ' style="background:#f8fafc; border:1px solid #e2e8f0; opacity:0.88;"' : '';
+      var delBtnStyle = isInactive ? ' style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; min-width:44px; min-height:44px; border-radius:8px; cursor:pointer; font-size:15px;"' : '';
+
+      crisperRowsHtml += '<div class="sg-crisper-row' + (isInactive ? ' sg-crisper-row-inactive' : '') + '" id="sgCrisperRow_' + item.id + '"' + crisperRowStyle + '>' +
         '<div class="sg-crisper-top-line">' +
           '<div class="sg-crisper-item-info">' +
             '<span style="font-size:17px; flex-shrink:0; line-height:1;">' + icon + '</span>' +
@@ -5498,7 +5528,7 @@ function renderStillGoodItems() {
           '<div class="sg-crisper-actions-group">' +
             '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
             '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
-            '<button type="button" class="sg-crisper-btn sg-crisper-btn-del" onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
+            '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
           '</div>' +
         '</div>' +
       '</div>';
