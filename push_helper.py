@@ -826,6 +826,43 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
         hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
         params["target_hour"] = int(target_hour)
 
+    cadence_clause = ""
+    if not force_send:
+        cadence_clause = """
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'still_good_lunch_7am'
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
+        )
+        AND (
+            NOT EXISTS (
+                SELECT 1 FROM push_notifications_log pnl_y
+                WHERE pnl_y.target_type = 'user'
+                  AND pnl_y.target_id = u.id
+                  AND pnl_y.custom_data->>'campaign' = 'still_good_lunch_7am'
+                  AND (
+                      pnl_y.created_at >= NOW() - INTERVAL '36 hours'
+                      OR DATE((pnl_y.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                         DATE((NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) - INTERVAL '1 day')
+                  )
+            )
+            OR EXISTS (
+                SELECT 1 FROM still_good_items sgi_today
+                WHERE sgi_today.household_id = h.id
+                  AND sgi_today.status = 'active'
+                  AND sgi_today.location = 'fridge'
+                  AND sgi_today.item_type != 'produce'
+                  AND sgi_today.consume_by = DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+            )
+        )
+        """
+
     candidate_query = f"""
         SELECT 
             u.id AS user_id,
@@ -860,22 +897,13 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
               AND sgi.status = 'active'
               AND sgi.location = 'fridge'
               AND sgi.item_type != 'produce'
+              AND (sgi.consume_by IS NULL OR sgi.consume_by >= (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))::DATE)
               AND (
                 (COALESCE(sgi.remind_cadence, 'daily') != 'at_expiry' AND (sgi.snooze_until IS NULL OR sgi.snooze_until <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))))
-                OR (sgi.consume_by IS NOT NULL AND sgi.consume_by <= DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')))
+                OR (sgi.consume_by IS NOT NULL AND sgi.consume_by = DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')))
               )
         )
-        AND NOT EXISTS (
-            SELECT 1 FROM push_notifications_log pnl
-            WHERE pnl.target_type = 'user'
-              AND pnl.target_id = u.id
-              AND pnl.custom_data->>'campaign' = 'still_good_lunch_7am'
-              AND (
-                  pnl.created_at >= NOW() - INTERVAL '20 hours'
-                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
-                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
-              )
-        )
+        {cadence_clause}
         ORDER BY h.id ASC, u.id ASC
     """
 
@@ -911,9 +939,10 @@ def check_still_good_fridge_lunch_pushes(target_hour: int = 7, dry_run: bool = F
                       AND status = 'active'
                       AND location = 'fridge'
                       AND item_type != 'produce'
+                      AND (consume_by IS NULL OR consume_by >= CURRENT_DATE)
                       AND (
                         (COALESCE(remind_cadence, 'daily') != 'at_expiry' AND (snooze_until IS NULL OR snooze_until <= CURRENT_DATE))
-                        OR (consume_by IS NOT NULL AND consume_by <= CURRENT_DATE)
+                        OR (consume_by IS NOT NULL AND consume_by = CURRENT_DATE)
                       )
                     ORDER BY consume_by ASC NULLS LAST, id ASC
                 """, (hhid,))
