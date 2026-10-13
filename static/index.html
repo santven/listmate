@@ -2821,7 +2821,7 @@ function renderHome() {
       if (vLabel) vLabelHtml = '<div style="font-size:11px; font-weight:500; color:#888; margin-top:-4px; margin-bottom:10px; padding:0 4px;">' + escapeHtml(vLabel) + '</div>';
     }
 
-    return '<div class="store-group">' +
+    return '<div class="store-group" data-store-id="' + storeId + '">' +
       '<div class="store-group-title">' +
       '<div style="display:flex;align-items:baseline;gap:6px;"><span>' + escapeHtml(storeMap[storeId] || storeName) + '</span><span style="opacity:0.6;font-size:10px;">' + items.length + '</span></div>' +
       '<div style="display:flex;align-items:center;gap:4px;">' +
@@ -4171,24 +4171,37 @@ async function toggleItem(id, showVisitPrompt = true) {
     if (btnNo) btnNo.textContent = isGeneral ? "No, just organizing" : "No, just organizing";
 
     $('#visitModal').classList.add('active');
-    $('#btnVisitYes').onclick = async () => {
+    $('#btnVisitYes').onclick = function() {
       $('#visitModal').classList.remove('active');
       window.activeTrips = window.activeTrips || {};
       window.activeTrips[itemStoreId] = true;
       try { sessionStorage.setItem('activeTrip_' + itemStoreId, '1'); } catch(e) {}
 
+      var existingFinishBtn = document.querySelector('.finish-trip-btn[data-sid="' + itemStoreId + '"]');
+      if (!existingFinishBtn) {
+        var actionsContainer = document.querySelector('.store-group .shop-btn[data-sid="' + itemStoreId + '"]')?.parentElement ||
+                               document.querySelector('.store-group[data-store-id="' + itemStoreId + '"] .shop-btn')?.parentElement;
+        if (actionsContainer) {
+          var finishBtn = document.createElement('button');
+          finishBtn.className = 'finish-trip-btn';
+          finishBtn.setAttribute('data-sid', itemStoreId);
+          finishBtn.style.cssText = 'font-size:11px; padding:3px 9px; border-radius:8px; font-weight:600; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(16,185,129,0.3); display:inline-flex; align-items:center; gap:3px;';
+          finishBtn.innerHTML = '🏁 Finish Trip';
+          finishBtn.onclick = function() { completeStoreTrip(parseInt(itemStoreId, 10)); };
+          actionsContainer.insertBefore(finishBtn, actionsContainer.firstChild);
+        }
+      }
+
       if (!isGeneral) {
-        await fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' });
-        const st = stores.find(s => s.id === item.store_id);
+        fetch(API + '/stores/' + item.store_id + '/visit', { method: 'POST' }).catch(function() {});
+        var st = stores.find(function(s) { return s.id === item.store_id; });
         if (st) {
           st.planned_visit_date = null;
           st.planned_visit_by = null;
-          const d = new Date();
+          var d = new Date();
           st.last_visited = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
         }
       }
-      renderHome();
-      loadSuggestions();
     };
     $('#btnVisitNo').onclick = () => {
       $('#visitModal').classList.remove('active');
