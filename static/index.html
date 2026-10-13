@@ -2122,7 +2122,16 @@ async function executeSpinOff() {
   }
 }
 
+window.authConfigPromise = null;
+try {
+  var _cachedCfg = localStorage.getItem('listmate_cfg');
+  if (_cachedCfg) {
+    window.currentCfg = JSON.parse(_cachedCfg);
+  }
+} catch (e) {}
+
 async function checkAuth() {
+  window.authConfigPromise = (async function() {
   if (!navigator.onLine) {
     let cfg = null;
     try {
@@ -2133,6 +2142,13 @@ async function checkAuth() {
       cfg = { user: 'offline_user', display_name: 'Offline User', is_premium: true };
     }
     window.currentCfg = cfg;
+    if (typeof canAccessStillGood === 'function' && canAccessStillGood()) {
+      var pModal = document.getElementById('premiumModal');
+      var pTitle = document.getElementById('premiumModalTitle');
+      if (pModal && pModal.classList.contains('active') && pTitle && pTitle.textContent.includes('Still Good')) {
+        pModal.classList.remove('active');
+      }
+    }
     if ($('#headerUser')) $('#headerUser').textContent = cfg.display_name||cfg.user;
     
     const tierBadge = document.getElementById('tierBadge');
@@ -2221,6 +2237,13 @@ async function checkAuth() {
       headers: cfgHeaders
     })).json(); 
     window.currentCfg = cfg;
+    if (typeof canAccessStillGood === 'function' && canAccessStillGood()) {
+      var pModal = document.getElementById('premiumModal');
+      var pTitle = document.getElementById('premiumModalTitle');
+      if (pModal && pModal.classList.contains('active') && pTitle && pTitle.textContent.includes('Still Good')) {
+        pModal.classList.remove('active');
+      }
+    }
     if (cfg.household_id) {
       if (window.currentHouseholdId && window.currentHouseholdId !== cfg.household_id) {
         try { localStorage.removeItem('listmate_offline_queue'); } catch(e){}
@@ -2341,9 +2364,18 @@ async function checkAuth() {
     } catch(ex){}
     if (!cfg) cfg = { user: 'offline_user', display_name: 'Offline User', is_premium: true };
     window.currentCfg = cfg;
+    if (typeof canAccessStillGood === 'function' && canAccessStillGood()) {
+      var pModal = document.getElementById('premiumModal');
+      var pTitle = document.getElementById('premiumModalTitle');
+      if (pModal && pModal.classList.contains('active') && pTitle && pTitle.textContent.includes('Still Good')) {
+        pModal.classList.remove('active');
+      }
+    }
     updateOfflineStatusUI();
     return true; 
   }
+  })();
+  return window.authConfigPromise;
 }
 
 // ── Offline Sync & Queue System (#153) ─────────────────────────────
@@ -4791,9 +4823,15 @@ var sgModalType = 'home_cooked';
 var sgModalServings = 1;
 
 function canAccessStillGood() {
-  var cfg = window.currentCfg || {};
+  var cfg = window.currentCfg;
+  if (!cfg) {
+    try {
+      var cached = localStorage.getItem('listmate_cfg');
+      if (cached) cfg = JSON.parse(cached);
+    } catch(e) {}
+  }
+  cfg = cfg || {};
   var status = (cfg.subscription_status || '').toLowerCase().trim();
-  // Premium, active and trial users only. Expired users don't get it.
   if (status === 'trial') {
     if (cfg.trial_ends_at) {
       try {
@@ -4805,20 +4843,25 @@ function canAccessStillGood() {
     }
     return true;
   }
-  if (status === 'premium' || status === 'active') {
+  if (status === 'premium' || status === 'active' || status === 'lifetime') {
     return true;
   }
-  if (cfg.is_premium && status !== 'expired' && status !== 'canceled' && status !== 'free') {
+  if (cfg.is_premium && status !== 'expired' && status !== 'canceled') {
     return true;
   }
   return false;
 }
 
-function showStillGoodScreen() {
+async function showStillGoodScreen() {
   if (typeof closeBurger === 'function') {
     closeBurger();
   } else if (typeof toggleBurger === 'function') {
     toggleBurger(false);
+  }
+  if (!window.currentCfg && window.authConfigPromise) {
+    try {
+      await window.authConfigPromise;
+    } catch(e) {}
   }
   if (!canAccessStillGood()) {
     showPremiumModal('Still Good');
@@ -4982,7 +5025,16 @@ async function checkPostTripStashCandidates(force, bypassQuarantine) {
     if (res && res.ok && Array.isArray(res.candidates) && res.candidates.length > 0) {
       if ((currentScreen === 'home' || force || isTest) && (!sessionStorage.getItem('dismissed_stash_candidates') || force || isTest)) {
         renderSgPostTripCandidates(res.candidates);
-        if (modal) modal.classList.add('active');
+        if (modal) {
+          modal.classList.add('active');
+          var pModal = document.getElementById('premiumModal');
+          if (pModal && pModal.classList.contains('active')) {
+            var isPrem = (window.currentCfg && window.currentCfg.is_premium) || (typeof canAccessStillGood === 'function' && canAccessStillGood());
+            if (isPrem) {
+              pModal.classList.remove('active');
+            }
+          }
+        }
       }
     }
   } catch (e) {

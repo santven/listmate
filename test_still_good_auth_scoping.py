@@ -29,7 +29,7 @@ if "flask_limiter" not in sys.modules:
 
 os.environ["DATABASE_URL"] = os.environ.get("DATABASE_URL", "postgresql://dummy:5432/test")
 
-from app import app, _resolve_still_good_hh
+from app import app, _resolve_still_good_hh, _can_household_access_still_good
 import shared.auth as authmod
 import datetime
 import push_helper
@@ -527,6 +527,18 @@ class TestStillGoodAuthScoping(unittest.TestCase):
             # Household 30 is free tier
             if hhid == 30:
                 return {"id": 30, "is_premium": False, "subscription_status": "free", "trial_ends_at": None}
+            # Household 40 is lifetime VIP grant (status free, is_premium True)
+            if hhid == 40:
+                return {"id": 40, "is_premium": True, "subscription_status": "free", "trial_ends_at": None}
+            # Household 41 is lifetime subscription
+            if hhid == 41:
+                return {"id": 41, "is_premium": True, "subscription_status": "lifetime", "trial_ends_at": None}
+            # Household 42 is canceled
+            if hhid == 42:
+                return {"id": 42, "is_premium": False, "subscription_status": "canceled", "trial_ends_at": None}
+            # Household 43 is expired
+            if hhid == 43:
+                return {"id": 43, "is_premium": False, "subscription_status": "expired", "trial_ends_at": None}
         return None
 
     # ─────────────────────────────────────────────────────────────
@@ -841,6 +853,98 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         body_add = res_add.get_json()
         self.assertFalse(body_add["ok"])
         self.assertTrue(body_add["paywall_required"])
+
+    def test_can_household_access_still_good_subscription_status_matrix(self):
+        """
+        Verify _can_household_access_still_good access rules (Issue #662):
+        - Returns True for subscription_status='premium', is_premium=True
+        - Returns True for subscription_status='free', is_premium=True (lifetime VIP grant)
+        - Returns True for subscription_status='lifetime', is_premium=True
+        - Returns False for subscription_status='expired', is_premium=False
+        - Returns False for subscription_status='canceled', is_premium=False
+        - Returns False for subscription_status='free', is_premium=False
+        - Preserves trial validation (active=True, expired=False)
+        """
+        # Stop default mock to test custom auth returns per case
+        self.patcher_auth_one.stop()
+        try:
+            test_cases = [
+                ("premium", True, True, "premium subscription"),
+                ("free", True, True, "lifetime VIP grant (status=free, is_premium=True)"),
+                ("lifetime", True, True, "lifetime subscription"),
+                ("expired", False, False, "expired subscription"),
+                ("canceled", False, False, "canceled subscription"),
+                ("free", False, False, "free tier without premium"),
+            ]
+
+            for status, is_prem, expected, label in test_cases:
+                with self.subTest(status=status, is_premium=is_prem, label=label):
+                    mock_record = {
+                        "id": 999,
+                        "is_premium": is_prem,
+                        "subscription_status": status,
+                        "trial_ends_at": None,
+                    }
+                    with patch("shared.auth._one", return_value=mock_record):
+                        result = _can_household_access_still_good(self.mock_db, 999)
+                        self.assertEqual(
+                            result,
+                            expected,
+                            f"Expected {expected} for status='{status}', is_premium={is_prem} ({label}), got {result}"
+                        )
+
+            # Trial validation checks
+            now = datetime.datetime.now(datetime.timezone.utc)
+            # Active trial in the future
+            future_trial = (now + datetime.timedelta(days=7)).isoformat()
+            with patch("shared.auth._one", return_value={"id": 999, "is_premium": False, "subscription_status": "trial", "trial_ends_at": future_trial}):
+                self.assertTrue(_can_household_access_still_good(self.mock_db, 999))
+
+            # Expired trial in the past
+            past_trial = (now - datetime.timedelta(days=1)).isoformat()
+            with patch("shared.auth._one", return_value={"id": 999, "is_premium": False, "subscription_status": "trial", "trial_ends_at": past_trial}):
+                self.assertFalse(_can_household_access_still_good(self.mock_db, 999))
+
+            # Invalid household IDs
+            self.assertFalse(_can_household_access_still_good(self.mock_db, 0))
+            self.assertFalse(_can_household_access_still_good(self.mock_db, None))
+            self.assertFalse(_can_household_access_still_good(self.mock_db, -5))
+        finally:
+            self.patcher_auth_one.start()
+
+    def test_lifetime_and_vip_tier_households_allowed_through_paywall(self):
+        """Households with lifetime or free-VIP status pass the paywall endpoint check."""
+        # Household 40 (status='free', is_premium=True)
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 40, "household_id": 40, "email": "vip@example.com"}
+
+        res = self.client.get("/api/still-good")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()["ok"])
+
+        # Household 41 (status='lifetime', is_premium=True)
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 41, "household_id": 41, "email": "lifetime@example.com"}
+
+        res = self.client.get("/api/still-good")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()["ok"])
+
+        # Household 42 (status='canceled', is_premium=False)
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 42, "household_id": 42, "email": "canceled@example.com"}
+
+        res = self.client.get("/api/still-good")
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(res.get_json()["paywall_required"])
+
+        # Household 43 (status='expired', is_premium=False)
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 43, "household_id": 43, "email": "expired@example.com"}
+
+        res = self.client.get("/api/still-good")
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(res.get_json()["paywall_required"])
 
     # ─────────────────────────────────────────────────────────────
     # 7. Smart Stash Crisper Drawer Tests (Issue #632)
