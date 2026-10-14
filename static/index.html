@@ -1906,21 +1906,21 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 </div>
 
 <!-- Premium Modal -->
-<div class="modal-overlay" id="premiumModal">
-  <div class="modal-sheet" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
+<div class="modal-overlay" id="premiumModal" onclick="closePremiumModal(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="text-align:center; padding:24px 20px; border-radius:20px 20px 0 0;">
     <div style="font-size:48px; margin-bottom:12px;">⭐</div>
     <h3 id="premiumModalTitle" style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Recipe Planner is Premium</h3>
     <p id="premiumModalDesc" style="font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:20px;">
       Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.
     </p>
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <button onclick="closePremiumModal(); showPaywall();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">
+      <button type="button" onclick="closePremiumModal(); if(typeof showPaywall==='function') showPaywall();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:14px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; min-height:44px; display:flex; align-items:center; justify-content:center;">
         🎁 Upgrade to Premium
       </button>
-      <a href="/settings" style="display:block; padding:12px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); text-decoration:none; font-weight:600; font-size:14px;">
+      <button type="button" onclick="closePremiumModal(); window.location.href='/settings';" style="display:flex; align-items:center; justify-content:center; width:100%; padding:13px 12px; border-radius:12px; border:1px solid var(--border); background:#f9fafb; color:var(--text); font-weight:600; font-size:14px; cursor:pointer; min-height:44px;">
         ⚙️ Manage Premium in Settings
-      </a>
-      <button onclick="closePremiumModal()" style="background:none; border:none; color:#888; padding:10px; font-size:13px; cursor:pointer;">Close</button>
+      </button>
+      <button type="button" onclick="closePremiumModal()" style="background:none; border:none; color:#888; padding:12px 10px; font-size:14px; cursor:pointer; min-height:44px; display:flex; align-items:center; justify-content:center;">Close</button>
     </div>
   </div>
 </div>
@@ -6712,6 +6712,15 @@ function showPremiumModal(featureName) {
   
   if (pModal) pModal.classList.add('active');
 }
+
+function closePremiumModal(e) {
+  if (e && e.target && e.currentTarget && e.target !== e.currentTarget) return;
+  var pModal = document.getElementById('premiumModal') || (typeof $ === 'function' ? $('#premiumModal') : null);
+  if (pModal) {
+    pModal.classList.remove('active');
+  }
+}
+window.closePremiumModal = closePremiumModal;
 
 
 
