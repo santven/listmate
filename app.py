@@ -2787,11 +2787,29 @@ def still_good_create_endpoint():
             servings = 1
 
         notes = (data.get("notes") or "").strip()
-        consume_by = (data.get("consume_by") or "").strip()
 
         from datetime import date, timedelta
         today = date.today()
-        if not consume_by:
+
+        raw_consume_by = data.get("consume_by")
+        if raw_consume_by is not None:
+            if not isinstance(raw_consume_by, str):
+                return jsonify({"ok": False, "error": "Invalid consume_by date format. Expected YYYY-MM-DD."}), 400
+            raw_consume_by = raw_consume_by.strip()
+        else:
+            raw_consume_by = ""
+
+        if raw_consume_by:
+            try:
+                if len(raw_consume_by) < 10:
+                    raise ValueError("Date string too short")
+                valid_date = date.fromisoformat(raw_consume_by[:10])
+                consume_by = str(valid_date)
+                ai_estimated = True
+                ai_tip = ""
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "Invalid consume_by date format. Expected YYYY-MM-DD."}), 400
+        else:
             if location == "freezer":
                 freeze_default = 90 if item_type == "produce" else 60
                 consume_by = (today + timedelta(days=freeze_default)).strftime("%Y-%m-%d")
@@ -2801,6 +2819,8 @@ def still_good_create_endpoint():
                 consume_by = (today + timedelta(days=5)).strftime("%Y-%m-%d")
             else:
                 consume_by = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+            ai_estimated = False
+            ai_tip = ""
 
         if location == "freezer":
             snooze_until = None
@@ -2823,9 +2843,9 @@ def still_good_create_endpoint():
                 remind_cadence = "daily"
 
         cur = db.execute(
-            "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, snooze_until, remind_cadence, status, notes) "
-            "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, ?::date, ?, 'active', ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, remind_cadence",
-            (hhid, name, location, item_type, servings, consume_by, str(snooze_until) if snooze_until else None, remind_cadence, notes)
+            "INSERT INTO still_good_items (household_id, name, location, item_type, servings, date_added, consume_by, snooze_until, remind_cadence, status, notes, ai_estimated, ai_tip) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?::date, ?::date, ?, 'active', ?, ?, ?) RETURNING id, TO_CHAR(date_added, 'YYYY-MM-DD') as date_added, TO_CHAR(consume_by, 'YYYY-MM-DD') as consume_by, TO_CHAR(snooze_until, 'YYYY-MM-DD') as snooze_until, remind_cadence, ai_estimated, ai_tip",
+            (hhid, name, location, item_type, servings, consume_by, str(snooze_until) if snooze_until else None, remind_cadence, notes, ai_estimated, ai_tip)
         )
         row = cur.fetchone()
         item_id = row["id"] if row else None
@@ -2844,6 +2864,8 @@ def still_good_create_endpoint():
                 "status": "active",
                 "notes": notes,
                 "thawing": False,
+                "ai_estimated": bool(row.get("ai_estimated", ai_estimated)) if row else ai_estimated,
+                "ai_tip": (row.get("ai_tip") or "") if row else ai_tip,
             }
         })
     except Exception as exc:
@@ -3435,7 +3457,6 @@ def still_good_item_endpoint(item_id):
         name = (data.get("name") or "").strip()
         location = (data.get("location") or "").strip().lower()
         item_type = (data.get("item_type") or "").strip().lower()
-        consume_by = (data.get("consume_by") or "").strip()
         servings = data.get("servings")
         notes = data.get("notes")
 
@@ -3443,6 +3464,9 @@ def still_good_item_endpoint(item_id):
         params = []
         name_changed = False
         other_changed = False
+        has_consume_by_key = "consume_by" in data
+        user_set_custom_consume_by = False
+        user_cleared_consume_by = False
 
         if name and name != existing.get("name"):
             name_changed = True
@@ -3463,17 +3487,32 @@ def still_good_item_endpoint(item_id):
             updates.append("item_type = ?")
             params.append(item_type)
 
-        if consume_by:
-            try:
-                from datetime import date
-                valid_date = date.fromisoformat(consume_by[:10])
-                old_consume = str(existing.get("consume_by") or "")[:10]
-                if str(valid_date) != old_consume:
-                    other_changed = True
-                updates.append("consume_by = ?::date")
-                params.append(str(valid_date))
-            except (ValueError, TypeError):
-                pass
+        if has_consume_by_key:
+            raw_cb = data.get("consume_by")
+            if raw_cb is None:
+                raw_cb_str = ""
+            elif not isinstance(raw_cb, str):
+                return jsonify({"ok": False, "error": "Invalid consume_by date format. Expected YYYY-MM-DD."}), 400
+            else:
+                raw_cb_str = raw_cb.strip()
+
+            if raw_cb_str:
+                try:
+                    from datetime import date
+                    if len(raw_cb_str) < 10:
+                        raise ValueError("Date string too short")
+                    valid_cb = date.fromisoformat(raw_cb_str[:10])
+                    new_cb_str = str(valid_cb)
+                    old_consume = str(existing.get("consume_by") or "")[:10]
+                    if new_cb_str != old_consume:
+                        other_changed = True
+                    updates.append("consume_by = ?::date")
+                    params.append(new_cb_str)
+                    user_set_custom_consume_by = True
+                except (ValueError, TypeError):
+                    return jsonify({"ok": False, "error": "Invalid consume_by date format. Expected YYYY-MM-DD."}), 400
+            else:
+                user_cleared_consume_by = True
 
         if servings is not None:
             try:
@@ -3492,8 +3531,10 @@ def still_good_item_endpoint(item_id):
             updates.append("notes = ?")
             params.append(clean_notes)
 
-        new_loc = location if (location in ["fridge", "freezer"]) else (existing.get("location") or "fridge")
-        if new_loc == "freezer":
+        eff_loc = location if (location in ["fridge", "freezer"]) else (existing.get("location") or "fridge").lower()
+        eff_type = item_type if (item_type in ["home_cooked", "restaurant", "batch_cook", "produce", "other"]) else (existing.get("item_type") or "home_cooked").lower()
+
+        if eff_loc == "freezer":
             updates.append("snooze_until = NULL")
             updates.append("remind_cadence = '1_week_before'")
         elif "remind_option" in data:
@@ -3533,13 +3574,42 @@ def still_good_item_endpoint(item_id):
                     updates.append("remind_cadence = ?")
                     params.append(c_val)
 
-        # Rule: if only name changes, do nothing to AI estimation columns.
-        # If anything other than name changes, if AI estimation was already done, null those values.
-        if other_changed and existing.get("ai_estimated"):
+        if user_set_custom_consume_by:
+            updates.append("ai_estimated = TRUE")
+            updates.append("ai_tip = ''")
+            updates.append("shelf_life_days = NULL")
+        elif user_cleared_consume_by:
+            from datetime import date, timedelta
+            today = date.today()
+            if eff_loc == "freezer":
+                if eff_type == "produce":
+                    fb_days = 90
+                elif eff_type == "restaurant":
+                    fb_days = 30
+                else:
+                    fb_days = 60
+            else:
+                if eff_type == "restaurant":
+                    fb_days = 1
+                elif eff_type in ("batch_cook", "produce"):
+                    fb_days = 5
+                else:
+                    fb_days = 3
+            fallback_cb = (today + timedelta(days=fb_days)).strftime("%Y-%m-%d")
+            updates.append("consume_by = ?::date")
+            params.append(fallback_cb)
             updates.append("ai_estimated = FALSE")
             updates.append("ai_estimated_at = NULL")
             updates.append("shelf_life_days = NULL")
             updates.append("ai_tip = ''")
+        else:
+            # Rule: if only name changes, do nothing to AI estimation columns.
+            # If anything other than name changes, if AI estimation was already done, null those values.
+            if other_changed and existing.get("ai_estimated"):
+                updates.append("ai_estimated = FALSE")
+                updates.append("ai_estimated_at = NULL")
+                updates.append("shelf_life_days = NULL")
+                updates.append("ai_tip = ''")
 
         if updates:
             updates.append("updated_at = NOW()")

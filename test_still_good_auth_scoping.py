@@ -308,7 +308,12 @@ class InMemoryStillGoodDb:
                 self._last_rowcount = 1
                 return self
 
-            hhid, name, loc, itype, servings, consume_by, snooze_until, remind_cadence, notes = params
+            if len(params) == 11:
+                hhid, name, loc, itype, servings, consume_by, snooze_until, remind_cadence, notes, ai_estimated, ai_tip = params
+            else:
+                hhid, name, loc, itype, servings, consume_by, snooze_until, remind_cadence, notes = params
+                ai_estimated = False
+                ai_tip = ""
             item_id = self.next_id
             self.next_id += 1
             item = {
@@ -327,10 +332,10 @@ class InMemoryStillGoodDb:
                 "discarded_at": None,
                 "thawing": False,
                 "notes": notes,
-                "ai_estimated": False,
+                "ai_estimated": ai_estimated,
                 "ai_estimated_at": None,
                 "shelf_life_days": 3,
-                "ai_tip": "",
+                "ai_tip": ai_tip,
                 "created_at": "2026-10-10 12:00:00",
                 "updated_at": "2026-10-10 12:00:00"
             }
@@ -340,7 +345,9 @@ class InMemoryStillGoodDb:
                 "date_added": "2026-10-10",
                 "consume_by": consume_by,
                 "snooze_until": snooze_until,
-                "remind_cadence": remind_cadence
+                "remind_cadence": remind_cadence,
+                "ai_estimated": ai_estimated,
+                "ai_tip": ai_tip
             }]
             self._last_rowcount = 1
             return self
@@ -374,6 +381,17 @@ class InMemoryStillGoodDb:
                 self._cur_result = [{"snooze_until": item.get("snooze_until"), "remind_cadence": item.get("remind_cadence")}]
             else:
                 self._cur_result = []
+            return self
+
+        # AI estimation query (still_good_ai.py)
+        if "FROM still_good_items WHERE status = 'active' AND ai_estimated = FALSE" in sql_clean:
+            limit = params[0] if params else 50
+            matched = [
+                dict(v) for v in sorted(self.items.values(), key=lambda x: x["id"])
+                if v.get("status") == "active" and not v.get("ai_estimated")
+            ][:limit]
+            self._cur_result = matched
+            self._last_rowcount = len(matched)
             return self
 
         # Updates
@@ -429,6 +447,16 @@ class InMemoryStillGoodDb:
                         item["snooze_until"] = "2026-10-15"
                     elif "snooze_until = NULL" in sql_clean:
                         item["snooze_until"] = None
+                    if "ai_estimated = TRUE" in sql_clean:
+                        item["ai_estimated"] = True
+                    elif "ai_estimated = FALSE" in sql_clean:
+                        item["ai_estimated"] = False
+                    if "ai_tip = ''" in sql_clean:
+                        item["ai_tip"] = ""
+                    if "shelf_life_days = NULL" in sql_clean:
+                        item["shelf_life_days"] = None
+                    if "ai_estimated_at = NULL" in sql_clean:
+                        item["ai_estimated_at"] = None
                     for p in params[:-2]:
                         if isinstance(p, str) and p in ["fridge", "freezer"]:
                             item["location"] = p
@@ -440,6 +468,14 @@ class InMemoryStillGoodDb:
                             item["consume_by"] = p
                         elif isinstance(p, str):
                             item["name"] = p
+                    self._last_rowcount = 1
+            elif "WHERE id = ?" in sql_clean and "ai_estimated = TRUE" in sql_clean:
+                new_cb, safe_days, tip, i_id = params
+                if i_id in self.items:
+                    self.items[i_id]["consume_by"] = new_cb
+                    self.items[i_id]["shelf_life_days"] = safe_days
+                    self.items[i_id]["ai_tip"] = tip
+                    self.items[i_id]["ai_estimated"] = True
                     self._last_rowcount = 1
             return self
 
@@ -1473,6 +1509,224 @@ class TestStillGoodAuthScoping(unittest.TestCase):
         self.assertEqual(new_li["store_id"], 1)
         self.assertEqual(new_li["name"], "Bananas")
         self.assertTrue(len(new_li["category"]) > 0)
+
+    # ─────────────────────────────────────────────────────────────
+    # 9. Manual Consume-By Date & AI Estimation Lock (Issue #669)
+    # ─────────────────────────────────────────────────────────────
+
+    def test_post_still_good_with_custom_consume_by_locks_ai_and_clears_tip(self):
+        """POST /api/still-good with valid custom consume_by sets consume_by, ai_estimated=True, ai_tip=''."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        res = self.client.post("/api/still-good", json={
+            "name": "Homemade Chicken Curry",
+            "location": "fridge",
+            "item_type": "home_cooked",
+            "servings": 3,
+            "consume_by": "2026-10-25"
+        })
+        self.assertEqual(res.status_code, 200)
+        body = res.get_json()
+        self.assertTrue(body["ok"])
+        item = body["item"]
+        self.assertEqual(item["consume_by"], "2026-10-25")
+        self.assertTrue(item["ai_estimated"])
+        self.assertEqual(item["ai_tip"], "")
+
+        db_item = self.mock_db.items[item["id"]]
+        self.assertEqual(db_item["consume_by"], "2026-10-25")
+        self.assertTrue(db_item["ai_estimated"])
+        self.assertEqual(db_item["ai_tip"], "")
+
+    def test_post_still_good_without_consume_by_uses_default_and_leaves_ai_unestimated(self):
+        """POST /api/still-good with empty or omitted consume_by computes default consume_by and sets ai_estimated=False."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        for payload_cb in [None, "", "   "]:
+            with self.subTest(consume_by=payload_cb):
+                payload = {
+                    "name": "Leftover Pizza",
+                    "location": "fridge",
+                    "item_type": "restaurant",
+                    "servings": 2
+                }
+                if payload_cb is not None:
+                    payload["consume_by"] = payload_cb
+
+                res = self.client.post("/api/still-good", json=payload)
+                self.assertEqual(res.status_code, 200)
+                body = res.get_json()
+                self.assertTrue(body["ok"])
+                item = body["item"]
+                expected_cb = (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                self.assertEqual(item["consume_by"], expected_cb)
+                self.assertFalse(item["ai_estimated"])
+                self.assertEqual(item["ai_tip"], "")
+
+                db_item = self.mock_db.items[item["id"]]
+                self.assertFalse(db_item["ai_estimated"])
+                self.assertEqual(db_item["ai_tip"], "")
+
+    def test_post_still_good_malformed_consume_by_returns_400(self):
+        """POST /api/still-good with malformed consume_by returns HTTP 400 (never 500)."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        bad_inputs = ["not-a-date", "2026-02-30", "2026-13-01", "2026-1-1", 12345, ["2026-10-20"], {"date": "2026-10-20"}]
+        for bad_cb in bad_inputs:
+            with self.subTest(bad_cb=bad_cb):
+                res = self.client.post("/api/still-good", json={
+                    "name": "Test Item",
+                    "consume_by": bad_cb
+                })
+                self.assertEqual(res.status_code, 400)
+                body = res.get_json()
+                self.assertFalse(body["ok"])
+                self.assertIn("Invalid consume_by date format", body["error"])
+
+    def test_put_still_good_setting_custom_consume_by_locks_ai_and_clears_tip(self):
+        """PUT /api/still-good/<id> setting custom consume_by sets consume_by, ai_estimated=True, ai_tip='' even when other fields change."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        self.mock_db.items[850] = {
+            "id": 850,
+            "household_id": 10,
+            "name": "Veggie Soup",
+            "location": "fridge",
+            "item_type": "home_cooked",
+            "servings": 2,
+            "date_added": "2026-10-15",
+            "consume_by": "2026-10-18",
+            "status": "active",
+            "ai_estimated": True,
+            "ai_tip": "Reheat until steaming hot",
+            "shelf_life_days": 3,
+            "notes": ""
+        }
+
+        res = self.client.put("/api/still-good/850", json={
+            "name": "Veggie Soup",
+            "location": "freezer",
+            "servings": 4,
+            "consume_by": "2026-11-30"
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()["ok"])
+
+        updated = self.mock_db.items[850]
+        self.assertEqual(updated["consume_by"], "2026-11-30")
+        self.assertEqual(updated["location"], "freezer")
+        self.assertEqual(updated["servings"], 4)
+        self.assertTrue(updated["ai_estimated"])
+        self.assertEqual(updated["ai_tip"], "")
+        self.assertIsNone(updated["shelf_life_days"])
+
+    def test_put_still_good_clearing_consume_by_resets_default_and_reenables_ai(self):
+        """PUT /api/still-good/<id> clearing consume_by ('') recalculates fallback consume_by and sets ai_estimated=False, ai_tip=''."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        self.mock_db.items[851] = {
+            "id": 851,
+            "household_id": 10,
+            "name": "Batch Chili",
+            "location": "fridge",
+            "item_type": "batch_cook",
+            "servings": 6,
+            "date_added": "2026-10-15",
+            "consume_by": "2026-10-28",
+            "status": "active",
+            "ai_estimated": True,
+            "ai_tip": "Custom tip",
+            "shelf_life_days": 10,
+            "notes": ""
+        }
+
+        res = self.client.put("/api/still-good/851", json={
+            "consume_by": ""
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()["ok"])
+
+        updated = self.mock_db.items[851]
+        expected_fallback = (datetime.date.today() + datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+        self.assertEqual(updated["consume_by"], expected_fallback)
+        self.assertFalse(updated["ai_estimated"])
+        self.assertEqual(updated["ai_tip"], "")
+        self.assertIsNone(updated["shelf_life_days"])
+
+    def test_put_still_good_malformed_consume_by_returns_400(self):
+        """PUT /api/still-good/<id> with malformed consume_by returns HTTP 400."""
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        self.mock_db.items[852] = {
+            "id": 852,
+            "household_id": 10,
+            "name": "Pasta Salad",
+            "location": "fridge",
+            "item_type": "home_cooked",
+            "servings": 2,
+            "date_added": "2026-10-15",
+            "consume_by": "2026-10-18",
+            "status": "active",
+            "ai_estimated": False,
+            "ai_tip": "",
+            "notes": ""
+        }
+
+        for bad_cb in ["invalid-date", "2026-02-30", 99999, ["2026-10-20"]]:
+            with self.subTest(bad_cb=bad_cb):
+                res = self.client.put("/api/still-good/852", json={"consume_by": bad_cb})
+                self.assertEqual(res.status_code, 400)
+                self.assertFalse(res.get_json()["ok"])
+                self.assertEqual(self.mock_db.items[852]["consume_by"], "2026-10-18")
+
+    def test_still_good_ai_skips_household_consume_by_items(self):
+        """Verify still_good_ai.enhance_still_good_shelf_life_batch skips items where household provided consume_by (ai_estimated=True)."""
+        import still_good_ai
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 10, "household_id": 10, "email": "pro@example.com"}
+
+        # Clear pre-seeded items
+        self.mock_db.items.clear()
+
+        # 1. Create item with household custom consume_by -> ai_estimated=True
+        res_custom = self.client.post("/api/still-good", json={
+            "name": "Household Custom Date Stew",
+            "location": "fridge",
+            "item_type": "home_cooked",
+            "consume_by": "2026-10-29"
+        })
+        custom_id = res_custom.get_json()["item"]["id"]
+
+        # 2. Create item without custom consume_by -> ai_estimated=False
+        res_auto = self.client.post("/api/still-good", json={
+            "name": "Auto Date Stir Fry",
+            "location": "fridge",
+            "item_type": "restaurant"
+        })
+        auto_id = res_auto.get_json()["item"]["id"]
+
+        with patch("still_good_ai.get_db", return_value=self.mock_db), \
+             patch("still_good_ai.close_db"), \
+             patch("still_good_ai._discover_gemini_key", return_value=""):
+            ai_res = still_good_ai.enhance_still_good_shelf_life_batch()
+            self.assertTrue(ai_res["ok"])
+            self.assertEqual(ai_res["processed"], 1)
+            self.assertEqual(ai_res["enhanced"], 1)
+
+        # Custom item was skipped: consume_by remains 2026-10-29 and ai_tip remains empty
+        self.assertEqual(self.mock_db.items[custom_id]["consume_by"], "2026-10-29")
+        self.assertEqual(self.mock_db.items[custom_id]["ai_tip"], "")
+        self.assertTrue(self.mock_db.items[custom_id]["ai_estimated"])
+
+        # Auto item was processed by AI fallback and got a tip
+        self.assertTrue(self.mock_db.items[auto_id]["ai_estimated"])
+        self.assertNotEqual(self.mock_db.items[auto_id]["ai_tip"], "")
 
 
 if __name__ == "__main__":
