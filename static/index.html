@@ -1632,6 +1632,18 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       </div>
     </div>
 
+    <!-- 4. Consume By Date (Optional) -->
+    <div style="margin-bottom: 14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+        <label for="sgInputConsumeBy" style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Consume by date (optional)</label>
+        <button type="button" id="sgClearConsumeByBtn" onclick="clearSgConsumeBy()" style="display:none; background:none; border:none; color:#059669; font-size:12px; font-weight:600; cursor:pointer; padding:2px 6px;">Reset to AI estimate</button>
+      </div>
+      <input type="date" id="sgInputConsumeBy" onchange="onSgConsumeByChange()" oninput="onSgConsumeByChange()" style="width:100%; padding:11px 13px; border:1.5px solid var(--border); border-radius:10px; font-size:14px; background:#f8fafc; color:var(--text); box-sizing:border-box; min-height:44px; font-family:inherit;" />
+      <div style="font-size:11.5px; color:#64748b; margin-top:5px; line-height:1.35;">
+        ✨ Leave blank and our AI will estimate safe shelf life automatically.
+      </div>
+    </div>
+
     <!-- Recommended Shelf-Life Display -->
     <div style="margin-bottom:16px;">
       <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Smart Shelf Life</label>
@@ -1845,6 +1857,11 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <!-- Item List with checkboxes -->
     <div id="sgPostTripItemsList" style="max-height:48vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:12px 0; display:flex; flex-direction:column; gap:6px; padding-right:2px;">
       <!-- Populated dynamically -->
+    </div>
+
+    <div id="sgPostTripAiNote" style="display:flex; align-items:flex-start; gap:8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#166534; line-height:1.4;">
+      <span style="font-size:15px; line-height:1;">✨</span>
+      <span><strong>Smart Shelf Life:</strong> Our AI automatically estimates safe consume-by dates for items you stash — or you can set/edit dates anytime in Still Good.</span>
     </div>
 
     <!-- Actions / Buttons -->
@@ -5615,6 +5632,7 @@ function renderStillGoodItems() {
           '</div>' +
           '<div class="sg-crisper-bottom-line" style="justify-content:flex-end;">' +
             '<div class="sg-crisper-actions-group">' +
+              '<button type="button" class="sg-crisper-btn crisper-btn" onclick="openEditStillGoodModal(' + item.id + ')" title="Edit item" aria-label="Edit ' + escapeHtml(item.name) + '" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1;">✏️</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
@@ -5642,6 +5660,7 @@ function renderStillGoodItems() {
               tipSublineHtml +
             '</div>' +
             '<div class="sg-crisper-actions-group">' +
+              '<button type="button" class="sg-crisper-btn crisper-btn" onclick="openEditStillGoodModal(' + item.id + ')" title="Edit item" aria-label="Edit ' + escapeHtml(item.name) + '" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1;">✏️</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-relist" id="sgReorderBtn_' + item.id + '" onclick="stillGoodAddToList(' + item.id + ', event)" title="Add back to ' + escapeHtml(item.store_name || 'list') + '" aria-label="Add ' + escapeHtml(item.name) + ' back to list">🛒+</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-check" onclick="stillGoodAction(' + item.id + ', \'consume\', event)" title="Mark as Enjoyed" aria-label="Mark ' + escapeHtml(item.name) + ' as Enjoyed">✓</button>' +
               '<button type="button" class="sg-crisper-btn sg-crisper-btn-del"' + delBtnStyle + ' onclick="stillGoodAction(' + item.id + ', \'discard\', event)" title="Discard" aria-label="Discard ' + escapeHtml(item.name) + '">🗑</button>' +
@@ -6012,7 +6031,10 @@ function openEditStillGoodModal(itemId) {
   sgModalLocation = item.location || 'fridge';
   sgModalType = item.item_type || 'home_cooked';
   sgModalServings = item.servings || 1;
-  sgModalConsumeBy = item.consume_by || '';
+
+  var cbInput = document.getElementById('sgInputConsumeBy');
+  if (cbInput) cbInput.value = item.consume_by ? String(item.consume_by).slice(0, 10) : '';
+  sgModalConsumeBy = item.consume_by ? String(item.consume_by).slice(0, 10) : '';
 
   var modalTitle = document.getElementById('sgModalTitle');
   if (modalTitle) modalTitle.textContent = '✏️ Edit Still Good Item';
@@ -6028,6 +6050,7 @@ function openEditStillGoodModal(itemId) {
 
   selectSgModalLocation(sgModalLocation);
   selectSgModalType(sgModalType);
+  onSgConsumeByChange();
   updateSgModalServingsDisplay();
 
   if (sgModalLocation === 'fridge') {
@@ -6065,6 +6088,12 @@ function openAddStillGoodModal(preLocation) {
   sgModalLocation = preLocation || sgActiveTab || 'fridge';
   sgModalType = 'home_cooked';
   sgModalServings = 1;
+  sgModalConsumeBy = '';
+
+  var cbInput = document.getElementById('sgInputConsumeBy');
+  if (cbInput) cbInput.value = '';
+  var clearBtn = document.getElementById('sgClearConsumeByBtn');
+  if (clearBtn) clearBtn.style.display = 'none';
 
   var nameInput = document.getElementById('sgInputName');
   if (nameInput) nameInput.value = '';
@@ -6204,14 +6233,63 @@ function updateSgModalServingsDisplay() {
   }
 }
 
+function updateSgDefaultRecCard() {
+  selectSgModalType(sgModalType || 'home_cooked');
+}
+
+function onSgConsumeByChange() {
+  var cbInput = document.getElementById('sgInputConsumeBy');
+  var clearBtn = document.getElementById('sgClearConsumeByBtn');
+  var val = cbInput ? cbInput.value.trim() : '';
+
+  if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    sgModalConsumeBy = val;
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+
+    var now = new Date();
+    var todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var parts = val.split('-');
+    var chosenLocal = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    var diffDays = Math.round((chosenLocal - todayLocal) / (1000 * 60 * 60 * 24));
+
+    var titleEl = document.getElementById('sgRecTitle');
+    var subEl = document.getElementById('sgRecSub');
+    if (titleEl) {
+      if (diffDays > 1) {
+        titleEl.textContent = 'Custom date: ' + val + ' (' + diffDays + ' days)';
+      } else if (diffDays === 1) {
+        titleEl.textContent = 'Custom date: ' + val + ' (Tomorrow)';
+      } else if (diffDays === 0) {
+        titleEl.textContent = 'Custom date: ' + val + ' (Today)';
+      } else {
+        titleEl.textContent = 'Custom date: ' + val + ' (' + Math.abs(diffDays) + 'd past)';
+      }
+    }
+    if (subEl) {
+      subEl.textContent = 'Household date locked — AI estimation will be skipped';
+    }
+  } else {
+    sgModalConsumeBy = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    updateSgDefaultRecCard();
+  }
+}
+
+function clearSgConsumeBy() {
+  var cbInput = document.getElementById('sgInputConsumeBy');
+  if (cbInput) cbInput.value = '';
+  onSgConsumeByChange();
+}
+
 function setSgModalDays(days, title, subtitle) {
   sgModalDays = days;
-  var d = new Date();
-  d.setDate(d.getDate() + days);
-  var yyyy = d.getFullYear();
-  var mm = String(d.getMonth() + 1).padStart(2, '0');
-  var dd = String(d.getDate()).padStart(2, '0');
-  sgModalConsumeBy = yyyy + '-' + mm + '-' + dd;
+  var cbInput = document.getElementById('sgInputConsumeBy');
+  var currentVal = cbInput ? cbInput.value.trim() : '';
+  if (currentVal && /^\d{4}-\d{2}-\d{2}$/.test(currentVal)) {
+    sgModalConsumeBy = currentVal;
+    return;
+  }
+  sgModalConsumeBy = '';
 
   var titleEl = document.getElementById('sgRecTitle');
   var subEl = document.getElementById('sgRecSub');
@@ -6281,6 +6359,8 @@ async function submitAddStillGood() {
 
   var notesInput = document.getElementById('sgInputNotes');
   var notes = notesInput ? notesInput.value.trim() : '';
+  var customCb = (document.getElementById('sgInputConsumeBy')?.value || '').trim();
+  sgModalConsumeBy = customCb;
 
   var isEdit = !!sgEditingItemId;
   var saveBtn = document.getElementById('btnSaveStillGood');
@@ -6295,7 +6375,7 @@ async function submitAddStillGood() {
       location: sgModalLocation,
       item_type: sgModalType,
       servings: sgModalServings,
-      consume_by: sgModalConsumeBy,
+      consume_by: customCb,
       notes: notes,
       remind_option: (sgModalLocation === 'freezer') ? '1_week_before' : (sgModalRemindOption || 'daily')
     };
