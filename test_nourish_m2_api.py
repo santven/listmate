@@ -56,6 +56,7 @@ class InMemoryNourishDB:
         self.goals = {}    # user_id -> dict
         self.biometrics = {}  # (user_id, log_date) -> dict
         self.users = {}       # user_id -> dict
+        self.ai_usage = {}    # (user_id, usage_date_str) -> int count
         self._next_cat_id = 1
         self._next_rec_id = 1
         self._next_log_id = 1
@@ -180,20 +181,22 @@ class InMemoryNourishDB:
             self.rowcount = len(matched)
             return self
 
-        # 3. Single food log lookup by id AND user_id
+        # 3. Single food log lookup by id AND user_id AND household_id
         if "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ?" in norm:
             lid, uid = int(params[0]), int(params[1])
+            hhid = int(params[2]) if len(params) > 2 else None
             row = self.logs.get(lid)
-            if row and int(row["user_id"]) == uid:
+            if row and int(row["user_id"]) == uid and (hhid is None or int(row.get("household_id", 0)) == hhid):
                 self._result_rows = [dict(row)]
                 self.rowcount = 1
             return self
 
-        # 4. DELETE food log by id AND user_id
+        # 4. DELETE food log by id AND user_id AND household_id
         if "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ?" in norm:
             lid, uid = int(params[0]), int(params[1])
+            hhid = int(params[2]) if len(params) > 2 else None
             row = self.logs.get(lid)
-            if row and int(row["user_id"]) == uid:
+            if row and int(row["user_id"]) == uid and (hhid is None or int(row.get("household_id", 0)) == hhid):
                 del self.logs[lid]
                 self._result_rows = [{"id": lid}]
                 self.rowcount = 1
@@ -254,8 +257,9 @@ class InMemoryNourishDB:
         # 7. UPDATE nourish_food_logs from PUT /api/nourish/logs/<id>
         if "UPDATE nourish_food_logs" in norm and "WHERE id = ? AND user_id = ?" in norm:
             lid, uid = int(params[14]), int(params[15])
+            hhid = int(params[16]) if len(params) > 16 else None
             row = self.logs.get(lid)
-            if row and int(row["user_id"]) == uid:
+            if row and int(row["user_id"]) == uid and (hhid is None or int(row.get("household_id", 0)) == hhid):
                 row["food_name"] = params[0]
                 row["meal_slot"] = params[1]
                 row["quantity"] = float(params[2])
@@ -575,6 +579,27 @@ class InMemoryNourishDB:
             matched = [dict(r) for r in self.catalog.values() if r.get("household_id") == hhid and r.get("normalized_name") == norm_name]
             self._result_rows = matched
             self.rowcount = len(matched)
+            return self
+
+        # 21. nourish_ai_usage check
+        if "SELECT request_count FROM nourish_ai_usage" in norm:
+            uid = int(params[0])
+            d_str = datetime.date.today().isoformat()
+            cnt = self.ai_usage.get((uid, d_str), 0)
+            if cnt > 0:
+                self._result_rows = [{"request_count": cnt}]
+                self.rowcount = 1
+            return self
+
+        # 22. nourish_ai_usage increment / insert
+        if "INSERT INTO nourish_ai_usage" in norm:
+            uid = int(params[0])
+            d_str = datetime.date.today().isoformat()
+            key = (uid, d_str)
+            self.ai_usage[key] = self.ai_usage.get(key, 0) + 1
+            new_cnt = self.ai_usage[key]
+            self._result_rows = [{"request_count": new_cnt}]
+            self.rowcount = 1
             return self
 
         return self
@@ -1159,6 +1184,179 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             shared_res_snack = self.client.get("/api/nourish/household/shared-meals?date=2026-10-19")
             shared_slots = [m["meal_slot"] for m in shared_res_snack.get_json()["shared_meals"]]
             self.assertNotIn("Snack", shared_slots)
+
+    def test_12_ai_batch_enrichment_does_not_catalog_unmatched_zero_calories(self):
+        """Issue #679: When AI returns None and heuristic is unmatched/0 cal, do NOT catalog as verified and keep pending."""
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Log an unmatchable unknown food
+            res = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "food_name": "Totally Mysterious Food Item XYZ 999",
+                    "quantity": 100,
+                    "unit": "g",
+                },
+            )
+            self.assertEqual(res.status_code, 200)
+            pending_log = res.get_json()["log"]
+            log_id = pending_log["id"]
+            self.assertEqual(pending_log["ai_enrich_status"], "pending")
+
+            initial_cat_count = len(self.fake_db.catalog)
+
+            # 2. Run enrich_pending_nourish_logs_batch with Gemini returning None (simulating failure/timeout)
+            with patch("nourish_ai._call_gemini_json", return_value=None):
+                stats = nourish_ai.enrich_pending_nourish_logs_batch(db=self.fake_db, dry_run=False)
+
+            # Enriched and cataloged MUST be 0!
+            self.assertEqual(stats["enriched"], 0)
+            self.assertEqual(stats["cataloged"], 0)
+
+            # Log row must REMAIN 'pending' with 0 calories
+            self.assertEqual(self.fake_db.logs[log_id]["ai_enrich_status"], "pending")
+            self.assertEqual(self.fake_db.logs[log_id]["calories"], 0.0)
+
+            # Food catalog must NOT have been poisoned with an unverified 0-calorie item!
+            self.assertEqual(len(self.fake_db.catalog), initial_cat_count)
+            self.assertFalse(any("mysterious food item" in c.get("normalized_name", "") for c in self.fake_db.catalog.values()))
+
+    def test_13_share_endpoints_safe_date_parsing(self):
+        """Issue #680: Invalid dates to /api/nourish/meals/share and /api/nourish/household/shared-meals return HTTP 400."""
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Invalid date in POST /api/nourish/meals/share -> 400
+            res1 = self.client.post(
+                "/api/nourish/meals/share",
+                json={"date": "invalid-date-format", "meal_slot": "Dinner"},
+            )
+            self.assertEqual(res1.status_code, 400)
+            self.assertFalse(res1.get_json()["ok"])
+            self.assertIn("Invalid date format", res1.get_json()["error"])
+
+            # 2. Invalid date in GET /api/nourish/household/shared-meals -> 400
+            self.fake_db.users.setdefault(10, {})["nourish_enabled"] = True
+            res2 = self.client.get("/api/nourish/household/shared-meals?date=2026-99-99")
+            self.assertEqual(res2.status_code, 400)
+            self.assertFalse(res2.get_json()["ok"])
+            self.assertIn("Invalid date format", res2.get_json()["error"])
+
+    def test_14_user_goals_respects_explicit_zero_macro_targets(self):
+        """Issue #681: Explicit 0g macro targets (keto/carnivore) are preserved and not overridden with defaults."""
+        with self._context_patches(user_id=10, household_id=1):
+            res = self.client.post(
+                "/api/nourish/goals",
+                json={
+                    "calories_target": 1800,
+                    "protein_target_g": 140,
+                    "carbs_target_g": 0,
+                    "fat_target_g": 80,
+                    "fiber_target_g": 0,
+                },
+            )
+            self.assertEqual(res.status_code, 200)
+            goals = res.get_json()["goals"]
+            self.assertEqual(goals["calories_target"], 1800)
+            self.assertEqual(goals["protein_target_g"], 140)
+            self.assertEqual(goals["carbs_target_g"], 0)
+            self.assertEqual(goals["fat_target_g"], 80)
+            self.assertEqual(goals["fiber_target_g"], 0)
+
+    def test_15_canonical_boolean_parser_and_user_nourish_enabled_alias(self):
+        """Issue #681: Boolean parsing handles string 'false'/'0', and /api/nourish/user/nourish-enabled alias works."""
+        with self._context_patches(user_id=10, household_id=1):
+            # Test /api/nourish/user/nourish-enabled route alias with string "true"
+            res = self.client.post("/api/nourish/user/nourish-enabled", json={"enabled": "true"})
+            self.assertEqual(res.status_code, 200)
+            self.assertTrue(res.get_json()["enabled"])
+
+            # Test toggling off with string "false" -> must evaluate to False (not True!)
+            res2 = self.client.post("/api/nourish/user/nourish-enabled", json={"enabled": "false"})
+            self.assertEqual(res2.status_code, 200)
+            self.assertFalse(res2.get_json()["enabled"])
+
+            # Test toggling with integer 0 -> False
+            res3 = self.client.post("/api/nourish/user/nourish-enabled", json={"enabled": 0})
+            self.assertEqual(res3.status_code, 200)
+            self.assertFalse(res3.get_json()["enabled"])
+
+    def test_16_modify_food_log_scoping_by_household_id(self):
+        """Issue #681: Cannot PUT or DELETE a log belonging to another household even if user_id matches."""
+        # Seed a log in household 1 for user 10
+        self.fake_db.logs[999] = {
+            "id": 999,
+            "user_id": 10,
+            "household_id": 1,
+            "log_date": "2026-10-19",
+            "meal_slot": "Dinner",
+            "food_name": "Test Item",
+            "quantity": 100,
+            "unit": "g",
+            "gram_weight": 100,
+            "calories": 150,
+            "protein_g": 10,
+            "carbs_g": 15,
+            "fat_g": 5,
+            "fiber_g": 2,
+            "sugar_g": 1,
+            "sodium_mg": 50,
+            "ai_enrich_status": "complete",
+            "notes": "",
+        }
+
+        # User 10 in household 2 tries to PUT log 999 -> 404
+        with self._context_patches(user_id=10, household_id=2):
+            res_put = self.client.put("/api/nourish/logs/999", json={"quantity": 200})
+            self.assertEqual(res_put.status_code, 404)
+
+            res_del = self.client.delete("/api/nourish/logs/999")
+            self.assertEqual(res_del.status_code, 404)
+
+        # In correct household 1 -> succeeds
+        with self._context_patches(user_id=10, household_id=1):
+            res_del_ok = self.client.delete("/api/nourish/logs/999")
+            self.assertEqual(res_del_ok.status_code, 200)
+            self.assertEqual(res_del_ok.get_json()["deleted_id"], 999)
+
+    def test_17_ai_daily_rate_limiting(self):
+        """Issue #685: Daily AI rate limit on POST /api/nourish/analyze-meal."""
+        mock_analysis = {
+            "text": "1 cup oats",
+            "items": [{"food_name": "oats", "calories": 150, "quantity": 1, "unit": "cup"}],
+            "total_calories": 150,
+            "total_protein_g": 5,
+            "total_carbs_g": 27,
+            "total_fat_g": 3,
+            "total_fiber_g": 4,
+            "total_sugar_g": 1,
+            "total_sodium_mg": 0,
+            "confidence": 0.9,
+            "ai_source": "gemini",
+        }
+
+        with self._context_patches(user_id=10, household_id=1), \
+             patch.dict(os.environ, {"NOURISH_AI_DAILY_LIMIT": "2"}), \
+             patch("nourish_ai.analyze_natural_language_meal", return_value=mock_analysis):
+
+            # Request 1: allowed, remaining 1
+            res1 = self.client.post("/api/nourish/analyze-meal", json={"text": "1 cup oats"})
+            self.assertEqual(res1.status_code, 200)
+            self.assertTrue(res1.get_json()["ok"])
+            self.assertEqual(res1.get_json()["remaining_today"], 1)
+
+            # Request 2: allowed, remaining 0
+            res2 = self.client.post("/api/nourish/analyze-meal", json={"text": "1 cup oats"})
+            self.assertEqual(res2.status_code, 200)
+            self.assertEqual(res2.get_json()["remaining_today"], 0)
+
+            # Request 3: rate limit reached -> HTTP 429
+            res3 = self.client.post("/api/nourish/analyze-meal", json={"text": "1 cup oats"})
+            self.assertEqual(res3.status_code, 429)
+            body3 = res3.get_json()
+            self.assertFalse(body3["ok"])
+            self.assertTrue(body3["limit_reached"])
+            self.assertEqual(body3["daily_limit"], 2)
+            self.assertIn("Daily AI evaluation limit reached", body3["error"])
 
 
 if __name__ == "__main__":
