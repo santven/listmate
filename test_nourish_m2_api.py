@@ -1562,6 +1562,49 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             data3 = res3.get_json()
             self.assertIsNone(data3["logs"][0]["still_good_item_id"])
 
+    def test_20_hydration_water_delta_persistence(self):
+        """Issue #690: Test hydration increments via both delta_water_ml and water_delta_ml persist correctly."""
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Post +250ml with delta_water_ml (frontend format)
+            res1 = self.client.post(
+                "/api/nourish/biometrics",
+                json={
+                    "log_date": "2026-10-19",
+                    "delta_water_ml": 250,
+                },
+            )
+            self.assertEqual(res1.status_code, 200)
+            data1 = res1.get_json()
+            self.assertTrue(data1["ok"])
+            self.assertEqual(data1["biometrics"]["water_ml"], 250)
+
+            # 2. Post another +250ml with water_delta_ml
+            res2 = self.client.post(
+                "/api/nourish/biometrics",
+                json={
+                    "log_date": "2026-10-19",
+                    "water_delta_ml": 250,
+                },
+            )
+            self.assertEqual(res2.status_code, 200)
+            data2 = res2.get_json()
+            self.assertTrue(data2["ok"])
+            self.assertEqual(data2["biometrics"]["water_ml"], 500)
+
+            # 3. Verify GET /api/nourish/day?date=2026-10-19 returns 500ml
+            day_res = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertEqual(day_res.status_code, 200)
+            day_data = day_res.get_json()
+            self.assertEqual(day_data["biometrics"]["water_ml"], 500)
+
+            # 4. Verify different date returns 0ml and returning to 2026-10-19 returns 500ml
+            day_other = self.client.get("/api/nourish/day?date=2026-10-20")
+            self.assertEqual(day_other.get_json()["biometrics"]["water_ml"], 0)
+
+            day_again = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertEqual(day_again.get_json()["biometrics"]["water_ml"], 500)
+
 
 if __name__ == "__main__":
     unittest.main()
+
