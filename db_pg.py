@@ -176,10 +176,143 @@ _SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_still_good_list_item ON still_good_items(list_item_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_still_good_store ON still_good_items(store_id)",
     "CREATE INDEX IF NOT EXISTS idx_list_items_stash_window ON list_items(household_id, purchased, still_good_stashed_at, purchased_at)",
+    """CREATE TABLE IF NOT EXISTS nourish_food_catalog (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        normalized_name VARCHAR(180) NOT NULL,
+        brand TEXT DEFAULT '',
+        category VARCHAR(80) DEFAULT 'General',
+        source VARCHAR(32) NOT NULL DEFAULT 'curated',
+        is_public BOOLEAN NOT NULL DEFAULT TRUE,
+        created_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+        household_id INTEGER REFERENCES auth_households(id) ON DELETE CASCADE,
+        calories_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        protein_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        carbs_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fat_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fiber_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sugar_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sodium_mg_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        serving_label TEXT NOT NULL DEFAULT '1 serving (100g)',
+        serving_weight_g NUMERIC(8,2) NOT NULL DEFAULT 100,
+        is_liquid BOOLEAN NOT NULL DEFAULT FALSE,
+        prep_state VARCHAR(20) NOT NULL DEFAULT 'as_is',
+        ai_verified BOOLEAN NOT NULL DEFAULT TRUE,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_nourish_cat_public_norm ON nourish_food_catalog(normalized_name) WHERE is_public = TRUE",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_cat_hh_norm ON nourish_food_catalog(household_id, normalized_name)",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_cat_search ON nourish_food_catalog(LOWER(name))",
+    """CREATE TABLE IF NOT EXISTS nourish_recipes (
+        id SERIAL PRIMARY KEY,
+        household_id INTEGER REFERENCES auth_households(id) ON DELETE CASCADE,
+        created_by_user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+        linked_recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        servings NUMERIC(6,2) NOT NULL DEFAULT 4,
+        total_cooked_weight_g NUMERIC(10,2) NOT NULL DEFAULT 400,
+        total_volume_ml NUMERIC(10,2),
+        density_g_per_ml NUMERIC(6,3) DEFAULT 1.050,
+        serving_weight_g NUMERIC(8,2) NOT NULL DEFAULT 100,
+        raw_ingredients_text TEXT NOT NULL DEFAULT '',
+        ingredients_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+        calories_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        protein_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        carbs_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fat_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fiber_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sugar_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sodium_mg_per_serving NUMERIC(8,2) NOT NULL DEFAULT 0,
+        calories_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        protein_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        carbs_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fat_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fiber_per_100g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        ai_notes TEXT DEFAULT '',
+        is_public BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_recipes_hh ON nourish_recipes(household_id)",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_recipes_public ON nourish_recipes(is_public) WHERE is_public = TRUE",
+    """CREATE TABLE IF NOT EXISTS nourish_food_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+        household_id INTEGER NOT NULL REFERENCES auth_households(id) ON DELETE CASCADE,
+        log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        meal_slot VARCHAR(24) NOT NULL DEFAULT 'Breakfast',
+        food_name TEXT NOT NULL,
+        catalog_id INTEGER REFERENCES nourish_food_catalog(id) ON DELETE SET NULL,
+        nourish_recipe_id INTEGER REFERENCES nourish_recipes(id) ON DELETE SET NULL,
+        still_good_item_id INTEGER REFERENCES still_good_items(id) ON DELETE SET NULL,
+        quantity NUMERIC(8,2) NOT NULL DEFAULT 100,
+        unit VARCHAR(16) NOT NULL DEFAULT 'g',
+        gram_weight NUMERIC(8,2) NOT NULL DEFAULT 100,
+        calories NUMERIC(8,2) NOT NULL DEFAULT 0,
+        protein_g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        carbs_g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fat_g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        fiber_g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sugar_g NUMERIC(8,2) NOT NULL DEFAULT 0,
+        sodium_mg NUMERIC(8,2) NOT NULL DEFAULT 0,
+        ai_enrich_status VARCHAR(20) NOT NULL DEFAULT 'complete',
+        notes TEXT DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_logs_user_date ON nourish_food_logs(user_id, log_date DESC, id ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_logs_pending_ai ON nourish_food_logs(ai_enrich_status) WHERE ai_enrich_status = 'pending'",
+    """CREATE TABLE IF NOT EXISTS nourish_user_goals (
+        user_id INTEGER PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+        calories_target INTEGER NOT NULL DEFAULT 2000,
+        protein_target_g INTEGER NOT NULL DEFAULT 130,
+        carbs_target_g INTEGER NOT NULL DEFAULT 200,
+        fat_target_g INTEGER NOT NULL DEFAULT 65,
+        fiber_target_g INTEGER NOT NULL DEFAULT 30,
+        water_target_ml INTEGER NOT NULL DEFAULT 2500,
+        sex VARCHAR(16) DEFAULT '',
+        age INTEGER,
+        height_cm NUMERIC(6,2),
+        weight_kg NUMERIC(6,2),
+        activity_level VARCHAR(24) DEFAULT 'moderate',
+        goal_pace VARCHAR(24) DEFAULT 'maintain',
+        coach_token VARCHAR(64) UNIQUE,
+        coach_link_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        coach_display_alias TEXT DEFAULT '',
+        coach_created_at TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_goals_coach_token ON nourish_user_goals(coach_token) WHERE coach_link_enabled = TRUE",
+    """CREATE TABLE IF NOT EXISTS nourish_daily_biometrics (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+        log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        water_ml INTEGER NOT NULL DEFAULT 0,
+        weight_kg NUMERIC(6,2),
+        notes TEXT DEFAULT '',
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, log_date)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_bio_user_date ON nourish_daily_biometrics(user_id, log_date DESC)",
+    """CREATE TABLE IF NOT EXISTS nourish_coach_notes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+        log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        author_role VARCHAR(16) NOT NULL DEFAULT 'coach',
+        author_name VARCHAR(64) NOT NULL DEFAULT 'Coach',
+        message TEXT NOT NULL,
+        is_read BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_coach_notes_user_date ON nourish_coach_notes(user_id, log_date DESC)",
 ]
 
-def init_db():
-    db = get_db()
+def init_db(db=None):
+    own_db = db is None
+    if own_db:
+        db = get_db()
     try:
         for s in _SCHEMA:
             try:
@@ -314,5 +447,14 @@ def init_db():
             _safe_exec("UPDATE stores SET category_order = %s WHERE name ILIKE %s AND (category_order IS NULL OR category_order = '' OR category_order NOT LIKE '%Spices%')", (order, pattern))
         _safe_exec("UPDATE stores SET category_order = 'Produce,Bakery,Meat & Seafood,Deli,Spices & Seasonings,Legumes & Grains,Pantry,Canned & Jarred,Dips & Spreads,Nuts & Seeds,Snacks & Sweets,Beverages,Dairy,Frozen,Household' WHERE (category_order IS NULL OR category_order = '')")
 
+        try:
+            from seed_nourish import seed_nourish_catalog
+            seed_nourish_catalog(db)
+        except Exception:
+            try: db.rollback()
+            except Exception: pass
+
         db.commit()
-    finally: close_db(db)
+    finally:
+        if own_db:
+            close_db(db)
