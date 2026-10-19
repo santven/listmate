@@ -153,6 +153,38 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn("Skip (Just mark as enjoyed)", self.html)
         self.assertIn("env(safe-area-inset-bottom, 0px)", self.html)
 
+        # 11. Trends View & Macro Analytics (Issue #692)
+        self.assertIn('id="nourishTabDay"', self.html)
+        self.assertIn('id="nourishTabTrends"', self.html)
+        self.assertIn('id="nourishDayView"', self.html)
+        self.assertIn('id="nourishTrendsView"', self.html)
+        self.assertIn('id="nourishTrendsRange_7"', self.html)
+        self.assertIn('id="nourishTrendsRange_14"', self.html)
+        self.assertIn('id="nourishTrendsRange_30"', self.html)
+        self.assertIn('id="nourishTrendsAvgCal"', self.html)
+        self.assertIn('id="nourishTrendsTargetCal"', self.html)
+        self.assertIn('id="nourishTrendsAdherence"', self.html)
+        self.assertIn('id="nourishTrendsAvgProtein"', self.html)
+        self.assertIn('id="nourishTrendsAvgCarbs"', self.html)
+        self.assertIn('id="nourishTrendsAvgFat"', self.html)
+        self.assertIn('id="nourishTrendsAvgWater"', self.html)
+        self.assertIn('id="nourishTrendsChartContainer"', self.html)
+
+        # 12. VitalPath Coach Link & Feedback Drawer (Issue #694)
+        self.assertIn('id="nourishCoachFeedbackCard"', self.html)
+        self.assertIn('id="nourishCoachCardAuthor"', self.html)
+        self.assertIn('id="nourishCoachCardMessage"', self.html)
+        self.assertIn('id="nourishCoachLinkToggle"', self.html)
+        self.assertIn('id="nourishCoachLinkDetails"', self.html)
+        self.assertIn('id="nourishCoachAliasInput"', self.html)
+        self.assertIn('id="nourishCoachShareUrl"', self.html)
+        self.assertIn('id="nourishBtnCopyCoachLink"', self.html)
+        self.assertIn('id="nourishBtnResetCoachToken"', self.html)
+        self.assertIn('id="nourishCoachFeedbackDrawer"', self.html)
+        self.assertIn('id="nourishCoachDrawerAuthor"', self.html)
+        self.assertIn('id="nourishCoachDrawerMessage"', self.html)
+        self.assertIn('id="nourishBtnAckCoachNote"', self.html)
+
     def test_nourish_deep_link_and_push_handlers_present(self):
         # Query parameter deep link handling
         self.assertIn("screenParam === 'nourish' || actionParam === 'open_nourish'", self.html)
@@ -161,6 +193,11 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn("isNourishPush", self.html)
         self.assertIn("data.screen === 'nourish'", self.html)
         self.assertIn("data.campaign === 'nourish_reminder'", self.html)
+        # Coach Note & Trends deep link/push support
+        self.assertIn("show_coach_drawer", self.html)
+        self.assertIn("open_coach_note", self.html)
+        self.assertIn("switchNourishSubView('trends')", self.html)
+        self.assertIn("openNourishCoachDrawer", self.html)
 
     def test_user_requested_ai_estimating_copy(self):
         # User requested pill badge and removed redundant subline
@@ -237,7 +274,18 @@ const fns = [
   'getTodayDateString',
   'submitSgNourishBridge',
   'skipSgNourishBridge',
-  'stillGoodAction'
+  'stillGoodAction',
+  'switchNourishSubView',
+  'loadNourishTrends',
+  'renderNourishTrends',
+  'renderNourishTrendsChart',
+  'toggleNourishCoachLink',
+  'copyNourishCoachLink',
+  'resetNourishCoachToken',
+  'openNourishCoachDrawer',
+  'closeNourishCoachDrawer',
+  'acknowledgeCoachFeedbackNote',
+  'getAppOrigin'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -298,7 +346,19 @@ const elementIds = [
   'nourishSharedMealDrawer', 'nourishSharedDrawerSub', 'nourishSharedDrawerItems', 'nourishBtnAddSharedMeal',
   'sgNourishBridgeDrawer', 'sgNourishBridgeSub', 'sgNourishBridgeBtnSkip',
   'sgBridgeBtn_breakfast', 'sgBridgeBtn_lunch', 'sgBridgeBtn_dinner', 'sgBridgeBtn_snack',
-  'sgCard_10', 'sgWrap_10', 'sgCard_20', 'sgWrap_20'
+  'sgCard_10', 'sgWrap_10', 'sgCard_20', 'sgWrap_20',
+  'nourishTabDay', 'nourishTabTrends',
+  'nourishDayView', 'nourishTrendsView',
+  'nourishTrendsRange_7', 'nourishTrendsRange_14', 'nourishTrendsRange_30',
+  'nourishTrendsAvgCal', 'nourishTrendsTargetCal', 'nourishTrendsCalSub', 'nourishTrendsAdherence',
+  'nourishTrendsAvgProtein', 'nourishTrendsTargetProtein',
+  'nourishTrendsAvgCarbs', 'nourishTrendsTargetCarbs',
+  'nourishTrendsAvgFat', 'nourishTrendsTargetFat',
+  'nourishTrendsAvgWater', 'nourishTrendsTargetWater',
+  'nourishTrendsChartContainer',
+  'nourishCoachFeedbackCard', 'nourishCoachCardAuthor', 'nourishCoachCardRole', 'nourishCoachCardDate', 'nourishCoachCardMessage',
+  'nourishCoachLinkToggle', 'nourishCoachLinkDetails', 'nourishCoachAliasInput', 'nourishCoachShareUrl', 'nourishBtnCopyCoachLink', 'nourishBtnResetCoachToken',
+  'nourishCoachFeedbackDrawer', 'nourishCoachDrawerTitle', 'nourishCoachDrawerSub', 'nourishCoachDrawerAuthor', 'nourishCoachDrawerDate', 'nourishCoachDrawerMessage', 'nourishBtnAckCoachNote'
 ];
 elementIds.forEach(id => { elements[id] = makeEl(id); });
 
@@ -319,6 +379,7 @@ global.sessionStorage = {
 };
 
 global.window = global;
+global.window.location = { origin: 'http://localhost:5001', pathname: '/', search: '' };
 global.document = {
   getElementById(id) { return elements[id] || null; },
   addEventListener() {}
@@ -666,6 +727,144 @@ eval(fns);
   const directActionCall = allFetchCalls.find(c => c.url.includes('/api/still-good/20/action') && c.body && c.body.action === 'consume');
   if (!directActionCall) {
     throw new Error('stillGoodAction should directly consume when Nourish is disabled');
+  }
+
+  // 22. Issue #692: Subview switching between Day and Trends
+  switchNourishSubView('trends');
+  if (elements.nourishDayView.style.display !== 'none') throw new Error('Expected nourishDayView none in trends mode');
+  if (elements.nourishTrendsView.style.display !== 'block') throw new Error('Expected nourishTrendsView block in trends mode');
+
+  switchNourishSubView('day');
+  if (elements.nourishDayView.style.display !== 'block') throw new Error('Expected nourishDayView block in day mode');
+  if (elements.nourishTrendsView.style.display !== 'none') throw new Error('Expected nourishTrendsView none in day mode');
+
+  // 23. Issue #692: Trends analytics loading, metric calculation, and SVG chart rendering
+  allFetchCalls.length = 0;
+  global.fetch = (url) => {
+    allFetchCalls.push({ url });
+    return Promise.resolve({
+      json: () => Promise.resolve({
+        ok: true,
+        summary: {
+          avg_calories: 1950,
+          target_calories: 2000,
+          avg_protein: 125,
+          target_protein: 130,
+          avg_carbs: 210,
+          target_carbs: 200,
+          avg_fat: 60,
+          target_fat: 65,
+          avg_water_ml: 2600,
+          target_water_ml: 2500,
+          adherence_pct: 88
+        },
+        daily: [
+          { date: '2026-10-13', label: '10/13', calories: 1900 },
+          { date: '2026-10-14', label: '10/14', calories: 2050 },
+          { date: '2026-10-15', label: '10/15', calories: 1950 },
+          { date: '2026-10-16', label: '10/16', calories: 2200 },
+          { date: '2026-10-17', label: '10/17', calories: 1800 },
+          { date: '2026-10-18', label: '10/18', calories: 1980 },
+          { date: '2026-10-19', label: '10/19', calories: 1770 }
+        ]
+      })
+    });
+  };
+
+  await loadNourishTrends(7);
+  if (!allFetchCalls.some(c => c.url.includes('/api/nourish/analytics?days=7'))) {
+    throw new Error('Expected fetch to /api/nourish/analytics?days=7');
+  }
+  if (!elements.nourishTrendsAvgCal.textContent.includes('1,950') && elements.nourishTrendsAvgCal.textContent !== '1950') {
+    throw new Error('Expected avg calories 1950, got: ' + elements.nourishTrendsAvgCal.textContent);
+  }
+  if (elements.nourishTrendsAdherence.textContent !== '88%') {
+    throw new Error('Expected adherence 88%, got: ' + elements.nourishTrendsAdherence.textContent);
+  }
+  if (elements.nourishTrendsAvgProtein.textContent !== '125') {
+    throw new Error('Expected avg protein 125, got: ' + elements.nourishTrendsAvgProtein.textContent);
+  }
+  if (!elements.nourishTrendsChartContainer.innerHTML.includes('<svg')) {
+    throw new Error('Expected SVG bar chart rendered in trends container');
+  }
+  if (!elements.nourishTrendsChartContainer.innerHTML.includes('Target 2000')) {
+    throw new Error('Expected target dashed reference line in chart');
+  }
+
+  // 24. Issue #694: VitalPath Coach Link section in Goals modal
+  currentNourishData = {
+    goals: {
+      calories_target: 2100,
+      coach_link_enabled: true,
+      coach_display_alias: 'Venkat Athlete #1',
+      coach_token: 'coach_secret_tok_123'
+    }
+  };
+  openNourishGoalsModal();
+  if (!elements.nourishCoachLinkToggle.checked) throw new Error('Expected coach link toggle checked');
+  if (elements.nourishCoachAliasInput.value !== 'Venkat Athlete #1') throw new Error('Expected alias populated');
+  if (!elements.nourishCoachShareUrl.value.includes('coach_secret_tok_123')) {
+    throw new Error('Expected share URL populated with token');
+  }
+
+  // Saving goals with coach link fields
+  allFetchCalls.length = 0;
+  global.fetch = (url, opts) => {
+    allFetchCalls.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null });
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+  elements.nourishCoachAliasInput.value = 'Venkat Runner';
+  await saveNourishGoals();
+  const savedGoalCall = allFetchCalls.find(c => c.url === '/api/nourish/goals');
+  if (!savedGoalCall) throw new Error('Expected fetch call to /api/nourish/goals');
+  if (savedGoalCall.body.coach_link_enabled !== true) throw new Error('Expected coach_link_enabled true');
+  if (savedGoalCall.body.coach_display_alias !== 'Venkat Runner') throw new Error('Expected updated coach alias');
+
+  // 25. Issue #694: Coach Feedback Card in Daily Diary
+  renderNourishDay({
+    totals: { calories: 1500, protein_g: 90, carbs_g: 150, fat_g: 50, fiber_g: 22 },
+    goals: { calorie_target: 2000 },
+    biometrics: { water_ml: 1200 },
+    logs: [],
+    coach_notes: [
+      { id: 99, author_name: 'Coach Maya', author_role: 'Dietitian', log_date: '2026-10-19', message: 'Target 130g protein today for recovery.', is_read: false }
+    ]
+  });
+  if (elements.nourishCoachFeedbackCard.style.display !== 'block') {
+    throw new Error('Expected coach feedback card visible when coach notes exist');
+  }
+  if (!elements.nourishCoachCardAuthor.textContent.includes('Coach Maya')) {
+    throw new Error('Expected coach author in feedback card');
+  }
+  if (!elements.nourishCoachCardMessage.textContent.includes('Target 130g protein today')) {
+    throw new Error('Expected coach message in feedback card');
+  }
+
+  // 26. Issue #694: Coach Feedback Drawer acknowledgment
+  allFetchCalls.length = 0;
+  global.fetch = (url) => {
+    allFetchCalls.push({ url });
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+  openNourishCoachDrawer({
+    id: 99,
+    author_name: 'Coach Maya',
+    author_role: 'Dietitian',
+    log_date: '2026-10-19',
+    message: 'Target 130g protein today for recovery.'
+  });
+  if (elements.nourishCoachFeedbackDrawer.style.display !== 'flex') {
+    throw new Error('Expected coach drawer display flex');
+  }
+  await acknowledgeCoachFeedbackNote();
+  if (elements.nourishCoachFeedbackDrawer.style.display !== 'none') {
+    throw new Error('Expected coach drawer closed after acknowledge');
+  }
+  if (!allFetchCalls.some(c => c.url.includes('/api/nourish/coach/notes/99/ack'))) {
+    throw new Error('Expected POST to /api/nourish/coach/notes/99/ack');
+  }
+  if (sessionStorage.getItem('nourish_dismissed_coach_note_99') !== '1') {
+    throw new Error('Expected dismissal stored in sessionStorage');
   }
 })();
 """

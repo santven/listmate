@@ -3742,6 +3742,9 @@ NOURISH_DEFAULT_GOALS = {
     "fat_target_g": 65,
     "fiber_target_g": 30,
     "water_target_ml": 2500,
+    "coach_token": None,
+    "coach_link_enabled": False,
+    "coach_display_alias": "",
 }
 
 
@@ -3909,6 +3912,37 @@ def nourish_day_endpoint():
         }
         pending_ai_count = sum(1 for l in logs if l.get("ai_enrich_status") == "pending")
 
+        # 6. Coach notes for this date & unread coach note (Issue #694)
+        coach_notes = []
+        unread_coach_note = None
+        try:
+            notes_cur = db.execute(
+                """
+                SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+                FROM nourish_coach_notes
+                WHERE user_id = ? AND log_date = ?::date
+                ORDER BY id ASC
+                """,
+                (uid, log_date_str),
+            )
+            raw_notes = (notes_cur.fetchall() if notes_cur else []) or []
+            coach_notes = [_serialize_nourish_row(r) for r in raw_notes]
+
+            unread_cur = db.execute(
+                """
+                SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+                FROM nourish_coach_notes
+                WHERE user_id = ? AND is_read = FALSE
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (uid,),
+            )
+            unread_row = unread_cur.fetchone() if unread_cur else None
+            unread_coach_note = _serialize_nourish_row(unread_row) if unread_row else None
+        except Exception as note_err:
+            print(f"[NOURISH NOTICE] Coach notes query notice: {note_err}")
+
         return jsonify({
             "ok": True,
             "date": log_date_str,
@@ -3920,6 +3954,8 @@ def nourish_day_endpoint():
             "biometrics": biometrics,
             "recipes": recipes,
             "pending_ai_count": pending_ai_count,
+            "coach_notes": coach_notes,
+            "unread_coach_note": unread_coach_note,
         })
     except Exception as exc:
         print(f"[NOURISH ERROR] GET /api/nourish/day failed: {exc}")
@@ -5146,6 +5182,895 @@ def api_nourish_household_shared_meals():
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
+
+
+# ── Nourish Trends & Coach Link Portal (Issues #692, #694) ──
+
+@app.route("/api/nourish/analytics", methods=["GET"])
+@require_user
+def api_nourish_analytics():
+    """
+    Issue #692: Macro Trends & Analytics endpoint.
+    Aggregates user's daily food logs and biometrics over the requested days window (default 7, max 90).
+    Computes daily totals, rolling averages, macro distribution split, and goal adherence.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        raw_days = request.args.get("days", "7")
+        try:
+            days = int(raw_days)
+            if days < 1:
+                days = 7
+            elif days > 90:
+                days = 90
+        except (ValueError, TypeError):
+            days = 7
+
+        raw_end = request.args.get("end_date")
+        if raw_end:
+            end_date_str = _parse_nourish_date(raw_end)
+            if not end_date_str:
+                return jsonify({"ok": False, "error": "Invalid end_date format. Expected YYYY-MM-DD."}), 400
+        else:
+            end_date_str = datetime.date.today().isoformat()
+
+        end_d = datetime.date.fromisoformat(end_date_str)
+        start_d = end_d - datetime.timedelta(days=days - 1)
+        start_date_str = start_d.isoformat()
+
+        # 1. Strictly user_id and household_id-scoped food logs
+        log_cur = db.execute(
+            """
+            SELECT log_date, calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg
+            FROM nourish_food_logs
+            WHERE user_id = ? AND household_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date ASC
+            """,
+            (uid, hhid, start_date_str, end_date_str),
+        )
+        log_rows = log_cur.fetchall() if log_cur else []
+
+        # 2. Strictly user_id-scoped biometrics
+        bio_cur = db.execute(
+            """
+            SELECT log_date, water_ml, weight_kg
+            FROM nourish_daily_biometrics
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date ASC
+            """,
+            (uid, start_date_str, end_date_str),
+        )
+        bio_rows = bio_cur.fetchall() if bio_cur else []
+
+        # 3. User goals
+        goal_cur = db.execute("SELECT * FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        goal_row = goal_cur.fetchone() if goal_cur else None
+        if goal_row:
+            goals = _serialize_nourish_row(goal_row)
+            for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                if goals.get(k) is None:
+                    goals[k] = default_v
+        else:
+            goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+
+        # 4. Map daily entries
+        daily_map = {}
+        curr = start_d
+        while curr <= end_d:
+            d_str = curr.isoformat()
+            daily_map[d_str] = {
+                "date": d_str,
+                "calories": 0.0,
+                "protein_g": 0.0,
+                "carbs_g": 0.0,
+                "fat_g": 0.0,
+                "fiber_g": 0.0,
+                "sugar_g": 0.0,
+                "sodium_mg": 0.0,
+                "water_ml": 0,
+                "weight_kg": None,
+                "logged_meals_count": 0,
+            }
+            curr += datetime.timedelta(days=1)
+
+        for r in log_rows:
+            ld = str(r["log_date"])[:10]
+            if ld in daily_map:
+                d = daily_map[ld]
+                d["calories"] += float(r.get("calories") or 0.0)
+                d["protein_g"] += float(r.get("protein_g") or 0.0)
+                d["carbs_g"] += float(r.get("carbs_g") or 0.0)
+                d["fat_g"] += float(r.get("fat_g") or 0.0)
+                d["fiber_g"] += float(r.get("fiber_g") or 0.0)
+                d["sugar_g"] += float(r.get("sugar_g") or 0.0)
+                d["sodium_mg"] += float(r.get("sodium_mg") or 0.0)
+                d["logged_meals_count"] += 1
+
+        for r in bio_rows:
+            ld = str(r["log_date"])[:10]
+            if ld in daily_map:
+                d = daily_map[ld]
+                d["water_ml"] = int(r.get("water_ml") or 0)
+                if r.get("weight_kg") is not None:
+                    d["weight_kg"] = float(r["weight_kg"])
+
+        for d in daily_map.values():
+            d["calories"] = round(d["calories"], 1)
+            d["protein_g"] = round(d["protein_g"], 1)
+            d["carbs_g"] = round(d["carbs_g"], 1)
+            d["fat_g"] = round(d["fat_g"], 1)
+            d["fiber_g"] = round(d["fiber_g"], 1)
+            d["sugar_g"] = round(d["sugar_g"], 1)
+            d["sodium_mg"] = round(d["sodium_mg"], 1)
+
+        daily_list = [daily_map[k] for k in sorted(daily_map.keys())]
+
+        # 5. Averages & Adherence
+        logged_days = [d for d in daily_list if d["logged_meals_count"] > 0 or d["water_ml"] > 0]
+        num_logged = len(logged_days)
+
+        if num_logged > 0:
+            avg_calories = round(sum(d["calories"] for d in logged_days) / num_logged, 1)
+            avg_protein = round(sum(d["protein_g"] for d in logged_days) / num_logged, 1)
+            avg_carbs = round(sum(d["carbs_g"] for d in logged_days) / num_logged, 1)
+            avg_fat = round(sum(d["fat_g"] for d in logged_days) / num_logged, 1)
+            avg_fiber = round(sum(d["fiber_g"] for d in logged_days) / num_logged, 1)
+            avg_water = round(sum(d["water_ml"] for d in logged_days) / num_logged, 0)
+        else:
+            avg_calories = avg_protein = avg_carbs = avg_fat = avg_fiber = avg_water = 0.0
+
+        total_p_kcal = sum(d["protein_g"] * 4.0 for d in daily_list)
+        total_c_kcal = sum(d["carbs_g"] * 4.0 for d in daily_list)
+        total_f_kcal = sum(d["fat_g"] * 9.0 for d in daily_list)
+        total_macro_kcal = total_p_kcal + total_c_kcal + total_f_kcal
+
+        if total_macro_kcal > 0:
+            macro_split = {
+                "protein_pct": round((total_p_kcal / total_macro_kcal) * 100.0, 1),
+                "carbs_pct": round((total_c_kcal / total_macro_kcal) * 100.0, 1),
+                "fat_pct": round((total_f_kcal / total_macro_kcal) * 100.0, 1),
+            }
+        else:
+            macro_split = {"protein_pct": 0.0, "carbs_pct": 0.0, "fat_pct": 0.0}
+
+        cal_target = float(goals.get("calories_target") or 2000)
+        p_target = float(goals.get("protein_target_g") or 130)
+        w_target = float(goals.get("water_target_ml") or 2500)
+
+        days_meeting_cal = sum(1 for d in logged_days if 0.85 * cal_target <= d["calories"] <= 1.15 * cal_target)
+        days_meeting_p = sum(1 for d in logged_days if d["protein_g"] >= 0.85 * p_target)
+        days_meeting_w = sum(1 for d in logged_days if d["water_ml"] >= 0.85 * w_target)
+
+        adherence = {
+            "days_logged": num_logged,
+            "total_days": days,
+            "calories_hit_count": days_meeting_cal,
+            "calories_adherence_pct": round((days_meeting_cal / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+            "protein_hit_count": days_meeting_p,
+            "protein_adherence_pct": round((days_meeting_p / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+            "water_hit_count": days_meeting_w,
+            "water_adherence_pct": round((days_meeting_w / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+        }
+
+        return jsonify({
+            "ok": True,
+            "days": days,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "daily": daily_list,
+            "averages": {
+                "calories": avg_calories,
+                "protein_g": avg_protein,
+                "carbs_g": avg_carbs,
+                "fat_g": avg_fat,
+                "fiber_g": avg_fiber,
+                "water_ml": int(avg_water),
+                "days_logged": num_logged,
+            },
+            "macro_split": macro_split,
+            "goals": goals,
+            "adherence": adherence,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/analytics failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/link", methods=["POST"])
+@require_user
+def api_nourish_coach_link():
+    """
+    Issue #694: Generates or updates the user's Coach Link token, status, and display alias.
+    """
+    import secrets
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        data = request.get_json(silent=True) or {}
+        enabled = data.get("enabled")
+        alias = str(data.get("alias") or "").strip()[:64] if data.get("alias") is not None else None
+        regenerate = bool(data.get("regenerate"))
+
+        cur = db.execute("SELECT * FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        row = cur.fetchone() if cur else None
+
+        if not row:
+            token = secrets.token_urlsafe(16)
+            is_enabled = bool(enabled) if enabled is not None else True
+            disp_alias = alias or ""
+            db.execute(
+                """
+                INSERT INTO nourish_user_goals (
+                    user_id, coach_token, coach_link_enabled, coach_display_alias, coach_created_at, updated_at
+                ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                """,
+                (uid, token, is_enabled, disp_alias),
+            )
+        else:
+            current_token = row.get("coach_token")
+            if regenerate or not current_token:
+                token = secrets.token_urlsafe(16)
+            else:
+                token = current_token
+
+            is_enabled = bool(enabled) if enabled is not None else (bool(row.get("coach_link_enabled")) if not regenerate else True)
+            disp_alias = alias if alias is not None else (row.get("coach_display_alias") or "")
+
+            db.execute(
+                """
+                UPDATE nourish_user_goals
+                SET coach_token = ?,
+                    coach_link_enabled = ?,
+                    coach_display_alias = ?,
+                    coach_created_at = COALESCE(coach_created_at, NOW()),
+                    updated_at = NOW()
+                WHERE user_id = ?
+                """,
+                (token, is_enabled, disp_alias, uid),
+            )
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "coach_token": token,
+            "coach_link_enabled": is_enabled,
+            "coach_display_alias": disp_alias,
+            "coach_url": f"/coach/{token}",
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/link failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/view/<token>", methods=["GET"])
+def api_nourish_coach_view(token):
+    """
+    Issue #694: Token-authenticated view of client's past 14 days of diary logs and biometrics.
+    """
+    if not token or not str(token).strip():
+        return jsonify({"ok": False, "error": "Invalid token", "code": "invalid_token"}), 404
+
+    clean_token = str(token).strip()
+    db = get_db()
+    try:
+        g_cur = db.execute(
+            """
+            SELECT g.*, u.name as client_name, u.household_id
+            FROM nourish_user_goals g
+            JOIN auth_users u ON u.id = g.user_id
+            WHERE g.coach_token = ? AND g.coach_link_enabled = TRUE
+            """,
+            (clean_token,),
+        )
+        goal_row = g_cur.fetchone() if g_cur else None
+        if not goal_row:
+            return jsonify({
+                "ok": False,
+                "error": "This coach link is invalid or has been disabled by the client.",
+                "code": "invalid_token"
+            }), 404
+
+        client_uid = int(goal_row["user_id"])
+        alias = str(goal_row.get("coach_display_alias") or goal_row.get("client_name") or "Client").strip() or "Client"
+
+        goals = _serialize_nourish_row(goal_row)
+        for k, default_v in NOURISH_DEFAULT_GOALS.items():
+            if goals.get(k) is None:
+                goals[k] = default_v
+
+        # Past 14 days
+        end_d = datetime.date.today()
+        start_d = end_d - datetime.timedelta(days=13)
+        start_date_str = start_d.isoformat()
+        end_date_str = end_d.isoformat()
+
+        # Food logs
+        l_cur = db.execute(
+            """
+            SELECT * FROM nourish_food_logs
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date DESC, id ASC
+            """,
+            (client_uid, start_date_str, end_date_str),
+        )
+        raw_logs = (l_cur.fetchall() if l_cur else []) or []
+        logs = [_serialize_nourish_row(r) for r in raw_logs]
+
+        # Biometrics
+        b_cur = db.execute(
+            """
+            SELECT * FROM nourish_daily_biometrics
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date DESC
+            """,
+            (client_uid, start_date_str, end_date_str),
+        )
+        raw_bios = (b_cur.fetchall() if b_cur else []) or []
+        bios = {str(b["log_date"])[:10]: _serialize_nourish_row(b) for b in raw_bios}
+
+        # Coach notes
+        n_cur = db.execute(
+            """
+            SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+            FROM nourish_coach_notes
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (client_uid,),
+        )
+        raw_notes = (n_cur.fetchall() if n_cur else []) or []
+        notes = [_serialize_nourish_row(r) for r in raw_notes]
+
+        # Group by day
+        days_list = []
+        curr = end_d
+        while curr >= start_d:
+            d_str = curr.isoformat()
+            day_logs = [l for l in logs if str(l.get("log_date"))[:10] == d_str]
+            day_bio = bios.get(d_str, {"water_ml": 0, "weight_kg": None, "notes": ""})
+            day_notes = [n for n in notes if str(n.get("log_date"))[:10] == d_str]
+
+            totals = {
+                "calories": round(sum(float(l.get("calories") or 0.0) for l in day_logs), 1),
+                "protein_g": round(sum(float(l.get("protein_g") or 0.0) for l in day_logs), 1),
+                "carbs_g": round(sum(float(l.get("carbs_g") or 0.0) for l in day_logs), 1),
+                "fat_g": round(sum(float(l.get("fat_g") or 0.0) for l in day_logs), 1),
+                "fiber_g": round(sum(float(l.get("fiber_g") or 0.0) for l in day_logs), 1),
+                "water_ml": int(day_bio.get("water_ml") or 0),
+                "weight_kg": float(day_bio["weight_kg"]) if day_bio.get("weight_kg") is not None else None,
+            }
+
+            days_list.append({
+                "date": d_str,
+                "totals": totals,
+                "logs": day_logs,
+                "biometrics": day_bio,
+                "notes": day_notes,
+            })
+            curr -= datetime.timedelta(days=1)
+
+        return jsonify({
+            "ok": True,
+            "client": {
+                "alias": alias,
+                "user_id": client_uid,
+            },
+            "goals": goals,
+            "days": days_list,
+            "recent_notes": notes,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/coach/view failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/notes/<token>", methods=["POST"])
+def api_nourish_coach_create_note(token):
+    """
+    Issue #694: Coach posts feedback note for client.
+    Triggers immediate push notification alert to client via push_helper.send_push_to_user().
+    """
+    if not token or not str(token).strip():
+        return jsonify({"ok": False, "error": "Invalid token"}), 404
+
+    clean_token = str(token).strip()
+    db = get_db()
+    try:
+        g_cur = db.execute(
+            """
+            SELECT g.user_id, g.coach_display_alias, u.name as client_name
+            FROM nourish_user_goals g
+            JOIN auth_users u ON u.id = g.user_id
+            WHERE g.coach_token = ? AND g.coach_link_enabled = TRUE
+            """,
+            (clean_token,),
+        )
+        client_row = g_cur.fetchone() if g_cur else None
+        if not client_row:
+            return jsonify({"ok": False, "error": "Invalid or disabled coach link", "code": "invalid_token"}), 404
+
+        client_uid = int(client_row["user_id"])
+        data = request.get_json(silent=True) or {}
+        message = str(data.get("message") or "").strip()[:1000]
+        if not message:
+            return jsonify({"ok": False, "error": "Message cannot be empty."}), 400
+
+        author_name = str(data.get("author_name") or "Coach").strip()[:64] or "Coach"
+        raw_date = data.get("log_date")
+        log_date_str = _parse_nourish_date(raw_date) if raw_date else datetime.date.today().isoformat()
+
+        ins_cur = db.execute(
+            """
+            INSERT INTO nourish_coach_notes (
+                user_id, log_date, author_role, author_name, message, is_read, created_at
+            ) VALUES (
+                ?, ?::date, 'coach', ?, ?, FALSE, NOW()
+            )
+            RETURNING id, user_id, log_date, author_role, author_name, message, is_read, created_at
+            """,
+            (client_uid, log_date_str, author_name, message),
+        )
+        note_row = ins_cur.fetchone() if ins_cur else None
+        db.commit()
+
+        note_data = _serialize_nourish_row(note_row) if note_row else {
+            "id": None,
+            "user_id": client_uid,
+            "log_date": log_date_str,
+            "author_role": "coach",
+            "author_name": author_name,
+            "message": message,
+            "is_read": False,
+        }
+
+        # Trigger immediate push notification to client
+        try:
+            import push_helper
+            push_title = f"💬 Coach Note from {author_name}"
+            push_body = message if len(message) <= 120 else (message[:117] + "...")
+            push_data = {
+                "action": "open_nourish",
+                "screen": "nourish",
+                "source": "coach_note",
+                "note_id": str(note_data.get("id") or ""),
+                "date": str(log_date_str),
+                "url": f"/?screen=nourish&date={log_date_str}",
+            }
+            push_helper.send_push_to_user(
+                user_id=client_uid,
+                title=push_title,
+                body=push_body,
+                data=push_data,
+            )
+        except Exception as push_err:
+            print(f"[NOURISH PUSH ERROR] Failed to send coach note push: {push_err}", flush=True)
+
+        return jsonify({"ok": True, "note": note_data})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/notes failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/notes/<int:note_id>/ack", methods=["POST"])
+@require_user
+def api_nourish_coach_ack_note(note_id):
+    """
+    Issue #694: Marks a coach feedback note as read by the client.
+    Scoped strictly by user_id.
+    """
+    if not note_id or note_id <= 0:
+        return jsonify({"ok": False, "error": "Invalid note_id"}), 400
+
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        up_cur = db.execute(
+            """
+            UPDATE nourish_coach_notes
+            SET is_read = TRUE
+            WHERE id = ? AND user_id = ?
+            RETURNING id
+            """,
+            (note_id, uid),
+        )
+        row = up_cur.fetchone() if up_cur else None
+        if not row:
+            return jsonify({"ok": False, "error": "Note not found or already acknowledged."}), 404
+
+        db.commit()
+        return jsonify({"ok": True, "note_id": note_id, "is_read": True})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/notes/<id>/ack failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/coach/<token>", methods=["GET"])
+def coach_portal_view(token):
+    """
+    Issue #694: Web page for coaches to view client's past 14 days and submit feedback notes.
+    """
+    clean_token = str(token).strip()
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>VitalPath Coach Portal — ListMate Nourish</title>
+  <style>
+    :root {{
+      --primary: #10B981;
+      --primary-dark: #059669;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --ring: rgba(16, 185, 129, 0.2);
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }}
+    .header {{
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--primary-dark);
+    }}
+    .badge-client {{
+      background: #ECFDF5;
+      color: #065F46;
+      font-size: 0.82rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+    }}
+    .container {{
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }}
+    .card {{
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }}
+    .card h2 {{
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .targets-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }}
+    .target-pill {{
+      background: #F1F5F9;
+      padding: 10px;
+      border-radius: 10px;
+      text-align: center;
+    }}
+    .target-label {{ font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }}
+    .target-val {{ font-size: 1.1rem; font-weight: 700; color: var(--text); }}
+    .day-card {{
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      background: var(--card-bg);
+    }}
+    .day-header {{
+      padding: 14px 16px;
+      background: #FAFAFA;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }}
+    .day-date {{ font-weight: 700; font-size: 0.95rem; }}
+    .day-macros {{ font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; }}
+    .day-body {{ padding: 14px 16px; }}
+    .log-item {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #F1F5F9;
+      font-size: 0.88rem;
+    }}
+    .log-item:last-child {{ border-bottom: none; }}
+    .slot-tag {{
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #EEF2F6;
+      color: #475569;
+      margin-right: 6px;
+    }}
+    .feedback-form textarea {{
+      width: 100%;
+      min-height: 90px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      resize: vertical;
+      outline: none;
+    }}
+    .feedback-form textarea:focus {{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+    }}
+    .form-row {{
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }}
+    .form-row input {{
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+    }}
+    .btn-send {{
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.92rem;
+      transition: background 0.15s;
+    }}
+    .btn-send:hover {{ background: var(--primary-dark); }}
+    .toast {{
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #065F46;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 999px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: none;
+      z-index: 100;
+    }}
+    .note-bubble {{
+      background: #F0FDF4;
+      border-left: 3px solid var(--primary);
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-top: 10px;
+      font-size: 0.88rem;
+    }}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <span>🥗 VitalPath Coach</span>
+    </div>
+    <div id="clientBadge" class="badge-client">Loading client...</div>
+  </div>
+
+  <div class="container">
+    <div id="errorBanner" class="card" style="display:none; border-color:#FCA5A5; background:#FEF2F2; color:#991B1B;">
+      <h2>⚠️ Access Denied</h2>
+      <p id="errorText">This coach link is invalid or has been disabled by the client.</p>
+    </div>
+
+    <div id="portalContent" style="display:none;">
+      <!-- Send Feedback Note Card -->
+      <div class="card">
+        <h2>💬 Send Feedback to Client</h2>
+        <div class="feedback-form">
+          <textarea id="noteMessage" placeholder="Leave an encouraging note, dietary adjustment, or macro feedback..."></textarea>
+          <div class="form-row">
+            <input type="text" id="noteAuthor" placeholder="Coach Name" value="Coach" style="flex:1;">
+            <input type="date" id="noteDate" style="flex:1;">
+            <button class="btn-send" id="sendBtn" onclick="submitCoachNote()">Send Note</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Client Target Goals Card -->
+      <div class="card">
+        <h2>🎯 Client Daily Macro Targets</h2>
+        <div class="targets-grid" id="goalsGrid">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <!-- Past 14 Days History -->
+      <h2 style="font-size:1.1rem; font-weight:700; margin: 24px 0 12px 4px;">📅 Past 14 Days Diary</h2>
+      <div id="daysList">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Feedback note sent to client!</div>
+
+  <script>
+    const TOKEN = "{clean_token}";
+    document.getElementById("noteDate").value = new Date().toISOString().slice(0, 10);
+
+    async function loadCoachView() {{
+      try {{
+        const res = await fetch("/api/nourish/coach/view/" + TOKEN);
+        const data = await res.json();
+        if (!res.ok || !data.ok) {{
+          document.getElementById("errorBanner").style.display = "block";
+          if (data.error) document.getElementById("errorText").textContent = data.error;
+          return;
+        }}
+
+        document.getElementById("portalContent").style.display = "block";
+        document.getElementById("clientBadge").textContent = "Client: " + (data.client?.alias || "Client");
+
+        // Render Goals
+        const g = data.goals || {{}};
+        document.getElementById("goalsGrid").innerHTML = `
+          <div class="target-pill"><div class="target-label">Calories</div><div class="target-val">${{Math.round(g.calories_target || 2000)}}</div></div>
+          <div class="target-pill"><div class="target-label">Protein</div><div class="target-val">${{Math.round(g.protein_target_g || 130)}}g</div></div>
+          <div class="target-pill"><div class="target-label">Carbs</div><div class="target-val">${{Math.round(g.carbs_target_g || 200)}}g</div></div>
+          <div class="target-pill"><div class="target-label">Fat</div><div class="target-val">${{Math.round(g.fat_target_g || 65)}}g</div></div>
+          <div class="target-pill"><div class="target-label">Water</div><div class="target-val">${{Math.round(g.water_target_ml || 2500)}}ml</div></div>
+        `;
+
+        // Render 14 Days
+        const container = document.getElementById("daysList");
+        container.innerHTML = "";
+        (data.days || []).forEach(day => {{
+          const t = day.totals || {{}};
+          const logsHtml = (day.logs || []).map(l => `
+            <div class="log-item">
+              <div><span class="slot-tag">${{l.meal_slot || 'Meal'}}</span><b>${{l.food_name}}</b> <span style="color:#64748B;">(${{l.quantity}} ${{l.unit || 'serving'}})</span></div>
+              <div><b>${{Math.round(l.calories || 0)}} kcal</b> <span style="color:#64748B; font-size:0.8rem;">P:${{Math.round(l.protein_g||0)}}g C:${{Math.round(l.carbs_g||0)}}g F:${{Math.round(l.fat_g||0)}}g</span></div>
+            </div>
+          `).join("");
+
+          const notesHtml = (day.notes || []).map(n => `
+            <div class="note-bubble">
+              <b>${{n.author_name || 'Coach'}}:</b> ${{n.message}}
+            </div>
+          `).join("");
+
+          const card = document.createElement("div");
+          card.className = "day-card";
+          card.innerHTML = `
+            <div class="day-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+              <div>
+                <div class="day-date">${{day.date}}</div>
+                <div class="day-macros">
+                  <span>🔥 ${{Math.round(t.calories || 0)}} kcal</span>
+                  <span>🍗 ${{Math.round(t.protein_g || 0)}}g P</span>
+                  <span>🍚 ${{Math.round(t.carbs_g || 0)}}g C</span>
+                  <span>🥑 ${{Math.round(t.fat_g || 0)}}g F</span>
+                  <span>💧 ${{t.water_ml || 0}}ml</span>
+                </div>
+              </div>
+              <span style="font-size:0.85rem; color:#64748B;">▼</span>
+            </div>
+            <div class="day-body" style="${{day.date === new Date().toISOString().slice(0, 10) ? '' : 'display:none;'}}">
+              ${{logsHtml || '<div style="color:#94A3B8; font-size:0.9rem;">No meals logged for this day.</div>'}}
+              ${{notesHtml ? '<div style="margin-top:12px;"><h4 style="font-size:0.85rem; color:#64748B;">Coach Notes:</h4>' + notesHtml + '</div>' : ''}}
+            </div>
+          `;
+          container.appendChild(card);
+        }});
+      }} catch (err) {{
+        document.getElementById("errorBanner").style.display = "block";
+        document.getElementById("errorText").textContent = "Network error loading client data.";
+      }}
+    }}
+
+    async function submitCoachNote() {{
+      const msg = document.getElementById("noteMessage").value.trim();
+      if (!msg) return alert("Please enter a feedback message.");
+      const author = document.getElementById("noteAuthor").value.trim() || "Coach";
+      const date = document.getElementById("noteDate").value;
+      const btn = document.getElementById("sendBtn");
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+
+      try {{
+        const res = await fetch("/api/nourish/coach/notes/" + TOKEN, {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ message: msg, author_name: author, log_date: date }}),
+        }});
+        const data = await res.json();
+        if (data.ok) {{
+          document.getElementById("noteMessage").value = "";
+          showToast("Feedback note sent to client!");
+          loadCoachView();
+        }} else {{
+          alert(data.error || "Failed to send note");
+        }}
+      }} catch (err) {{
+        alert("Failed to post note: " + err);
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = "Send Note";
+      }}
+    }}
+
+    function showToast(text) {{
+      const t = document.getElementById("toast");
+      t.textContent = text;
+      t.style.display = "block";
+      setTimeout(() => {{ t.style.display = "none"; }}, 3500);
+    }}
+
+    loadCoachView();
+  </script>
+</body>
+</html>
+"""
 
 
 @app.route("/logout")
