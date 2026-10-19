@@ -83,6 +83,7 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
     """Calls Gemini using the Lite model fallback cascade and parses JSON response."""
     key = _discover_gemini_key()
     if not key:
+        print("[NOURISH AI] Notice: No GEMINI_API_KEY found in environment or .env files. Skipping AI call.")
         return None
 
     import time
@@ -447,13 +448,27 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
             ]
             prompt = "Estimate per-100g nutrition and typical serving weight for these foods:\n" + json.dumps(batch_payload, indent=2)
             parsed = _call_gemini_json(system_instruction, prompt, temperature=0.2)
+            if isinstance(parsed, dict):
+                for wrapper_key in ["foods", "items", "results", "data", "nutrition"]:
+                    if isinstance(parsed.get(wrapper_key), list):
+                        parsed = parsed[wrapper_key]
+                        break
+                else:
+                    if parsed.get("calories_per_100g") is not None or parsed.get("normalized_name"):
+                        parsed = [parsed]
+
             if isinstance(parsed, list):
+                if len(chunk_norms) == 1 and len(parsed) >= 1 and isinstance(parsed[0], dict):
+                    ai_by_norm[chunk_norms[0]] = parsed[0]
+
                 for entry in parsed:
                     if not isinstance(entry, dict):
                         continue
                     enorm = normalize_food_name(entry.get("normalized_name") or entry.get("food_name") or "")
                     if enorm:
                         ai_by_norm[enorm] = entry
+            elif parsed is not None:
+                print(f"[NOURISH AI] Warning: Gemini response could not be parsed as a list of food items: {type(parsed)}")
 
         catalog_id_by_norm = {}
         cataloged_count = 0
