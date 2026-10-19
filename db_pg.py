@@ -370,6 +370,9 @@ def init_db(db=None):
         _safe_exec("ALTER TABLE still_good_items ADD COLUMN IF NOT EXISTS remind_cadence VARCHAR(16) DEFAULT 'daily'")
         _safe_exec("CREATE INDEX IF NOT EXISTS idx_still_good_ai_pending ON still_good_items(status, ai_estimated)")
         _safe_exec("CREATE INDEX IF NOT EXISTS idx_still_good_snooze ON still_good_items(household_id, snooze_until)")
+        _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS nourish_enabled BOOLEAN NOT NULL DEFAULT FALSE")
+        _safe_exec("ALTER TABLE nourish_food_logs ADD COLUMN IF NOT EXISTS is_shared_household BOOLEAN NOT NULL DEFAULT FALSE")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_nourish_logs_shared ON nourish_food_logs(household_id, log_date, meal_slot) WHERE is_shared_household = TRUE")
 
         try:
             db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS still_good_stashed_at TIMESTAMP")
