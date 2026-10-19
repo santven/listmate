@@ -1918,11 +1918,21 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             res_day_read = self.client.get("/api/nourish/day?date=2026-10-19")
             self.assertIsNone(res_day_read.get_json()["unread_coach_note"])
 
-            # 6. Verify Web portal route GET /coach/<token> renders mobile-friendly HTML
-            res_portal = self.client.get(f"/coach/{token}")
-            self.assertEqual(res_portal.status_code, 200)
-            self.assertIn("VitalPath Coach Portal", res_portal.get_data(as_text=True))
-            self.assertIn(token, res_portal.get_data(as_text=True))
+            # 6. Verify Web portal routes render mobile-friendly HTML (Issue #694 & #698)
+            for portal_path in [
+                f"/coach/{token}",
+                f"/coach?token={token}",
+                f"/nourish/coach/{token}",
+                f"/nourish/coach?token={token}",
+            ]:
+                res_portal = self.client.get(portal_path)
+                self.assertEqual(res_portal.status_code, 200, f"Expected 200 for {portal_path}")
+                self.assertIn("VitalPath Coach Portal", res_portal.get_data(as_text=True))
+                self.assertIn(token, res_portal.get_data(as_text=True))
+
+            # Missing token returns 404
+            res_no_tok = self.client.get("/coach")
+            self.assertEqual(res_no_tok.status_code, 404)
 
             # 7. Disabling coach link revokes access
             self.client.post("/api/nourish/coach/link", json={"enabled": False})
