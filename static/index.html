@@ -1232,8 +1232,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <div class="header">
   <div class="app-switcher-wrap">
     <div id="appSwitcherBtn" class="app-switcher-btn" onclick="toggleAppSwitcherMenu(event)" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAppSwitcherMenu(event);}" title="Switch Suite App (ListMate | Still Good | Nourish)" aria-label="Switch Suite App">
-      <img src="/icon-192.png" id="cartIcon" style="width:36px;height:36px;min-width:36px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo">
-      <h1 id="headerTitle" style="margin-left:2px;">Grocery List</h1>
+      <img src="/icon-192.png" id="cartIcon" style="width:36px;height:36px;min-width:36px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate">
+      <div id="appSwitcherSgIcon" aria-hidden="true" style="display:none; width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #059669, #10b981); align-items:center; justify-content:center; font-size:19px; box-shadow:0 1px 3px rgba(0,0,0,0.18); flex-shrink:0;">🥗</div>
+      <img src="/static/nourish-icon.png" id="appSwitcherNourishIcon" alt="Nourish" style="display:none; width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.18); flex-shrink:0;">
+      <h1 id="headerTitle" style="position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;">Grocery List</h1>
       <span id="appSwitcherChevron" style="font-size:12px; opacity:0.85; margin-left:4px;">▾</span>
       <span id="appSwitcherUrgentDot" style="display:none; width:9px; height:9px; border-radius:50%; background:#ef4444; border:1.5px solid #fff; position:absolute; top:4px; left:30px; box-shadow:0 1px 3px rgba(0,0,0,0.25);"></span>
     </div>
@@ -1262,7 +1264,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <span class="app-switch-check" id="appSwitchCheckStillGood">✓</span>
       </button>
       <button type="button" id="appSwitchItemNourish" class="app-switch-item" onclick="selectSuiteApp('nourish')" role="menuitem">
-        <div style="width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #4d7c0f, #16a34a); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 2px 6px rgba(22,163,74,0.25); flex-shrink:0;">🍎</div>
+        <img src="/static/nourish-icon.png" alt="Nourish" style="width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 2px 6px rgba(22,163,74,0.25); flex-shrink:0;">
         <div style="flex:1; min-width:0;">
           <div style="display:flex; align-items:center; font-size:14px; font-weight:700; color:var(--text);">
             <span>🍎 Nourish</span>
@@ -2198,6 +2200,15 @@ function updateAppSwitcherActiveState(screenName) {
   if (homeItem) homeItem.classList.toggle('active', screenName === 'home' || screenName === 'catalog');
   if (sgItem) sgItem.classList.toggle('active', screenName === 'stillGood');
   if (nourishItem) nourishItem.classList.toggle('active', screenName === 'nourish');
+
+  var lmLogo = document.getElementById('cartIcon');
+  var sgLogo = document.getElementById('appSwitcherSgIcon');
+  var nLogo = document.getElementById('appSwitcherNourishIcon');
+  var isSg = screenName === 'stillGood';
+  var isN = screenName === 'nourish';
+  if (lmLogo) lmLogo.style.display = (isSg || isN) ? 'none' : 'block';
+  if (sgLogo) sgLogo.style.display = isSg ? 'flex' : 'none';
+  if (nLogo) nLogo.style.display = isN ? 'block' : 'none';
 }
 window.updateAppSwitcherActiveState = updateAppSwitcherActiveState;
 
@@ -6082,6 +6093,22 @@ function attachSgSwipe(itemId) {
 }
 
 function fireStillGoodConfetti(targetEl) {
+  var c = window.confetti;
+  if (c && typeof c.create === 'function') {
+    if (!window._mainConfetti) {
+      try {
+        window._mainConfetti = c.create(null, { resize: true, useWorker: false });
+      } catch (e) {
+        window._mainConfetti = c;
+      }
+    }
+    c = window._mainConfetti;
+  }
+
+  if (!c || typeof c !== 'function') {
+    return;
+  }
+
   var originX = 0.5;
   var originY = 0.55;
   if (targetEl && targetEl.getBoundingClientRect) {
@@ -6105,9 +6132,7 @@ function fireStillGoodConfetti(targetEl) {
   };
 
   try {
-    if (typeof window.confetti === 'function') {
-      window.confetti(opts1);
-    }
+    c(opts1);
   } catch (e) {}
 
   setTimeout(function() {
@@ -6124,9 +6149,7 @@ function fireStillGoodConfetti(targetEl) {
       colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24', '#f59e0b']
     };
     try {
-      if (typeof window.confetti === 'function') {
-        window.confetti(opts2);
-      }
+      c(opts2);
     } catch (e) {}
   }, 120);
 }
