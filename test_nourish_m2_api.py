@@ -1,0 +1,889 @@
+#!/usr/bin/env python3
+"""
+Unit tests for Nourish Milestone 2 (Issue #673):
+- Core Backend API (`/api/nourish/*`)
+- Strict `user_id` privacy isolation within a shared `household_id`
+- Household Premium entitlement gating & read-only guard
+- 4-Tier Food Lookup & 4-Unit Scaling (`g`, `oz`, `ml`, `serving`)
+- Hourly Cron Gemini Batch Enrichment (`nourish_ai.enrich_pending_nourish_logs_batch` & `scripts/cron_hourly.py`)
+"""
+
+import datetime
+import json
+import os
+import re
+import sys
+import unittest
+from unittest.mock import MagicMock, patch
+
+# Defensive mocking of external C-extensions if missing locally
+for mod in [
+    "google",
+    "google.oauth2",
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.exceptions",
+    "psycopg2",
+    "psycopg2.extras",
+    "psycopg2.pool",
+    "requests",
+]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+
+if "flask_limiter" not in sys.modules:
+    mock_limiter = MagicMock()
+    mock_limiter.Limiter.return_value.limit.return_value = lambda f: f
+    sys.modules["flask_limiter"] = mock_limiter
+    sys.modules["flask_limiter.util"] = MagicMock()
+
+os.environ["DATABASE_URL"] = os.environ.get("DATABASE_URL", "postgresql://dummy:5432/test")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import app as app_module
+import nourish_ai
+import scripts.cron_hourly as cron_hourly
+from seed_nourish import normalize_food_name
+
+
+class InMemoryNourishDB:
+    """Stateful in-memory PostgreSQL emulator for Nourish M2 tables."""
+
+    def __init__(self):
+        self.catalog = {}  # id -> dict
+        self.recipes = {}  # id -> dict
+        self.logs = {}     # id -> dict
+        self.goals = {}    # user_id -> dict
+        self.biometrics = {}  # (user_id, log_date) -> dict
+        self._next_cat_id = 1
+        self._next_rec_id = 1
+        self._next_log_id = 1
+        self._next_bio_id = 1
+        self._result_rows = []
+        self.rowcount = 0
+        self.committed = False
+
+        # Seed a sample public catalog item (Chicken Breast Cooked) and Banana
+        self.insert_catalog({
+            "name": "Chicken Breast (Cooked)",
+            "normalized_name": "chicken breast (cooked)",
+            "brand": "",
+            "category": "Meat & Poultry",
+            "source": "curated",
+            "is_public": True,
+            "household_id": None,
+            "calories_per_100g": 165.0,
+            "protein_per_100g": 31.0,
+            "carbs_per_100g": 0.0,
+            "fat_per_100g": 3.6,
+            "fiber_per_100g": 0.0,
+            "sugar_per_100g": 0.0,
+            "sodium_mg_per_100g": 74.0,
+            "serving_label": "1 breast (150g)",
+            "serving_weight_g": 150.0,
+            "is_liquid": False,
+            "prep_state": "cooked",
+            "ai_verified": True,
+            "usage_count": 0,
+        })
+        self.insert_catalog({
+            "name": "Banana",
+            "normalized_name": "banana",
+            "brand": "",
+            "category": "Fruits",
+            "source": "curated",
+            "is_public": True,
+            "household_id": None,
+            "calories_per_100g": 89.0,
+            "protein_per_100g": 1.1,
+            "carbs_per_100g": 22.8,
+            "fat_per_100g": 0.3,
+            "fiber_per_100g": 2.6,
+            "sugar_per_100g": 12.2,
+            "sodium_mg_per_100g": 1.0,
+            "serving_label": "1 medium (118g)",
+            "serving_weight_g": 118.0,
+            "is_liquid": False,
+            "prep_state": "as_is",
+            "ai_verified": True,
+            "usage_count": 5,
+        })
+        # Seed a sample public recipe
+        self.insert_recipe({
+            "household_id": None,
+            "created_by_user_id": None,
+            "linked_recipe_id": None,
+            "name": "General Koottu",
+            "servings": 4.0,
+            "total_cooked_weight_g": 800.0,
+            "total_volume_ml": 760.0,
+            "density_g_per_ml": 1.05,
+            "serving_weight_g": 200.0,
+            "raw_ingredients_text": "200g snake gourd, 100g cooked moong dal",
+            "ingredients_json": [{"name": "Moong Dal", "quantity_g": 200}],
+            "calories_per_serving": 220.0,
+            "protein_per_serving": 10.0,
+            "carbs_per_serving": 30.0,
+            "fat_per_serving": 6.0,
+            "fiber_per_serving": 5.0,
+            "sugar_per_serving": 2.0,
+            "sodium_mg_per_serving": 240.0,
+            "calories_per_100g": 110.0,
+            "protein_per_100g": 5.0,
+            "carbs_per_100g": 15.0,
+            "fat_per_100g": 3.0,
+            "fiber_per_100g": 2.5,
+            "ai_notes": "Seeded recipe",
+            "is_public": True,
+        })
+
+    def insert_catalog(self, item):
+        cid = self._next_cat_id
+        self._next_cat_id += 1
+        row = {"id": cid, "usage_count": 0, **item}
+        self.catalog[cid] = row
+        return row
+
+    def insert_recipe(self, rec):
+        rid = self._next_rec_id
+        self._next_rec_id += 1
+        row = {"id": rid, **rec}
+        self.recipes[rid] = row
+        return row
+
+    def execute(self, sql, params=None):
+        norm = re.sub(r"\s+", " ", sql.strip())
+        params = tuple(params or ())
+        self._result_rows = []
+        self.rowcount = 0
+
+        # 1. Pending AI logs query in nourish_ai.py
+        if "FROM nourish_food_logs WHERE ai_enrich_status = 'pending'" in norm:
+            limit = int(params[0]) if params else 50
+            pending = [
+                dict(r) for r in sorted(self.logs.values(), key=lambda x: x["id"])
+                if r.get("ai_enrich_status") == "pending"
+            ][:limit]
+            self._result_rows = pending
+            self.rowcount = len(pending)
+            return self
+
+        # 2. Daily food logs query in GET /api/nourish/day
+        if "SELECT * FROM nourish_food_logs WHERE user_id = ? AND log_date = ?::date" in norm:
+            uid, d_str = int(params[0]), str(params[1])[:10]
+            matched = [
+                dict(r) for r in sorted(self.logs.values(), key=lambda x: x["id"])
+                if int(r["user_id"]) == uid and str(r["log_date"])[:10] == d_str
+            ]
+            self._result_rows = matched
+            self.rowcount = len(matched)
+            return self
+
+        # 3. Single food log lookup by id AND user_id
+        if "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ?" in norm:
+            lid, uid = int(params[0]), int(params[1])
+            row = self.logs.get(lid)
+            if row and int(row["user_id"]) == uid:
+                self._result_rows = [dict(row)]
+                self.rowcount = 1
+            return self
+
+        # 4. DELETE food log by id AND user_id
+        if "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ?" in norm:
+            lid, uid = int(params[0]), int(params[1])
+            row = self.logs.get(lid)
+            if row and int(row["user_id"]) == uid:
+                del self.logs[lid]
+                self._result_rows = [{"id": lid}]
+                self.rowcount = 1
+            return self
+
+        # 5. INSERT INTO nourish_food_logs
+        if "INSERT INTO nourish_food_logs" in norm:
+            lid = self._next_log_id
+            self._next_log_id += 1
+            row = {
+                "id": lid,
+                "user_id": int(params[0]),
+                "household_id": int(params[1]),
+                "log_date": str(params[2])[:10],
+                "meal_slot": params[3],
+                "food_name": params[4],
+                "catalog_id": params[5],
+                "nourish_recipe_id": params[6],
+                "still_good_item_id": params[7],
+                "quantity": float(params[8]),
+                "unit": params[9],
+                "gram_weight": float(params[10]),
+                "calories": float(params[11]),
+                "protein_g": float(params[12]),
+                "carbs_g": float(params[13]),
+                "fat_g": float(params[14]),
+                "fiber_g": float(params[15]),
+                "sugar_g": float(params[16]),
+                "sodium_mg": float(params[17]),
+                "ai_enrich_status": params[18],
+                "notes": params[19],
+            }
+            self.logs[lid] = row
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
+        # 6. UPDATE nourish_food_logs from cron batch enrichment
+        if "UPDATE nourish_food_logs" in norm and "ai_enrich_status = 'complete'" in norm and "WHERE id = ?" in norm:
+            lid = int(params[9])
+            row = self.logs.get(lid)
+            if row:
+                row["calories"] = float(params[0])
+                row["protein_g"] = float(params[1])
+                row["carbs_g"] = float(params[2])
+                row["fat_g"] = float(params[3])
+                row["fiber_g"] = float(params[4])
+                row["sugar_g"] = float(params[5])
+                row["sodium_mg"] = float(params[6])
+                row["gram_weight"] = float(params[7])
+                if params[8] is not None:
+                    row["catalog_id"] = int(params[8])
+                row["ai_enrich_status"] = "complete"
+                self.rowcount = 1
+            return self
+
+        # 7. UPDATE nourish_food_logs from PUT /api/nourish/logs/<id>
+        if "UPDATE nourish_food_logs" in norm and "WHERE id = ? AND user_id = ?" in norm:
+            lid, uid = int(params[14]), int(params[15])
+            row = self.logs.get(lid)
+            if row and int(row["user_id"]) == uid:
+                row["food_name"] = params[0]
+                row["meal_slot"] = params[1]
+                row["quantity"] = float(params[2])
+                row["unit"] = params[3]
+                row["gram_weight"] = float(params[4])
+                row["calories"] = float(params[5])
+                row["protein_g"] = float(params[6])
+                row["carbs_g"] = float(params[7])
+                row["fat_g"] = float(params[8])
+                row["fiber_g"] = float(params[9])
+                row["sugar_g"] = float(params[10])
+                row["sodium_mg"] = float(params[11])
+                row["ai_enrich_status"] = params[12]
+                row["notes"] = params[13]
+                self._result_rows = [dict(row)]
+                self.rowcount = 1
+            return self
+
+        # 8. Catalog lookup by id
+        if "SELECT * FROM nourish_food_catalog WHERE id = ?" in norm:
+            cid, hhid = int(params[0]), int(params[1])
+            row = self.catalog.get(cid)
+            if row and (row.get("is_public") or row.get("household_id") == hhid):
+                self._result_rows = [dict(row)]
+                self.rowcount = 1
+            return self
+
+        # 9. Catalog lookup by normalized_name
+        if "SELECT * FROM nourish_food_catalog WHERE normalized_name = ?" in norm:
+            norm_name, hhid = params[0], int(params[1])
+            matches = [
+                dict(c) for c in self.catalog.values()
+                if c.get("normalized_name") == norm_name and (c.get("is_public") or c.get("household_id") == hhid)
+            ]
+            matches.sort(key=lambda c: (0 if c.get("household_id") == hhid else 1, c["id"]))
+            if matches:
+                self._result_rows = [matches[0]]
+                self.rowcount = 1
+            return self
+
+        # 10. Catalog search
+        if "SELECT * FROM nourish_food_catalog WHERE (is_public = TRUE OR household_id = ?)" in norm:
+            hhid = int(params[0])
+            q = str(params[3])
+            matches = [
+                dict(c) for c in self.catalog.values()
+                if (c.get("is_public") or c.get("household_id") == hhid)
+                and (q in c.get("normalized_name", "") or q in c.get("name", "").lower())
+            ]
+            self._result_rows = matches
+            self.rowcount = len(matches)
+            return self
+
+        if "SELECT * FROM nourish_food_catalog WHERE is_public = TRUE OR household_id = ?" in norm:
+            hhid = int(params[0])
+            matches = [
+                dict(c) for c in self.catalog.values()
+                if c.get("is_public") or c.get("household_id") == hhid
+            ]
+            self._result_rows = matches
+            self.rowcount = len(matches)
+            return self
+
+        # 11. Catalog usage_count increment
+        if "UPDATE nourish_food_catalog SET usage_count" in norm:
+            cid = int(params[0])
+            if cid in self.catalog:
+                self.catalog[cid]["usage_count"] = int(self.catalog[cid].get("usage_count") or 0) + 1
+                self.rowcount = 1
+            return self
+
+        # 12. Catalog upsert (AI enrichment or external API cache)
+        if "INSERT INTO nourish_food_catalog" in norm:
+            norm_name = params[1]
+            existing_cat = next(
+                (c for c in self.catalog.values() if c.get("is_public") and c.get("normalized_name") == norm_name),
+                None,
+            )
+            if "ai_enriched" in norm:
+                # From enrich_pending_nourish_logs_batch
+                payload = {
+                    "name": params[0],
+                    "normalized_name": params[1],
+                    "brand": "",
+                    "category": params[2],
+                    "source": "ai_enriched",
+                    "is_public": True,
+                    "household_id": None,
+                    "calories_per_100g": float(params[3]),
+                    "protein_per_100g": float(params[4]),
+                    "carbs_per_100g": float(params[5]),
+                    "fat_per_100g": float(params[6]),
+                    "fiber_per_100g": float(params[7]),
+                    "sugar_per_100g": float(params[8]),
+                    "sodium_mg_per_100g": float(params[9]),
+                    "serving_label": params[10],
+                    "serving_weight_g": float(params[11]),
+                    "is_liquid": bool(params[12]),
+                    "prep_state": params[13],
+                    "ai_verified": True,
+                }
+            else:
+                # From search_public_nutrition_apis cache
+                payload = {
+                    "name": params[0],
+                    "normalized_name": params[1],
+                    "brand": params[2],
+                    "category": params[3],
+                    "source": params[4],
+                    "is_public": True,
+                    "household_id": None,
+                    "calories_per_100g": float(params[5]),
+                    "protein_per_100g": float(params[6]),
+                    "carbs_per_100g": float(params[7]),
+                    "fat_per_100g": float(params[8]),
+                    "fiber_per_100g": float(params[9]),
+                    "sugar_per_100g": float(params[10]),
+                    "sodium_mg_per_100g": float(params[11]),
+                    "serving_label": params[12],
+                    "serving_weight_g": float(params[13]),
+                    "is_liquid": False,
+                    "prep_state": "as_is",
+                    "ai_verified": True,
+                }
+            if existing_cat:
+                existing_cat.update(payload)
+                row = existing_cat
+            else:
+                row = self.insert_catalog(payload)
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
+        # 13. Recipe lookup by id
+        if "SELECT * FROM nourish_recipes WHERE id = ?" in norm:
+            rid, hhid = int(params[0]), int(params[1])
+            row = self.recipes.get(rid)
+            if row and (row.get("is_public") or row.get("household_id") == hhid):
+                self._result_rows = [dict(row)]
+                self.rowcount = 1
+            return self
+
+        # 14. Recipe list/search
+        if "SELECT * FROM nourish_recipes WHERE household_id = ? OR is_public = TRUE" in norm:
+            hhid = int(params[0])
+            matches = [
+                dict(r) for r in self.recipes.values()
+                if r.get("is_public") or r.get("household_id") == hhid
+            ]
+            self._result_rows = matches
+            self.rowcount = len(matches)
+            return self
+
+        if "SELECT * FROM nourish_recipes WHERE (household_id = ? OR is_public = TRUE)" in norm:
+            hhid = int(params[0])
+            pat = str(params[1]).strip("%").lower()
+            matches = [
+                dict(r) for r in self.recipes.values()
+                if (r.get("is_public") or r.get("household_id") == hhid) and pat in r.get("name", "").lower()
+            ]
+            self._result_rows = matches
+            self.rowcount = len(matches)
+            return self
+
+        if "INSERT INTO nourish_recipes" in norm:
+            row = self.insert_recipe({
+                "household_id": int(params[0]),
+                "created_by_user_id": int(params[1]),
+                "linked_recipe_id": params[2],
+                "name": params[3],
+                "servings": float(params[4]),
+                "total_cooked_weight_g": float(params[5]),
+                "total_volume_ml": float(params[6]),
+                "density_g_per_ml": float(params[7]),
+                "serving_weight_g": float(params[8]),
+                "raw_ingredients_text": params[9],
+                "ingredients_json": json.loads(params[10]) if isinstance(params[10], str) else params[10],
+                "calories_per_serving": float(params[11]),
+                "protein_per_serving": float(params[12]),
+                "carbs_per_serving": float(params[13]),
+                "fat_per_serving": float(params[14]),
+                "fiber_per_serving": float(params[15]),
+                "sugar_per_serving": float(params[16]),
+                "sodium_mg_per_serving": float(params[17]),
+                "calories_per_100g": float(params[18]),
+                "protein_per_100g": float(params[19]),
+                "carbs_per_100g": float(params[20]),
+                "fat_per_100g": float(params[21]),
+                "fiber_per_100g": float(params[22]),
+                "ai_notes": params[23],
+                "is_public": False,
+            })
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
+        # 15. User goals
+        if "SELECT * FROM nourish_user_goals WHERE user_id = ?" in norm:
+            uid = int(params[0])
+            if uid in self.goals:
+                self._result_rows = [dict(self.goals[uid])]
+                self.rowcount = 1
+            return self
+
+        # 16. Daily biometrics
+        if "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date" in norm:
+            uid, d_str = int(params[0]), str(params[1])[:10]
+            key = (uid, d_str)
+            if key in self.biometrics:
+                self._result_rows = [dict(self.biometrics[key])]
+                self.rowcount = 1
+            return self
+
+        if "INSERT INTO nourish_daily_biometrics" in norm:
+            uid, d_str = int(params[0]), str(params[1])[:10]
+            key = (uid, d_str)
+            bio_id = self.biometrics[key]["id"] if key in self.biometrics else self._next_bio_id
+            if key not in self.biometrics:
+                self._next_bio_id += 1
+            row = {
+                "id": bio_id,
+                "user_id": uid,
+                "log_date": d_str,
+                "water_ml": int(params[2]),
+                "weight_kg": float(params[3]) if params[3] is not None else None,
+                "notes": params[4],
+            }
+            self.biometrics[key] = row
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
+        return self
+
+    def fetchall(self):
+        return list(self._result_rows)
+
+    def fetchone(self):
+        return self._result_rows[0] if self._result_rows else None
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class TestNourishM2APIAndCron(unittest.TestCase):
+    def setUp(self):
+        app_module.app.config["TESTING"] = True
+        self.client = app_module.app.test_client()
+        self.fake_db = InMemoryNourishDB()
+
+    def _context_patches(self, user_id=10, household_id=1, subscription_status="premium", is_premium=True, trial_ends_at=None, is_read_only=False):
+        """Context manager mocking auth, household entitlement, and DB."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def _ctx():
+            with self.client.session_transaction() as sess:
+                sess["listmate_session"] = {
+                    "user_id": user_id,
+                    "household_id": household_id,
+                    "email": f"user{user_id}@example.com",
+                }
+            hh_row = {
+                "id": household_id,
+                "is_premium": is_premium,
+                "subscription_status": subscription_status,
+                "trial_ends_at": trial_ends_at,
+            }
+            with contextlib.ExitStack() as stack:
+                for p in (
+                    patch("shared.auth._reconcile_session", side_effect=lambda s: s),
+                    patch("app.get_db", return_value=self.fake_db),
+                    patch("app._ensure_schema"),
+                    patch("shared.auth.get_user_id", return_value=user_id),
+                    patch("shared.auth.get_household_id", return_value=household_id),
+                    patch("app.get_household_id", return_value=household_id),
+                    patch("shared.auth._one", return_value=hh_row if household_id else None),
+                    patch("shared.auth.get_household_status", return_value={"is_read_only": is_read_only}),
+                ):
+                    stack.enter_context(p)
+                yield
+
+        return _ctx()
+
+    def test_1_strict_user_id_privacy_isolation_within_same_household(self):
+        """
+        User A (id=10, hh=1) and User B (id=11, hh=1) are in the SAME household.
+        User A logs food and biometrics; User B calling GET /api/nourish/day sees 0 of User A's
+        food logs or weight/water, and User B cannot PUT or DELETE User A's log (404).
+        """
+        today_str = "2026-10-19"
+
+        # Step 1: User A (id=10, hh=1) logs food and biometrics
+        with self._context_patches(user_id=10, household_id=1):
+            resp_log = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": today_str,
+                    "meal_slot": "Lunch",
+                    "food_name": "Chicken Breast (Cooked)",
+                    "quantity": 200,
+                    "unit": "g",
+                },
+            )
+            self.assertEqual(resp_log.status_code, 200)
+            data_log = resp_log.get_json()
+            self.assertTrue(data_log["ok"])
+            user_a_log_id = data_log["log"]["id"]
+            self.assertEqual(data_log["log"]["user_id"], 10)
+            self.assertAlmostEqual(data_log["log"]["calories"], 330.0)
+
+            resp_bio = self.client.post(
+                "/api/nourish/biometrics",
+                json={
+                    "log_date": today_str,
+                    "water_ml": 1750,
+                    "weight_kg": 72.4,
+                },
+            )
+            self.assertEqual(resp_bio.status_code, 200)
+            self.assertEqual(resp_bio.get_json()["biometrics"]["water_ml"], 1750)
+            self.assertAlmostEqual(resp_bio.get_json()["biometrics"]["weight_kg"], 72.4)
+
+            # Verify User A sees their own data on GET /api/nourish/day
+            resp_day_a = self.client.get(f"/api/nourish/day?date={today_str}")
+            self.assertEqual(resp_day_a.status_code, 200)
+            day_a = resp_day_a.get_json()
+            self.assertEqual(len(day_a["logs"]), 1)
+            self.assertAlmostEqual(day_a["totals"]["calories"], 330.0)
+            self.assertEqual(day_a["biometrics"]["water_ml"], 1750)
+            self.assertAlmostEqual(day_a["biometrics"]["weight_kg"], 72.4)
+
+        # Step 2: User B (id=11, hh=1 — SAME household!) queries GET /api/nourish/day
+        with self._context_patches(user_id=11, household_id=1):
+            resp_day_b = self.client.get(f"/api/nourish/day?date={today_str}")
+            self.assertEqual(resp_day_b.status_code, 200)
+            day_b = resp_day_b.get_json()
+            self.assertEqual(day_b["user_id"], 11)
+            self.assertEqual(day_b["household_id"], 1)
+            # User B sees 0 of User A's logs and 0 of User A's biometrics
+            self.assertEqual(len(day_b["logs"]), 0)
+            self.assertEqual(day_b["totals"]["calories"], 0.0)
+            self.assertEqual(day_b["biometrics"]["water_ml"], 0)
+            self.assertIsNone(day_b["biometrics"]["weight_kg"])
+            # Shared/public recipes are still visible to User B
+            self.assertGreaterEqual(len(day_b["recipes"]), 1)
+
+            # User B cannot PUT User A's food log -> 404
+            resp_put_b = self.client.put(
+                f"/api/nourish/logs/{user_a_log_id}",
+                json={"quantity": 500, "unit": "g"},
+            )
+            self.assertEqual(resp_put_b.status_code, 404)
+
+            # User B cannot DELETE User A's food log -> 404
+            resp_del_b = self.client.delete(f"/api/nourish/logs/{user_a_log_id}")
+            self.assertEqual(resp_del_b.status_code, 404)
+
+        # Verify User A's log is still intact at 200g / 330 kcal
+        self.assertIn(user_a_log_id, self.fake_db.logs)
+        self.assertAlmostEqual(self.fake_db.logs[user_a_log_id]["calories"], 330.0)
+
+    def test_2_household_entitlement_gating_and_read_only_guard(self):
+        """
+        Free-tier and expired households receive 403 with paywall_required: True;
+        trial, premium, active, and lifetime households succeed (200).
+        """
+        # Free household -> 403 paywall_required: True
+        with self._context_patches(
+            user_id=10, household_id=1, subscription_status="free", is_premium=False
+        ):
+            resp = self.client.get("/api/nourish/day")
+            self.assertEqual(resp.status_code, 403)
+            body = resp.get_json()
+            self.assertFalse(body["ok"])
+            self.assertTrue(body["paywall_required"])
+
+        # Expired trial household -> 403 paywall_required: True
+        past_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)).isoformat()
+        with self._context_patches(
+            user_id=10, household_id=1, subscription_status="trial", is_premium=False, trial_ends_at=past_date
+        ):
+            resp = self.client.get("/api/nourish/day")
+            self.assertEqual(resp.status_code, 403)
+            self.assertTrue(resp.get_json()["paywall_required"])
+
+        # Active trial, premium, active, lifetime -> 200 OK
+        future_date = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=10)).isoformat()
+        for status, is_prem, t_end in [
+            ("trial", False, future_date),
+            ("premium", True, None),
+            ("active", True, None),
+            ("lifetime", True, None),
+        ]:
+            with self._context_patches(
+                user_id=10, household_id=1, subscription_status=status, is_premium=is_prem, trial_ends_at=t_end
+            ):
+                resp = self.client.get("/api/nourish/day")
+                self.assertEqual(resp.status_code, 200, f"Expected 200 for subscription_status={status}")
+                self.assertTrue(resp.get_json()["ok"])
+
+        # Falsiness rule: uid=0 or hhid=0 -> 401
+        with self._context_patches(user_id=0, household_id=1):
+            resp = self.client.get("/api/nourish/day")
+            self.assertEqual(resp.status_code, 401)
+
+        # Read-only household guard on POST /api/nourish/logs -> 403 read_only
+        with self._context_patches(
+            user_id=10, household_id=1, subscription_status="premium", is_premium=True, is_read_only=True
+        ):
+            resp = self.client.post("/api/nourish/logs", json={"food_name": "Banana", "quantity": 1, "unit": "serving"})
+            self.assertEqual(resp.status_code, 403)
+            self.assertEqual(resp.get_json().get("code"), "read_only")
+
+    def test_3_four_unit_scaling_on_post_and_put_logs(self):
+        """
+        Tests 4-unit scaling (`g`, `oz`, `ml`, `serving`) on POST /api/nourish/logs
+        and proportional rescaling on PUT /api/nourish/logs/<id>.
+        """
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Log Chicken Breast (165 kcal/100g, 31g protein/100g, serving_weight_g=150g) in 'serving'
+            resp = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "food_name": "Chicken Breast (Cooked)",
+                    "quantity": 2,
+                    "unit": "serving",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            log_item = resp.get_json()["log"]
+            log_id = log_item["id"]
+            self.assertEqual(log_item["ai_enrich_status"], "complete")
+            # 2 servings * 150g = 300g -> 3 * 165 = 495 kcal, 3 * 31 = 93g protein
+            self.assertAlmostEqual(log_item["gram_weight"], 300.0)
+            self.assertAlmostEqual(log_item["calories"], 495.0)
+            self.assertAlmostEqual(log_item["protein_g"], 93.0)
+
+            # 2. PUT to update unit to 'oz' and quantity to 4 oz (4 * 28.3495 = 113.4g)
+            resp_oz = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"quantity": 4, "unit": "oz"},
+            )
+            self.assertEqual(resp_oz.status_code, 200)
+            oz_log = resp_oz.get_json()["log"]
+            expected_gw = round(4 * 28.3495, 2)
+            self.assertAlmostEqual(oz_log["gram_weight"], expected_gw, places=1)
+            self.assertAlmostEqual(oz_log["calories"], round(165.0 * (4 * 28.3495) / 100.0, 2), places=1)
+
+            # 3. PUT to update unit to 'g' and quantity to 100g
+            resp_g = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"quantity": 100, "unit": "g"},
+            )
+            self.assertEqual(resp_g.status_code, 200)
+            g_log = resp_g.get_json()["log"]
+            self.assertAlmostEqual(g_log["gram_weight"], 100.0)
+            self.assertAlmostEqual(g_log["calories"], 165.0)
+            self.assertAlmostEqual(g_log["protein_g"], 31.0)
+
+            # 4. Log a recipe (General Koottu: 110 kcal/100g, density=1.05, serving_weight_g=200g) in 'ml'
+            resp_rec = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Lunch",
+                    "food_name": "General Koottu",
+                    "nourish_recipe_id": 1,
+                    "quantity": 200,
+                    "unit": "ml",
+                },
+            )
+            self.assertEqual(resp_rec.status_code, 200)
+            rec_log = resp_rec.get_json()["log"]
+            # 200 ml * 1.05 g/ml = 210g -> 2.1 * 110 = 231 kcal
+            self.assertAlmostEqual(rec_log["gram_weight"], 210.0)
+            self.assertAlmostEqual(rec_log["calories"], 231.0)
+
+    def test_4_pending_ai_enrichment_and_hourly_cron_sweep(self):
+        """
+        Unknown food logged at 0 kcal gets ai_enrich_status = 'pending'.
+        Running enrich_pending_nourish_logs_batch (and cron_hourly.run_hourly_jobs)
+        enriches the log entry, flips ai_enrich_status = 'complete', and caches the item
+        into nourish_food_catalog (is_public = TRUE).
+        """
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Log an unknown food with 0 calories
+            resp = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Breakfast",
+                    "food_name": "Homemade Ragi Mudde",
+                    "quantity": 2,
+                    "unit": "serving",
+                },
+            )
+            self.assertEqual(resp.status_code, 200)
+            pending_log = resp.get_json()["log"]
+            log_id = pending_log["id"]
+            self.assertEqual(pending_log["ai_enrich_status"], "pending")
+            self.assertEqual(pending_log["calories"], 0.0)
+
+            # 2. Verify dry_run=True reports candidates without mutating
+            dry_res = nourish_ai.enrich_pending_nourish_logs_batch(db=self.fake_db, dry_run=True)
+            self.assertEqual(dry_res["candidates"], 1)
+            self.assertEqual(dry_res["enriched"], 0)
+            self.assertEqual(self.fake_db.logs[log_id]["ai_enrich_status"], "pending")
+
+            # 3. Run cron_hourly.run_hourly_jobs with mocked Gemini response
+            fake_gemini_response = [
+                {
+                    "normalized_name": "homemade ragi mudde",
+                    "calories_per_100g": 128.0,
+                    "protein_per_100g": 3.4,
+                    "carbs_per_100g": 27.0,
+                    "fat_per_100g": 0.6,
+                    "fiber_per_100g": 3.8,
+                    "sugar_per_100g": 0.3,
+                    "sodium_mg_per_100g": 45.0,
+                    "serving_weight_g": 150.0,
+                    "serving_label": "1 ball (150g)",
+                    "category": "Grains & Starches",
+                }
+            ]
+            with patch("nourish_ai._call_gemini_json", return_value=fake_gemini_response), \
+                 patch("scripts.cron_hourly.check_trial_expiration_pushes", return_value={"ok": True}), \
+                 patch("scripts.cron_hourly.check_still_good_fridge_lunch_pushes", return_value={"ok": True}), \
+                 patch("scripts.cron_hourly.check_still_good_produce_expiry_pushes", return_value={"ok": True}), \
+                 patch("scripts.cron_hourly.check_still_good_freezer_expiry_pushes", return_value={"ok": True}), \
+                 patch("scripts.cron_hourly.check_store_plan_push_reminders", return_value={"ok": True}), \
+                 patch("scripts.cron_hourly.check_post_shopping_smart_stash_pushes", return_value={"ok": True}):
+                summary = cron_hourly.run_hourly_jobs(db=self.fake_db, dry_run=False)
+
+            self.assertIn("nourish_ai_enrichment", summary)
+            enrich_summary = summary["nourish_ai_enrichment"]
+            self.assertEqual(enrich_summary["candidates"], 1)
+            self.assertEqual(enrich_summary["enriched"], 1)
+            self.assertEqual(enrich_summary["cataloged"], 1)
+
+            # 4. Verify the log entry is now 'complete' with scaled macros (2 servings * 150g = 300g -> 3 * 128 = 384 kcal)
+            enriched_log = self.fake_db.logs[log_id]
+            self.assertEqual(enriched_log["ai_enrich_status"], "complete")
+            self.assertAlmostEqual(enriched_log["gram_weight"], 300.0)
+            self.assertAlmostEqual(enriched_log["calories"], 384.0)
+            self.assertAlmostEqual(enriched_log["protein_g"], 10.2)
+            self.assertIsNotNone(enriched_log["catalog_id"])
+
+            # 5. Verify the food was cached in nourish_food_catalog with is_public = TRUE
+            cached_cat = self.fake_db.catalog[enriched_log["catalog_id"]]
+            self.assertTrue(cached_cat["is_public"])
+            self.assertEqual(cached_cat["normalized_name"], "homemade ragi mudde")
+            self.assertEqual(cached_cat["source"], "ai_enriched")
+            self.assertAlmostEqual(cached_cat["calories_per_100g"], 128.0)
+
+            # 6. Verify subsequent log of "Homemade Ragi Mudde" resolves immediately from catalog!
+            resp_second = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "food_name": "Homemade Ragi Mudde",
+                    "quantity": 100,
+                    "unit": "g",
+                },
+            )
+            self.assertEqual(resp_second.status_code, 200)
+            second_log = resp_second.get_json()["log"]
+            self.assertEqual(second_log["ai_enrich_status"], "complete")
+            self.assertAlmostEqual(second_log["calories"], 128.0)
+
+    def test_5_catalog_search_meal_deconstructor_and_recipe_analyzer(self):
+        """
+        Tests GET /api/nourish/catalog/search, POST /api/nourish/analyze-meal,
+        and POST /api/nourish/recipes/analyze (including cooked vs raw rule).
+        """
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Catalog search
+            resp_search = self.client.get("/api/nourish/catalog/search?q=banana")
+            self.assertEqual(resp_search.status_code, 200)
+            s_data = resp_search.get_json()
+            self.assertTrue(s_data["ok"])
+            self.assertEqual(len(s_data["foods"]), 1)
+            self.assertEqual(s_data["foods"][0]["normalized_name"], "banana")
+
+            # 2. Meal deconstructor (heuristic fallback when no Gemini key)
+            with patch("nourish_ai._call_gemini_json", return_value=None):
+                resp_meal = self.client.post(
+                    "/api/nourish/analyze-meal",
+                    json={"text": "200g cooked white rice and 150g chicken breast"},
+                )
+                self.assertEqual(resp_meal.status_code, 200)
+                m_data = resp_meal.get_json()
+                self.assertTrue(m_data["ok"])
+                self.assertEqual(len(m_data["items"]), 2)
+                self.assertGreater(m_data["totals"]["calories"], 400.0)
+                # Cooked rice should be ~130-135 kcal/100g, NOT raw 360 kcal/100g
+                rice_item = m_data["items"][0]
+                self.assertLess(rice_item["calories_per_100g"], 180.0)
+
+            # 3. 5-baseline Recipe Analyzer with save=True
+            with patch("nourish_ai._call_gemini_json", return_value=None):
+                resp_rec = self.client.post(
+                    "/api/nourish/recipes/analyze",
+                    json={
+                        "name": "High Protein Dal Bowl",
+                        "servings": 2,
+                        "raw_ingredients_text": "200g cooked dal\n150g cooked white rice",
+                        "save": True,
+                    },
+                )
+                self.assertEqual(resp_rec.status_code, 200)
+                r_data = resp_rec.get_json()
+                self.assertTrue(r_data["ok"])
+                rec = r_data["recipe"]
+                self.assertEqual(rec["name"], "High Protein Dal Bowl")
+                self.assertEqual(rec["servings"], 2.0)
+                self.assertGreater(rec["total_cooked_weight_g"], 0)
+                self.assertGreater(rec["calories_per_serving"], 0)
+                self.assertGreater(rec["calories_per_100g"], 0)
+                self.assertIn("id", rec)
+
+
+if __name__ == "__main__":
+    unittest.main()
