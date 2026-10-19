@@ -11062,14 +11062,22 @@ async function analyzeNourishPlate() {
         var portionText = (fUnit === 'serving' || fUnit === 'servings')
           ? (formattedQty + (formattedQty === 1 ? ' serving' : ' servings'))
           : (formattedQty + (fUnit === 'g' ? 'g' : (' ' + fUnit)));
+        var isPending = it.ai_enrich_status === 'pending' || (cal === 0 && !it.catalog_id);
+        var calBadge = isPending
+          ? '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>'
+          : '<div style="font-weight:600; color:#1f2937;">' + Math.round(cal) + ' kcal</div>';
         html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
           '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span></div>' +
-          '<div style="font-weight:600; color:#1f2937;">' + Math.round(cal) + ' kcal</div>' +
+          calBadge +
         '</div>';
       });
+      var hasPending = res.items.some(function(i) { return i.ai_enrich_status === 'pending' || ((i.calories || 0) === 0 && !i.catalog_id); });
+      var totalText = hasPending
+        ? (totalCal > 0 ? (Math.round(totalCal) + ' kcal (+ AI estimating)') : '✨ AI Estimating · Check back in ~1 hr')
+        : (Math.round(totalCal) + ' kcal');
       html += '<div style="display:flex; justify-content:space-between; font-weight:700; font-size:13px; padding-top:8px; color:var(--green-dark);">' +
         '<span>Total Plate Estimate:</span>' +
-        '<span>' + Math.round(totalCal) + ' kcal</span>' +
+        '<span>' + totalText + '</span>' +
       '</div>' +
       '<button type="button" id="nourishBtnLogAllPlate" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
         '➕ Log All ' + res.items.length + ' Items to ' + slotTitle +
@@ -11297,8 +11305,8 @@ function renderNourishSlotSection(slot, items) {
       : '<span class="nourish-log-cals">' + Math.round(it.calories) + ' kcal</span>';
 
     var macroSub = isPending
-      ? '<span style="font-size:11px; color:#92400e; font-weight:500;">Nutrition available in ~1 hr</span>'
-      : '<span>P: ' + Math.round(it.protein_g || 0) + 'g</span> · <span>C: ' + Math.round(it.carbs_g || 0) + 'g</span> · <span>F: ' + Math.round(it.fat_g || 0) + 'g</span>';
+      ? ''
+      : ' · <span>P: ' + Math.round(it.protein_g || 0) + 'g</span> · <span>C: ' + Math.round(it.carbs_g || 0) + 'g</span> · <span>F: ' + Math.round(it.fat_g || 0) + 'g</span>';
 
     var fName = it.food_name || it.name || 'Food item';
     var rawQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
@@ -11317,7 +11325,7 @@ function renderNourishSlotSection(slot, items) {
       '<div style="flex:1; min-width:0;">' +
         '<div class="nourish-log-name">' + escapeHtml(fName) + '</div>' +
         '<div class="nourish-log-sub">' +
-          '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span> · ' +
+          '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
           macroSub +
         '</div>' +
       '</div>' +

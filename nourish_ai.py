@@ -80,7 +80,7 @@ def _get_gemini_models():
     return models_to_try
 
 
-def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 14):
+def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 30):
     """Calls Gemini using the Lite model fallback cascade and parses JSON response."""
     key = _discover_gemini_key()
     if not key:
@@ -367,17 +367,18 @@ def _heuristic_food_nutrition(food_name: str) -> dict:
         }
 
     return {
-        "calories_per_100g": 145.0,
-        "protein_per_100g": 7.0,
-        "carbs_per_100g": 18.0,
-        "fat_per_100g": 5.0,
-        "fiber_per_100g": 2.5,
-        "sugar_per_100g": 2.0,
-        "sodium_mg_per_100g": 210.0,
-        "serving_weight_g": 150.0,
-        "serving_label": "1 serving (150g)",
+        "calories_per_100g": 0.0,
+        "protein_per_100g": 0.0,
+        "carbs_per_100g": 0.0,
+        "fat_per_100g": 0.0,
+        "fiber_per_100g": 0.0,
+        "sugar_per_100g": 0.0,
+        "sodium_mg_per_100g": 0.0,
+        "serving_weight_g": 100.0,
+        "serving_label": "1 serving (100g)",
         "category": "Prepared Foods",
         "prep_state": "raw" if is_raw_explicit else "cooked",
+        "is_unmatched": True,
     }
 
 
@@ -547,7 +548,15 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
             log_id = r["id"]
             fname = str(r.get("food_name") or "").strip()
             norm = normalize_food_name(fname)
-            est = ai_by_norm.get(norm) or _heuristic_food_nutrition(fname)
+            est = ai_by_norm.get(norm)
+            if not est:
+                heur = _heuristic_food_nutrition(fname)
+                if not heur.get("is_unmatched") and heur.get("calories_per_100g", 0.0) > 0:
+                    est = heur
+            if not est:
+                # Do not invent numbers if AI failed and no verified curated match; leave pending for next cron run
+                continue
+
             scaled = compute_scaled_macros(
                 est,
                 r.get("quantity", 100),
@@ -702,6 +711,7 @@ def _parse_heuristic_meal_clauses(text_description: str):
                 unit = "serving"
 
         est = _heuristic_food_nutrition(food_name)
+        is_pending = bool(est.get("is_unmatched") or est.get("calories_per_100g", 0.0) == 0.0)
         scaled = compute_scaled_macros(
             est,
             qty,
@@ -716,21 +726,22 @@ def _parse_heuristic_meal_clauses(text_description: str):
             "unit": scaled["unit"],
             "serving_unit": scaled["unit"],
             "gram_weight": scaled["gram_weight"],
-            "calories": scaled["calories"],
-            "protein_g": scaled["protein_g"],
-            "carbs_g": scaled["carbs_g"],
-            "fat_g": scaled["fat_g"],
-            "fiber_g": scaled["fiber_g"],
-            "sugar_g": scaled["sugar_g"],
-            "sodium_mg": scaled["sodium_mg"],
-            "calories_per_100g": est["calories_per_100g"],
-            "protein_per_100g": est["protein_per_100g"],
-            "carbs_per_100g": est["carbs_per_100g"],
-            "fat_per_100g": est["fat_per_100g"],
-            "fiber_per_100g": est["fiber_per_100g"],
+            "calories": 0.0 if is_pending else scaled["calories"],
+            "protein_g": 0.0 if is_pending else scaled["protein_g"],
+            "carbs_g": 0.0 if is_pending else scaled["carbs_g"],
+            "fat_g": 0.0 if is_pending else scaled["fat_g"],
+            "fiber_g": 0.0 if is_pending else scaled["fiber_g"],
+            "sugar_g": 0.0 if is_pending else scaled["sugar_g"],
+            "sodium_mg": 0.0 if is_pending else scaled["sodium_mg"],
+            "calories_per_100g": 0.0 if is_pending else est["calories_per_100g"],
+            "protein_per_100g": 0.0 if is_pending else est["protein_per_100g"],
+            "carbs_per_100g": 0.0 if is_pending else est["carbs_per_100g"],
+            "fat_per_100g": 0.0 if is_pending else est["fat_per_100g"],
+            "fiber_per_100g": 0.0 if is_pending else est["fiber_per_100g"],
             "serving_weight_g": est["serving_weight_g"],
             "serving_label": est["serving_label"],
             "category": est.get("category", "Prepared Foods"),
+            "ai_enrich_status": "pending" if is_pending else "complete",
         })
     return items
 

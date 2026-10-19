@@ -127,9 +127,9 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishBtnSaveGoals"', self.html)
 
     def test_user_requested_ai_estimating_copy(self):
-        # User explicitly asked: "along with 'AI Estimating...' also indicate the user to come back in hour to see the nutrition info in a succint way."
+        # User requested pill badge and removed redundant subline
         self.assertIn("✨ AI Estimating · Check back in ~1 hr", self.html)
-        self.assertIn("Nutrition available in ~1 hr", self.html)
+        self.assertNotIn("Nutrition available in ~1 hr", self.html)
 
     def test_runtime_behavior_in_node_sandbox(self):
         node_test = r"""
@@ -331,8 +331,8 @@ eval(fns);
   if (!lunchHtml.includes('✨ AI Estimating · Check back in ~1 hr')) {
     throw new Error('Expected AI estimating badge in diary for pending item');
   }
-  if (!lunchHtml.includes('Nutrition available in ~1 hr')) {
-    throw new Error('Expected subline nutrition available in ~1 hr');
+  if (lunchHtml.includes('Nutrition available in ~1 hr')) {
+    throw new Error('Found redundant "Nutrition available in ~1 hr" subline which was removed');
   }
 
   // 7. Hydration quick add
