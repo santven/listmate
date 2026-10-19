@@ -5747,11 +5747,33 @@ def api_nourish_coach_ack_note(note_id):
 
 
 @app.route("/coach/<token>", methods=["GET"])
-def coach_portal_view(token):
+@app.route("/coach", methods=["GET"])
+@app.route("/nourish/coach/<token>", methods=["GET"])
+@app.route("/nourish/coach", methods=["GET"])
+def coach_portal_view(token=None):
     """
-    Issue #694: Web page for coaches to view client's past 14 days and submit feedback notes.
+    Issue #694 & #698: Web page for coaches to view client's past 14 days and submit feedback notes.
+    Accepts token in the path (/coach/<token>) or as query parameter (?token=... or ?t=...).
     """
+    if not token:
+        token = request.args.get("token") or request.args.get("t") or ""
     clean_token = str(token).strip()
+    if not clean_token:
+        return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>VitalPath Coach Portal — Link Missing</title>
+  <style>body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #F8FAFC; color: #0F172A; } .box { max-width: 440px; margin: 0 auto; background: white; border: 1px solid #E2E8F0; padding: 30px; border-radius: 12px; }</style>
+</head>
+<body>
+  <div class="box">
+    <h2 style="color:#DC2626; margin-bottom:10px;">⚠️ Invalid Coach Link</h2>
+    <p style="color:#64748B;">No coach token was provided in the URL. Please verify the link provided by your client.</p>
+  </div>
+</body>
+</html>""", 404
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

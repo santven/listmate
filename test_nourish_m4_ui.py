@@ -285,7 +285,10 @@ const fns = [
   'openNourishCoachDrawer',
   'closeNourishCoachDrawer',
   'acknowledgeCoachFeedbackNote',
-  'getAppOrigin'
+  'getAppOrigin',
+  'getCoachShareLink',
+  'saveNourishCoachAlias',
+  'openNourishCoachQuickShare'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -357,6 +360,7 @@ const elementIds = [
   'nourishTrendsAvgWater', 'nourishTrendsTargetWater',
   'nourishTrendsChartContainer',
   'nourishCoachFeedbackCard', 'nourishCoachCardAuthor', 'nourishCoachCardRole', 'nourishCoachCardDate', 'nourishCoachCardMessage',
+  'nourishCoachLinkSection', 'nourishBtnCoachQuickLink',
   'nourishCoachLinkToggle', 'nourishCoachLinkDetails', 'nourishCoachAliasInput', 'nourishCoachShareUrl', 'nourishBtnCopyCoachLink', 'nourishBtnResetCoachToken',
   'nourishCoachFeedbackDrawer', 'nourishCoachDrawerTitle', 'nourishCoachDrawerSub', 'nourishCoachDrawerAuthor', 'nourishCoachDrawerDate', 'nourishCoachDrawerMessage', 'nourishBtnAckCoachNote'
 ];
@@ -805,6 +809,24 @@ eval(fns);
   if (elements.nourishCoachAliasInput.value !== 'Venkat Athlete #1') throw new Error('Expected alias populated');
   if (!elements.nourishCoachShareUrl.value.includes('coach_secret_tok_123')) {
     throw new Error('Expected share URL populated with token');
+  }
+
+  // Issue #698: Test toggleNourishCoachLink auto-generates immediately without saving goals
+  allFetchCalls.length = 0;
+  global.fetch = (url, opts) => {
+    allFetchCalls.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null });
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true, coach_token: 'coach_auto_tok_999', coach_link_enabled: true }) });
+  };
+  elements.nourishCoachShareUrl.value = '';
+  await toggleNourishCoachLink(true);
+  if (!elements.nourishCoachShareUrl.value.includes('coach_auto_tok_999')) {
+    throw new Error('Expected coach share URL auto-generated on toggle');
+  }
+
+  // Issue #698: Test quick share button
+  openNourishCoachQuickShare();
+  if (!elements.nourishGoalsModal.classList.contains('active')) {
+    throw new Error('Expected goals modal open on quick share');
   }
 
   // Saving goals with coach link fields
