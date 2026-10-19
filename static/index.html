@@ -12260,14 +12260,36 @@ function closeNourishGoalsModal() {
   if (modal) modal.classList.remove('active');
 }
 
-function toggleNourishCoachLink(enabled) {
+async function toggleNourishCoachLink(enabled) {
   var details = document.getElementById('nourishCoachLinkDetails');
   if (details) details.style.display = enabled ? 'block' : 'none';
   if (enabled) {
     var coachUrl = document.getElementById('nourishCoachShareUrl');
     var goals = (currentNourishData && currentNourishData.goals) || {};
-    if (coachUrl && !coachUrl.value && goals.coach_token) {
-      coachUrl.value = getAppOrigin() + '/nourish/coach?token=' + encodeURIComponent(goals.coach_token);
+    if (coachUrl) {
+      if (goals.coach_token) {
+        coachUrl.value = getAppOrigin() + '/nourish/coach?token=' + encodeURIComponent(goals.coach_token);
+      } else {
+        try {
+          var aliasInput = document.getElementById('nourishCoachAliasInput');
+          var aliasVal = aliasInput ? aliasInput.value.trim() : '';
+          var res = await fetch(API + '/nourish/coach/link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, alias: aliasVal })
+          }).then(function(r) { return r.json(); });
+          if (res && res.ok && res.coach_token) {
+            if (!currentNourishData) currentNourishData = {};
+            if (!currentNourishData.goals) currentNourishData.goals = {};
+            currentNourishData.goals.coach_token = res.coach_token;
+            currentNourishData.goals.coach_link_enabled = true;
+            if (res.coach_display_alias) currentNourishData.goals.coach_display_alias = res.coach_display_alias;
+            coachUrl.value = getAppOrigin() + '/nourish/coach?token=' + encodeURIComponent(res.coach_token);
+          }
+        } catch(e) {
+          console.warn('Could not auto-generate coach link on toggle:', e);
+        }
+      }
     }
   }
 }
