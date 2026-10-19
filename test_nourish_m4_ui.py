@@ -141,6 +141,27 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishSharedMealDrawer"', self.html)
         self.assertIn('id="nourishBtnAddSharedMeal"', self.html)
 
+        # 10. Still Good to Nourish Bridge Drawer (Issue #688)
+        self.assertIn('id="sgNourishBridgeDrawer"', self.html)
+        self.assertIn('id="sgNourishBridgeSub"', self.html)
+        self.assertIn('id="sgBridgeBtn_breakfast"', self.html)
+        self.assertIn('id="sgBridgeBtn_lunch"', self.html)
+        self.assertIn('id="sgBridgeBtn_dinner"', self.html)
+        self.assertIn('id="sgBridgeBtn_snack"', self.html)
+        self.assertIn('id="sgNourishBridgeBtnSkip"', self.html)
+        self.assertIn("Log this to Nourish?", self.html)
+        self.assertIn("Skip (Just mark as enjoyed)", self.html)
+        self.assertIn("env(safe-area-inset-bottom, 0px)", self.html)
+
+    def test_nourish_deep_link_and_push_handlers_present(self):
+        # Query parameter deep link handling
+        self.assertIn("screenParam === 'nourish' || actionParam === 'open_nourish'", self.html)
+        self.assertIn("action === 'open_nourish' || action === 'nourish'", self.html)
+        # Push notification handler
+        self.assertIn("isNourishPush", self.html)
+        self.assertIn("data.screen === 'nourish'", self.html)
+        self.assertIn("data.campaign === 'nourish_reminder'", self.html)
+
     def test_user_requested_ai_estimating_copy(self):
         # User requested pill badge and removed redundant subline
         self.assertIn("✨ AI Estimating · Check back in ~1 hr", self.html)
@@ -210,7 +231,13 @@ const fns = [
   'openNourishSharedMealDrawer',
   'closeNourishSharedMealDrawer',
   'dismissNourishSharedMeal',
-  'acceptNourishSharedMeal'
+  'acceptNourishSharedMeal',
+  'openSgNourishBridgeDrawer',
+  'closeSgNourishBridgeDrawer',
+  'getTodayDateString',
+  'submitSgNourishBridge',
+  'skipSgNourishBridge',
+  'stillGoodAction'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -268,7 +295,10 @@ const elementIds = [
   'nourishDisabledView', 'nourishActiveView', 'nourishPageToggle', 'nourishBtnStart',
   'nourishSearchShareHousehold', 'nourishDescribeShareHousehold',
   'nourishBtnShare_breakfast', 'nourishBtnShare_lunch', 'nourishBtnShare_dinner', 'nourishBtnShare_snack',
-  'nourishSharedMealDrawer', 'nourishSharedDrawerSub', 'nourishSharedDrawerItems', 'nourishBtnAddSharedMeal'
+  'nourishSharedMealDrawer', 'nourishSharedDrawerSub', 'nourishSharedDrawerItems', 'nourishBtnAddSharedMeal',
+  'sgNourishBridgeDrawer', 'sgNourishBridgeSub', 'sgNourishBridgeBtnSkip',
+  'sgBridgeBtn_breakfast', 'sgBridgeBtn_lunch', 'sgBridgeBtn_dinner', 'sgBridgeBtn_snack',
+  'sgCard_10', 'sgWrap_10', 'sgCard_20', 'sgWrap_20'
 ];
 elementIds.forEach(id => { elements[id] = makeEl(id); });
 
@@ -296,6 +326,10 @@ global.document = {
 global.escapeHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 global.toast = () => {};
 global.API = '/api';
+global.fireStillGoodConfetti = () => {};
+global.loadStillGood = () => {};
+global.sgItems = [{ id: 10, name: 'Homemade Curry' }, { id: 20, name: 'Freezer Stew' }];
+global._sgBridgeContext = null;
 
 global.currentNourishDate = '2026-10-19';
 global.currentNourishSlot = 'breakfast';
@@ -556,6 +590,82 @@ eval(fns);
   await analyzeNourishPlate();
   if (!elements.nourishParsedItems.innerHTML.includes('Daily AI Plate Limit Reached')) {
     throw new Error('Expected 429 limit message in parsed items container, got: ' + elements.nourishParsedItems.innerHTML);
+  }
+
+  // Restore tracking fetch for Still Good bridge tests
+  allFetchCalls.length = 0;
+  global.fetch = (url, opts) => {
+    const callObj = {
+      url: url,
+      opts: opts,
+      body: opts && opts.body ? JSON.parse(opts.body) : null
+    };
+    allFetchCalls.push(callObj);
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+
+  // 18. Issue #688: Still Good to Nourish Bridge Drawer open logic
+  openSgNourishBridgeDrawer({
+    itemId: 10,
+    itemName: 'Homemade Curry',
+    card: elements.sgCard_10,
+    wrap: elements.sgWrap_10
+  });
+  if (elements.sgNourishBridgeDrawer.style.display !== 'flex') {
+    throw new Error('Expected bridge drawer display flex');
+  }
+  if (!elements.sgNourishBridgeSub.textContent.includes('Homemade Curry · 1 serving')) {
+    throw new Error('Expected subtitle to show item name and 1 serving, got: ' + elements.sgNourishBridgeSub.textContent);
+  }
+
+  // 19. Submit Bridge logs to Nourish and executes Still Good consume
+  await submitSgNourishBridge('dinner');
+  if (elements.sgNourishBridgeDrawer.style.display !== 'none') {
+    throw new Error('Bridge drawer should close on submit');
+  }
+  const bridgeNourishCall = allFetchCalls.find(c => c.url.includes('/api/nourish/logs') && c.body && c.body.still_good_item_id === 10);
+  if (!bridgeNourishCall) throw new Error('Expected /api/nourish/logs call with still_good_item_id');
+  if (bridgeNourishCall.body.meal_slot !== 'dinner') throw new Error('Expected dinner slot in nourish log call');
+  if (bridgeNourishCall.body.food_name !== 'Homemade Curry') throw new Error('Expected food_name Homemade Curry');
+  if (bridgeNourishCall.body.quantity !== 1 || bridgeNourishCall.body.unit !== 'serving') throw new Error('Expected quantity 1 and unit serving');
+  const bridgeActionCall = allFetchCalls.find(c => c.url.includes('/api/still-good/10/action') && c.body && c.body.action === 'consume');
+  if (!bridgeActionCall) throw new Error('Expected /api/still-good/10/action consume call');
+
+  // 20. Skip Bridge executes Still Good consume directly without nourish log
+  allFetchCalls.length = 0;
+  openSgNourishBridgeDrawer({
+    itemId: 20,
+    itemName: 'Freezer Stew',
+    card: elements.sgCard_20,
+    wrap: elements.sgWrap_20
+  });
+  await skipSgNourishBridge();
+  if (elements.sgNourishBridgeDrawer.style.display !== 'none') {
+    throw new Error('Bridge drawer should close on skip');
+  }
+  if (allFetchCalls.some(c => c.url.includes('/api/nourish/logs'))) {
+    throw new Error('Skip should not log to nourish');
+  }
+  const skipActionCall = allFetchCalls.find(c => c.url.includes('/api/still-good/20/action') && c.body && c.body.action === 'consume');
+  if (!skipActionCall) throw new Error('Expected /api/still-good/20/action consume call on skip');
+
+  // 21. stillGoodAction interceptor behavior when Nourish is enabled vs disabled
+  window._nourishEnabled = true;
+  await stillGoodAction(10, 'consume');
+  if (elements.sgNourishBridgeDrawer.style.display !== 'flex') {
+    throw new Error('stillGoodAction should intercept and open bridge drawer when Nourish is enabled');
+  }
+
+  closeSgNourishBridgeDrawer();
+  window._nourishEnabled = false;
+  allFetchCalls.length = 0;
+  await stillGoodAction(20, 'consume');
+  if (elements.sgNourishBridgeDrawer.style.display !== 'none') {
+    throw new Error('stillGoodAction should not open bridge drawer when Nourish is disabled');
+  }
+  const directActionCall = allFetchCalls.find(c => c.url.includes('/api/still-good/20/action') && c.body && c.body.action === 'consume');
+  if (!directActionCall) {
+    throw new Error('stillGoodAction should directly consume when Nourish is disabled');
   }
 })();
 """

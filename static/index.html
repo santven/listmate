@@ -6659,9 +6659,9 @@ function getTodayDateString() {
 
 async function submitSgNourishBridge(slot) {
   var ctx = _sgBridgeContext;
-  closeSgNourishBridgeDrawer();
   if (!ctx) return;
   _sgBridgeContext = null;
+  closeSgNourishBridgeDrawer();
 
   var itemId = ctx.itemId;
   var itemName = ctx.itemName;
@@ -6722,9 +6722,9 @@ async function submitSgNourishBridge(slot) {
 
 async function skipSgNourishBridge() {
   var ctx = _sgBridgeContext;
-  closeSgNourishBridgeDrawer();
   if (!ctx) return;
   _sgBridgeContext = null;
+  closeSgNourishBridgeDrawer();
 
   var itemId = ctx.itemId;
   var triggerEl = ctx.triggerEl;
@@ -12027,15 +12027,29 @@ async function saveNourishGoals() {
   }
 }
 
-function isNourishEnabled() {
+window._nourishEnabled = (function() {
   try {
     return localStorage.getItem('nourish_enabled') === 'true';
+  } catch(e) {
+    return false;
+  }
+})();
+
+function isNourishEnabled() {
+  if (typeof window._nourishEnabled === 'boolean') {
+    return window._nourishEnabled;
+  }
+  try {
+    var val = localStorage.getItem('nourish_enabled') === 'true';
+    window._nourishEnabled = val;
+    return val;
   } catch(e) {
     return false;
   }
 }
 
 async function setNourishEnabled(enabled) {
+  window._nourishEnabled = !!enabled;
   try {
     localStorage.setItem('nourish_enabled', enabled ? 'true' : 'false');
   } catch(e) {}
@@ -12083,6 +12097,7 @@ async function syncNourishEnabledFromServer() {
     var res = await fetch(API + '/user/nourish-enabled').then(function(r) { return r.json(); });
     if (res && res.ok) {
       var isEn = res.enabled === true;
+      window._nourishEnabled = isEn;
       try {
         localStorage.setItem('nourish_enabled', isEn ? 'true' : 'false');
       } catch(e) {}
