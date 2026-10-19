@@ -165,7 +165,7 @@ def _ensure_schema():
 @app.before_request
 def enforce_read_only():
     if request.method in ["POST", "PUT", "DELETE"]:
-        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path.startswith("/api/still-good") or request.path == "/api/sync":
+        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path.startswith("/api/still-good") or request.path.startswith("/api/nourish") or request.path == "/api/sync":
             # Allowed for read-only: None, but wait, maybe some specific ones?
             if request.path == "/api/recipes/generate":
                 # Recipes generate might require premium entirely, but let's just guard modifications to data.
@@ -3725,6 +3725,877 @@ def still_good_add_to_list_endpoint(item_id):
         try: db.rollback()
         except Exception: pass
         print(f"[STILL GOOD ERROR] Error adding item to list: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ── Nourish (Personal Food Diary, Macro Tracker & Recipe Nutrition) ──
+
+NOURISH_DEFAULT_GOALS = {
+    "calories_target": 2000,
+    "protein_target_g": 130,
+    "carbs_target_g": 200,
+    "fat_target_g": 65,
+    "fiber_target_g": 30,
+    "water_target_ml": 2500,
+}
+
+
+def _serialize_nourish_row(row):
+    """Converts Decimal/date/datetime values in a DB dict row into JSON-safe Python primitives."""
+    if not row:
+        return {}
+    from decimal import Decimal
+    import datetime as _dt
+    out = {}
+    for k, v in dict(row).items():
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        elif isinstance(v, (_dt.date, _dt.datetime)):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    return out
+
+
+def _resolve_nourish_context(db):
+    """
+    Resolves authenticated user_id (`uid`) and household_id (`hhid`) for Nourish endpoints.
+    Enforces strict non-zero ID validation (Falsiness Rule) and household Premium entitlement gating.
+    Returns `(uid, hhid, error_response_tuple)`.
+    """
+    uid = authmod.get_user_id()
+    hhid = _resolve_still_good_hh(db)
+
+    if uid is None or uid == 0 or uid < 0 or hhid is None or hhid == 0 or hhid < 0:
+        return None, None, (
+            jsonify({"ok": False, "error": "Authentication required: valid user and household required"}),
+            401,
+        )
+
+    if not _can_household_access_still_good(db, hhid):
+        return int(uid), int(hhid), (
+            jsonify({
+                "ok": False,
+                "error": "Nourish requires a Premium subscription.",
+                "paywall_required": True,
+            }),
+            403,
+        )
+
+    return int(uid), int(hhid), None
+
+
+def _parse_nourish_date(raw_date):
+    import datetime as _dt
+    if not raw_date:
+        return _dt.date.today().isoformat()
+    s = str(raw_date).strip()[:10]
+    try:
+        return _dt.date.fromisoformat(s).isoformat()
+    except ValueError:
+        return None
+
+
+@app.route("/api/nourish/day", methods=["GET"])
+@require_user
+def nourish_day_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        log_date_str = _parse_nourish_date(request.args.get("date"))
+        if not log_date_str:
+            return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+
+        # 1. Strictly user_id-scoped food logs for the day
+        log_cur = db.execute(
+            "SELECT * FROM nourish_food_logs WHERE user_id = ? AND log_date = ?::date ORDER BY id ASC",
+            (uid, log_date_str),
+        )
+        raw_logs = (log_cur.fetchall() if log_cur else []) or []
+        logs = [_serialize_nourish_row(r) for r in raw_logs]
+
+        # 2. Strictly user_id-scoped goals (or default targets)
+        goal_cur = db.execute(
+            "SELECT * FROM nourish_user_goals WHERE user_id = ?",
+            (uid,),
+        )
+        goal_row = goal_cur.fetchone() if goal_cur else None
+        if goal_row:
+            goals = _serialize_nourish_row(goal_row)
+            for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                if goals.get(k) is None:
+                    goals[k] = default_v
+        else:
+            goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+
+        # 3. Strictly user_id-scoped daily biometrics
+        bio_cur = db.execute(
+            "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date",
+            (uid, log_date_str),
+        )
+        bio_row = bio_cur.fetchone() if bio_cur else None
+        if bio_row:
+            biometrics = _serialize_nourish_row(bio_row)
+        else:
+            biometrics = {
+                "user_id": uid,
+                "log_date": log_date_str,
+                "water_ml": 0,
+                "weight_kg": None,
+                "notes": "",
+            }
+
+        # 4. Household + Public recipes
+        rec_cur = db.execute(
+            "SELECT * FROM nourish_recipes WHERE household_id = ? OR is_public = TRUE "
+            "ORDER BY household_id IS NULL ASC, id DESC LIMIT 50",
+            (hhid,),
+        )
+        raw_recipes = (rec_cur.fetchall() if rec_cur else []) or []
+        recipes = [_serialize_nourish_row(r) for r in raw_recipes]
+
+        # 5. Compute daily totals
+        totals = {
+            "calories": round(sum(float(l.get("calories") or 0.0) for l in logs), 2),
+            "protein_g": round(sum(float(l.get("protein_g") or 0.0) for l in logs), 2),
+            "carbs_g": round(sum(float(l.get("carbs_g") or 0.0) for l in logs), 2),
+            "fat_g": round(sum(float(l.get("fat_g") or 0.0) for l in logs), 2),
+            "fiber_g": round(sum(float(l.get("fiber_g") or 0.0) for l in logs), 2),
+            "sugar_g": round(sum(float(l.get("sugar_g") or 0.0) for l in logs), 2),
+            "sodium_mg": round(sum(float(l.get("sodium_mg") or 0.0) for l in logs), 2),
+        }
+        pending_ai_count = sum(1 for l in logs if l.get("ai_enrich_status") == "pending")
+
+        return jsonify({
+            "ok": True,
+            "date": log_date_str,
+            "user_id": uid,
+            "household_id": hhid,
+            "logs": logs,
+            "totals": totals,
+            "goals": goals,
+            "biometrics": biometrics,
+            "recipes": recipes,
+            "pending_ai_count": pending_ai_count,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/day failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/logs", methods=["POST"])
+@require_user
+def nourish_create_logs_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from nourish_ai import compute_scaled_macros
+        from seed_nourish import normalize_food_name
+
+        data = request.get_json(silent=True) or {}
+        default_date = _parse_nourish_date(data.get("log_date"))
+        if not default_date:
+            return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+        raw_items = data.get("items") if isinstance(data.get("items"), list) else [data]
+        if not raw_items:
+            return jsonify({"ok": False, "error": "No food items provided"}), 400
+
+        created_logs = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                continue
+            food_name = str(entry.get("food_name") or entry.get("name") or "").strip()
+            if not food_name:
+                return jsonify({"ok": False, "error": "food_name is required"}), 400
+
+            item_date = _parse_nourish_date(entry.get("log_date") or default_date)
+            if not item_date:
+                return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+            meal_slot = str(entry.get("meal_slot") or data.get("meal_slot") or "Breakfast").strip()[:24] or "Breakfast"
+            unit = str(entry.get("unit") or "g").strip().lower()
+            default_qty = 1.0 if unit in ("serving", "servings", "piece", "cup", "bowl") else 100.0
+            try:
+                quantity = float(entry.get("quantity") if entry.get("quantity") is not None else default_qty)
+                if quantity <= 0:
+                    quantity = default_qty
+            except (ValueError, TypeError):
+                quantity = default_qty
+
+            raw_cat_id = entry.get("catalog_id")
+            catalog_id = int(raw_cat_id) if (raw_cat_id is not None and str(raw_cat_id).strip().isdigit() and int(raw_cat_id) > 0) else None
+
+            raw_rec_id = entry.get("nourish_recipe_id")
+            nourish_recipe_id = int(raw_rec_id) if (raw_rec_id is not None and str(raw_rec_id).strip().isdigit() and int(raw_rec_id) > 0) else None
+
+            raw_sg_id = entry.get("still_good_item_id")
+            still_good_item_id = int(raw_sg_id) if (raw_sg_id is not None and str(raw_sg_id).strip().isdigit() and int(raw_sg_id) > 0) else None
+
+            notes = str(entry.get("notes") or "").strip()
+
+            matched_baseline = None
+            serving_weight_g = float(entry.get("serving_weight_g") or 100.0)
+            density_g_per_ml = 1.0
+
+            # Tier 1a: Explicit catalog_id
+            if catalog_id is not None:
+                c_cur = db.execute(
+                    "SELECT * FROM nourish_food_catalog WHERE id = ? AND (is_public = TRUE OR household_id = ?)",
+                    (catalog_id, hhid),
+                )
+                c_row = c_cur.fetchone() if c_cur else None
+                if c_row:
+                    matched_baseline = c_row
+                    serving_weight_g = float(c_row.get("serving_weight_g") or 100.0)
+                else:
+                    catalog_id = None
+
+            # Tier 1b: Explicit nourish_recipe_id
+            if matched_baseline is None and nourish_recipe_id is not None:
+                r_cur = db.execute(
+                    "SELECT * FROM nourish_recipes WHERE id = ? AND (household_id = ? OR is_public = TRUE)",
+                    (nourish_recipe_id, hhid),
+                )
+                r_row = r_cur.fetchone() if r_cur else None
+                if r_row:
+                    matched_baseline = r_row
+                    serving_weight_g = float(r_row.get("serving_weight_g") or 100.0)
+                    density_g_per_ml = float(r_row.get("density_g_per_ml") or 1.0)
+                else:
+                    nourish_recipe_id = None
+
+            # Tier 1c: Automatic normalized_name lookup in nourish_food_catalog
+            if matched_baseline is None:
+                norm_name = normalize_food_name(food_name)
+                if norm_name:
+                    n_cur = db.execute(
+                        "SELECT * FROM nourish_food_catalog "
+                        "WHERE normalized_name = ? AND (household_id = ? OR is_public = TRUE) "
+                        "ORDER BY (CASE WHEN household_id = ? THEN 0 ELSE 1 END), id ASC LIMIT 1",
+                        (norm_name, hhid, hhid),
+                    )
+                    n_row = n_cur.fetchone() if n_cur else None
+                    if n_row:
+                        matched_baseline = n_row
+                        catalog_id = int(n_row["id"])
+                        serving_weight_g = float(n_row.get("serving_weight_g") or 100.0)
+
+            try:
+                explicit_calories = float(entry.get("calories") or 0.0)
+            except (ValueError, TypeError):
+                explicit_calories = 0.0
+
+            if matched_baseline is not None:
+                scaled = compute_scaled_macros(
+                    matched_baseline,
+                    quantity,
+                    unit,
+                    serving_weight_g=serving_weight_g,
+                    density_g_per_ml=density_g_per_ml,
+                )
+                ai_enrich_status = "complete"
+                if catalog_id is not None:
+                    db.execute(
+                        "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                        (catalog_id,),
+                    )
+            elif explicit_calories > 0:
+                unit_info = compute_scaled_macros({}, quantity, unit, serving_weight_g=serving_weight_g)
+                scaled = {
+                    "quantity": unit_info["quantity"],
+                    "unit": unit_info["unit"],
+                    "gram_weight": float(entry.get("gram_weight") or unit_info["gram_weight"]),
+                    "calories": round(explicit_calories, 2),
+                    "protein_g": round(max(0.0, float(entry.get("protein_g") or 0.0)), 2),
+                    "carbs_g": round(max(0.0, float(entry.get("carbs_g") or 0.0)), 2),
+                    "fat_g": round(max(0.0, float(entry.get("fat_g") or 0.0)), 2),
+                    "fiber_g": round(max(0.0, float(entry.get("fiber_g") or 0.0)), 2),
+                    "sugar_g": round(max(0.0, float(entry.get("sugar_g") or 0.0)), 2),
+                    "sodium_mg": round(max(0.0, float(entry.get("sodium_mg") or 0.0)), 2),
+                }
+                ai_enrich_status = "manual"
+            else:
+                # Unknown food logged with 0 kcal -> mark 'pending' for hourly cron AI enrichment
+                unit_info = compute_scaled_macros({}, quantity, unit, serving_weight_g=serving_weight_g)
+                scaled = {
+                    "quantity": unit_info["quantity"],
+                    "unit": unit_info["unit"],
+                    "gram_weight": unit_info["gram_weight"],
+                    "calories": 0.0,
+                    "protein_g": 0.0,
+                    "carbs_g": 0.0,
+                    "fat_g": 0.0,
+                    "fiber_g": 0.0,
+                    "sugar_g": 0.0,
+                    "sodium_mg": 0.0,
+                }
+                ai_enrich_status = "pending"
+
+            ins_cur = db.execute(
+                """
+                INSERT INTO nourish_food_logs (
+                    user_id, household_id, log_date, meal_slot, food_name,
+                    catalog_id, nourish_recipe_id, still_good_item_id,
+                    quantity, unit, gram_weight,
+                    calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg,
+                    ai_enrich_status, notes
+                ) VALUES (
+                    ?, ?, ?::date, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?
+                )
+                RETURNING *
+                """,
+                (
+                    uid,
+                    hhid,
+                    item_date,
+                    meal_slot,
+                    food_name,
+                    catalog_id,
+                    nourish_recipe_id,
+                    still_good_item_id,
+                    scaled["quantity"],
+                    scaled["unit"],
+                    scaled["gram_weight"],
+                    scaled["calories"],
+                    scaled["protein_g"],
+                    scaled["carbs_g"],
+                    scaled["fat_g"],
+                    scaled["fiber_g"],
+                    scaled["sugar_g"],
+                    scaled["sodium_mg"],
+                    ai_enrich_status,
+                    notes,
+                ),
+            )
+            ins_row = ins_cur.fetchone() if ins_cur else None
+            if ins_row:
+                created_logs.append(_serialize_nourish_row(ins_row))
+            else:
+                created_logs.append({
+                    "user_id": uid,
+                    "household_id": hhid,
+                    "log_date": item_date,
+                    "meal_slot": meal_slot,
+                    "food_name": food_name,
+                    "catalog_id": catalog_id,
+                    "nourish_recipe_id": nourish_recipe_id,
+                    "still_good_item_id": still_good_item_id,
+                    **scaled,
+                    "ai_enrich_status": ai_enrich_status,
+                    "notes": notes,
+                })
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "log": created_logs[0] if created_logs else None,
+            "logs": created_logs,
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/logs failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/logs/<int:log_id>", methods=["PUT", "DELETE"])
+@require_user
+def nourish_modify_log_endpoint(log_id):
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        # Strictly scoped to user_id
+        existing_cur = db.execute(
+            "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ?",
+            (log_id, uid),
+        )
+        existing = existing_cur.fetchone() if existing_cur else None
+        if not existing:
+            return jsonify({"ok": False, "error": "Food log not found"}), 404
+
+        if request.method == "DELETE":
+            db.execute(
+                "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ?",
+                (log_id, uid),
+            )
+            db.commit()
+            return jsonify({"ok": True, "deleted_id": log_id})
+
+        from nourish_ai import compute_scaled_macros
+
+        data = request.get_json(silent=True) or {}
+        new_food_name = str(data.get("food_name") or existing.get("food_name") or "").strip()
+        new_meal_slot = str(data.get("meal_slot") or existing.get("meal_slot") or "Breakfast").strip()[:24]
+        new_notes = str(data.get("notes") if "notes" in data else (existing.get("notes") or "")).strip()
+
+        new_unit = str(data.get("unit") or existing.get("unit") or "g").strip().lower()
+        try:
+            new_quantity = float(data.get("quantity") if "quantity" in data else existing.get("quantity") or 100.0)
+            if new_quantity <= 0:
+                new_quantity = float(existing.get("quantity") or 100.0)
+        except (ValueError, TypeError):
+            new_quantity = float(existing.get("quantity") or 100.0)
+
+        qty_or_unit_changed = (
+            ("quantity" in data or "unit" in data)
+            and "calories" not in data
+        )
+
+        if "calories" in data and not qty_or_unit_changed:
+            unit_info = compute_scaled_macros({}, new_quantity, new_unit)
+            scaled = {
+                "quantity": unit_info["quantity"],
+                "unit": unit_info["unit"],
+                "gram_weight": float(data.get("gram_weight") or unit_info["gram_weight"]),
+                "calories": round(max(0.0, float(data.get("calories") or 0.0)), 2),
+                "protein_g": round(max(0.0, float(data.get("protein_g", existing.get("protein_g")) or 0.0)), 2),
+                "carbs_g": round(max(0.0, float(data.get("carbs_g", existing.get("carbs_g")) or 0.0)), 2),
+                "fat_g": round(max(0.0, float(data.get("fat_g", existing.get("fat_g")) or 0.0)), 2),
+                "fiber_g": round(max(0.0, float(data.get("fiber_g", existing.get("fiber_g")) or 0.0)), 2),
+                "sugar_g": round(max(0.0, float(data.get("sugar_g", existing.get("sugar_g")) or 0.0)), 2),
+                "sodium_mg": round(max(0.0, float(data.get("sodium_mg", existing.get("sodium_mg")) or 0.0)), 2),
+            }
+            new_status = "manual"
+        else:
+            # Rescale proportionally from linked catalog_id, nourish_recipe_id, or existing gram_weight
+            baseline = None
+            serving_weight_g = 100.0
+            density_g_per_ml = 1.0
+
+            cat_id = existing.get("catalog_id")
+            rec_id = existing.get("nourish_recipe_id")
+
+            if cat_id is not None and int(cat_id) > 0:
+                c_cur = db.execute(
+                    "SELECT * FROM nourish_food_catalog WHERE id = ? AND (is_public = TRUE OR household_id = ?)",
+                    (int(cat_id), hhid),
+                )
+                c_row = c_cur.fetchone() if c_cur else None
+                if c_row:
+                    baseline = c_row
+                    serving_weight_g = float(c_row.get("serving_weight_g") or 100.0)
+
+            if baseline is None and rec_id is not None and int(rec_id) > 0:
+                r_cur = db.execute(
+                    "SELECT * FROM nourish_recipes WHERE id = ? AND (household_id = ? OR is_public = TRUE)",
+                    (int(rec_id), hhid),
+                )
+                r_row = r_cur.fetchone() if r_cur else None
+                if r_row:
+                    baseline = r_row
+                    serving_weight_g = float(r_row.get("serving_weight_g") or 100.0)
+                    density_g_per_ml = float(r_row.get("density_g_per_ml") or 1.0)
+
+            if baseline is None:
+                old_gw = float(existing.get("gram_weight") or 100.0)
+                if old_gw <= 0:
+                    old_gw = 100.0
+                old_qty = float(existing.get("quantity") or 1.0)
+                if str(existing.get("unit") or "").lower() == "serving" and old_qty > 0:
+                    serving_weight_g = old_gw / old_qty
+                inv = 100.0 / old_gw
+                baseline = {
+                    "calories_per_100g": float(existing.get("calories") or 0.0) * inv,
+                    "protein_per_100g": float(existing.get("protein_g") or 0.0) * inv,
+                    "carbs_per_100g": float(existing.get("carbs_g") or 0.0) * inv,
+                    "fat_per_100g": float(existing.get("fat_g") or 0.0) * inv,
+                    "fiber_per_100g": float(existing.get("fiber_g") or 0.0) * inv,
+                    "sugar_per_100g": float(existing.get("sugar_g") or 0.0) * inv,
+                    "sodium_mg_per_100g": float(existing.get("sodium_mg") or 0.0) * inv,
+                }
+
+            scaled = compute_scaled_macros(
+                baseline,
+                new_quantity,
+                new_unit,
+                serving_weight_g=serving_weight_g,
+                density_g_per_ml=density_g_per_ml,
+            )
+            new_status = existing.get("ai_enrich_status") or "complete"
+
+        upd_cur = db.execute(
+            """
+            UPDATE nourish_food_logs
+            SET food_name = ?,
+                meal_slot = ?,
+                quantity = ?,
+                unit = ?,
+                gram_weight = ?,
+                calories = ?,
+                protein_g = ?,
+                carbs_g = ?,
+                fat_g = ?,
+                fiber_g = ?,
+                sugar_g = ?,
+                sodium_mg = ?,
+                ai_enrich_status = ?,
+                notes = ?,
+                updated_at = NOW()
+            WHERE id = ? AND user_id = ?
+            RETURNING *
+            """,
+            (
+                new_food_name,
+                new_meal_slot,
+                scaled["quantity"],
+                scaled["unit"],
+                scaled["gram_weight"],
+                scaled["calories"],
+                scaled["protein_g"],
+                scaled["carbs_g"],
+                scaled["fat_g"],
+                scaled["fiber_g"],
+                scaled["sugar_g"],
+                scaled["sodium_mg"],
+                new_status,
+                new_notes,
+                log_id,
+                uid,
+            ),
+        )
+        upd_row = upd_cur.fetchone() if upd_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "log": _serialize_nourish_row(upd_row) if upd_row else {
+                "id": log_id,
+                "user_id": uid,
+                "food_name": new_food_name,
+                "meal_slot": new_meal_slot,
+                **scaled,
+                "ai_enrich_status": new_status,
+                "notes": new_notes,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] Modify /api/nourish/logs/{log_id} failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/biometrics", methods=["POST"])
+@require_user
+def nourish_biometrics_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        data = request.get_json(silent=True) or {}
+        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"))
+        if not log_date_str:
+            return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+        existing_cur = db.execute(
+            "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date",
+            (uid, log_date_str),
+        )
+        existing = existing_cur.fetchone() if existing_cur else None
+        curr_water = int(existing.get("water_ml") or 0) if existing else 0
+        curr_weight = existing.get("weight_kg") if existing else None
+        curr_notes = (existing.get("notes") or "") if existing else ""
+
+        if "water_ml" in data and data.get("water_ml") is not None:
+            try:
+                new_water = max(0, int(float(data.get("water_ml"))))
+            except (ValueError, TypeError):
+                new_water = curr_water
+        elif "water_delta_ml" in data and data.get("water_delta_ml") is not None:
+            try:
+                new_water = max(0, curr_water + int(float(data.get("water_delta_ml"))))
+            except (ValueError, TypeError):
+                new_water = curr_water
+        else:
+            new_water = curr_water
+
+        if "weight_kg" in data:
+            raw_w = data.get("weight_kg")
+            if raw_w is None or raw_w == "":
+                new_weight = None
+            else:
+                try:
+                    new_weight = round(max(1.0, float(raw_w)), 2)
+                except (ValueError, TypeError):
+                    new_weight = curr_weight
+        else:
+            new_weight = float(curr_weight) if curr_weight is not None else None
+
+        new_notes = str(data.get("notes") if "notes" in data else curr_notes).strip()
+
+        up_cur = db.execute(
+            """
+            INSERT INTO nourish_daily_biometrics (user_id, log_date, water_ml, weight_kg, notes, updated_at)
+            VALUES (?, ?::date, ?, ?, ?, NOW())
+            ON CONFLICT (user_id, log_date)
+            DO UPDATE SET
+                water_ml = EXCLUDED.water_ml,
+                weight_kg = EXCLUDED.weight_kg,
+                notes = EXCLUDED.notes,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            (uid, log_date_str, new_water, new_weight, new_notes),
+        )
+        up_row = up_cur.fetchone() if up_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "biometrics": _serialize_nourish_row(up_row) if up_row else {
+                "user_id": uid,
+                "log_date": log_date_str,
+                "water_ml": new_water,
+                "weight_kg": new_weight,
+                "notes": new_notes,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/biometrics failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/catalog/search", methods=["GET"])
+@require_user
+def nourish_catalog_search_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from seed_nourish import normalize_food_name
+        from nourish_ai import search_public_nutrition_apis
+
+        q = (request.args.get("q") or "").strip()
+        include_external = str(request.args.get("include_external") or "").strip().lower() in ("1", "true", "yes")
+
+        if not q:
+            cat_cur = db.execute(
+                "SELECT * FROM nourish_food_catalog WHERE is_public = TRUE OR household_id = ? "
+                "ORDER BY usage_count DESC, id ASC LIMIT 25",
+                (hhid,),
+            )
+            rec_cur = db.execute(
+                "SELECT * FROM nourish_recipes WHERE household_id = ? OR is_public = TRUE "
+                "ORDER BY household_id IS NULL ASC, id DESC LIMIT 10",
+                (hhid,),
+            )
+            foods = [_serialize_nourish_row(r) for r in ((cat_cur.fetchall() if cat_cur else []) or [])]
+            recipes = [_serialize_nourish_row(r) for r in ((rec_cur.fetchall() if rec_cur else []) or [])]
+            return jsonify({"ok": True, "foods": foods, "recipes": recipes, "results": foods})
+
+        norm_q = normalize_food_name(q)
+        like_pattern = f"%{norm_q}%"
+
+        cat_cur = db.execute(
+            "SELECT * FROM nourish_food_catalog "
+            "WHERE (is_public = TRUE OR household_id = ?) "
+            "  AND (LOWER(name) LIKE ? OR normalized_name LIKE ?) "
+            "ORDER BY (CASE WHEN normalized_name = ? THEN 0 WHEN normalized_name LIKE ? THEN 1 ELSE 2 END), "
+            "usage_count DESC, id ASC LIMIT 25",
+            (hhid, like_pattern, like_pattern, norm_q, f"{norm_q}%"),
+        )
+        foods = [_serialize_nourish_row(r) for r in ((cat_cur.fetchall() if cat_cur else []) or [])]
+
+        rec_cur = db.execute(
+            "SELECT * FROM nourish_recipes "
+            "WHERE (household_id = ? OR is_public = TRUE) AND LOWER(name) LIKE ? "
+            "ORDER BY household_id IS NULL ASC, id DESC LIMIT 10",
+            (hhid, like_pattern),
+        )
+        recipes = [_serialize_nourish_row(r) for r in ((rec_cur.fetchall() if rec_cur else []) or [])]
+
+        if len(foods) < 3 and include_external and len(norm_q) >= 2:
+            ext_hits = search_public_nutrition_apis(q)
+            seen_norms = {f.get("normalized_name") for f in foods}
+            for hit in ext_hits:
+                h_norm = hit.get("normalized_name")
+                if not h_norm or h_norm in seen_norms:
+                    continue
+                seen_norms.add(h_norm)
+                ins_cur = db.execute(
+                    """
+                    INSERT INTO nourish_food_catalog (
+                        name, normalized_name, brand, category, source, is_public,
+                        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                        fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                        serving_label, serving_weight_g, is_liquid, prep_state, ai_verified
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, TRUE,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, FALSE, 'as_is', TRUE
+                    )
+                    ON CONFLICT (normalized_name) WHERE is_public = TRUE
+                    DO UPDATE SET updated_at = NOW()
+                    RETURNING *
+                    """,
+                    (
+                        hit["name"],
+                        h_norm,
+                        hit.get("brand", ""),
+                        hit.get("category", "Packaged Foods"),
+                        hit.get("source", "openfoodfacts"),
+                        hit["calories_per_100g"],
+                        hit["protein_per_100g"],
+                        hit["carbs_per_100g"],
+                        hit["fat_per_100g"],
+                        hit["fiber_per_100g"],
+                        hit["sugar_per_100g"],
+                        hit["sodium_mg_per_100g"],
+                        hit.get("serving_label", "1 serving (100g)"),
+                        hit.get("serving_weight_g", 100.0),
+                    ),
+                )
+                cached_row = ins_cur.fetchone() if ins_cur else None
+                foods.append(_serialize_nourish_row(cached_row) if cached_row else hit)
+            db.commit()
+
+        return jsonify({"ok": True, "foods": foods, "recipes": recipes, "results": foods})
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/catalog/search failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/analyze-meal", methods=["POST"])
+@require_user
+def nourish_analyze_meal_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from nourish_ai import analyze_natural_language_meal
+
+        data = request.get_json(silent=True) or {}
+        text = str(data.get("text") or data.get("description") or data.get("meal") or "").strip()
+        if not text:
+            return jsonify({"ok": False, "error": "Meal description text is required"}), 400
+
+        analysis = analyze_natural_language_meal(text)
+        return jsonify({"ok": True, **analysis})
+    except Exception as exc:
+        print(f"[NOURISH ERROR] POST /api/nourish/analyze-meal failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/recipes/analyze", methods=["POST"])
+@require_user
+def nourish_analyze_recipe_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from nourish_ai import analyze_recipe_nutrition
+
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name") or data.get("title") or "Custom Recipe").strip()
+        raw_ingredients = str(data.get("raw_ingredients_text") or data.get("ingredients") or "").strip()
+        if not raw_ingredients:
+            return jsonify({"ok": False, "error": "raw_ingredients_text is required"}), 400
+
+        try:
+            servings = max(1.0, float(data.get("servings") or 4.0))
+        except (ValueError, TypeError):
+            servings = 4.0
+
+        recipe_calc = analyze_recipe_nutrition(name, servings, raw_ingredients)
+
+        if data.get("save"):
+            linked_id = data.get("linked_recipe_id")
+            linked_recipe_id = int(linked_id) if (linked_id is not None and str(linked_id).strip().isdigit() and int(linked_id) > 0) else None
+            ins_cur = db.execute(
+                """
+                INSERT INTO nourish_recipes (
+                    household_id, created_by_user_id, linked_recipe_id, name,
+                    servings, total_cooked_weight_g, total_volume_ml, density_g_per_ml,
+                    serving_weight_g, raw_ingredients_text, ingredients_json,
+                    calories_per_serving, protein_per_serving, carbs_per_serving, fat_per_serving,
+                    fiber_per_serving, sugar_per_serving, sodium_mg_per_serving,
+                    calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g,
+                    ai_notes, is_public
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?::jsonb,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, FALSE
+                )
+                RETURNING id
+                """,
+                (
+                    hhid,
+                    uid,
+                    linked_recipe_id,
+                    recipe_calc["name"],
+                    recipe_calc["servings"],
+                    recipe_calc["total_cooked_weight_g"],
+                    recipe_calc["total_volume_ml"],
+                    recipe_calc["density_g_per_ml"],
+                    recipe_calc["serving_weight_g"],
+                    recipe_calc["raw_ingredients_text"],
+                    json.dumps(recipe_calc["ingredients_json"]),
+                    recipe_calc["calories_per_serving"],
+                    recipe_calc["protein_per_serving"],
+                    recipe_calc["carbs_per_serving"],
+                    recipe_calc["fat_per_serving"],
+                    recipe_calc["fiber_per_serving"],
+                    recipe_calc["sugar_per_serving"],
+                    recipe_calc["sodium_mg_per_serving"],
+                    recipe_calc["calories_per_100g"],
+                    recipe_calc["protein_per_100g"],
+                    recipe_calc["carbs_per_100g"],
+                    recipe_calc["fat_per_100g"],
+                    recipe_calc["fiber_per_100g"],
+                    recipe_calc["ai_notes"],
+                ),
+            )
+            ins_row = ins_cur.fetchone() if ins_cur else None
+            if ins_row and ins_row.get("id"):
+                recipe_calc["id"] = int(ins_row["id"])
+            db.commit()
+
+        return jsonify({"ok": True, "recipe": recipe_calc})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/recipes/analyze failed: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
