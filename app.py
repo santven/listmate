@@ -4601,12 +4601,43 @@ def nourish_goals_endpoint():
         except (ValueError, TypeError):
             w_target = 2500
 
+        # Check existing goals row for coach fields
+        exist_cur = db.execute("SELECT coach_token, coach_link_enabled, coach_display_alias FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        exist_row = exist_cur.fetchone() if exist_cur else None
+
+        coach_link_enabled = None
+        if "coach_link_enabled" in data:
+            coach_link_enabled = _to_bool(data.get("coach_link_enabled"))
+        elif exist_row:
+            coach_link_enabled = bool(exist_row.get("coach_link_enabled"))
+        else:
+            coach_link_enabled = False
+
+        coach_display_alias = None
+        if "coach_display_alias" in data:
+            coach_display_alias = str(data.get("coach_display_alias") or "").strip()[:64]
+        elif exist_row:
+            coach_display_alias = exist_row.get("coach_display_alias") or ""
+        else:
+            coach_display_alias = ""
+
+        reset_token = _to_bool(data.get("reset_coach_token"))
+        existing_token = exist_row.get("coach_token") if exist_row else None
+
+        import secrets
+        if reset_token or (coach_link_enabled and not existing_token):
+            coach_token = secrets.token_urlsafe(16)
+        else:
+            coach_token = existing_token
+
         up_cur = db.execute(
             """
             INSERT INTO nourish_user_goals (
                 user_id, calories_target, protein_target_g, carbs_target_g,
-                fat_target_g, fiber_target_g, water_target_ml, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                fat_target_g, fiber_target_g, water_target_ml,
+                coach_token, coach_link_enabled, coach_display_alias,
+                coach_created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             ON CONFLICT (user_id)
             DO UPDATE SET
                 calories_target = EXCLUDED.calories_target,
@@ -4615,10 +4646,14 @@ def nourish_goals_endpoint():
                 fat_target_g = EXCLUDED.fat_target_g,
                 fiber_target_g = EXCLUDED.fiber_target_g,
                 water_target_ml = EXCLUDED.water_target_ml,
+                coach_token = EXCLUDED.coach_token,
+                coach_link_enabled = EXCLUDED.coach_link_enabled,
+                coach_display_alias = EXCLUDED.coach_display_alias,
+                coach_created_at = COALESCE(nourish_user_goals.coach_created_at, NOW()),
                 updated_at = NOW()
             RETURNING *
             """,
-            (uid, cal_target, p_target, c_target, f_target, fib_target, w_target),
+            (uid, cal_target, p_target, c_target, f_target, fib_target, w_target, coach_token, coach_link_enabled, coach_display_alias),
         )
         up_row = up_cur.fetchone() if up_cur else None
         db.commit()
@@ -4633,6 +4668,9 @@ def nourish_goals_endpoint():
                 "fat_target_g": f_target,
                 "fiber_target_g": fib_target,
                 "water_target_ml": w_target,
+                "coach_token": coach_token,
+                "coach_link_enabled": coach_link_enabled,
+                "coach_display_alias": coach_display_alias,
             },
         })
     except Exception as exc:
