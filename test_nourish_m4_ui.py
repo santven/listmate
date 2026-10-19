@@ -264,7 +264,7 @@ const elementIds = [
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
   'nourishDiarySection_dinner', 'nourishSlotSubtotal_dinner', 'nourishSlotItems_dinner',
   'nourishDiarySection_snack', 'nourishSlotSubtotal_snack', 'nourishSlotItems_snack',
-  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit',
+  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit', 'nourishBtnSaveEditLog',
   'nourishDisabledView', 'nourishActiveView', 'nourishPageToggle', 'nourishBtnStart',
   'nourishSearchShareHousehold', 'nourishDescribeShareHousehold',
   'nourishBtnShare_breakfast', 'nourishBtnShare_lunch', 'nourishBtnShare_dinner', 'nourishBtnShare_snack',
@@ -278,6 +278,14 @@ global.localStorage = {
   setItem(k, v) { storageMap[k] = String(v); },
   removeItem(k) { delete storageMap[k]; },
   clear() { for (let k in storageMap) delete storageMap[k]; }
+};
+
+const sessionStorageMap = {};
+global.sessionStorage = {
+  getItem(k) { return sessionStorageMap[k] !== undefined ? sessionStorageMap[k] : null; },
+  setItem(k, v) { sessionStorageMap[k] = String(v); },
+  removeItem(k) { delete sessionStorageMap[k]; },
+  clear() { for (let k in sessionStorageMap) delete sessionStorageMap[k]; }
 };
 
 global.window = global;
@@ -506,6 +514,49 @@ eval(fns);
   const shareCall = allFetchCalls.find(c => c.url === '/api/nourish/meals/share');
   if (!shareCall) throw new Error('Expected /api/nourish/meals/share fetch call');
   if (shareCall.body.meal_slot !== 'lunch') throw new Error('Expected meal_slot lunch in share call');
+
+  // 14. Issue #682: Unit switching conversion precision
+  elements.nourishAmountInput.value = '100';
+  nourishSelectedUnit = 'g';
+  setNourishUnit('oz');
+  if (elements.nourishAmountInput.value !== '3.5') {
+    throw new Error('Expected 100g to convert to 3.5 oz, got: ' + elements.nourishAmountInput.value);
+  }
+  setNourishUnit('g');
+  if (elements.nourishAmountInput.value !== '99') {
+    throw new Error('Expected 3.5 oz to convert to 99g, got: ' + elements.nourishAmountInput.value);
+  }
+
+  // 15. Issue #684: SessionStorage persistence on dismiss
+  window._currentSharedMeal = {
+    meal_slot: 'Breakfast',
+    shared_by_user_id: 42,
+    log_date: '2026-10-19',
+    items: [{ food_name: 'Idli', serving_amount: 2, serving_unit: 'serving', calories: 120 }]
+  };
+  dismissNourishSharedMeal();
+  const dismissedKey = 'nourish_dismissed_Breakfast_42_2026-10-19';
+  if (sessionStorage.getItem(dismissedKey) !== '1') {
+    throw new Error('Expected sessionStorage item to be set on dismiss, got: ' + sessionStorage.getItem(dismissedKey));
+  }
+
+  // 16. Issue #684: Update enabled view immediately closes drawer when disabled
+  elements.nourishSharedMealDrawer.style.display = 'flex';
+  await setNourishEnabled(false);
+  if (elements.nourishSharedMealDrawer.style.display !== 'none') {
+    throw new Error('Expected shared meal drawer to close when Nourish is disabled');
+  }
+
+  // 17. Describe Plate 429 rate limit response handling
+  global.fetch = () => Promise.resolve({
+    status: 429,
+    json: () => Promise.resolve({ ok: false, error: 'Daily AI plate analysis limit reached' })
+  });
+  elements.nourishDescribeInput.value = '3 idlis with sambar';
+  await analyzeNourishPlate();
+  if (!elements.nourishParsedItems.innerHTML.includes('Daily AI Plate Limit Reached')) {
+    throw new Error('Expected 429 limit message in parsed items container, got: ' + elements.nourishParsedItems.innerHTML);
+  }
 })();
 """
         res = subprocess.run(
@@ -527,6 +578,9 @@ eval(fns);
         self.assertIn("initNourishUI", settings_html)
         self.assertIn("toggleNourishSetting", settings_html)
         self.assertIn("/api/user/nourish-enabled", settings_html)
+        # Verify duplicate card tag was cleaned up
+        self.assertNotIn('<div class="card">\n  <div class="card">', settings_html)
+        self.assertNotIn('<div class="card">\n<div class="card">', settings_html)
 
 
 if __name__ == "__main__":

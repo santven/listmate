@@ -56,7 +56,7 @@ def _get_gemini_models():
     """Returns the Gemini Lite fallback cascade with resilient production fallbacks."""
     raw_models = os.environ.get(
         "GEMINI_MODEL_NAME",
-        "gemini-3.1-flash-lite,gemini-flash-latest,gemini-2.0-flash,gemini-1.5-flash",
+        "gemini-2.5-flash-lite,gemini-2.0-flash,gemini-flash-latest,gemini-1.5-flash",
     )
     models_to_try = []
     for m in raw_models.split(","):
@@ -67,11 +67,10 @@ def _get_gemini_models():
             models_to_try.append(clean_m)
 
     for fallback in [
-        "gemini-3.1-flash-lite",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
         "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+        "gemini-1.5-flash",
         "gemini-2.0-flash-lite",
         "gemini-2.0-flash-lite-preview-02-05",
     ]:
@@ -462,9 +461,17 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
         for norm, display_name in unique_foods.items():
             raw_est = ai_by_norm.get(norm)
             if not raw_est:
-                raw_est = _heuristic_food_nutrition(display_name)
+                heur = _heuristic_food_nutrition(display_name)
+                if not heur.get("is_unmatched") and float(heur.get("calories_per_100g") or 0.0) > 0:
+                    raw_est = heur
+                else:
+                    # If AI returned None and heuristic returned is_unmatched or 0 cal,
+                    # NEVER upsert into nourish_food_catalog as verified!
+                    continue
 
-            cal_100 = max(0.0, float(raw_est.get("calories_per_100g", 145.0) or 0.0))
+            cal_100 = max(0.0, float(raw_est.get("calories_per_100g") or 0.0))
+            if cal_100 <= 0:
+                continue
             pro_100 = max(0.0, float(raw_est.get("protein_per_100g", 7.0) or 0.0))
             carb_100 = max(0.0, float(raw_est.get("carbs_per_100g", 18.0) or 0.0))
             fat_100 = max(0.0, float(raw_est.get("fat_per_100g", 5.0) or 0.0))
@@ -551,9 +558,9 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
             est = ai_by_norm.get(norm)
             if not est:
                 heur = _heuristic_food_nutrition(fname)
-                if not heur.get("is_unmatched") and heur.get("calories_per_100g", 0.0) > 0:
+                if not heur.get("is_unmatched") and float(heur.get("calories_per_100g") or 0.0) > 0:
                     est = heur
-            if not est:
+            if not est or float(est.get("calories_per_100g") or 0.0) <= 0:
                 # Do not invent numbers if AI failed and no verified curated match; leave pending for next cron run
                 continue
 

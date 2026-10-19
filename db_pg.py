@@ -307,6 +307,15 @@ _SCHEMA = [
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )""",
     "CREATE INDEX IF NOT EXISTS idx_nourish_coach_notes_user_date ON nourish_coach_notes(user_id, log_date DESC)",
+    """CREATE TABLE IF NOT EXISTS nourish_ai_usage (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        usage_date DATE,
+        request_count INTEGER DEFAULT 1,
+        updated_at TIMESTAMP,
+        UNIQUE(user_id, usage_date)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_nourish_ai_usage_user_date ON nourish_ai_usage(user_id, usage_date)",
 ]
 
 def init_db(db=None):
@@ -373,6 +382,15 @@ def init_db(db=None):
         _safe_exec("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS nourish_enabled BOOLEAN NOT NULL DEFAULT FALSE")
         _safe_exec("ALTER TABLE nourish_food_logs ADD COLUMN IF NOT EXISTS is_shared_household BOOLEAN NOT NULL DEFAULT FALSE")
         _safe_exec("CREATE INDEX IF NOT EXISTS idx_nourish_logs_shared ON nourish_food_logs(household_id, log_date, meal_slot) WHERE is_shared_household = TRUE")
+        _safe_exec("""CREATE TABLE IF NOT EXISTS nourish_ai_usage (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            usage_date DATE,
+            request_count INTEGER DEFAULT 1,
+            updated_at TIMESTAMP,
+            UNIQUE(user_id, usage_date)
+        )""")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_nourish_ai_usage_user_date ON nourish_ai_usage(user_id, usage_date)")
 
         try:
             db.execute("ALTER TABLE list_items ADD COLUMN IF NOT EXISTS still_good_stashed_at TIMESTAMP")

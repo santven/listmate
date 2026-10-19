@@ -2,7 +2,7 @@
 """ListMate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
-import os, json, sys, time, re, urllib.request
+import os, json, sys, time, re, urllib.request, datetime
 from functools import wraps
 from urllib.parse import quote, urlencode
 
@@ -3817,6 +3817,25 @@ def _parse_nourish_date(raw_date):
         return None
 
 
+def _to_bool(val, default=False):
+    """
+    Canonical boolean parser for query parameters, JSON fields, and form payloads.
+    Handles booleans, integers (1/0), and strings ('true'/'false'/'1'/'0').
+    """
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    s = str(val).strip().lower()
+    if s in ("true", "1", "t", "yes", "y", "on"):
+        return True
+    if s in ("false", "0", "f", "no", "n", "off", ""):
+        return False
+    return default
+
+
 @app.route("/api/nourish/day", methods=["GET"])
 @require_user
 def nourish_day_endpoint():
@@ -4062,7 +4081,20 @@ def nourish_create_logs_endpoint():
                 }
                 ai_enrich_status = "pending"
 
-            is_shared = bool(entry.get("is_shared_household") or entry.get("share_with_household") or data.get("is_shared_household") or data.get("share_with_household"))
+            raw_shared = (
+                entry.get("is_shared_household")
+                if entry.get("is_shared_household") is not None
+                else (
+                    entry.get("share_with_household")
+                    if entry.get("share_with_household") is not None
+                    else (
+                        data.get("is_shared_household")
+                        if data.get("is_shared_household") is not None
+                        else data.get("share_with_household")
+                    )
+                )
+            )
+            is_shared = _to_bool(raw_shared, default=False)
 
             # Automatically save/update custom & non-baseline food items into household catalog so family can reuse:
             if matched_baseline is None and explicit_calories > 0 and hhid is not None:
@@ -4215,10 +4247,10 @@ def nourish_modify_log_endpoint(log_id):
         if err_resp is not None:
             return err_resp
 
-        # Strictly scoped to user_id
+        # Strictly scoped to user_id and household_id
         existing_cur = db.execute(
-            "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ?",
-            (log_id, uid),
+            "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ? AND household_id = ?",
+            (log_id, uid, hhid),
         )
         existing = existing_cur.fetchone() if existing_cur else None
         if not existing:
@@ -4226,8 +4258,8 @@ def nourish_modify_log_endpoint(log_id):
 
         if request.method == "DELETE":
             db.execute(
-                "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ?",
-                (log_id, uid),
+                "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ? AND household_id = ?",
+                (log_id, uid, hhid),
             )
             db.commit()
             return jsonify({"ok": True, "deleted_id": log_id})
@@ -4343,7 +4375,7 @@ def nourish_modify_log_endpoint(log_id):
                 ai_enrich_status = ?,
                 notes = ?,
                 updated_at = NOW()
-            WHERE id = ? AND user_id = ?
+            WHERE id = ? AND user_id = ? AND household_id = ?
             RETURNING *
             """,
             (
@@ -4363,6 +4395,7 @@ def nourish_modify_log_endpoint(log_id):
                 new_notes,
                 log_id,
                 uid,
+                hhid,
             ),
         )
         upd_row = upd_cur.fetchone() if upd_cur else None
@@ -4498,33 +4531,39 @@ def nourish_goals_endpoint():
             return jsonify({"ok": True, "goals": goals})
 
         data = request.get_json(silent=True) or {}
+        raw_cal = data.get("calories_target") if data.get("calories_target") is not None else data.get("calorie_target")
         try:
-            cal_target = max(500, min(10000, int(float(data.get("calories_target") or data.get("calorie_target") or 2000))))
+            cal_target = max(500, min(10000, int(float(raw_cal)))) if (raw_cal is not None and str(raw_cal).strip() != "") else 2000
         except (ValueError, TypeError):
             cal_target = 2000
 
+        raw_p = data.get("protein_target_g")
         try:
-            p_target = max(0, min(500, int(float(data.get("protein_target_g") or 130))))
+            p_target = max(0, min(500, int(float(raw_p)))) if (raw_p is not None and str(raw_p).strip() != "") else 130
         except (ValueError, TypeError):
             p_target = 130
 
+        raw_c = data.get("carbs_target_g")
         try:
-            c_target = max(0, min(800, int(float(data.get("carbs_target_g") or 200))))
+            c_target = max(0, min(800, int(float(raw_c)))) if (raw_c is not None and str(raw_c).strip() != "") else 200
         except (ValueError, TypeError):
             c_target = 200
 
+        raw_f = data.get("fat_target_g")
         try:
-            f_target = max(0, min(300, int(float(data.get("fat_target_g") or 65))))
+            f_target = max(0, min(300, int(float(raw_f)))) if (raw_f is not None and str(raw_f).strip() != "") else 65
         except (ValueError, TypeError):
             f_target = 65
 
+        raw_fib = data.get("fiber_target_g")
         try:
-            fib_target = max(0, min(150, int(float(data.get("fiber_target_g") or 30))))
+            fib_target = max(0, min(150, int(float(raw_fib)))) if (raw_fib is not None and str(raw_fib).strip() != "") else 30
         except (ValueError, TypeError):
             fib_target = 30
 
+        raw_w = data.get("water_target_ml")
         try:
-            w_target = max(500, min(10000, int(float(data.get("water_target_ml") or 2500))))
+            w_target = max(500, min(10000, int(float(raw_w)))) if (raw_w is not None and str(raw_w).strip() != "") else 2500
         except (ValueError, TypeError):
             w_target = 2500
 
@@ -4685,16 +4724,60 @@ def nourish_analyze_meal_endpoint():
         if err_resp is not None:
             return err_resp
 
-        from nourish_ai import analyze_natural_language_meal
-
         data = request.get_json(silent=True) or {}
         text = str(data.get("text") or data.get("description") or data.get("meal") or "").strip()
         if not text:
             return jsonify({"ok": False, "error": "Meal description text is required"}), 400
 
+        try:
+            limit = int(os.environ.get("NOURISH_AI_DAILY_LIMIT", "10"))
+        except (ValueError, TypeError):
+            limit = 10
+
+        # Check user's daily usage count for today
+        usage_cur = db.execute(
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
+            (uid,),
+        )
+        usage_row = usage_cur.fetchone() if usage_cur else None
+        curr_count = int(usage_row.get("request_count") or 0) if usage_row else 0
+
+        if curr_count >= limit:
+            return jsonify({
+                "ok": False,
+                "error": f"Daily AI evaluation limit reached ({limit}/day). You can still log foods manually and AI will enrich them in the background.",
+                "limit_reached": True,
+                "daily_limit": limit,
+            }), 429
+
+        from nourish_ai import analyze_natural_language_meal
+
         analysis = analyze_natural_language_meal(text)
-        return jsonify({"ok": True, **analysis})
+
+        # Record / increment count in nourish_ai_usage
+        inc_cur = db.execute(
+            """
+            INSERT INTO nourish_ai_usage (user_id, usage_date, request_count, updated_at)
+            VALUES (?, CURRENT_DATE, 1, NOW())
+            ON CONFLICT (user_id, usage_date)
+            DO UPDATE SET request_count = nourish_ai_usage.request_count + 1, updated_at = NOW()
+            RETURNING request_count
+            """,
+            (uid,),
+        )
+        inc_row = inc_cur.fetchone() if inc_cur else None
+        new_count = int(inc_row.get("request_count") or (curr_count + 1)) if inc_row else (curr_count + 1)
+        db.commit()
+
+        remaining_today = max(0, limit - new_count)
+        return jsonify({
+            "ok": True,
+            "remaining_today": remaining_today,
+            **analysis,
+        })
     except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
         print(f"[NOURISH ERROR] POST /api/nourish/analyze-meal failed: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
@@ -4792,14 +4875,18 @@ def nourish_analyze_recipe_endpoint():
 
 
 @app.route("/api/user/nourish-enabled", methods=["GET", "POST"])
+@app.route("/api/nourish/user/nourish-enabled", methods=["GET", "POST"])
 @require_user
 def api_user_nourish_enabled():
     db = get_db()
     try:
         uid = authmod.get_user_id()
+        if uid is None or uid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required"}), 401
+
         if request.method == "POST":
             data = request.get_json(silent=True) or {}
-            enabled = bool(data.get("enabled", False))
+            enabled = _to_bool(data.get("enabled"), False)
             db.execute("UPDATE auth_users SET nourish_enabled = ? WHERE id = ?", (enabled, uid))
             db.commit()
             return jsonify({"ok": True, "enabled": enabled})
@@ -4834,7 +4921,13 @@ def api_nourish_share_meal():
         from seed_nourish import normalize_food_name
 
         data = request.get_json(silent=True) or {}
-        date_str = _parse_nourish_date(data.get("date")) or datetime.date.today().isoformat()
+        raw_date = data.get("date")
+        if raw_date:
+            date_str = _parse_nourish_date(raw_date)
+            if not date_str:
+                return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+        else:
+            date_str = datetime.date.today().isoformat()
         meal_slot = str(data.get("meal_slot") or "Dinner").strip()
 
         up_cur = db.execute(
@@ -4916,8 +5009,8 @@ def api_nourish_share_meal():
 
             if new_cat_id:
                 db.execute(
-                    "UPDATE nourish_food_logs SET catalog_id = ? WHERE id = ?",
-                    (new_cat_id, row["id"]),
+                    "UPDATE nourish_food_logs SET catalog_id = ? WHERE id = ? AND household_id = ? AND user_id = ?",
+                    (new_cat_id, row["id"], hhid, uid),
                 )
 
         db.commit()
@@ -4950,7 +5043,14 @@ def api_nourish_household_shared_meals():
         if not bool(u_row and u_row.get("nourish_enabled")):
             return jsonify({"ok": True, "shared_meals": []})
 
-        date_str = _parse_nourish_date(request.args.get("date")) or datetime.date.today().isoformat()
+        raw_date = request.args.get("date")
+        if raw_date:
+            date_str = _parse_nourish_date(raw_date)
+            if not date_str:
+                return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+        else:
+            date_str = datetime.date.today().isoformat()
+
         cur = db.execute(
             """
             SELECT l.*, u.name as user_name
@@ -4980,6 +5080,8 @@ def api_nourish_household_shared_meals():
 
         return jsonify({"ok": True, "shared_meals": list(meals_by_slot.values())})
     except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
         print(f"[NOURISH ERROR] GET /api/nourish/household/shared-meals failed: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
