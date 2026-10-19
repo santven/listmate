@@ -1048,6 +1048,46 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   color: #64748b;
   text-decoration: underline;
 }
+
+/* ── Nourish Screen Styles (Issue #676) ── */
+#screenNourish, .nourish-screen { max-width: 680px; margin: 0 auto; }
+.nourish-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.nourish-date-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; }
+.nourish-nav-btn { background: #f3f4f6; border: 1px solid var(--border); border-radius: 10px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; cursor: pointer; color: var(--text); user-select: none; transition: background 0.15s ease; }
+.nourish-nav-btn:hover { background: #e5e7eb; }
+.nourish-nav-btn:active { transform: scale(0.94); }
+.nourish-date-label { font-size: 15px; font-weight: 700; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.nourish-slot-pills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+.nourish-slot-pill { padding: 9px 4px; border-radius: 10px; border: 1.5px solid var(--border); background: #f9fafb; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; text-align: center; transition: all 0.15s ease; user-select: none; }
+.nourish-slot-pill:hover { background: #f3f4f6; }
+.nourish-slot-pill.active { background: #ecfdf5; border-color: var(--green); color: #065f46; font-weight: 700; box-shadow: 0 1px 3px rgba(16,185,129,0.15); }
+.nourish-entry-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+.nourish-tab-btn { background: none; border: none; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: all 0.15s ease; }
+.nourish-tab-btn.active { background: #ecfdf5; color: #065f46; font-weight: 700; }
+.nourish-unit-pill { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f9fafb; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s ease; user-select: none; }
+.nourish-unit-pill.active { background: #10b981; border-color: #10b981; color: #fff; font-weight: 700; }
+.nourish-gram-pill { padding: 4px 10px; border-radius: 14px; border: 1px solid #e5e7eb; background: #f9fafb; font-size: 11px; font-weight: 600; color: #4b5563; cursor: pointer; transition: all 0.12s ease; user-select: none; }
+.nourish-gram-pill:hover { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.nourish-gram-pill.active { background: #059669; border-color: #059669; color: #fff; }
+.nourish-preview-bar { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #334155; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.nourish-estimating-badge { display: inline-flex; align-items: center; gap: 4px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; }
+.nourish-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-top: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 240px; overflow-y: auto; z-index: 1000; display: none; }
+.nourish-dropdown-item { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.nourish-dropdown-item:last-child { border-bottom: none; }
+.nourish-dropdown-item:hover { background: #f0fdf4; }
+.nourish-slot-section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+.nourish-slot-header { background: #fafafa; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
+.nourish-slot-title { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.nourish-slot-subtotal { font-size: 12px; font-weight: 600; color: var(--muted); }
+.nourish-log-item { padding: 12px 14px; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nourish-log-item:last-child { border-bottom: none; }
+.nourish-log-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.nourish-log-sub { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.nourish-log-cals { font-size: 13px; font-weight: 700; color: #1f2937; white-space: nowrap; }
+.nourish-item-actions { display: flex; align-items: center; gap: 4px; margin-left: 8px; flex-shrink: 0; }
+.nourish-action-btn { background: transparent; border: none; cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: 14px; color: #9ca3af; transition: all 0.12s ease; }
+.nourish-action-btn:hover { background: #f3f4f6; color: var(--text); }
+.nourish-action-btn.delete:hover { background: #fee2e2; color: #ef4444; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -1524,17 +1564,248 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   </div>
 
   <!-- NOURISH SCREEN -->
-  <div id="screenNourish" class="screen" style="display:none; padding-bottom:40px;">
-    <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
-      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-        <span style="font-size:24px; flex-shrink:0;">🍎</span>
+  <div id="screenNourish" class="screen" style="display:none; padding-bottom:50px;">
+    <!-- Top Reassurance Header -->
+    <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <span style="font-size:22px; flex-shrink:0;">🍎</span>
         <div style="min-width:0;">
-          <div style="font-size:15px; font-weight:700; color:#065f46;">Nourish · Daily Food &amp; Macro Log</div>
-          <div style="font-size:12px; color:#047857; opacity:0.9; margin-top:2px;">🔒 Your food log &amp; goals are 100% private to you.</div>
+          <div style="font-size:14px; font-weight:700; color:#065f46;">Nourish · Daily Food &amp; Macro Log</div>
+          <div style="font-size:11.5px; color:#047857; opacity:0.9; margin-top:1px;">🔒 100% Private to your personal login.</div>
+        </div>
+      </div>
+      <button type="button" id="nourishBtnToday" onclick="jumpNourishToToday()" style="background:#fff; border:1px solid #a7f3d0; color:#047857; font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:12px; cursor:pointer;">Today</button>
+    </div>
+
+    <!-- Date Navigator -->
+    <div class="nourish-date-nav" id="nourishDateNav">
+      <button type="button" class="nourish-nav-btn" id="nourishBtnPrevDay" onclick="navigateNourishDate(-1)" title="Previous Day">‹</button>
+      <div class="nourish-date-label" onclick="var p = document.getElementById('nourishDatePicker'); if(p.showPicker){p.showPicker();}else{p.click();}">
+        <span>📅</span>
+        <span id="nourishDateLabel">Today</span>
+        <span style="font-size:11px; opacity:0.6;">▾</span>
+        <input type="date" id="nourishDatePicker" onchange="onNourishDateChange(this.value)" style="position:absolute; opacity:0; pointer-events:none; width:0; height:0;">
+      </div>
+      <button type="button" class="nourish-nav-btn" id="nourishBtnNextDay" onclick="navigateNourishDate(1)" title="Next Day">›</button>
+    </div>
+
+    <!-- Dashboard Summary Card -->
+    <div class="nourish-card" id="nourishDashboardCard">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+        <div>
+          <span style="font-size:28px; font-weight:800; letter-spacing:-0.5px;" id="nourishCalRemaining">0</span>
+          <span style="font-size:13px; font-weight:600; color:var(--muted); margin-left:4px;" id="nourishCalSub">kcal remaining</span>
+        </div>
+        <div style="font-size:12px; color:var(--muted);">
+          Budget: <b id="nourishCalBudget" style="color:var(--text);">2000</b> · Food: <b id="nourishCalConsumed" style="color:var(--text);">0</b>
+        </div>
+      </div>
+      <div style="height:8px; border-radius:999px; background:#f1f5f9; overflow:hidden; margin-bottom:14px;">
+        <div id="nourishCalProgress" style="height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg, #10b981, #059669); transition:width 0.3s ease;"></div>
+      </div>
+
+      <!-- 4 Macro Bars -->
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:14px;">
+        <!-- Protein -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#047857; margin-bottom:2px;">🥩 Protein</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_protein">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_protein">120</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_protein" style="height:100%; width:0%; background:#10b981; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Carbs -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#b45309; margin-bottom:2px;">🌾 Carbs</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_carbs">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_carbs">220</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_carbs" style="height:100%; width:0%; background:#f59e0b; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Fat -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#0369a1; margin-bottom:2px;">🥑 Fat</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_fat">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_fat">65</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_fat" style="height:100%; width:0%; background:#0284c7; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Fiber -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#6d28d9; margin-bottom:2px;">🌱 Fiber</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_fiber">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_fiber">30</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_fiber" style="height:100%; width:0%; background:#8b5cf6; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hydration Row -->
+      <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div style="flex:1; min-width:140px;">
+          <div style="font-size:12px; font-weight:700; color:#1e40af; display:flex; align-items:center; gap:4px;">
+            <span>💧 Hydration:</span>
+            <span id="nourishValWater" style="font-weight:800;">0</span> / <span id="nourishTargetWater">2500</span> ml
+          </div>
+          <div style="height:4px; border-radius:999px; background:#dbeafe; margin-top:4px; overflow:hidden;">
+            <div id="nourishWaterProgress" style="height:100%; width:0%; background:#3b82f6; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button type="button" onclick="quickAddNourishWater(250)" style="background:#fff; border:1px solid #93c5fd; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:5px 9px; border-radius:8px; cursor:pointer;">+1 Cup (250ml)</button>
+          <button type="button" onclick="quickAddNourishWater(500)" style="background:#fff; border:1px solid #93c5fd; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:5px 9px; border-radius:8px; cursor:pointer;">+500ml</button>
         </div>
       </div>
     </div>
-    <div id="nourishScreenContent"></div>
+
+    <!-- Food Entry Engine Card -->
+    <div class="nourish-card" id="nourishEntryCard">
+      <!-- Meal Slot Selector -->
+      <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Select Meal Slot</div>
+      <div class="nourish-slot-pills">
+        <div class="nourish-slot-pill active" id="nourishSlot_breakfast" onclick="selectNourishSlot('breakfast')">🌅 Breakfast</div>
+        <div class="nourish-slot-pill" id="nourishSlot_lunch" onclick="selectNourishSlot('lunch')">☀️ Lunch</div>
+        <div class="nourish-slot-pill" id="nourishSlot_dinner" onclick="selectNourishSlot('dinner')">🌙 Dinner</div>
+        <div class="nourish-slot-pill" id="nourishSlot_snack" onclick="selectNourishSlot('snack')">🍎 Snack</div>
+      </div>
+
+      <!-- Entry Mode Tabs -->
+      <div class="nourish-entry-tabs">
+        <button type="button" class="nourish-tab-btn active" id="nourishTabSearch" onclick="switchNourishEntryTab('search')">🔍 Search Catalog</button>
+        <button type="button" class="nourish-tab-btn" id="nourishTabDescribe" onclick="switchNourishEntryTab('describe')">✨ Describe Plate (AI)</button>
+      </div>
+
+      <!-- Search Mode Content -->
+      <div id="nourishContentSearch">
+        <div style="position:relative; margin-bottom:10px;">
+          <input type="text" id="nourishSearchInput" placeholder="Search foods or type custom item (e.g. idli, oats, chicken, banana)..." autocomplete="off" oninput="onNourishSearchInput(event)" style="width:100%; padding:12px 14px; font-size:15px; border-radius:12px; border:1.5px solid var(--border); outline:none; background:#fff;">
+          <div id="nourishSearchDropdown" class="nourish-dropdown"></div>
+        </div>
+
+        <!-- Quantity & 4-Unit Switcher Row -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <button type="button" onclick="(function(){var i=document.getElementById('nourishAmountInput');var v=Math.max(1,(parseFloat(i.value)||0)-10);i.value=v;updateNourishPreview();})()" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">-</button>
+            <input type="number" id="nourishAmountInput" value="100" min="0.1" step="any" oninput="updateNourishPreview(); updateNourishGramPillActiveState();" style="width:75px; text-align:center; padding:7px; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:8px; outline:none;">
+            <button type="button" onclick="(function(){var i=document.getElementById('nourishAmountInput');var v=(parseFloat(i.value)||0)+10;i.value=v;updateNourishPreview();})()" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">+</button>
+          </div>
+
+          <!-- 4-Unit Selector -->
+          <div style="display:flex; gap:4px; flex-shrink:0;">
+            <button type="button" class="nourish-unit-pill active" id="nourishUnit_g" onclick="setNourishUnit('g')">g</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_oz" onclick="setNourishUnit('oz')">oz</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_ml" onclick="setNourishUnit('ml')">ml</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_serving" onclick="setNourishUnit('serving')">serving</button>
+          </div>
+        </div>
+
+        <!-- 1-Tap Gram Presets -->
+        <div id="nourishGramPillsRow" style="display:flex; align-items:center; gap:6px; margin-bottom:10px; overflow-x:auto; padding-bottom:2px;">
+          <span style="font-size:11px; font-weight:600; color:var(--muted); flex-shrink:0;">Quick:</span>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_50" onclick="setNourishGramPill(50)">50g</button>
+          <button type="button" class="nourish-gram-pill active" id="nourishGramPill_100" onclick="setNourishGramPill(100)">100g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_150" onclick="setNourishGramPill(150)">150g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_200" onclick="setNourishGramPill(200)">200g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_250" onclick="setNourishGramPill(250)">250g</button>
+        </div>
+
+        <!-- Live Macro Preview Bar -->
+        <div id="nourishPreviewBar" class="nourish-preview-bar">
+          <span style="color:var(--muted); font-size:11.5px;">Search an item or type a custom food name to preview nutrition.</span>
+        </div>
+
+        <button type="button" id="nourishBtnLog" onclick="submitNourishLog()" style="width:100%; margin-top:12px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
+          ➕ Log to Breakfast
+        </button>
+      </div>
+
+      <!-- Describe Plate Mode Content -->
+      <div id="nourishContentDescribe" style="display:none;">
+        <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">
+          Type whatever you ate in plain English (e.g. <i>"2 dosas with 1 cup sambar and coconut chutney"</i>). AI will deconstruct the plate and scale portions.
+        </div>
+        <textarea id="nourishDescribeInput" rows="3" placeholder="Describe your meal..." style="width:100%; padding:12px 14px; font-size:14px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff; font-family:inherit; resize:vertical;"></textarea>
+        <button type="button" id="nourishBtnAnalyzePlate" onclick="analyzeNourishPlate()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #4d7c0f, #16a34a); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer;">
+          ✨ Analyze Plate
+        </button>
+        <div id="nourishAnalyzeLoading" style="display:none; text-align:center; padding:14px; font-size:13px; font-weight:600; color:#047857;">
+          ⏳ Analyzing ingredients and scaling macros...
+        </div>
+        <div id="nourishParsedItems"></div>
+      </div>
+    </div>
+
+    <!-- Today's Meal Diary -->
+    <div id="nourishDiaryContainer">
+      <!-- Breakfast -->
+      <div class="nourish-slot-section" id="nourishDiarySection_breakfast">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🌅 Breakfast</div>
+          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_breakfast">0 kcal · 0g P</div>
+        </div>
+        <div id="nourishSlotItems_breakfast">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Lunch -->
+      <div class="nourish-slot-section" id="nourishDiarySection_lunch">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">☀️ Lunch</div>
+          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_lunch">0 kcal · 0g P</div>
+        </div>
+        <div id="nourishSlotItems_lunch">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Dinner -->
+      <div class="nourish-slot-section" id="nourishDiarySection_dinner">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🌙 Dinner</div>
+          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_dinner">0 kcal · 0g P</div>
+        </div>
+        <div id="nourishSlotItems_dinner">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Snack -->
+      <div class="nourish-slot-section" id="nourishDiarySection_snack">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🍎 Snack</div>
+          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_snack">0 kcal · 0g P</div>
+        </div>
+        <div id="nourishSlotItems_snack">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nourish Portion Edit Modal -->
+  <div id="nourishEditModal" class="modal-overlay" onclick="if(event.target===this)closeNourishEditModal();" style="align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; width:100%; max-width:380px; border-radius:18px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Edit Portion</div>
+      <div id="nourishEditName" style="font-size:13.5px; color:#047857; font-weight:600; margin-bottom:14px;"></div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Serving Amount</label>
+        <input type="number" id="nourishEditAmount" min="0.1" step="any" style="width:100%; padding:10px; font-size:16px; border:1px solid var(--border); border-radius:10px; margin-top:4px; outline:none;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Serving Unit</label>
+        <select id="nourishEditUnit" style="width:100%; padding:10px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:4px; background:#fff; outline:none;">
+          <option value="g">g (grams)</option>
+          <option value="oz">oz (ounces)</option>
+          <option value="ml">ml (milliliters)</option>
+          <option value="serving">serving</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="closeNourishEditModal()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; cursor:pointer;">Cancel</button>
+        <button type="button" onclick="saveNourishEditLog()" style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--green); color:#fff; font-weight:700; cursor:pointer;">Save</button>
+      </div>
+    </div>
   </div>
 
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
@@ -10344,6 +10615,740 @@ window.checkAppUpdatePrompt = async function() {
     });
   }
 })();
+
+// ── Nourish Client Controller (Issue #676) ──
+var currentNourishDate = (function() {
+  var d = new Date();
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  return [year, month, day].join('-');
+})();
+
+var currentNourishSlot = (function() {
+  var h = new Date().getHours();
+  if (h >= 4 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 16 && h < 21) return 'dinner';
+  return 'snack';
+})();
+
+var currentNourishData = null;
+var selectedNourishItem = null;
+var nourishSelectedUnit = 'g';
+var nourishSearchDebounceTimer = null;
+var nourishEntryMode = 'search';
+
+function formatNourishDisplayDate(dateStr) {
+  if (!dateStr) return 'Today';
+  var today = (function() {
+    var d = new Date();
+    var month = '' + (d.getMonth() + 1);
+    var day = '' + d.getDate();
+    var year = d.getFullYear();
+    if (month.length < 2) month = '0' + month;
+    if (day.length < 2) day = '0' + day;
+    return [year, month, day].join('-');
+  })();
+  if (dateStr === today) return 'Today, ' + formatNourishShortDate(dateStr);
+
+  var yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  var ym = '' + (yesterday.getMonth() + 1);
+  var yd = '' + yesterday.getDate();
+  var yStr = [yesterday.getFullYear(), (ym.length < 2 ? '0' + ym : ym), (yd.length < 2 ? '0' + yd : yd)].join('-');
+  if (dateStr === yStr) return 'Yesterday, ' + formatNourishShortDate(dateStr);
+
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function formatNourishShortDate(dateStr) {
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function navigateNourishDate(offsetDays) {
+  var parts = currentNourishDate.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  d.setDate(d.getDate() + offsetDays);
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  currentNourishDate = [year, month, day].join('-');
+  loadNourishDay(currentNourishDate);
+}
+
+function onNourishDateChange(val) {
+  if (val) {
+    currentNourishDate = val;
+    loadNourishDay(currentNourishDate);
+  }
+}
+
+function jumpNourishToToday() {
+  var d = new Date();
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  currentNourishDate = [year, month, day].join('-');
+  loadNourishDay(currentNourishDate);
+}
+
+function selectNourishSlot(slot) {
+  currentNourishSlot = slot;
+  ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function(s) {
+    var el = document.getElementById('nourishSlot_' + s);
+    if (el) el.classList.toggle('active', s === slot);
+  });
+  var btn = document.getElementById('nourishBtnLog');
+  if (btn) {
+    var slotTitle = slot.charAt(0).toUpperCase() + slot.slice(1);
+    btn.innerHTML = '➕ Log to ' + slotTitle;
+  }
+}
+
+function switchNourishEntryTab(tab) {
+  nourishEntryMode = tab;
+  var btnSearch = document.getElementById('nourishTabSearch');
+  var btnDescribe = document.getElementById('nourishTabDescribe');
+  var cSearch = document.getElementById('nourishContentSearch');
+  var cDescribe = document.getElementById('nourishContentDescribe');
+  if (btnSearch) btnSearch.classList.toggle('active', tab === 'search');
+  if (btnDescribe) btnDescribe.classList.toggle('active', tab === 'describe');
+  if (cSearch) cSearch.style.display = (tab === 'search') ? 'block' : 'none';
+  if (cDescribe) cDescribe.style.display = (tab === 'describe') ? 'block' : 'none';
+}
+
+function setNourishUnit(unit) {
+  nourishSelectedUnit = unit;
+  ['g', 'oz', 'ml', 'serving'].forEach(function(u) {
+    var el = document.getElementById('nourishUnit_' + u);
+    if (el) el.classList.toggle('active', u === unit);
+  });
+  var amtInput = document.getElementById('nourishAmountInput');
+  var curVal = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  if (unit === 'g') {
+    if (curVal < 10) amtInput.value = '100';
+  } else if (unit === 'serving') {
+    if (curVal >= 10) amtInput.value = '1';
+  } else if (unit === 'oz') {
+    if (curVal >= 20 || curVal < 1) amtInput.value = '3.5';
+  } else if (unit === 'ml') {
+    if (curVal < 10) amtInput.value = '100';
+  }
+  var gramRow = document.getElementById('nourishGramPillsRow');
+  if (gramRow) gramRow.style.display = (unit === 'g') ? 'flex' : 'none';
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function setNourishGramPill(grams) {
+  if (nourishSelectedUnit !== 'g') {
+    setNourishUnit('g');
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  if (amtInput) amtInput.value = String(grams);
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function updateNourishGramPillActiveState() {
+  var amtInput = document.getElementById('nourishAmountInput');
+  var val = amtInput ? parseFloat(amtInput.value) : 0;
+  [50, 100, 150, 200, 250].forEach(function(g) {
+    var pill = document.getElementById('nourishGramPill_' + g);
+    if (pill) pill.classList.toggle('active', nourishSelectedUnit === 'g' && val === g);
+  });
+}
+
+function onNourishSearchInput(e) {
+  var q = e.target.value.trim();
+  if (selectedNourishItem && selectedNourishItem.name && selectedNourishItem.name.toLowerCase() !== q.toLowerCase()) {
+    selectedNourishItem = null;
+  }
+  if (nourishSearchDebounceTimer) clearTimeout(nourishSearchDebounceTimer);
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  if (!q) {
+    if (dropdown) dropdown.style.display = 'none';
+    updateNourishPreview();
+    return;
+  }
+  nourishSearchDebounceTimer = setTimeout(function() {
+    searchNourishCatalog(q);
+  }, 220);
+}
+
+async function searchNourishCatalog(q) {
+  try {
+    var res = await fetch(API + '/nourish/catalog/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); });
+    var dropdown = document.getElementById('nourishSearchDropdown');
+    if (!dropdown) return;
+    if (!res || !res.ok) {
+      dropdown.style.display = 'none';
+      return;
+    }
+    var items = (res.foods || []).concat((res.recipes || []).map(function(r) { r.is_recipe = true; return r; }));
+    if (items.length === 0) {
+      dropdown.innerHTML = '<div style="padding:12px 14px; font-size:12px; color:var(--muted); text-align:center;">Unmatched food. Tap <b>Log</b> to create (AI will estimate nutrition in background).</div>';
+      dropdown.style.display = 'block';
+      updateNourishPreview();
+      return;
+    }
+    var html = '';
+    items.slice(0, 8).forEach(function(item, idx) {
+      var cal = item.calories_per_100g || item.per_serving_calories || (item.perServing && item.perServing.calories) || item.calories || 0;
+      var prot = item.protein_per_100g || item.per_serving_protein_g || (item.perServing && item.perServing.protein) || 0;
+      var icon = item.is_recipe ? '🍳' : '🥗';
+      var servDesc = item.standard_serving_desc || (item.serving_weight_g ? item.serving_weight_g + 'g serving' : '100g');
+      html += '<div class="nourish-dropdown-item" onclick="selectNourishCatalogItemByIndex(' + idx + ')">' +
+        '<div>' +
+          '<div style="font-weight:600; color:var(--text);">' + icon + ' ' + escapeHtml(item.name) + '</div>' +
+          '<div style="font-size:11px; color:var(--muted); margin-top:1px;">' + escapeHtml(servDesc) + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;">' +
+          '<div style="font-weight:700; color:#1f2937;">' + Math.round(cal) + ' kcal</div>' +
+          '<div style="font-size:11px; color:#059669; font-weight:600;">' + Math.round(prot) + 'g P</div>' +
+        '</div>' +
+      '</div>';
+    });
+    window._lastNourishSearchHits = items;
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+  } catch(err) {
+    console.error('Nourish catalog search error:', err);
+  }
+}
+
+function selectNourishCatalogItemByIndex(idx) {
+  var items = window._lastNourishSearchHits || [];
+  if (items[idx]) {
+    selectNourishCatalogItem(items[idx]);
+  }
+}
+
+function selectNourishCatalogItem(item) {
+  selectedNourishItem = item;
+  var input = document.getElementById('nourishSearchInput');
+  if (input) input.value = item.name;
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+
+  if (item.standard_serving_unit && ['g', 'oz', 'ml', 'serving'].includes(item.standard_serving_unit)) {
+    setNourishUnit(item.standard_serving_unit);
+  } else {
+    setNourishUnit('g');
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  if (amtInput) {
+    var defAmt = item.standard_serving_amount || (nourishSelectedUnit === 'serving' ? 1 : (item.serving_weight_g || 100));
+    amtInput.value = String(defAmt);
+  }
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function updateNourishPreview() {
+  var previewBar = document.getElementById('nourishPreviewBar');
+  if (!previewBar) return;
+  var amtInput = document.getElementById('nourishAmountInput');
+  var amt = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  var nameInput = document.getElementById('nourishSearchInput');
+  var foodName = nameInput ? nameInput.value.trim() : '';
+  if (!foodName) {
+    previewBar.innerHTML = '<span style="color:var(--muted); font-size:11.5px;">Search an item or type a custom food name to preview nutrition.</span>';
+    return;
+  }
+  var item = selectedNourishItem;
+  if (!item) {
+    previewBar.innerHTML = '<span style="color:#b45309; font-weight:600; font-size:11.5px;">✨ Custom Item: ' + escapeHtml(foodName) + ' (' + amt + ' ' + nourishSelectedUnit + ')</span>' +
+      '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>';
+    return;
+  }
+
+  var cal100 = item.calories_per_100g || 0;
+  var p100 = item.protein_per_100g || 0;
+  var c100 = item.carbs_per_100g || 0;
+  var f100 = item.fat_per_100g || 0;
+  var fib100 = item.fiber_per_100g || 0;
+  var servWeight = item.serving_weight_g || 100;
+  var density = item.density_g_per_ml || 1.0;
+
+  var gramWeight = amt;
+  if (nourishSelectedUnit === 'oz') {
+    gramWeight = amt * 28.3495;
+  } else if (nourishSelectedUnit === 'ml') {
+    gramWeight = amt * density;
+  } else if (nourishSelectedUnit === 'serving') {
+    gramWeight = amt * servWeight;
+  }
+  var scale = gramWeight / 100.0;
+  var estCal = Math.round(cal100 * scale);
+  var estP = Math.round((p100 * scale) * 10) / 10;
+  var estC = Math.round((c100 * scale) * 10) / 10;
+  var estF = Math.round((f100 * scale) * 10) / 10;
+
+  previewBar.innerHTML = '<div><b style="color:var(--text);">' + estCal + ' kcal</b> <span style="font-size:11px; color:var(--muted);">for ' + amt + ' ' + nourishSelectedUnit + ' (' + Math.round(gramWeight) + 'g)</span></div>' +
+    '<div style="display:flex; gap:8px; font-size:11.5px; font-weight:600;">' +
+      '<span style="color:#059669;">🥩 ' + estP + 'g P</span>' +
+      '<span style="color:#d97706;">🌾 ' + estC + 'g C</span>' +
+      '<span style="color:#0284c7;">🥑 ' + estF + 'g F</span>' +
+    '</div>';
+}
+
+async function submitNourishLog() {
+  var nameInput = document.getElementById('nourishSearchInput');
+  var foodName = nameInput ? nameInput.value.trim() : '';
+  if (!foodName) {
+    if (typeof toast === 'function') toast('Please enter a food name');
+    return;
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  var amt = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  if (amt <= 0) {
+    if (typeof toast === 'function') toast('Please enter a valid amount');
+    return;
+  }
+  var btn = document.getElementById('nourishBtnLog');
+  if (btn) btn.disabled = true;
+
+  var item = selectedNourishItem;
+  var payload = {
+    log_date: currentNourishDate,
+    items: [{
+      name: foodName,
+      meal_slot: currentNourishSlot,
+      serving_amount: amt,
+      serving_unit: nourishSelectedUnit,
+      catalog_id: (item && !item.is_recipe) ? item.id : null,
+      nourish_recipe_id: (item && item.is_recipe) ? item.id : null
+    }]
+  };
+
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (btn) btn.disabled = false;
+    if (res && res.ok) {
+      if (nameInput) nameInput.value = '';
+      selectedNourishItem = null;
+      var dropdown = document.getElementById('nourishSearchDropdown');
+      if (dropdown) dropdown.style.display = 'none';
+      updateNourishPreview();
+      var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
+      if (typeof toast === 'function') toast('✅ Logged to ' + slotTitle + '!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not log food: ' + (res && res.error ? res.error : 'Network error'));
+    }
+  } catch(err) {
+    if (btn) btn.disabled = false;
+    console.error('Error logging nourish food:', err);
+    if (typeof toast === 'function') toast('Network error while logging food');
+  }
+}
+
+async function analyzeNourishPlate() {
+  var input = document.getElementById('nourishDescribeInput');
+  var text = input ? input.value.trim() : '';
+  if (!text) {
+    if (typeof toast === 'function') toast('Please describe what you ate');
+    return;
+  }
+  var btn = document.getElementById('nourishBtnAnalyzePlate');
+  var loading = document.getElementById('nourishAnalyzeLoading');
+  var container = document.getElementById('nourishParsedItems');
+  if (btn) btn.disabled = true;
+  if (loading) loading.style.display = 'block';
+  if (container) container.innerHTML = '';
+
+  try {
+    var res = await fetch(API + '/nourish/analyze-meal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function(r) { return r.json(); });
+
+    if (btn) btn.disabled = false;
+    if (loading) loading.style.display = 'none';
+
+    if (res && res.ok && Array.isArray(res.items) && res.items.length > 0) {
+      window._lastNourishAnalyzedItems = res.items;
+      var html = '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:10px;">' +
+        '<div style="font-weight:700; font-size:13px; color:var(--text); margin-bottom:8px;">AI Plate Breakdown (' + res.items.length + ' items):</div>';
+      var totalCal = 0;
+      res.items.forEach(function(it) {
+        var cal = it.calories || 0;
+        totalCal += cal;
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
+          '<div><b>' + escapeHtml(it.name) + '</b> <span style="color:var(--muted); font-size:11px;">(' + (it.serving_amount || 100) + ' ' + (it.serving_unit || 'g') + ')</span></div>' +
+          '<div style="font-weight:600; color:#1f2937;">' + Math.round(cal) + ' kcal</div>' +
+        '</div>';
+      });
+      html += '<div style="display:flex; justify-content:space-between; font-weight:700; font-size:13px; padding-top:8px; color:var(--green-dark);">' +
+        '<span>Total Plate Estimate:</span>' +
+        '<span>' + Math.round(totalCal) + ' kcal</span>' +
+      '</div>' +
+      '<button type="button" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
+        '➕ Log All ' + res.items.length + ' Items to ' + (currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1)) +
+      '</button>' +
+      '</div>';
+      if (container) container.innerHTML = html;
+    } else {
+      if (container) container.innerHTML = '<div style="padding:10px; color:#b91c1c; font-size:12px;">Could not parse plate items. Please try describing more simply.</div>';
+    }
+  } catch(err) {
+    if (btn) btn.disabled = false;
+    if (loading) loading.style.display = 'none';
+    console.error('Plate analysis error:', err);
+    if (typeof toast === 'function') toast('Plate analysis failed');
+  }
+}
+
+async function logAllAnalyzedNourishItems() {
+  var items = window._lastNourishAnalyzedItems || [];
+  if (!items || items.length === 0) return;
+  var payload = {
+    log_date: currentNourishDate,
+    items: items.map(function(it) {
+      return {
+        name: it.name,
+        meal_slot: currentNourishSlot,
+        serving_amount: it.serving_amount || 100,
+        serving_unit: it.serving_unit || 'g',
+        catalog_id: it.catalog_id || null,
+        calories: it.calories,
+        protein_g: it.protein_g,
+        carbs_g: it.carbs_g,
+        fat_g: it.fat_g,
+        fiber_g: it.fiber_g
+      };
+    })
+  };
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      var input = document.getElementById('nourishDescribeInput');
+      if (input) input.value = '';
+      var container = document.getElementById('nourishParsedItems');
+      if (container) container.innerHTML = '';
+      window._lastNourishAnalyzedItems = null;
+      if (typeof toast === 'function') toast('✅ Logged all plate items!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not log items');
+    }
+  } catch(err) {
+    console.error('Error logging analyzed items:', err);
+  }
+}
+
+async function quickAddNourishWater(amountMl) {
+  var valEl = document.getElementById('nourishValWater');
+  var targetEl = document.getElementById('nourishTargetWater');
+  var currentVal = valEl ? parseInt(valEl.textContent, 10) || 0 : 0;
+  var targetVal = targetEl ? parseInt(targetEl.textContent, 10) || 2500 : 2500;
+  var newVal = currentVal + amountMl;
+  if (valEl) valEl.textContent = String(newVal);
+  var barEl = document.getElementById('nourishWaterProgress');
+  if (barEl) {
+    var pct = Math.min(100, Math.round((newVal / targetVal) * 100));
+    barEl.style.width = pct + '%';
+  }
+  if (typeof toast === 'function') toast('💧 +' + amountMl + 'ml water logged!');
+
+  try {
+    await fetch(API + '/nourish/biometrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        log_date: currentNourishDate,
+        delta_water_ml: amountMl
+      })
+    });
+  } catch(err) {
+    console.error('Error logging water:', err);
+  }
+}
+
+async function loadNourishDay(dateStr) {
+  var targetDate = dateStr || currentNourishDate;
+  currentNourishDate = targetDate;
+  var dateInput = document.getElementById('nourishDatePicker');
+  if (dateInput) dateInput.value = targetDate;
+  var dateLabel = document.getElementById('nourishDateLabel');
+  if (dateLabel) dateLabel.textContent = formatNourishDisplayDate(targetDate);
+  selectNourishSlot(currentNourishSlot);
+
+  try {
+    var res = await fetch(API + '/nourish/day?date=' + encodeURIComponent(targetDate)).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      currentNourishData = res;
+      renderNourishDay(res);
+    }
+  } catch(err) {
+    console.error('Error loading nourish day:', err);
+  }
+}
+
+function renderNourishDay(data) {
+  if (!data) return;
+  var totals = data.totals || {};
+  var goals = data.goals || {};
+  var biometrics = data.biometrics || {};
+  var logs = data.logs || [];
+
+  var budget = goals.calorie_target || 2000;
+  var consumed = Math.round(totals.calories || 0);
+  var remaining = budget - consumed;
+
+  var calRemEl = document.getElementById('nourishCalRemaining');
+  var calSubEl = document.getElementById('nourishCalSub');
+  var calBudgetEl = document.getElementById('nourishCalBudget');
+  var calConsumedEl = document.getElementById('nourishCalConsumed');
+  var calBar = document.getElementById('nourishCalProgress');
+
+  if (calRemEl) {
+    calRemEl.textContent = String(Math.abs(remaining));
+    calRemEl.style.color = (remaining >= 0) ? '#047857' : '#b91c1c';
+  }
+  if (calSubEl) {
+    calSubEl.textContent = (remaining >= 0) ? 'kcal remaining' : 'kcal over budget';
+  }
+  if (calBudgetEl) calBudgetEl.textContent = String(budget);
+  if (calConsumedEl) calConsumedEl.textContent = String(consumed);
+  if (calBar) {
+    var pct = Math.min(100, Math.round((consumed / budget) * 100));
+    calBar.style.width = pct + '%';
+    calBar.style.background = (remaining >= 0) ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f59e0b, #ef4444)';
+  }
+
+  var pTarget = goals.protein_target_g || 120;
+  var cTarget = goals.carbs_target_g || 220;
+  var fTarget = goals.fat_target_g || 65;
+  var fibTarget = goals.fiber_target_g || 30;
+
+  var pVal = Math.round(totals.protein_g || 0);
+  var cVal = Math.round(totals.carbs_g || 0);
+  var fVal = Math.round(totals.fat_g || 0);
+  var fibVal = Math.round(totals.fiber_g || 0);
+
+  var setMacro = function(name, val, target) {
+    var vEl = document.getElementById('nourishVal_' + name);
+    var tEl = document.getElementById('nourishTarget_' + name);
+    var bEl = document.getElementById('nourishBar_' + name);
+    if (vEl) vEl.textContent = String(val);
+    if (tEl) tEl.textContent = String(target);
+    if (bEl) {
+      var pct = Math.min(100, Math.round((val / (target || 1)) * 100));
+      bEl.style.width = pct + '%';
+    }
+  };
+  setMacro('protein', pVal, pTarget);
+  setMacro('carbs', cVal, cTarget);
+  setMacro('fat', fVal, fTarget);
+  setMacro('fiber', fibVal, fibTarget);
+
+  var waterVal = biometrics.water_ml || 0;
+  var waterTarget = goals.water_target_ml || 2500;
+  var wValEl = document.getElementById('nourishValWater');
+  var wTargetEl = document.getElementById('nourishTargetWater');
+  var wBar = document.getElementById('nourishWaterProgress');
+  if (wValEl) wValEl.textContent = String(waterVal);
+  if (wTargetEl) wTargetEl.textContent = String(waterTarget);
+  if (wBar) {
+    var wPct = Math.min(100, Math.round((waterVal / waterTarget) * 100));
+    wBar.style.width = wPct + '%';
+  }
+
+  var slots = { breakfast: [], lunch: [], dinner: [], snack: [] };
+  logs.forEach(function(l) {
+    var slot = (l.meal_slot || 'snack').toLowerCase();
+    if (!slots[slot]) slots[slot] = [];
+    slots[slot].push(l);
+  });
+
+  ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function(slot) {
+    renderNourishSlotSection(slot, slots[slot]);
+  });
+}
+
+function renderNourishSlotSection(slot, items) {
+  var container = document.getElementById('nourishSlotItems_' + slot);
+  var subtotalEl = document.getElementById('nourishSlotSubtotal_' + slot);
+  if (!container) return;
+
+  var totalCal = 0;
+  var totalP = 0;
+  items.forEach(function(it) {
+    totalCal += (it.calories || 0);
+    totalP += (it.protein_g || 0);
+  });
+
+  if (subtotalEl) {
+    subtotalEl.textContent = Math.round(totalCal) + ' kcal · ' + Math.round(totalP) + 'g P';
+  }
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>';
+    return;
+  }
+
+  var html = '';
+  items.forEach(function(it) {
+    var isPending = it.ai_enrich_status === 'pending' || (it.calories === 0 && !it.catalog_id);
+    var calText = isPending
+      ? '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>'
+      : '<span class="nourish-log-cals">' + Math.round(it.calories) + ' kcal</span>';
+
+    var macroSub = isPending
+      ? '<span style="font-size:11px; color:#92400e; font-weight:500;">Nutrition available in ~1 hr</span>'
+      : '<span>P: ' + Math.round(it.protein_g || 0) + 'g</span> · <span>C: ' + Math.round(it.carbs_g || 0) + 'g</span> · <span>F: ' + Math.round(it.fat_g || 0) + 'g</span>';
+
+    html += '<div class="nourish-log-item" id="nourishLog_' + it.id + '">' +
+      '<div style="flex:1; min-width:0;">' +
+        '<div class="nourish-log-name">' + escapeHtml(it.name) + '</div>' +
+        '<div class="nourish-log-sub">' +
+          '<span style="font-weight:600; color:#374151;">' + it.serving_amount + ' ' + escapeHtml(it.serving_unit || 'g') + '</span> · ' +
+          macroSub +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center;">' +
+        calText +
+        '<div class="nourish-item-actions">' +
+          '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
+          '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+async function deleteNourishLog(logId) {
+  if (!confirm('Delete this food log entry?')) return;
+  try {
+    var res = await fetch(API + '/nourish/logs/' + logId, {
+      method: 'DELETE'
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('Entry removed.');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not delete entry.');
+    }
+  } catch(err) {
+    console.error('Error deleting log:', err);
+    if (typeof toast === 'function') toast('Network error');
+  }
+}
+
+function openNourishEditModal(logId) {
+  var logs = (currentNourishData && currentNourishData.logs) || [];
+  var entry = logs.find(function(l) { return l.id === logId; });
+  if (!entry) return;
+  window._activeNourishEditLogId = logId;
+  var nameEl = document.getElementById('nourishEditName');
+  var amtEl = document.getElementById('nourishEditAmount');
+  var unitEl = document.getElementById('nourishEditUnit');
+  if (nameEl) nameEl.textContent = entry.name;
+  if (amtEl) amtEl.value = String(entry.serving_amount || 100);
+  if (unitEl) unitEl.value = entry.serving_unit || 'g';
+  var modal = document.getElementById('nourishEditModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeNourishEditModal() {
+  var modal = document.getElementById('nourishEditModal');
+  if (modal) modal.classList.remove('active');
+  window._activeNourishEditLogId = null;
+}
+
+async function saveNourishEditLog() {
+  var logId = window._activeNourishEditLogId;
+  if (!logId) return;
+  var amtEl = document.getElementById('nourishEditAmount');
+  var unitEl = document.getElementById('nourishEditUnit');
+  var amt = amtEl ? parseFloat(amtEl.value) || 0 : 0;
+  var unit = unitEl ? unitEl.value : 'g';
+  if (amt <= 0) {
+    if (typeof toast === 'function') toast('Please enter a valid amount');
+    return;
+  }
+  try {
+    var res = await fetch(API + '/nourish/logs/' + logId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serving_amount: amt,
+        serving_unit: unit
+      })
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      closeNourishEditModal();
+      if (typeof toast === 'function') toast('Portion updated.');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not update portion');
+    }
+  } catch(err) {
+    console.error('Error updating log:', err);
+    if (typeof toast === 'function') toast('Network error');
+  }
+}
+
+document.addEventListener('click', function(e) {
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  var input = document.getElementById('nourishSearchInput');
+  if (dropdown && dropdown.style.display === 'block') {
+    if (e.target !== dropdown && !dropdown.contains(e.target) && e.target !== input) {
+      dropdown.style.display = 'none';
+    }
+  }
+});
+
+window.loadNourishDay = loadNourishDay;
+window.navigateNourishDate = navigateNourishDate;
+window.onNourishDateChange = onNourishDateChange;
+window.jumpNourishToToday = jumpNourishToToday;
+window.selectNourishSlot = selectNourishSlot;
+window.switchNourishEntryTab = switchNourishEntryTab;
+window.setNourishUnit = setNourishUnit;
+window.setNourishGramPill = setNourishGramPill;
+window.updateNourishGramPillActiveState = updateNourishGramPillActiveState;
+window.updateNourishPreview = updateNourishPreview;
+window.submitNourishLog = submitNourishLog;
+window.analyzeNourishPlate = analyzeNourishPlate;
+window.logAllAnalyzedNourishItems = logAllAnalyzedNourishItems;
+window.quickAddNourishWater = quickAddNourishWater;
+window.deleteNourishLog = deleteNourishLog;
+window.openNourishEditModal = openNourishEditModal;
+window.closeNourishEditModal = closeNourishEditModal;
+window.saveNourishEditLog = saveNourishEditLog;
+window.onNourishSearchInput = onNourishSearchInput;
+window.searchNourishCatalog = searchNourishCatalog;
+window.selectNourishCatalogItemByIndex = selectNourishCatalogItemByIndex;
+window.selectNourishCatalogItem = selectNourishCatalogItem;
 </script>
 </body>
 </html>
+
