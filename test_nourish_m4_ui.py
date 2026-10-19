@@ -85,6 +85,8 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishGramPill_150"', self.html)
         self.assertIn('id="nourishGramPill_200"', self.html)
         self.assertIn('id="nourishGramPill_250"', self.html)
+        self.assertIn('id="nourishBtnStepMinus"', self.html)
+        self.assertIn('id="nourishBtnStepPlus"', self.html)
         self.assertIn('id="nourishPreviewBar"', self.html)
         self.assertIn('id="nourishBtnLog"', self.html)
 
@@ -166,6 +168,7 @@ const fns = [
   'setNourishUnit',
   'setNourishGramPill',
   'updateNourishGramPillActiveState',
+  'stepNourishAmount',
   'onNourishSearchInput',
   'searchNourishCatalog',
   'selectNourishCatalogItemByIndex',
@@ -230,6 +233,7 @@ const elementIds = [
   'nourishUnit_g', 'nourishUnit_oz', 'nourishUnit_ml', 'nourishUnit_serving',
   'nourishGramPillsRow',
   'nourishGramPill_50', 'nourishGramPill_100', 'nourishGramPill_150', 'nourishGramPill_200', 'nourishGramPill_250',
+  'nourishBtnStepMinus', 'nourishBtnStepPlus',
   'nourishPreviewBar', 'nourishBtnLog',
   'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems', 'nourishBtnLogAllPlate',
   'nourishDiaryContainer',
@@ -280,6 +284,20 @@ eval(fns);
   if (!elements.nourishUnit_g.classList.contains('active')) throw new Error('Gram pill should switch unit to g');
   if (elements.nourishAmountInput.value !== '150') throw new Error('Gram pill should set input value to 150');
   if (!elements.nourishGramPill_150.classList.contains('active')) throw new Error('150g pill should be active');
+
+  // 3b. Stepper + and - buttons behavior
+  setNourishUnit('serving');
+  if (elements.nourishAmountInput.value !== '1') throw new Error('Switching to serving should reset default to 1');
+  stepNourishAmount(1);
+  if (elements.nourishAmountInput.value !== '2') throw new Error('Clicking + on 1 serving should give 2, got: ' + elements.nourishAmountInput.value);
+  stepNourishAmount(1);
+  if (elements.nourishAmountInput.value !== '3') throw new Error('Clicking + on 2 servings should give 3, got: ' + elements.nourishAmountInput.value);
+  stepNourishAmount(-1);
+  if (elements.nourishAmountInput.value !== '2') throw new Error('Clicking - on 3 servings should give 2, got: ' + elements.nourishAmountInput.value);
+  stepNourishAmount(-1);
+  if (elements.nourishAmountInput.value !== '1') throw new Error('Clicking - on 2 servings should give 1, got: ' + elements.nourishAmountInput.value);
+  stepNourishAmount(-1);
+  if (elements.nourishAmountInput.value !== '0.5') throw new Error('Clicking - on 1 serving should give 0.5, got: ' + elements.nourishAmountInput.value);
 
   // 4. Live macro preview calculation
   elements.nourishSearchInput.value = 'Steamed Dosai';
