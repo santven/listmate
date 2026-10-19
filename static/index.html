@@ -1690,9 +1690,9 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <!-- Quantity & 4-Unit Switcher Row -->
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:4px;">
-            <button type="button" onclick="(function(){var i=document.getElementById('nourishAmountInput');var v=Math.max(1,(parseFloat(i.value)||0)-10);i.value=v;updateNourishPreview();})()" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">-</button>
+            <button type="button" id="nourishBtnStepMinus" onclick="stepNourishAmount(-1)" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">-</button>
             <input type="number" id="nourishAmountInput" value="100" min="0.1" step="any" oninput="updateNourishPreview(); updateNourishGramPillActiveState();" style="width:75px; text-align:center; padding:7px; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:8px; outline:none;">
-            <button type="button" onclick="(function(){var i=document.getElementById('nourishAmountInput');var v=(parseFloat(i.value)||0)+10;i.value=v;updateNourishPreview();})()" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">+</button>
+            <button type="button" id="nourishBtnStepPlus" onclick="stepNourishAmount(1)" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">+</button>
           </div>
 
           <!-- 4-Unit Selector -->
@@ -10827,6 +10827,42 @@ function updateNourishGramPillActiveState() {
   });
 }
 
+function stepNourishAmount(direction) {
+  var input = document.getElementById('nourishAmountInput');
+  if (!input) return;
+  var cur = parseFloat(input.value) || 0;
+  var next = cur;
+  if (cur <= 0) {
+    next = (nourishSelectedUnit === 'serving' ? 1 : (nourishSelectedUnit === 'oz' ? 1 : 10));
+    input.value = String(next);
+    updateNourishGramPillActiveState();
+    updateNourishPreview();
+    return;
+  }
+  if (nourishSelectedUnit === 'serving') {
+    var step = 1;
+    if (cur <= 1 && direction < 0) {
+      step = 0.5;
+    } else if (cur < 1 && direction > 0) {
+      step = 0.5;
+    }
+    next = Math.round((cur + direction * step) * 10) / 10;
+    if (next < 0.5) next = 0.5;
+  } else if (nourishSelectedUnit === 'oz') {
+    var step = 0.5;
+    next = Math.round((cur + direction * step) * 10) / 10;
+    if (next < 0.5) next = 0.5;
+  } else {
+    // 'g' or 'ml'
+    var step = 10;
+    next = Math.round(cur + direction * step);
+    if (next < 5) next = 5;
+  }
+  input.value = String(next);
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
 function onNourishSearchInput(e) {
   var q = e.target.value.trim();
   if (selectedNourishItem && selectedNourishItem.name && selectedNourishItem.name.toLowerCase() !== q.toLowerCase()) {
@@ -11545,6 +11581,7 @@ window.switchNourishEntryTab = switchNourishEntryTab;
 window.setNourishUnit = setNourishUnit;
 window.setNourishGramPill = setNourishGramPill;
 window.updateNourishGramPillActiveState = updateNourishGramPillActiveState;
+window.stepNourishAmount = stepNourishAmount;
 window.updateNourishPreview = updateNourishPreview;
 window.submitNourishLog = submitNourishLog;
 window.analyzeNourishPlate = analyzeNourishPlate;
