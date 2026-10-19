@@ -5766,13 +5766,19 @@ def coach_portal_view(token=None):
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>VitalPath Coach Portal — Link Missing</title>
-  <style>body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #F8FAFC; color: #0F172A; } .box { max-width: 440px; margin: 0 auto; background: white; border: 1px solid #E2E8F0; padding: 30px; border-radius: 12px; }</style>
+  <title>Nourish Coach Portal — Link Missing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #F8FAFC; color: #0F172A; }
+    .box { max-width: 440px; margin: 0 auto; background: white; border: 1px solid #E2E8F0; padding: 36px 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+    .badge { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; background: #FEF2F2; color: #DC2626; border-radius: 12px; font-size: 24px; margin-bottom: 16px; }
+  </style>
 </head>
 <body>
   <div class="box">
-    <h2 style="color:#DC2626; margin-bottom:10px;">⚠️ Invalid Coach Link</h2>
-    <p style="color:#64748B;">No coach token was provided in the URL. Please verify the link provided by your client.</p>
+    <div class="badge">⚠️</div>
+    <h2 style="color:#DC2626; margin-bottom:8px; font-size: 1.25rem;">Invalid Coach Link</h2>
+    <p style="color:#64748B; font-size: 0.95rem; line-height: 1.5;">No coach token was provided in the URL. Please verify the link provided by your client in ListMate Nourish.</p>
   </div>
 </body>
 </html>""", 404
@@ -5782,17 +5788,27 @@ def coach_portal_view(token=None):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>VitalPath Coach Portal — ListMate Nourish</title>
+  <title>Nourish Coach Portal — ListMate</title>
+  <!-- ListMate Nourish Coach Portal -->
   <style>
     :root {{
       --primary: #10B981;
       --primary-dark: #059669;
+      --primary-deep: #064E3B;
+      --primary-light: #ECFDF5;
+      --border: #E2E8F0;
+      --border-light: #F1F5F9;
       --bg: #F8FAFC;
       --card-bg: #FFFFFF;
       --text: #0F172A;
       --text-muted: #64748B;
-      --border: #E2E8F0;
-      --ring: rgba(16, 185, 129, 0.2);
+      --text-subtle: #94A3B8;
+      --ring: rgba(16, 185, 129, 0.25);
+      --macro-protein: #10B981;
+      --macro-carbs: #F59E0B;
+      --macro-fat: #8B5CF6;
+      --macro-water: #3B82F6;
+      --macro-cals: #F97316;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -5800,150 +5816,633 @@ def coach_portal_view(token=None):
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      padding-bottom: 60px;
+      padding-bottom: 80px;
+      -webkit-font-smoothing: antialiased;
     }}
     .header {{
-      background: var(--card-bg);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
-      padding: 16px 20px;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 50;
+      padding: 14px 20px;
+    }}
+    .header-inner {{
+      max-width: 820px;
+      margin: 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
     }}
     .brand {{
       display: flex;
       align-items: center;
       gap: 10px;
+      text-decoration: none;
+    }}
+    .brand-icon {{
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: white;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+      font-size: 20px;
+    }}
+    .brand-title {{
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0F172A;
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+    }}
+    .brand-sub {{
+      font-size: 0.72rem;
       font-weight: 700;
-      font-size: 1.1rem;
-      color: var(--primary-dark);
+      color: #059669;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }}
-    .badge-client {{
-      background: #ECFDF5;
-      color: #065F46;
-      font-size: 0.82rem;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-weight: 600;
-    }}
-    .container {{
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 20px 16px;
-    }}
-    .card {{
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-    }}
-    .card h2 {{
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 12px;
+    .header-actions {{
       display: flex;
       align-items: center;
       gap: 8px;
     }}
-    .targets-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-      gap: 10px;
-      margin-top: 10px;
+    .badge-client {{
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      font-size: 0.82rem;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }}
-    .target-pill {{
+    .badge-client .status-dot {{
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #10B981;
+      display: inline-block;
+    }}
+    .btn-icon {{
       background: #F1F5F9;
-      padding: 10px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      width: 36px;
+      height: 36px;
       border-radius: 10px;
-      text-align: center;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
     }}
-    .target-label {{ font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }}
-    .target-val {{ font-size: 1.1rem; font-weight: 700; color: var(--text); }}
-    .day-card {{
+    .btn-icon:hover {{
+      background: #E2E8F0;
+      color: var(--text);
+    }}
+    .container {{
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 16px 16px;
+    }}
+    .card {{
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }}
+    .card-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }}
+    .card-title {{
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .controls-bar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }}
+    .week-nav {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .btn-nav {{
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }}
+    .btn-nav:hover {{
+      background: #F1F5F9;
+      border-color: #CBD5E1;
+    }}
+    .view-toggles {{
+      display: flex;
+      background: #F1F5F9;
+      padding: 3px;
+      border-radius: 10px;
+      gap: 2px;
+    }}
+    .view-toggle-btn {{
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }}
+    .view-toggle-btn.active {{
+      background: white;
+      color: #065F46;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }}
+    .summary-pill {{
+      background: #F8FAFC;
       border: 1px solid var(--border);
       border-radius: 12px;
-      margin-bottom: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+    .summary-pill-label {{
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }}
+    .summary-pill-val {{
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }}
+    .summary-pill-sub {{
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }}
+    .macro-bar-wrap {{
+      margin-top: 10px;
+      padding-top: 14px;
+      border-top: 1px solid #F1F5F9;
+    }}
+    .macro-split-bar {{
+      display: flex;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #E2E8F0;
+      margin-bottom: 8px;
+    }}
+    .macro-split-seg {{
+      height: 100%;
+      transition: width 0.3s ease;
+    }}
+    .macro-split-legend {{
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }}
+    .legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }}
+    .legend-dot {{
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }}
+    /* Interactive Trend Chart */
+    .chart-card {{
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }}
+    .chart-container {{
+      position: relative;
+      height: 180px;
+      padding: 26px 6px 6px 6px;
+      margin-top: 12px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }}
+    .chart-target-line {{
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 2px dashed #94A3B8;
+      pointer-events: none;
+      z-index: 1;
+    }}
+    .chart-target-badge {{
+      position: absolute;
+      right: 6px;
+      top: -18px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #475569;
+      background: #F1F5F9;
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }}
+    .chart-col {{
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      cursor: pointer;
+      z-index: 2;
+      transition: transform 0.15s ease;
+      user-select: none;
+    }}
+    .chart-col:hover {{
+      transform: translateY(-2px);
+    }}
+    .chart-val {{
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.15s;
+    }}
+    .chart-bar-wrap {{
+      width: 100%;
+      max-width: 38px;
+      height: 100px;
+      background: #F1F5F9;
+      border-radius: 8px 8px 4px 4px;
+      display: flex;
+      align-items: flex-end;
+      padding: 2px;
+      overflow: hidden;
+      border: 1.5px solid transparent;
+      transition: all 0.2s;
+    }}
+    .chart-col.active .chart-bar-wrap {{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+      background: #ECFDF5;
+    }}
+    .chart-col.active .chart-val {{
+      color: var(--primary-dark);
+      font-weight: 800;
+    }}
+    .chart-bar {{
+      width: 100%;
+      border-radius: 6px 6px 2px 2px;
+      transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+    .chart-label {{
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-top: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }}
+    .chart-date-num {{
+      font-size: 9px;
+      color: var(--text-subtle);
+      font-weight: 600;
+    }}
+    .chart-col.active .chart-label {{
+      color: var(--primary-dark);
+      font-weight: 800;
+    }}
+    /* Day Accordion */
+    .day-card {{
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 10px;
       overflow: hidden;
       background: var(--card-bg);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }}
+    .day-card.selected {{
+      border-color: #10B981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
     }}
     .day-header {{
-      padding: 14px 16px;
-      background: #FAFAFA;
+      padding: 12px 16px;
+      background: #FFFFFF;
       display: flex;
       justify-content: space-between;
       align-items: center;
       cursor: pointer;
       user-select: none;
-      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+      gap: 10px;
     }}
-    .day-date {{ font-weight: 700; font-size: 0.95rem; }}
-    .day-macros {{ font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; }}
-    .day-body {{ padding: 14px 16px; }}
+    .day-header:hover {{
+      background: #F8FAFC;
+    }}
+    .day-date-badge {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }}
+    .day-avatar {{
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #F1F5F9;
+      color: #334155;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }}
+    .day-avatar.is-today {{
+      background: #10B981;
+      color: white;
+    }}
+    .day-title {{
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .today-pill {{
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }}
+    .day-meta {{
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }}
+    .day-body {{
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-light);
+      background: #FAFAFA;
+    }}
+    .slot-block {{
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }}
+    .slot-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #334155;
+      text-transform: capitalize;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #F1F5F9;
+    }}
     .log-item {{
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid #F1F5F9;
-      font-size: 0.88rem;
+      padding: 6px 0;
+      font-size: 0.86rem;
+      border-bottom: 1px solid #F8FAFC;
     }}
     .log-item:last-child {{ border-bottom: none; }}
-    .slot-tag {{
-      display: inline-block;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: #EEF2F6;
-      color: #475569;
-      margin-right: 6px;
+    .log-name {{
+      font-weight: 600;
+      color: var(--text);
     }}
+    .log-qty {{
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin-left: 4px;
+    }}
+    .log-cals {{
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }}
+    .log-macros {{
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }}
+    .water-row {{
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.84rem;
+      color: #1E40AF;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }}
+    .notes-list {{
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }}
+    .note-bubble {{
+      background: #F0FDF4;
+      border-left: 3px solid var(--primary);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+    }}
+    .note-author {{
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #065F46;
+      margin-bottom: 2px;
+    }}
+    .note-text {{
+      color: #1F2937;
+      white-space: pre-wrap;
+    }}
+    .note-time {{
+      font-size: 0.7rem;
+      color: #059669;
+      margin-top: 4px;
+    }}
+    /* Feedback Form */
     .feedback-form textarea {{
       width: 100%;
-      min-height: 90px;
+      min-height: 80px;
       padding: 12px;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 12px;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       resize: vertical;
       outline: none;
+      background: #FAFAFA;
+      transition: all 0.15s;
     }}
     .feedback-form textarea:focus {{
+      background: white;
       border-color: var(--primary);
       box-shadow: 0 0 0 3px var(--ring);
+    }}
+    .quick-chips {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }}
+    .quick-chip {{
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }}
+    .quick-chip:hover {{
+      background: #ECFDF5;
+      border-color: #A7F3D0;
+      color: #065F46;
     }}
     .form-row {{
       display: flex;
       gap: 10px;
       margin-top: 10px;
+      flex-wrap: wrap;
     }}
-    .form-row input {{
+    .form-input {{
       padding: 10px 12px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       outline: none;
+      background: #FAFAFA;
+    }}
+    .form-input:focus {{
+      background: white;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
     }}
     .btn-send {{
-      background: var(--primary);
+      background: linear-gradient(135deg, #10B981, #059669);
       color: white;
       border: none;
       padding: 10px 20px;
-      border-radius: 8px;
-      font-weight: 600;
+      border-radius: 10px;
+      font-weight: 700;
       cursor: pointer;
-      font-size: 0.92rem;
-      transition: background 0.15s;
+      font-size: 0.9rem;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }}
-    .btn-send:hover {{ background: var(--primary-dark); }}
+    .btn-send:hover {{
+      background: linear-gradient(135deg, #059669, #047857);
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }}
+    .btn-send:disabled {{
+      opacity: 0.6;
+      cursor: not-allowed;
+    }}
+    .targets-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+      gap: 10px;
+    }}
+    .target-pill {{
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 10px;
+      text-align: center;
+    }}
+    .target-label {{ font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }}
+    .target-val {{ font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 2px; }}
     .toast {{
       position: fixed;
       bottom: 24px;
@@ -5953,61 +6452,154 @@ def coach_portal_view(token=None):
       color: white;
       padding: 12px 24px;
       border-radius: 999px;
-      font-weight: 600;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-weight: 700;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
       display: none;
-      z-index: 100;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
     }}
-    .note-bubble {{
-      background: #F0FDF4;
-      border-left: 3px solid var(--primary);
-      padding: 10px 14px;
-      border-radius: 6px;
-      margin-top: 10px;
-      font-size: 0.88rem;
+    @keyframes fadeIn {{
+      from {{ opacity: 0; transform: translate(-50%, 10px); }}
+      to {{ opacity: 1; transform: translate(-50%, 0); }}
     }}
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="brand">
-      <span>🥗 VitalPath Coach</span>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🥗</div>
+        <div>
+          <div class="brand-title">Nourish Coach</div>
+          <div class="brand-sub">ListMate Nutrition</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="clientBadge" class="badge-client">
+          <span class="status-dot"></span>
+          <span id="clientNameText">Loading...</span>
+        </div>
+        <button id="btnRefresh" onclick="loadCoachView(true)" class="btn-icon" title="Refresh Data">
+          🔄
+        </button>
+      </div>
     </div>
-    <div id="clientBadge" class="badge-client">Loading client...</div>
-  </div>
+  </header>
 
   <div class="container">
     <div id="errorBanner" class="card" style="display:none; border-color:#FCA5A5; background:#FEF2F2; color:#991B1B;">
-      <h2>⚠️ Access Denied</h2>
+      <h2 style="font-size:1.1rem; font-weight:700; margin-bottom:6px;">⚠️ Access Denied</h2>
       <p id="errorText">This coach link is invalid or has been disabled by the client.</p>
     </div>
 
     <div id="portalContent" style="display:none;">
-      <!-- Send Feedback Note Card -->
-      <div class="card">
-        <h2>💬 Send Feedback to Client</h2>
+      <!-- Period & View Navigation Bar -->
+      <div class="controls-bar">
+        <div class="week-nav">
+          <button class="btn-nav" id="btnPrevWeek" onclick="changeWeek(-1)">◀ Prev</button>
+          <span id="dateRangeLabel" style="font-size:0.86rem; font-weight:700; color:#1E293B; padding:0 6px;"></span>
+          <button class="btn-nav" id="btnNextWeek" onclick="changeWeek(1)">Next ▶</button>
+          <button class="btn-nav" id="btnToday" onclick="resetToCurrentWeek()" style="color:#059669; font-weight:800;">Today</button>
+        </div>
+        <div class="view-toggles">
+          <button class="view-toggle-btn active" id="btnViewWeek" onclick="setViewMode('week')">📊 7-Day Trend</button>
+          <button class="view-toggle-btn" id="btnViewAll" onclick="setViewMode('all')">📅 14-Day Full</button>
+        </div>
+      </div>
+
+      <!-- Weekly Summary & Averages -->
+      <div class="card" id="summaryCard">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📊</span> <span id="summaryTitle">7-Day Nutrition Averages</span>
+          </div>
+          <span id="loggedDaysCount" style="font-size:0.78rem; font-weight:700; color:#059669; background:#ECFDF5; padding:3px 8px; border-radius:999px;">0 days logged</span>
+        </div>
+        <div class="summary-grid" id="summaryGrid">
+          <!-- Populated by JS -->
+        </div>
+        <div class="macro-bar-wrap">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase;">Macro Calorie Distribution</span>
+            <span id="macroSplitSummary" style="font-size:0.75rem; color:#64748B; font-weight:600;"></span>
+          </div>
+          <div class="macro-split-bar" id="macroSplitBar">
+            <div id="splitProtein" class="macro-split-seg" style="width:30%; background:#10B981;" title="Protein"></div>
+            <div id="splitCarbs" class="macro-split-seg" style="width:45%; background:#F59E0B;" title="Carbs"></div>
+            <div id="splitFat" class="macro-split-seg" style="width:25%; background:#8B5CF6;" title="Fat"></div>
+          </div>
+          <div class="macro-split-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#10B981;"></span> Protein: <b id="legProtein" style="color:#0F172A;">--</b></span>
+            <span class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> Carbs: <b id="legCarbs" style="color:#0F172A;">--</b></span>
+            <span class="legend-item"><span class="legend-dot" style="background:#8B5CF6;"></span> Fat: <b id="legFat" style="color:#0F172A;">--</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Calorie Intake Trend Chart (The VitalPath Chart) -->
+      <div class="chart-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📈</span> Daily Calorie Intake Trend
+          </div>
+          <span style="font-size:0.75rem; color:#64748B; font-weight:600;">Tap any bar to inspect day</span>
+        </div>
+        <div class="chart-container" id="trendChart">
+          <div class="chart-target-line" id="chartTargetLine" style="bottom: 50%;">
+            <span class="chart-target-badge" id="chartTargetBadge">Target: 2,000 kcal</span>
+          </div>
+          <!-- Bars populated by JS -->
+        </div>
+      </div>
+
+      <!-- Coach Feedback Composer Card -->
+      <div class="card" id="coachComposerCard">
+        <div class="card-header">
+          <div class="card-title">
+            <span>💬</span> <span id="feedbackCardTitle">Leave Feedback for Client</span>
+          </div>
+          <span id="feedbackTargetDateBadge" style="font-size:0.78rem; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:6px;">For: Today</span>
+        </div>
+        <div class="quick-chips">
+          <div class="quick-chip" onclick="applyQuickNote('🎯 Hit protein goal! Strong day')">🎯 Great Protein</div>
+          <div class="quick-chip" onclick="applyQuickNote('💧 Don\'t forget to stay hydrated today')">💧 Hydration Reminder</div>
+          <div class="quick-chip" onclick="applyQuickNote('🥗 Excellent whole-foods balance & veggies')">🥗 Balanced Meals</div>
+          <div class="quick-chip" onclick="applyQuickNote('🔥 Calorie deficit adherence is on track')">🔥 Great Deficit</div>
+          <div class="quick-chip" onclick="applyQuickNote('⚡ Good pre-workout meal timing today')">⚡ Fuel Timing</div>
+        </div>
         <div class="feedback-form">
-          <textarea id="noteMessage" placeholder="Leave an encouraging note, dietary adjustment, or macro feedback..."></textarea>
+          <textarea id="noteMessage" placeholder="Leave an encouraging note, dietary adjustment, or macro guidance for your client..."></textarea>
           <div class="form-row">
-            <input type="text" id="noteAuthor" placeholder="Coach Name" value="Coach" style="flex:1;">
-            <input type="date" id="noteDate" style="flex:1;">
-            <button class="btn-send" id="sendBtn" onclick="submitCoachNote()">Send Note</button>
+            <input type="text" id="noteAuthor" class="form-input" placeholder="Coach Name" value="Coach" style="flex:1; min-width:140px;">
+            <input type="date" id="noteDate" class="form-input" style="flex:1; min-width:140px;">
+            <button class="btn-send" id="sendBtn" onclick="submitCoachNote()">
+              <span>✉️</span>
+              <span id="sendBtnText">Send Note</span>
+            </button>
           </div>
         </div>
       </div>
 
       <!-- Client Target Goals Card -->
       <div class="card">
-        <h2>🎯 Client Daily Macro Targets</h2>
+        <div class="card-header">
+          <div class="card-title"><span>🎯</span> Client Daily Macro Targets</div>
+        </div>
         <div class="targets-grid" id="goalsGrid">
-          <!-- Filled by JS -->
+          <!-- Populated by JS -->
         </div>
       </div>
 
-      <!-- Past 14 Days History -->
-      <h2 style="font-size:1.1rem; font-weight:700; margin: 24px 0 12px 4px;">📅 Past 14 Days Diary</h2>
+      <!-- Day-by-Day Accordion -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin: 20px 4px 12px 4px;">
+        <h2 style="font-size:1.05rem; font-weight:800; color:#1E293B; display:flex; align-items:center; gap:8px;">
+          <span>📅</span> Day-by-Day Meal Breakdown
+        </h2>
+        <span style="font-size:0.75rem; color:#64748B; font-weight:600;">Tap day to view meals</span>
+      </div>
       <div id="daysList">
-        <!-- Filled by JS -->
+        <!-- Populated by JS -->
       </div>
     </div>
   </div>
@@ -6016,9 +6608,383 @@ def coach_portal_view(token=None):
 
   <script>
     const TOKEN = "{clean_token}";
-    document.getElementById("noteDate").value = new Date().toISOString().slice(0, 10);
+    let clientData = null;
+    let weekOffset = 0; // 0 = current 7 days, -1 = older 7 days
+    let viewMode = 'week'; // 'week' or 'all'
+    let selectedDate = new Date().toISOString().slice(0, 10);
+    const expandedDays = {{}};
 
-    async function loadCoachView() {{
+    // Restore coach name
+    try {{
+      const savedCoach = localStorage.getItem('nourish_coach_name');
+      if (savedCoach) document.getElementById('noteAuthor').value = savedCoach;
+    }} catch(e) {{}}
+
+    document.getElementById("noteDate").value = selectedDate;
+
+    function parseDate(iso) {{
+      const d = new Date(iso + 'T12:00:00');
+      const dayName = d.toLocaleDateString('en-US', {{ weekday: 'short' }}).toUpperCase();
+      const monthDay = d.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric' }});
+      const dayNum = d.getDate();
+      const full = d.toLocaleDateString('en-US', {{ weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }});
+      return {{ dayName, monthDay, dayNum, full }};
+    }}
+
+    function applyQuickNote(text) {{
+      const ta = document.getElementById('noteMessage');
+      if (!ta) return;
+      if (ta.value.trim().length > 0) {{
+        ta.value = ta.value.trim() + " " + text;
+      }} else {{
+        ta.value = text;
+      }}
+      ta.focus();
+    }}
+
+    function setViewMode(mode) {{
+      viewMode = mode;
+      document.getElementById('btnViewWeek').classList.toggle('active', mode === 'week');
+      document.getElementById('btnViewAll').classList.toggle('active', mode === 'all');
+      renderDashboard();
+    }}
+
+    function changeWeek(delta) {{
+      weekOffset += delta;
+      if (weekOffset > 0) weekOffset = 0;
+      if (weekOffset < -1) weekOffset = -1; // Max 14 days
+      renderDashboard();
+    }}
+
+    function resetToCurrentWeek() {{
+      weekOffset = 0;
+      selectedDate = new Date().toISOString().slice(0, 10);
+      document.getElementById('noteDate').value = selectedDate;
+      renderDashboard();
+    }}
+
+    function selectDate(iso, shouldScroll) {{
+      selectedDate = iso;
+      expandedDays[iso] = true;
+      document.getElementById('noteDate').value = iso;
+      const parsed = parseDate(iso);
+      document.getElementById('feedbackTargetDateBadge').textContent = 'For: ' + parsed.monthDay;
+      renderChart();
+      renderDaysList();
+
+      if (shouldScroll) {{
+        const el = document.getElementById('day-card-' + iso);
+        if (el) {{
+          el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+        }}
+      }}
+    }}
+
+    function toggleDay(iso) {{
+      expandedDays[iso] = !expandedDays[iso];
+      renderDaysList();
+    }}
+
+    function getVisibleDays() {{
+      if (!clientData || !clientData.days) return [];
+      const allDays = clientData.days;
+      if (viewMode === 'all') return allDays;
+
+      // Week mode (7 days per chunk)
+      if (weekOffset === 0) {{
+        return allDays.slice(0, 7);
+      }} else {{
+        return allDays.slice(7, 14);
+      }}
+    }}
+
+    function renderDashboard() {{
+      if (!clientData) return;
+      const visibleDays = getVisibleDays();
+
+      // Controls Bar Date Range Label
+      if (visibleDays.length > 0) {{
+        const first = parseDate(visibleDays[visibleDays.length - 1].date);
+        const last = parseDate(visibleDays[0].date);
+        document.getElementById('dateRangeLabel').textContent = first.monthDay + ' – ' + last.monthDay;
+      }}
+
+      document.getElementById('btnNextWeek').disabled = (weekOffset >= 0);
+      document.getElementById('btnPrevWeek').disabled = (weekOffset <= -1);
+
+      renderSummary(visibleDays);
+      renderChart();
+      renderGoals();
+      renderDaysList();
+    }}
+
+    function renderSummary(days) {{
+      const goals = clientData.goals || {{}};
+      const targetCals = goals.calories_target || 2000;
+      const targetP = goals.protein_target_g || 130;
+      const targetC = goals.carbs_target_g || 200;
+      const targetF = goals.fat_target_g || 65;
+      const targetW = goals.water_target_ml || 2500;
+
+      const loggedDays = days.filter(d => (d.logs && d.logs.length > 0) || (d.totals && d.totals.calories > 0));
+      const count = loggedDays.length;
+      document.getElementById('loggedDaysCount').textContent = count + ' of ' + days.length + ' days logged';
+
+      let sumCals = 0, sumP = 0, sumC = 0, sumF = 0, sumW = 0;
+      loggedDays.forEach(d => {{
+        const t = d.totals || {{}};
+        sumCals += (t.calories || 0);
+        sumP += (t.protein_g || 0);
+        sumC += (t.carbs_g || 0);
+        sumF += (t.fat_g || 0);
+        sumW += (t.water_ml || 0);
+      }});
+
+      const avgCals = count > 0 ? Math.round(sumCals / count) : 0;
+      const avgP = count > 0 ? Math.round(sumP / count) : 0;
+      const avgC = count > 0 ? Math.round(sumC / count) : 0;
+      const avgF = count > 0 ? Math.round(sumF / count) : 0;
+      const avgW = count > 0 ? Math.round(sumW / count) : 0;
+
+      // Macro calorie ratio
+      const pKcal = avgP * 4;
+      const cKcal = avgC * 4;
+      const fKcal = avgF * 9;
+      const macroKcal = pKcal + cKcal + fKcal;
+      const pPct = macroKcal > 0 ? Math.round((pKcal / macroKcal) * 100) : 0;
+      const cPct = macroKcal > 0 ? Math.round((cKcal / macroKcal) * 100) : 0;
+      const fPct = macroKcal > 0 ? Math.max(0, 100 - pPct - cPct) : 0;
+
+      const calDiff = avgCals - targetCals;
+      const calSub = calDiff === 0 ? 'Exact target' : (calDiff > 0 ? ('+' + calDiff + ' over target') : (calDiff + ' below target'));
+
+      document.getElementById('summaryGrid').innerHTML = `
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🔥</span> Avg Calories</div>
+          <div class="summary-pill-val">${{avgCals.toLocaleString()}}</div>
+          <div class="summary-pill-sub">${{calSub}}</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🥩</span> Avg Protein</div>
+          <div class="summary-pill-val" style="color:#10B981;">${{avgP}}g</div>
+          <div class="summary-pill-sub">${{pPct}}% • Target ${{targetP}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🌾</span> Avg Carbs</div>
+          <div class="summary-pill-val" style="color:#F59E0B;">${{avgC}}g</div>
+          <div class="summary-pill-sub">${{cPct}}% • Target ${{targetC}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🥑</span> Avg Fat</div>
+          <div class="summary-pill-val" style="color:#8B5CF6;">${{avgF}}g</div>
+          <div class="summary-pill-sub">${{fPct}}% • Target ${{targetF}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>💧</span> Avg Water</div>
+          <div class="summary-pill-val" style="color:#3B82F6;">${{avgW.toLocaleString()}} <span style="font-size:0.75rem; font-weight:600;">ml</span></div>
+          <div class="summary-pill-sub">${{Math.round(avgW / 29.5735)}} oz • Target ${{targetW}}ml</div>
+        </div>
+      `;
+
+      // Update Macro Split Bar
+      document.getElementById('splitProtein').style.width = pPct + '%';
+      document.getElementById('splitCarbs').style.width = cPct + '%';
+      document.getElementById('splitFat').style.width = fPct + '%';
+      document.getElementById('legProtein').textContent = `${{pPct}}% (${{avgP}}g)`;
+      document.getElementById('legCarbs').textContent = `${{cPct}}% (${{avgC}}g)`;
+      document.getElementById('legFat').textContent = `${{fPct}}% (${{avgF}}g)`;
+      document.getElementById('macroSplitSummary').textContent = `${{avgCals}} kcal avg`;
+    }}
+
+    function renderChart() {{
+      const days = getVisibleDays().slice().reverse(); // Show chronological L to R
+      const goals = clientData.goals || {{}};
+      const targetCals = goals.calories_target || 2000;
+
+      let maxCal = targetCals;
+      days.forEach(d => {{
+        const c = (d.totals && d.totals.calories) || 0;
+        if (c > maxCal) maxCal = c;
+      }});
+      if (maxCal <= 0) maxCal = 2000;
+
+      // Position target line
+      const targetPct = Math.min(95, Math.round((targetCals / maxCal) * 100));
+      const targetLine = document.getElementById('chartTargetLine');
+      targetLine.style.bottom = targetPct + '%';
+      document.getElementById('chartTargetBadge').textContent = 'Target: ' + targetCals.toLocaleString() + ' kcal';
+
+      const chart = document.getElementById('trendChart');
+      // Keep target line, remove old cols
+      chart.querySelectorAll('.chart-col').forEach(c => c.remove());
+
+      days.forEach(d => {{
+        const cals = Math.round((d.totals && d.totals.calories) || 0);
+        const heightPct = cals > 0 ? Math.max(6, Math.min(100, Math.round((cals / maxCal) * 100))) : 0;
+        const parsed = parseDate(d.date);
+        const isSelected = (d.date === selectedDate);
+
+        // Color logic
+        let barColor = '#E2E8F0';
+        if (cals > 0) {{
+          if (cals > targetCals * 1.15) barColor = '#F97316'; // Higher
+          else if (cals < targetCals * 0.85) barColor = '#F59E0B'; // Lower
+          else barColor = '#10B981'; // Target met
+        }}
+
+        const col = document.createElement('div');
+        col.className = 'chart-col' + (isSelected ? ' active' : '');
+        col.onclick = () => selectDate(d.date, true);
+        col.innerHTML = `
+          <span class="chart-val">${{cals > 0 ? cals : '-'}}</span>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="height:${{heightPct}}%; background:${{barColor}};"></div>
+          </div>
+          <span class="chart-label">${{parsed.dayName}}</span>
+          <span class="chart-date-num">${{parsed.dayNum}}</span>
+        `;
+        chart.appendChild(col);
+      }});
+    }}
+
+    function renderGoals() {{
+      const g = clientData.goals || {{}};
+      document.getElementById("goalsGrid").innerHTML = `
+        <div class="target-pill"><div class="target-label">🔥 Calories</div><div class="target-val">${{Math.round(g.calories_target || 2000)}}</div></div>
+        <div class="target-pill"><div class="target-label">🥩 Protein</div><div class="target-val">${{Math.round(g.protein_target_g || 130)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🌾 Carbs</div><div class="target-val">${{Math.round(g.carbs_target_g || 200)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🥑 Fat</div><div class="target-val">${{Math.round(g.fat_target_g || 65)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🌱 Fiber</div><div class="target-val">${{Math.round(g.fiber_target_g || 30)}}g</div></div>
+        <div class="target-pill"><div class="target-label">💧 Water</div><div class="target-val">${{Math.round(g.water_target_ml || 2500)}}ml</div></div>
+      `;
+    }}
+
+    function renderDaysList() {{
+      const days = getVisibleDays();
+      const container = document.getElementById("daysList");
+      container.innerHTML = "";
+      const todayISO = new Date().toISOString().slice(0, 10);
+
+      days.forEach(day => {{
+        const t = day.totals || {{}};
+        const parsed = parseDate(day.date);
+        const isToday = (day.date === todayISO);
+        const isSelected = (day.date === selectedDate);
+        const isExpanded = (expandedDays[day.date] === undefined ? isToday : !!expandedDays[day.date]);
+
+        // Group logs by slot
+        const logsBySlot = {{}};
+        (day.logs || []).forEach(l => {{
+          const slot = (l.meal_slot || 'meals').toLowerCase();
+          if (!logsBySlot[slot]) logsBySlot[slot] = [];
+          logsBySlot[slot].push(l);
+        }});
+
+        let slotsHtml = '';
+        const order = ['breakfast', 'lunch', 'dinner', 'snack', 'meals'];
+        const slotsPresent = Object.keys(logsBySlot);
+        const sortedSlots = order.filter(s => slotsPresent.includes(s)).concat(slotsPresent.filter(s => !order.includes(s)));
+
+        if (sortedSlots.length === 0) {{
+          slotsHtml = '<div style="color:#94A3B8; font-size:0.86rem; padding:12px; text-align:center; background:white; border-radius:10px; border:1px dashed #E2E8F0;">No meals logged for this day.</div>';
+        }} else {{
+          sortedSlots.forEach(slot => {{
+            const items = logsBySlot[slot];
+            const slotKcal = Math.round(items.reduce((s, i) => s + (parseFloat(i.calories) || 0), 0));
+            const slotItemsHtml = items.map(l => `
+              <div class="log-item">
+                <div>
+                  <span class="log-name">${{l.food_name}}</span>
+                  <span class="log-qty">(${{l.quantity}} ${{l.unit || 'serving'}})</span>
+                </div>
+                <div>
+                  <span class="log-cals">${{Math.round(l.calories || 0)}} kcal</span>
+                  <span class="log-macros">P:${{Math.round(l.protein_g||0)}}g C:${{Math.round(l.carbs_g||0)}}g F:${{Math.round(l.fat_g||0)}}g</span>
+                </div>
+              </div>
+            `).join('');
+
+            const slotIcons = {{ 'breakfast': '🍳', 'lunch': '🥗', 'dinner': '🍽️', 'snack': '🍎' }};
+            const icon = slotIcons[slot] || '🍴';
+
+            slotsHtml += `
+              <div class="slot-block">
+                <div class="slot-header">
+                  <span>${{icon}} ${{slot}}</span>
+                  <span style="color:#059669; font-variant-numeric:tabular-nums;">${{slotKcal}} kcal</span>
+                </div>
+                ${{slotItemsHtml}}
+              </div>
+            `;
+          }});
+        }}
+
+        // Water bar
+        const waterMl = t.water_ml || 0;
+        const waterOz = Math.round(waterMl / 29.5735);
+        const waterHtml = waterMl > 0 ? `
+          <div class="water-row">
+            <span>💧 Water Intake: <b>${{waterMl.toLocaleString()}} ml</b> (${{waterOz}} oz)</span>
+            <span>✓ Hydrated</span>
+          </div>
+        ` : '';
+
+        // Notes html
+        const notes = day.notes || [];
+        const notesHtml = notes.map(n => `
+          <div class="note-bubble">
+            <div class="note-author">💬 ${{n.author_name || 'Coach'}} (${{n.author_role || 'coach'}}):</div>
+            <div class="note-text">${{n.message}}</div>
+            <div class="note-time">${{new Date(n.created_at || Date.now()).toLocaleTimeString([], {{hour: '2-digit', minute:'2-digit'}})}}</div>
+          </div>
+        `).join('');
+
+        const card = document.createElement("div");
+        card.id = 'day-card-' + day.date;
+        card.className = "day-card" + (isSelected ? " selected" : "");
+        card.innerHTML = `
+          <div class="day-header" onclick="toggleDay('${{day.date}}')">
+            <div class="day-date-badge">
+              <div class="day-avatar ${{isToday ? 'is-today' : ''}}">
+                <span>${{parsed.dayName}}</span>
+                <span>${{parsed.dayNum}}</span>
+              </div>
+              <div>
+                <div class="day-title">
+                  <span>${{parsed.monthDay}}</span>
+                  ${{isToday ? '<span class="today-pill">Today</span>' : ''}}
+                  ${{notes.length > 0 ? '<span style="background:#FEF3C7; color:#92400E; font-size:0.7rem; font-weight:700; padding:1px 6px; border-radius:4px;">💬 ' + notes.length + ' note' + (notes.length > 1 ? 's' : '') + '</span>' : ''}}
+                </div>
+                <div class="day-meta">
+                  <span style="font-weight:700; color:#0F172A;">🔥 ${{Math.round(t.calories || 0)}} kcal</span>
+                  <span>🥩 ${{Math.round(t.protein_g || 0)}}g P</span>
+                  <span>🌾 ${{Math.round(t.carbs_g || 0)}}g C</span>
+                  <span>🥑 ${{Math.round(t.fat_g || 0)}}g F</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:0.85rem; color:#64748B;">${{isExpanded ? '▲' : '▼'}}</span>
+            </div>
+          </div>
+          <div class="day-body" style="${{isExpanded ? '' : 'display:none;'}}">
+            ${{waterHtml}}
+            ${{slotsHtml}}
+            ${{notes.length > 0 ? '<div class="notes-list"><h4 style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase;">Coach Feedback:</h4>' + notesHtml + '</div>' : ''}}
+            <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+              <button onclick="event.stopPropagation(); selectDate('${{day.date}}', false); document.getElementById('coachComposerCard').scrollIntoView({{behavior:'smooth'}});" style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:6px 12px; font-size:0.78rem; font-weight:700; color:#334155; cursor:pointer;">
+                ✍️ Write Note for ${{parsed.monthDay}}
+              </button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      }});
+    }}
+
+    async function loadCoachView(isRefresh) {{
+      const refreshBtn = document.getElementById('btnRefresh');
+      if (isRefresh && refreshBtn) refreshBtn.textContent = '⏳';
       try {{
         const res = await fetch("/api/nourish/coach/view/" + TOKEN);
         const data = await res.json();
@@ -6028,63 +6994,18 @@ def coach_portal_view(token=None):
           return;
         }}
 
+        clientData = data;
         document.getElementById("portalContent").style.display = "block";
-        document.getElementById("clientBadge").textContent = "Client: " + (data.client?.alias || "Client");
+        const alias = data.client?.alias || "Client";
+        document.getElementById("clientNameText").textContent = alias;
+        document.getElementById("feedbackCardTitle").textContent = "Leave Feedback for " + alias;
 
-        // Render Goals
-        const g = data.goals || {{}};
-        document.getElementById("goalsGrid").innerHTML = `
-          <div class="target-pill"><div class="target-label">Calories</div><div class="target-val">${{Math.round(g.calories_target || 2000)}}</div></div>
-          <div class="target-pill"><div class="target-label">Protein</div><div class="target-val">${{Math.round(g.protein_target_g || 130)}}g</div></div>
-          <div class="target-pill"><div class="target-label">Carbs</div><div class="target-val">${{Math.round(g.carbs_target_g || 200)}}g</div></div>
-          <div class="target-pill"><div class="target-label">Fat</div><div class="target-val">${{Math.round(g.fat_target_g || 65)}}g</div></div>
-          <div class="target-pill"><div class="target-label">Water</div><div class="target-val">${{Math.round(g.water_target_ml || 2500)}}ml</div></div>
-        `;
-
-        // Render 14 Days
-        const container = document.getElementById("daysList");
-        container.innerHTML = "";
-        (data.days || []).forEach(day => {{
-          const t = day.totals || {{}};
-          const logsHtml = (day.logs || []).map(l => `
-            <div class="log-item">
-              <div><span class="slot-tag">${{l.meal_slot || 'Meal'}}</span><b>${{l.food_name}}</b> <span style="color:#64748B;">(${{l.quantity}} ${{l.unit || 'serving'}})</span></div>
-              <div><b>${{Math.round(l.calories || 0)}} kcal</b> <span style="color:#64748B; font-size:0.8rem;">P:${{Math.round(l.protein_g||0)}}g C:${{Math.round(l.carbs_g||0)}}g F:${{Math.round(l.fat_g||0)}}g</span></div>
-            </div>
-          `).join("");
-
-          const notesHtml = (day.notes || []).map(n => `
-            <div class="note-bubble">
-              <b>${{n.author_name || 'Coach'}}:</b> ${{n.message}}
-            </div>
-          `).join("");
-
-          const card = document.createElement("div");
-          card.className = "day-card";
-          card.innerHTML = `
-            <div class="day-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-              <div>
-                <div class="day-date">${{day.date}}</div>
-                <div class="day-macros">
-                  <span>🔥 ${{Math.round(t.calories || 0)}} kcal</span>
-                  <span>🍗 ${{Math.round(t.protein_g || 0)}}g P</span>
-                  <span>🍚 ${{Math.round(t.carbs_g || 0)}}g C</span>
-                  <span>🥑 ${{Math.round(t.fat_g || 0)}}g F</span>
-                  <span>💧 ${{t.water_ml || 0}}ml</span>
-                </div>
-              </div>
-              <span style="font-size:0.85rem; color:#64748B;">▼</span>
-            </div>
-            <div class="day-body" style="${{day.date === new Date().toISOString().slice(0, 10) ? '' : 'display:none;'}}">
-              ${{logsHtml || '<div style="color:#94A3B8; font-size:0.9rem;">No meals logged for this day.</div>'}}
-              ${{notesHtml ? '<div style="margin-top:12px;"><h4 style="font-size:0.85rem; color:#64748B;">Coach Notes:</h4>' + notesHtml + '</div>' : ''}}
-            </div>
-          `;
-          container.appendChild(card);
-        }});
+        renderDashboard();
       }} catch (err) {{
         document.getElementById("errorBanner").style.display = "block";
         document.getElementById("errorText").textContent = "Network error loading client data.";
+      }} finally {{
+        if (refreshBtn) refreshBtn.textContent = '🔄';
       }}
     }}
 
@@ -6094,8 +7015,14 @@ def coach_portal_view(token=None):
       const author = document.getElementById("noteAuthor").value.trim() || "Coach";
       const date = document.getElementById("noteDate").value;
       const btn = document.getElementById("sendBtn");
+      const btnText = document.getElementById("sendBtnText");
+
+      try {{
+        localStorage.setItem('nourish_coach_name', author);
+      }} catch(e) {{}}
+
       btn.disabled = true;
-      btn.textContent = "Sending...";
+      btnText.textContent = "Sending...";
 
       try {{
         const res = await fetch("/api/nourish/coach/notes/" + TOKEN, {{
@@ -6106,8 +7033,8 @@ def coach_portal_view(token=None):
         const data = await res.json();
         if (data.ok) {{
           document.getElementById("noteMessage").value = "";
-          showToast("Feedback note sent to client!");
-          loadCoachView();
+          showToast("✓ Feedback note sent to client!");
+          loadCoachView(false);
         }} else {{
           alert(data.error || "Failed to send note");
         }}
@@ -6115,7 +7042,7 @@ def coach_portal_view(token=None):
         alert("Failed to post note: " + err);
       }} finally {{
         btn.disabled = false;
-        btn.textContent = "Send Note";
+        btnText.textContent = "Send Note";
       }}
     }}
 
@@ -6126,7 +7053,7 @@ def coach_portal_view(token=None):
       setTimeout(() => {{ t.style.display = "none"; }}, 3500);
     }}
 
-    loadCoachView();
+    loadCoachView(false);
   </script>
 </body>
 </html>
