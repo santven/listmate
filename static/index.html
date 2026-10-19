@@ -85,8 +85,8 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
   @media screen and (max-width: 768px) {
     input, select, textarea { font-size: 16px !important; }
   }
-  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
-  .header h1 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 500; gap: 8px; }
+  .header h1 { font-size: 17px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sandbox-badge { display: none; font-size: 11px; font-weight: 700; background: #f59e0b; color: #fff; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-left: 4px; }
   #tierBadge { flex-shrink: 0; white-space: nowrap; }
   .header.hide-badges .header-meta .user { display: none !important; }
@@ -96,6 +96,23 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
   #cartIcon { cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; user-select: none; -webkit-user-drag: none; }
   #cartIcon:hover { transform: scale(1.05); opacity: 0.95; }
   #cartIcon:active { transform: scale(0.92); }
+  .app-switcher-wrap { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+  .app-switcher-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 3px 10px 3px 4px; border-radius: 14px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.28); cursor: pointer; user-select: none; max-width: 100%; min-width: 0; position: relative; transition: background 0.15s ease, transform 0.12s ease, border-color 0.15s ease; }
+  .app-switcher-btn:hover { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.45); }
+  .app-switcher-btn:active { transform: scale(0.97); }
+  .app-switcher-overlay { display: none; position: fixed; inset: 0; z-index: 9499; background: rgba(0,0,0,0.12); }
+  .app-switcher-overlay.show { display: block; }
+  .app-switcher-menu { display: none; position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 50px); left: max(12px, env(safe-area-inset-left)); width: min(320px, calc(100vw - 24px)); background: #fff; color: var(--text); border-radius: 16px; box-shadow: 0 10px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08); border: 1px solid var(--border); z-index: 9500; padding: 8px; animation: appSwitcherFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+  .app-switcher-menu.show { display: block; }
+  @keyframes appSwitcherFadeIn { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .app-switch-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1.5px solid transparent; background: transparent; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.15s ease, border-color 0.15s ease; }
+  .app-switch-item + .app-switch-item { margin-top: 4px; }
+  .app-switch-item:hover, .app-switch-item:active { background: #f5faf3; }
+  .app-switch-item.active { background: #f0fdf4; border-color: #bbf7d0; }
+  .app-switch-check { font-size: 16px; font-weight: 800; color: #059669; opacity: 0; flex-shrink: 0; margin-left: auto; transition: opacity 0.15s ease; }
+  .app-switch-item.active .app-switch-check { opacity: 1; }
+  .app-switcher-spotlight { display: none; position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 54px); left: max(12px, env(safe-area-inset-left)); width: min(315px, calc(100vw - 24px)); background: #064e3b; color: #fff; border-radius: 14px; padding: 11px 13px; box-shadow: 0 8px 24px rgba(6,78,59,0.35); border: 1px solid rgba(167,243,208,0.4); z-index: 9490; font-size: 12.5px; line-height: 1.4; }
+  .app-switcher-spotlight.show { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
   .container { max-width: 600px; margin: 0 auto; padding: 16px; }
 
@@ -1213,9 +1230,55 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <body>
 
 <div class="header">
-  <img src="/icon-192.png" id="cartIcon" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
-  <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
-  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
+  <div class="app-switcher-wrap">
+    <div id="appSwitcherBtn" class="app-switcher-btn" onclick="toggleAppSwitcherMenu(event)" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAppSwitcherMenu(event);}" title="Switch Suite App (ListMate | Still Good | Nourish)" aria-label="Switch Suite App">
+      <img src="/icon-192.png" id="cartIcon" style="width:36px;height:36px;min-width:36px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo">
+      <h1 id="headerTitle" style="margin-left:2px;">Grocery List</h1>
+      <span id="appSwitcherChevron" style="font-size:12px; opacity:0.85; margin-left:4px;">▾</span>
+      <span id="appSwitcherUrgentDot" style="display:none; width:9px; height:9px; border-radius:50%; background:#ef4444; border:1.5px solid #fff; position:absolute; top:4px; left:30px; box-shadow:0 1px 3px rgba(0,0,0,0.25);"></span>
+    </div>
+    <div class="app-switcher-overlay" id="appSwitcherOverlay" onclick="closeAppSwitcherMenu()"></div>
+    <div class="app-switcher-menu" id="appSwitcherMenu" role="menu" aria-label="ListMate Suite Apps">
+      <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; padding:4px 10px 6px;">Household Suite</div>
+      <button type="button" id="appSwitchItemHome" class="app-switch-item active" onclick="selectSuiteApp('home')" role="menuitem">
+        <img src="/icon-192.png" alt="ListMate" style="width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.12); background:#fff; flex-shrink:0;">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🛒 ListMate</span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Smart Store Grocery Lists</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckHome">✓</span>
+      </button>
+      <button type="button" id="appSwitchItemStillGood" class="app-switch-item" onclick="selectSuiteApp('stillGood')" role="menuitem">
+        <div style="width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #059669, #10b981); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 2px 6px rgba(16,185,129,0.25); flex-shrink:0;">🥗</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🥗 Still Good</span>
+            <span id="appSwitcherSgBadge" style="display:none; background:#ef4444; color:#fff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:999px;"></span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Fridge, Freezer &amp; Leftover Freshness</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckStillGood">✓</span>
+      </button>
+      <button type="button" id="appSwitchItemNourish" class="app-switch-item" onclick="selectSuiteApp('nourish')" role="menuitem">
+        <div style="width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #4d7c0f, #16a34a); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 2px 6px rgba(22,163,74,0.25); flex-shrink:0;">🍎</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🍎 Nourish</span>
+            <span style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:999px;margin-left:6px;">NEW</span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Private Daily Food &amp; Macro Log</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckNourish">✓</span>
+      </button>
+    </div>
+    <div class="app-switcher-spotlight" id="appSwitcherSpotlight" role="status">
+      <span>✨ Tap here anytime to switch between ListMate, Still Good &amp; Nourish!</span>
+      <button type="button" onclick="dismissAppSwitcherSpotlight(event)" style="background:#10b981; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11.5px; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0;">Got it</button>
+    </div>
+  </div>
+  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
@@ -1228,6 +1291,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); if(typeof toggleBurger==='function') toggleBurger(false); return false;">📋 Grocery List</a>
       <a id="menuStillGoodLink" href="#" onclick="showStillGoodScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🍲 Still Good</a>
+      <button onclick="showNourishScreen()">🍎 Nourish (Food Log)</button>
       <a id="menuRecipesLink" href="#" onclick="showRecipesScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🍳 Recipe Planner</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">📊 Analytics</a>
@@ -1264,7 +1328,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           📅 Plan Visits
         </button>
         <button id="btnOpenStillGood" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onStillGoodClick(event)) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          🍲 Still Good
+          🍲 Still Good <span id="sgHomeBadge" style="display:none; background:#ef4444; color:#fff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:999px; margin-left:2px;"></span>
         </button>
       </div>
     </div>
@@ -1455,6 +1519,20 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <div id="sgItemsList" style="display:flex; flex-direction:column; gap:6px;">
       <div style="text-align:center; padding:30px; color:var(--muted);">Loading Still Good items...</div>
     </div>
+  </div>
+
+  <!-- NOURISH SCREEN -->
+  <div id="screenNourish" class="screen" style="display:none; padding-bottom:40px;">
+    <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        <span style="font-size:24px; flex-shrink:0;">🍎</span>
+        <div style="min-width:0;">
+          <div style="font-size:15px; font-weight:700; color:#065f46;">Nourish · Daily Food &amp; Macro Log</div>
+          <div style="font-size:12px; color:#047857; opacity:0.9; margin-top:2px;">🔒 Your food log &amp; goals are 100% private to you.</div>
+        </div>
+      </div>
+    </div>
+    <div id="nourishScreenContent"></div>
   </div>
 
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
@@ -2024,6 +2102,9 @@ function toggleBurger(force) {
   const menu = document.getElementById("burgerMenu");
   const overlay = document.getElementById("burgerOverlay");
   const shouldOpen = (typeof force === 'boolean') ? force : (menu ? !menu.classList.contains("show") : false);
+  if (shouldOpen && typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
   if (menu) menu.classList.toggle("show", shouldOpen);
   if (overlay) overlay.classList.toggle("show", shouldOpen);
   if (window.featureDiscoveryEngine && menu) {
@@ -2034,6 +2115,153 @@ function toggleBurger(force) {
 function closeBurger() {
   toggleBurger(false);
 }
+
+function closeAppSwitcherMenu() {
+  var menu = document.getElementById('appSwitcherMenu');
+  var overlay = document.getElementById('appSwitcherOverlay');
+  var btn = document.getElementById('appSwitcherBtn');
+  var chev = document.getElementById('appSwitcherChevron');
+  if (menu) menu.classList.remove('show');
+  if (overlay) overlay.classList.remove('show');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (chev) chev.style.transform = 'rotate(0deg)';
+}
+window.closeAppSwitcherMenu = closeAppSwitcherMenu;
+
+function dismissAppSwitcherSpotlight(event) {
+  if (event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  try {
+    localStorage.setItem('lm_app_switcher_seen_v1', '1');
+  } catch (e) {}
+  var spot = document.getElementById('appSwitcherSpotlight');
+  if (spot) {
+    spot.classList.remove('show');
+    spot.style.display = 'none';
+  }
+}
+window.dismissAppSwitcherSpotlight = dismissAppSwitcherSpotlight;
+
+function initAppSwitcherSpotlight() {
+  var seen = null;
+  try {
+    seen = localStorage.getItem('lm_app_switcher_seen_v1');
+  } catch (e) {}
+  var spot = document.getElementById('appSwitcherSpotlight');
+  if (!spot) return;
+  if (!seen) {
+    spot.style.display = '';
+    spot.classList.add('show');
+  } else {
+    spot.classList.remove('show');
+    spot.style.display = 'none';
+  }
+}
+window.initAppSwitcherSpotlight = initAppSwitcherSpotlight;
+
+function toggleAppSwitcherMenu(event) {
+  if (event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  if (window.featureDiscoveryEngine && typeof window.featureDiscoveryEngine.onLogoClick === 'function') {
+    if (window.featureDiscoveryEngine.onLogoClick(event)) return false;
+  }
+  var menu = document.getElementById('appSwitcherMenu');
+  var overlay = document.getElementById('appSwitcherOverlay');
+  var btn = document.getElementById('appSwitcherBtn');
+  var chev = document.getElementById('appSwitcherChevron');
+  if (!menu) return false;
+  var shouldOpen = !menu.classList.contains('show');
+  if (shouldOpen) {
+    closeBurger();
+    dismissAppSwitcherSpotlight();
+    if (typeof syncStillGoodSwitcherBadges === 'function') {
+      syncStillGoodSwitcherBadges();
+    }
+    if (typeof updateAppSwitcherActiveState === 'function') {
+      updateAppSwitcherActiveState(window.currentScreen || 'home');
+    }
+  }
+  menu.classList.toggle('show', shouldOpen);
+  if (overlay) overlay.classList.toggle('show', shouldOpen);
+  if (btn) btn.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (chev) chev.style.transform = shouldOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+  return false;
+}
+window.toggleAppSwitcherMenu = toggleAppSwitcherMenu;
+
+function updateAppSwitcherActiveState(screenName) {
+  var homeItem = document.getElementById('appSwitchItemHome');
+  var sgItem = document.getElementById('appSwitchItemStillGood');
+  var nourishItem = document.getElementById('appSwitchItemNourish');
+  if (homeItem) homeItem.classList.toggle('active', screenName === 'home' || screenName === 'catalog');
+  if (sgItem) sgItem.classList.toggle('active', screenName === 'stillGood');
+  if (nourishItem) nourishItem.classList.toggle('active', screenName === 'nourish');
+}
+window.updateAppSwitcherActiveState = updateAppSwitcherActiveState;
+
+function syncStillGoodSwitcherBadges(explicitUrgentCount) {
+  var homeBadge = document.getElementById('sgHomeBadge');
+  var switcherBadge = document.getElementById('appSwitcherSgBadge');
+  var urgentDot = document.getElementById('appSwitcherUrgentDot');
+
+  var count = 0;
+  if (typeof explicitUrgentCount === 'number') {
+    count = explicitUrgentCount;
+  } else if (typeof sgItems !== 'undefined' && Array.isArray(sgItems) && sgItems.length > 0) {
+    count = sgItems.filter(function(item) {
+      return item && item.status === 'active' && !item.is_inactive && item.lifecycle_status !== 'inactive' && item.urgency === 'urgent';
+    }).length;
+  } else if (homeBadge && homeBadge.textContent && homeBadge.textContent.trim()) {
+    var parsed = parseInt(homeBadge.textContent.trim(), 10);
+    if (!isNaN(parsed) && parsed > 0) count = parsed;
+  }
+
+  if (count > 0) {
+    if (homeBadge) {
+      homeBadge.textContent = String(count);
+      homeBadge.style.display = 'inline-block';
+    }
+    if (switcherBadge) {
+      switcherBadge.textContent = count + ' urgent';
+      switcherBadge.style.display = 'inline-block';
+    }
+    if (urgentDot) {
+      urgentDot.style.display = 'block';
+    }
+  } else {
+    if (homeBadge) {
+      homeBadge.textContent = '';
+      homeBadge.style.display = 'none';
+    }
+    if (switcherBadge) {
+      switcherBadge.textContent = '';
+      switcherBadge.style.display = 'none';
+    }
+    if (urgentDot) {
+      urgentDot.style.display = 'none';
+    }
+  }
+}
+window.syncStillGoodSwitcherBadges = syncStillGoodSwitcherBadges;
+
+function selectSuiteApp(appName) {
+  closeAppSwitcherMenu();
+  dismissAppSwitcherSpotlight();
+  if (appName === 'home') {
+    showScreen('home');
+  } else if (appName === 'stillGood') {
+    showStillGoodScreen();
+  } else if (appName === 'nourish') {
+    showNourishScreen();
+  }
+}
+window.selectSuiteApp = selectSuiteApp;
+
+document.addEventListener('DOMContentLoaded', function() {
+  initAppSwitcherSpotlight();
+});
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 
@@ -3244,12 +3472,16 @@ function updateCatalogGroupByUI() {
 
 async function openStore(sid) {
   currentScreen = 'catalog';
+  window.currentScreen = 'catalog';
+  if (typeof closeAppSwitcherMenu === 'function') closeAppSwitcherMenu();
   window.scrollTo(0, 0);
   currentStore=stores.find(s=>s.id===sid);
   if (!currentStore) return;
   $('#headerTitle').textContent='Add to ' + currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
   $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
+  if($('#screenNourish')) $('#screenNourish').style.display='none';
+  if (typeof updateAppSwitcherActiveState === 'function') updateAppSwitcherActiveState('catalog');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   if (navigator.onLine) {
     try {
@@ -3548,6 +3780,8 @@ function showScreen(name){
   window.currentScreen = name;
   if (typeof closeBurger === 'function') closeBurger();
   else if (typeof toggleBurger === 'function') toggleBurger(false);
+  if (typeof closeAppSwitcherMenu === 'function') closeAppSwitcherMenu();
+  if (typeof updateAppSwitcherActiveState === 'function') updateAppSwitcherActiveState(name);
   window.scrollTo(0, 0);
   document.body.scrollTop = 0;
   document.documentElement.scrollTop = 0;
@@ -3559,6 +3793,7 @@ function showScreen(name){
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -3580,6 +3815,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -3591,6 +3827,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -3602,6 +3839,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
@@ -3616,6 +3854,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -3631,12 +3870,31 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='block';
     $('#headerTitle').textContent='Still Good';
     loadStillGood();
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+  } else if(name==='nourish'){
+    if (typeof closeBurger === 'function') closeBurger();
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='block';
+    $('#headerTitle').textContent='Nourish';
+    if (typeof loadNourishDay === 'function') {
+      loadNourishDay();
+    }
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
@@ -4888,6 +5146,9 @@ async function showStillGoodScreen() {
   } else if (typeof toggleBurger === 'function') {
     toggleBurger(false);
   }
+  if (typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
   if (!window.currentCfg && window.authConfigPromise) {
     try {
       await window.authConfigPromise;
@@ -4899,6 +5160,28 @@ async function showStillGoodScreen() {
   }
   showScreen('stillGood');
 }
+
+async function showNourishScreen() {
+  if (typeof closeBurger === 'function') {
+    closeBurger();
+  } else if (typeof toggleBurger === 'function') {
+    toggleBurger(false);
+  }
+  if (typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
+  if (!window.currentCfg && window.authConfigPromise) {
+    try {
+      await window.authConfigPromise;
+    } catch(e) {}
+  }
+  if (!canAccessStillGood()) {
+    showPremiumModal('Nourish');
+    return;
+  }
+  showScreen('nourish');
+}
+window.showNourishScreen = showNourishScreen;
 
 function switchSgTab(tab) {
   sgActiveTab = tab;
@@ -4944,6 +5227,9 @@ async function loadStillGood() {
     if (res && res.ok) {
       sgItems = res.items || [];
       sgStats = res.stats || {};
+      if (typeof syncStillGoodSwitcherBadges === 'function') {
+        syncStillGoodSwitcherBadges();
+      }
 
       var countFridgeEl = document.getElementById('sgCountFridge');
       if (countFridgeEl) countFridgeEl.textContent = sgStats.active_fridge || 0;
@@ -6784,6 +7070,9 @@ function showPremiumModal(featureName) {
     } else if (featureName === 'Still Good') {
       title.textContent = 'Still Good is a Premium Feature';
       desc.textContent = 'Track leftovers, reduce household food waste, and get AI-powered safe shelf-life recommendations with ListMate Premium.';
+    } else if (featureName === 'Nourish') {
+      title.textContent = 'Nourish is a Premium Feature';
+      desc.textContent = 'Track daily calories, protein, and macros effortlessly for your whole household with AI meal parsing, 4-unit scaling, and 100% private personal logs.';
     } else {
       title.textContent = 'Recipe Planner is Premium';
       desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
