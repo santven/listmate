@@ -699,8 +699,11 @@ def _parse_heuristic_meal_clauses(text_description: str):
         )
         items.append({
             "food_name": food_name[:120],
+            "name": food_name[:120],
             "quantity": scaled["quantity"],
+            "serving_amount": scaled["quantity"],
             "unit": scaled["unit"],
+            "serving_unit": scaled["unit"],
             "gram_weight": scaled["gram_weight"],
             "calories": scaled["calories"],
             "protein_g": scaled["protein_g"],
@@ -753,8 +756,11 @@ def analyze_natural_language_meal(text_description: str):
             )
             items.append({
                 "food_name": str(entry["food_name"]).strip(),
+                "name": str(entry["food_name"]).strip(),
                 "quantity": scaled["quantity"],
+                "serving_amount": scaled["quantity"],
                 "unit": scaled["unit"],
+                "serving_unit": scaled["unit"],
                 "gram_weight": scaled["gram_weight"],
                 "calories": scaled["calories"],
                 "protein_g": scaled["protein_g"],

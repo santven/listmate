@@ -115,6 +115,17 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishEditAmount"', self.html)
         self.assertIn('id="nourishEditUnit"', self.html)
 
+        # 8. Goals Modal & Button
+        self.assertIn('id="nourishBtnOpenGoals"', self.html)
+        self.assertIn('id="nourishGoalsModal"', self.html)
+        self.assertIn('id="nourishGoalCalories"', self.html)
+        self.assertIn('id="nourishGoalProtein"', self.html)
+        self.assertIn('id="nourishGoalCarbs"', self.html)
+        self.assertIn('id="nourishGoalFat"', self.html)
+        self.assertIn('id="nourishGoalFiber"', self.html)
+        self.assertIn('id="nourishGoalWater"', self.html)
+        self.assertIn('id="nourishBtnSaveGoals"', self.html)
+
     def test_user_requested_ai_estimating_copy(self):
         # User explicitly asked: "along with 'AI Estimating...' also indicate the user to come back in hour to see the nutrition info in a succint way."
         self.assertIn("✨ AI Estimating · Check back in ~1 hr", self.html)
@@ -170,7 +181,10 @@ const fns = [
   'deleteNourishLog',
   'openNourishEditModal',
   'closeNourishEditModal',
-  'saveNourishEditLog'
+  'saveNourishEditLog',
+  'openNourishGoalsModal',
+  'closeNourishGoalsModal',
+  'saveNourishGoals'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -202,6 +216,8 @@ function makeEl(id) {
 const elementIds = [
   'nourishBtnToday', 'nourishDateNav', 'nourishBtnPrevDay', 'nourishBtnNextDay',
   'nourishDateLabel', 'nourishDatePicker', 'nourishDashboardCard',
+  'nourishBtnOpenGoals', 'nourishGoalsModal', 'nourishGoalCalories', 'nourishGoalProtein',
+  'nourishGoalCarbs', 'nourishGoalFat', 'nourishGoalFiber', 'nourishGoalWater', 'nourishBtnSaveGoals',
   'nourishCalRemaining', 'nourishCalSub', 'nourishCalBudget', 'nourishCalConsumed', 'nourishCalProgress',
   'nourishVal_protein', 'nourishTarget_protein', 'nourishBar_protein',
   'nourishVal_carbs', 'nourishTarget_carbs', 'nourishBar_carbs',
@@ -215,7 +231,7 @@ const elementIds = [
   'nourishGramPillsRow',
   'nourishGramPill_50', 'nourishGramPill_100', 'nourishGramPill_150', 'nourishGramPill_200', 'nourishGramPill_250',
   'nourishPreviewBar', 'nourishBtnLog',
-  'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems',
+  'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems', 'nourishBtnLogAllPlate',
   'nourishDiaryContainer',
   'nourishDiarySection_breakfast', 'nourishSlotSubtotal_breakfast', 'nourishSlotItems_breakfast',
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
@@ -320,14 +336,81 @@ eval(fns);
   }
 
   // 7. Hydration quick add
-  let fetchCalled = false;
+  const allFetchCalls = [];
   global.fetch = (url, opts) => {
-    fetchCalled = true;
+    const callObj = {
+      url: url,
+      opts: opts,
+      body: opts && opts.body ? JSON.parse(opts.body) : null
+    };
+    allFetchCalls.push(callObj);
     return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
   };
   await quickAddNourishWater(250);
   if (elements.nourishValWater.textContent !== '750') throw new Error('Expected 750ml water after adding 250ml');
-  if (!fetchCalled) throw new Error('Expected fetch call for biometrics water add');
+  if (!allFetchCalls.some(c => c.url.includes('/api/nourish/biometrics'))) {
+    throw new Error('Expected fetch call for biometrics water add');
+  }
+
+  // 8. User Finding 4, 5, 6: Portion & Food Name rendering (Toast 1 serving, Bread 1 serving, Sambar Rice 250g)
+  renderNourishSlotSection('breakfast', [
+    { id: 10, food_name: 'Toast', quantity: 1, unit: 'serving', calories: 75, protein_g: 2.5, carbs_g: 13, fat_g: 1.0 },
+    { id: 11, food_name: 'Bread', quantity: 1, unit: 'serving', calories: 80, protein_g: 3.0, carbs_g: 14, fat_g: 1.1 }
+  ]);
+  const bfastHtml = elements.nourishSlotItems_breakfast.innerHTML;
+  if (!bfastHtml.includes('Toast')) throw new Error('Expected food name Toast to be visible');
+  if (!bfastHtml.includes('1 serving')) throw new Error('Expected 1 serving for Toast, got: ' + bfastHtml);
+  if (!bfastHtml.includes('Bread')) throw new Error('Expected food name Bread to be visible');
+  if (bfastHtml.includes('undefined')) throw new Error('Found unexpected "undefined" in breakfast slot HTML');
+
+  renderNourishSlotSection('lunch', [
+    { id: 12, food_name: 'Sambar Rice', quantity: 250, unit: 'g', calories: 310, protein_g: 7.2, carbs_g: 58, fat_g: 4.5 }
+  ]);
+  const lunchHtml2 = elements.nourishSlotItems_lunch.innerHTML;
+  if (!lunchHtml2.includes('Sambar Rice')) throw new Error('Expected food name Sambar Rice to be visible');
+  if (!lunchHtml2.includes('250g')) throw new Error('Expected 250g for Sambar Rice, got: ' + lunchHtml2);
+  if (lunchHtml2.includes('undefined')) throw new Error('Found unexpected "undefined" in lunch slot HTML');
+
+  // 9. User Finding 3: Describe Plate Meal Slot Reactivity
+  window._lastNourishAnalyzedItems = [
+    { food_name: 'Sambar Rice', quantity: 250, unit: 'g', calories: 310 }
+  ];
+  selectNourishSlot('lunch');
+  if (!elements.nourishBtnLogAllPlate.innerHTML.includes('Lunch')) {
+    throw new Error('Expected nourishBtnLogAllPlate to reactively show Lunch');
+  }
+  selectNourishSlot('dinner');
+  if (!elements.nourishBtnLogAllPlate.innerHTML.includes('Dinner')) {
+    throw new Error('Expected nourishBtnLogAllPlate to reactively show Dinner');
+  }
+  selectNourishSlot('snack');
+  if (!elements.nourishBtnLogAllPlate.innerHTML.includes('Snack')) {
+    throw new Error('Expected nourishBtnLogAllPlate to reactively show Snack');
+  }
+
+  // 10. User Finding 7: Goals Modal flow
+  currentNourishData = {
+    goals: {
+      calories_target: 2200,
+      protein_target_g: 140,
+      carbs_target_g: 210,
+      fat_target_g: 70,
+      fiber_target_g: 32,
+      water_target_ml: 2800
+    }
+  };
+  openNourishGoalsModal();
+  if (!elements.nourishGoalsModal.classList.contains('active')) throw new Error('Expected nourishGoalsModal active');
+  if (elements.nourishGoalCalories.value !== 2200) throw new Error('Expected calorie input populated');
+  if (elements.nourishGoalProtein.value !== 140) throw new Error('Expected protein input populated');
+
+  elements.nourishGoalCalories.value = '2400';
+  elements.nourishGoalProtein.value = '155';
+  await saveNourishGoals();
+  const goalsCall = allFetchCalls.find(c => c.url === '/api/nourish/goals');
+  if (!goalsCall) throw new Error('Expected fetch call to /api/nourish/goals');
+  if (!goalsCall.body || goalsCall.body.calories_target !== 2400) throw new Error('Expected payload with calories_target=2400');
+  if (elements.nourishGoalsModal.classList.contains('active')) throw new Error('Modal should be closed after save');
 })();
 """
         res = subprocess.run(

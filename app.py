@@ -3759,6 +3759,22 @@ def _serialize_nourish_row(row):
             out[k] = v.isoformat()
         else:
             out[k] = v
+    if "food_name" in out and "name" not in out:
+        out["name"] = out["food_name"]
+    if "name" in out and "food_name" not in out:
+        out["food_name"] = out["name"]
+    if "quantity" in out and "serving_amount" not in out:
+        out["serving_amount"] = out["quantity"]
+    if "serving_amount" in out and "quantity" not in out:
+        out["quantity"] = out["serving_amount"]
+    if "unit" in out and "serving_unit" not in out:
+        out["serving_unit"] = out["unit"]
+    if "serving_unit" in out and "unit" not in out:
+        out["unit"] = out["serving_unit"]
+    if "calories_target" in out and "calorie_target" not in out:
+        out["calorie_target"] = out["calories_target"]
+    if "calorie_target" in out and "calories_target" not in out:
+        out["calories_target"] = out["calorie_target"]
     return out
 
 
@@ -3927,10 +3943,11 @@ def nourish_create_logs_endpoint():
                 return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
             meal_slot = str(entry.get("meal_slot") or data.get("meal_slot") or "Breakfast").strip()[:24] or "Breakfast"
-            unit = str(entry.get("unit") or "g").strip().lower()
+            unit = str(entry.get("unit") or entry.get("serving_unit") or "g").strip().lower()
             default_qty = 1.0 if unit in ("serving", "servings", "piece", "cup", "bowl") else 100.0
+            raw_qty = entry.get("quantity") if entry.get("quantity") is not None else entry.get("serving_amount")
             try:
-                quantity = float(entry.get("quantity") if entry.get("quantity") is not None else default_qty)
+                quantity = float(raw_qty if raw_qty is not None else default_qty)
                 if quantity <= 0:
                     quantity = default_qty
             except (ValueError, TypeError):
@@ -4151,16 +4168,17 @@ def nourish_modify_log_endpoint(log_id):
         new_meal_slot = str(data.get("meal_slot") or existing.get("meal_slot") or "Breakfast").strip()[:24]
         new_notes = str(data.get("notes") if "notes" in data else (existing.get("notes") or "")).strip()
 
-        new_unit = str(data.get("unit") or existing.get("unit") or "g").strip().lower()
+        new_unit = str(data.get("unit") or data.get("serving_unit") or existing.get("unit") or "g").strip().lower()
+        raw_qty = data.get("quantity") if "quantity" in data else data.get("serving_amount")
         try:
-            new_quantity = float(data.get("quantity") if "quantity" in data else existing.get("quantity") or 100.0)
+            new_quantity = float(raw_qty if raw_qty is not None else existing.get("quantity") or 100.0)
             if new_quantity <= 0:
                 new_quantity = float(existing.get("quantity") or 100.0)
         except (ValueError, TypeError):
             new_quantity = float(existing.get("quantity") or 100.0)
 
         qty_or_unit_changed = (
-            ("quantity" in data or "unit" in data)
+            ("quantity" in data or "serving_amount" in data or "unit" in data or "serving_unit" in data)
             and "calories" not in data
         )
 
@@ -4379,6 +4397,104 @@ def nourish_biometrics_endpoint():
         try: db.rollback()
         except Exception: pass
         print(f"[NOURISH ERROR] POST /api/nourish/biometrics failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/goals", methods=["GET", "POST", "PUT"])
+@require_user
+def nourish_goals_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        if request.method == "GET":
+            goal_cur = db.execute(
+                "SELECT * FROM nourish_user_goals WHERE user_id = ?",
+                (uid,),
+            )
+            goal_row = goal_cur.fetchone() if goal_cur else None
+            if goal_row:
+                goals = _serialize_nourish_row(goal_row)
+                for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                    if goals.get(k) is None:
+                        goals[k] = default_v
+            else:
+                goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+            return jsonify({"ok": True, "goals": goals})
+
+        data = request.get_json(silent=True) or {}
+        try:
+            cal_target = max(500, min(10000, int(float(data.get("calories_target") or data.get("calorie_target") or 2000))))
+        except (ValueError, TypeError):
+            cal_target = 2000
+
+        try:
+            p_target = max(0, min(500, int(float(data.get("protein_target_g") or 130))))
+        except (ValueError, TypeError):
+            p_target = 130
+
+        try:
+            c_target = max(0, min(800, int(float(data.get("carbs_target_g") or 200))))
+        except (ValueError, TypeError):
+            c_target = 200
+
+        try:
+            f_target = max(0, min(300, int(float(data.get("fat_target_g") or 65))))
+        except (ValueError, TypeError):
+            f_target = 65
+
+        try:
+            fib_target = max(0, min(150, int(float(data.get("fiber_target_g") or 30))))
+        except (ValueError, TypeError):
+            fib_target = 30
+
+        try:
+            w_target = max(500, min(10000, int(float(data.get("water_target_ml") or 2500))))
+        except (ValueError, TypeError):
+            w_target = 2500
+
+        up_cur = db.execute(
+            """
+            INSERT INTO nourish_user_goals (
+                user_id, calories_target, protein_target_g, carbs_target_g,
+                fat_target_g, fiber_target_g, water_target_ml, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                calories_target = EXCLUDED.calories_target,
+                protein_target_g = EXCLUDED.protein_target_g,
+                carbs_target_g = EXCLUDED.carbs_target_g,
+                fat_target_g = EXCLUDED.fat_target_g,
+                fiber_target_g = EXCLUDED.fiber_target_g,
+                water_target_ml = EXCLUDED.water_target_ml,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            (uid, cal_target, p_target, c_target, f_target, fib_target, w_target),
+        )
+        up_row = up_cur.fetchone() if up_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "goals": _serialize_nourish_row(up_row) if up_row else {
+                "user_id": uid,
+                "calories_target": cal_target,
+                "calorie_target": cal_target,
+                "protein_target_g": p_target,
+                "carbs_target_g": c_target,
+                "fat_target_g": f_target,
+                "fiber_target_g": fib_target,
+                "water_target_ml": w_target,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] /api/nourish/goals failed: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()

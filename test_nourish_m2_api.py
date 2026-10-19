@@ -458,6 +458,23 @@ class InMemoryNourishDB:
                 self.rowcount = 1
             return self
 
+        if "INSERT INTO nourish_user_goals" in norm:
+            uid = int(params[0])
+            row = {
+                "user_id": uid,
+                "calories_target": int(params[1]),
+                "calorie_target": int(params[1]),
+                "protein_target_g": int(params[2]),
+                "carbs_target_g": int(params[3]),
+                "fat_target_g": int(params[4]),
+                "fiber_target_g": int(params[5]),
+                "water_target_ml": int(params[6]),
+            }
+            self.goals[uid] = row
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
         # 16. Daily biometrics
         if "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date" in norm:
             uid, d_str = int(params[0]), str(params[1])[:10]
@@ -883,6 +900,42 @@ class TestNourishM2APIAndCron(unittest.TestCase):
                 self.assertGreater(rec["calories_per_serving"], 0)
                 self.assertGreater(rec["calories_per_100g"], 0)
                 self.assertIn("id", rec)
+
+    def test_10_goals_endpoint_crud_and_aliasing(self):
+        """Tests GET /api/nourish/goals defaults, POST /api/nourish/goals upsert, and day endpoint integration."""
+        with self._context_patches(user_id=42, household_id=1):
+            # 1. Default goals
+            get_res = self.client.get("/api/nourish/goals")
+            self.assertEqual(get_res.status_code, 200)
+            g_data = get_res.get_json()
+            self.assertTrue(g_data["ok"])
+            self.assertEqual(g_data["goals"]["calories_target"], 2000)
+
+            # 2. Update goals
+            post_res = self.client.post(
+                "/api/nourish/goals",
+                json={
+                    "calories_target": 2350,
+                    "protein_target_g": 160,
+                    "carbs_target_g": 240,
+                    "fat_target_g": 70,
+                    "fiber_target_g": 35,
+                    "water_target_ml": 3000,
+                },
+            )
+            self.assertEqual(post_res.status_code, 200)
+            up_data = post_res.get_json()
+            self.assertTrue(up_data["ok"])
+            self.assertEqual(up_data["goals"]["calories_target"], 2350)
+            self.assertEqual(up_data["goals"]["protein_target_g"], 160)
+            self.assertEqual(up_data["goals"]["water_target_ml"], 3000)
+
+            # 3. Reflected in /api/nourish/day
+            day_res = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertEqual(day_res.status_code, 200)
+            d_data = day_res.get_json()
+            self.assertEqual(d_data["goals"]["calories_target"], 2350)
+            self.assertEqual(d_data["goals"]["protein_target_g"], 160)
 
 
 if __name__ == "__main__":
