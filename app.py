@@ -4064,8 +4064,8 @@ def nourish_create_logs_endpoint():
 
             is_shared = bool(entry.get("is_shared_household") or entry.get("share_with_household") or data.get("is_shared_household") or data.get("share_with_household"))
 
-            # If user opted into sharing with household or saving to catalog:
-            if is_shared and matched_baseline is None and explicit_calories > 0 and hhid is not None:
+            # Automatically save/update custom & non-baseline food items into household catalog so family can reuse:
+            if matched_baseline is None and explicit_calories > 0 and hhid is not None:
                 norm_name = normalize_food_name(food_name)
                 if norm_name:
                     gw = float(scaled.get("gram_weight") or 100.0)

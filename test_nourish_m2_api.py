@@ -1123,6 +1123,43 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertTrue(s_data["ok"])
             self.assertEqual(s_data["shared_count"], 1)
 
+        # 7. Verify an unshared new item (is_shared_household=False) is STILL added to household catalog
+        with self._context_patches(user_id=10, household_id=1):
+            unshared_log = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Snack",
+                    "is_shared_household": False,
+                    "items": [
+                        {
+                            "name": "Homemade Mango Lassi",
+                            "serving_amount": 1,
+                            "serving_unit": "serving",
+                            "calories": 180,
+                            "protein_g": 5,
+                            "carbs_g": 28,
+                            "fat_g": 3,
+                            "fiber_g": 1,
+                            "serving_weight_g": 250,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(unshared_log.status_code, 200)
+
+        # User 11 searches catalog for Mango Lassi -> finds it!
+        with self._context_patches(user_id=11, household_id=1):
+            search_res = self.client.get("/api/nourish/catalog/search?q=Mango+Lassi")
+            self.assertEqual(search_res.status_code, 200)
+            foods = search_res.get_json()["foods"]
+            self.assertTrue(any(f["name"] == "Homemade Mango Lassi" and f.get("household_id") == 1 for f in foods))
+
+            # But Snack is NOT in shared meals drawer
+            shared_res_snack = self.client.get("/api/nourish/household/shared-meals?date=2026-10-19")
+            shared_slots = [m["meal_slot"] for m in shared_res_snack.get_json()["shared_meals"]]
+            self.assertNotIn("Snack", shared_slots)
+
 
 if __name__ == "__main__":
     unittest.main()
