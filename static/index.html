@@ -1674,7 +1674,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           <div style="font-size:12px; color:var(--muted);">
             Budget: <b id="nourishCalBudget" style="color:var(--text);">2000</b> · Food: <b id="nourishCalConsumed" style="color:var(--text);">0</b>
           </div>
-          <button type="button" id="nourishBtnCoachQuickLink" onclick="openNourishCoachQuickShare()" title="VitalPath Coach Link" style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:3px 8px; font-size:11.5px; font-weight:700; cursor:pointer; color:#065f46; display:inline-flex; align-items:center; gap:3px;">
+          <button type="button" id="nourishBtnCoachQuickLink" onclick="openNourishCoachQuickShare()" title="Nourish Coach Link" style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:3px 8px; font-size:11.5px; font-weight:700; cursor:pointer; color:#065f46; display:inline-flex; align-items:center; gap:3px;">
             💬 Coach Link
           </button>
           <button type="button" id="nourishBtnOpenGoals" onclick="openNourishGoalsModal()" title="Set Calorie Goal & Macro Budgets" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px; padding:3px 8px; font-size:11.5px; font-weight:700; cursor:pointer; color:#334155; display:inline-flex; align-items:center; gap:3px;">
@@ -2046,12 +2046,12 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <input type="number" id="nourishGoalWater" min="500" max="10000" step="50" placeholder="2500" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
       </div>
 
-      <!-- VitalPath Coach Link Section (Issue #694 & #698) -->
+      <!-- Nourish Coach Link Section (Issue #694 & #698) -->
       <div id="nourishCoachLinkSection" style="margin-bottom:16px; padding:12px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
             <div style="font-size:12.5px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:5px;">
-              <span>🩺</span> VitalPath Coach Link
+              <span>🥗</span> Nourish Coach Link
             </div>
             <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:1px;">Share read-only diary &amp; receive coach notes</div>
           </div>
@@ -2161,7 +2161,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           <span style="font-size:24px;">🩺</span>
           <div>
             <div style="font-weight:700; font-size:16px; color:#111827;" id="nourishCoachDrawerTitle">Coach Feedback</div>
-            <div id="nourishCoachDrawerSub" style="font-size:12px; color:#047857; font-weight:600;">VitalPath Coaching</div>
+            <div id="nourishCoachDrawerSub" style="font-size:12px; color:#047857; font-weight:600;">Nourish Coaching</div>
           </div>
         </div>
         <button type="button" onclick="closeNourishCoachDrawer()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer;" aria-label="Close">✕</button>
@@ -12513,7 +12513,7 @@ function openNourishCoachDrawer(note) {
   if (authorEl) authorEl.textContent = (note && note.author_name) ? (note.author_name + ' (' + (note.author_role || 'Coach') + ')') : 'Coach';
   if (dateEl) dateEl.textContent = (note && note.log_date) ? note.log_date : '';
   if (msgEl) msgEl.textContent = (note && note.message) ? note.message : 'Keep up the great work!';
-  if (subEl) subEl.textContent = (note && note.author_role) ? ('Feedback from ' + note.author_role) : 'VitalPath Coaching';
+  if (subEl) subEl.textContent = (note && note.author_role) ? ('Feedback from ' + note.author_role) : 'Nourish Coaching';
 
   drawer.style.display = 'flex';
   drawer.classList.add('active');

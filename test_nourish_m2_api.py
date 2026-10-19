@@ -1927,7 +1927,7 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             ]:
                 res_portal = self.client.get(portal_path)
                 self.assertEqual(res_portal.status_code, 200, f"Expected 200 for {portal_path}")
-                self.assertIn("VitalPath Coach Portal", res_portal.get_data(as_text=True))
+                self.assertIn("Nourish Coach Portal", res_portal.get_data(as_text=True))
                 self.assertIn(token, res_portal.get_data(as_text=True))
 
             # Missing token returns 404
