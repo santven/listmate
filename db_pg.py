@@ -338,6 +338,23 @@ def init_db(db=None):
                 try: db.rollback()
                 except Exception: pass
 
+        _safe_exec("ALTER TABLE nourish_user_goals ADD COLUMN IF NOT EXISTS coach_token VARCHAR(64) UNIQUE")
+        _safe_exec("ALTER TABLE nourish_user_goals ADD COLUMN IF NOT EXISTS coach_link_enabled BOOLEAN NOT NULL DEFAULT FALSE")
+        _safe_exec("ALTER TABLE nourish_user_goals ADD COLUMN IF NOT EXISTS coach_display_alias TEXT DEFAULT ''")
+        _safe_exec("ALTER TABLE nourish_user_goals ADD COLUMN IF NOT EXISTS coach_created_at TIMESTAMP")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_nourish_goals_coach_token ON nourish_user_goals(coach_token) WHERE coach_link_enabled = TRUE")
+        _safe_exec("""CREATE TABLE IF NOT EXISTS nourish_coach_notes (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+            log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            author_role VARCHAR(16) NOT NULL DEFAULT 'coach',
+            author_name VARCHAR(64) NOT NULL DEFAULT 'Coach',
+            message TEXT NOT NULL,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )""")
+        _safe_exec("CREATE INDEX IF NOT EXISTS idx_nourish_coach_notes_user_date ON nourish_coach_notes(user_id, log_date DESC)")
+
         _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS rating INTEGER")
         _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open'")
         _safe_exec("ALTER TABLE app_feedback ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE")

@@ -33,6 +33,8 @@ from push_helper import (
     check_still_good_produce_expiry_pushes,
     check_still_good_freezer_expiry_pushes,
     check_post_shopping_smart_stash_pushes,
+    check_nourish_evening_diary_pushes,
+    check_nourish_afternoon_hydration_pushes,
 )
 
 
@@ -148,6 +150,24 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
     except Exception as exc:
         logger.error(f"Nourish AI task failed to launch: {exc}")
         pipeline_results["nourish_ai_enrichment"] = {"status": "error", "error": str(exc)}
+
+    # Task 8: Nourish Smart Evening Diary Push Reminder (8:00 PM local)
+    pipeline_results["nourish_evening_diary_pushes"] = safe_execute_task(
+        "Nourish Smart Evening Diary Push Reminder (8:00 PM local)",
+        check_nourish_evening_diary_pushes,
+        target_hour=20,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
+    # Task 9: Nourish Afternoon Hydration Push Reminder (3:00 PM local)
+    pipeline_results["nourish_afternoon_hydration_pushes"] = safe_execute_task(
+        "Nourish Afternoon Hydration Push Reminder (3:00 PM local)",
+        check_nourish_afternoon_hydration_pushes,
+        target_hour=15,
+        dry_run=dry_run,
+        force_send=force_send
+    )
 
     logger.info(f"Hourly pipeline finished. Tasks evaluated: {len(pipeline_results)}")
     for task_name, res in pipeline_results.items():

@@ -59,10 +59,12 @@ class InMemoryNourishDB:
         self.biometrics = {}  # (user_id, log_date) -> dict
         self.users = {}       # user_id -> dict
         self.ai_usage = {}    # (user_id, usage_date_str) -> int count
+        self.coach_notes = {} # id -> dict
         self._next_cat_id = 1
         self._next_rec_id = 1
         self._next_log_id = 1
         self._next_bio_id = 1
+        self._next_note_id = 1
         self._result_rows = []
         self.rowcount = 0
         self.committed = False
@@ -490,19 +492,48 @@ class InMemoryNourishDB:
                 self.rowcount = 1
             return self
 
+        if "INSERT INTO nourish_user_goals" in norm and "coach_token" in norm:
+            uid = int(params[0])
+            token, is_en, alias = params[1], bool(params[2]), str(params[3] or "")
+            row = self.goals.setdefault(uid, {"user_id": uid, "calories_target": 2000, "protein_target_g": 130, "carbs_target_g": 200, "fat_target_g": 65, "fiber_target_g": 30, "water_target_ml": 2500})
+            row["coach_token"] = token
+            row["coach_link_enabled"] = is_en
+            row["coach_display_alias"] = alias
+            self.rowcount = 1
+            return self
+
         if "INSERT INTO nourish_user_goals" in norm:
             uid = int(params[0])
-            row = {
-                "user_id": uid,
-                "calories_target": int(params[1]),
-                "calorie_target": int(params[1]),
-                "protein_target_g": int(params[2]),
-                "carbs_target_g": int(params[3]),
-                "fat_target_g": int(params[4]),
-                "fiber_target_g": int(params[5]),
-                "water_target_ml": int(params[6]),
-            }
-            self.goals[uid] = row
+            if "coach_token" in norm:
+                token, is_en, alias = params[1], bool(params[2]), str(params[3] or "")
+                row = self.goals.setdefault(uid, {
+                    "user_id": uid,
+                    "calories_target": 2000,
+                    "calorie_target": 2000,
+                    "protein_target_g": 130,
+                    "carbs_target_g": 200,
+                    "fat_target_g": 65,
+                    "fiber_target_g": 30,
+                    "water_target_ml": 2500,
+                })
+                row["coach_token"] = token
+                row["coach_link_enabled"] = is_en
+                row["coach_display_alias"] = alias
+            else:
+                row = {
+                    "user_id": uid,
+                    "calories_target": int(params[1]),
+                    "calorie_target": int(params[1]),
+                    "protein_target_g": int(params[2]),
+                    "carbs_target_g": int(params[3]),
+                    "fat_target_g": int(params[4]),
+                    "fiber_target_g": int(params[5]),
+                    "water_target_ml": int(params[6]),
+                    "coach_token": None,
+                    "coach_link_enabled": False,
+                    "coach_display_alias": "",
+                }
+                self.goals[uid] = row
             self._result_rows = [dict(row)]
             self.rowcount = 1
             return self
@@ -609,6 +640,118 @@ class InMemoryNourishDB:
             new_cnt = self.ai_usage[key]
             self._result_rows = [{"request_count": new_cnt}]
             self.rowcount = 1
+            return self
+
+        # 23. Food logs BETWEEN dates (Analytics & Coach View)
+        if "FROM nourish_food_logs" in norm and "log_date BETWEEN ?::date AND ?::date" in norm:
+            if len(params) >= 4:
+                uid, hhid, start_d, end_d = int(params[0]), int(params[1]), str(params[2])[:10], str(params[3])[:10]
+                matched = [
+                    dict(r) for r in sorted(self.logs.values(), key=lambda x: str(x["log_date"]))
+                    if r["user_id"] == uid and int(r.get("household_id", 0)) == hhid and start_d <= str(r["log_date"])[:10] <= end_d
+                ]
+            else:
+                uid, start_d, end_d = int(params[0]), str(params[1])[:10], str(params[2])[:10]
+                matched = [
+                    dict(r) for r in sorted(self.logs.values(), key=lambda x: str(x["log_date"]))
+                    if r["user_id"] == uid and start_d <= str(r["log_date"])[:10] <= end_d
+                ]
+            self._result_rows = matched
+            self.rowcount = len(matched)
+            return self
+
+        # 24. Biometrics BETWEEN dates (Analytics & Coach View)
+        if "FROM nourish_daily_biometrics" in norm and "log_date BETWEEN ?::date AND ?::date" in norm:
+            uid, start_d, end_d = int(params[0]), str(params[1])[:10], str(params[2])[:10]
+            matched = [
+                dict(b) for b in sorted(self.biometrics.values(), key=lambda x: str(x["log_date"]))
+                if b["user_id"] == uid and start_d <= str(b["log_date"])[:10] <= end_d
+            ]
+            self._result_rows = matched
+            self.rowcount = len(matched)
+            return self
+
+        # 25. Coach goals token lookup
+        if "coach_token = ?" in norm and "coach_link_enabled = TRUE" in norm:
+            token = params[0]
+            for uid, g in self.goals.items():
+                if g.get("coach_token") == token and g.get("coach_link_enabled"):
+                    u = self.users.get(uid, {"name": f"User {uid}", "household_id": 1})
+                    ret = {**g, "user_id": uid, "client_name": u.get("name", "Client"), "household_id": u.get("household_id", 1)}
+                    self._result_rows = [ret]
+                    self.rowcount = 1
+                    return self
+            self._result_rows = []
+            self.rowcount = 0
+            return self
+
+        # 26. Coach goals update / insert
+        if "UPDATE nourish_user_goals" in norm and "coach_token = ?" in norm:
+            token, is_en, alias, uid = params[0], bool(params[1]), str(params[2] or ""), int(params[3])
+            row = self.goals.setdefault(uid, {"user_id": uid, "calories_target": 2000, "protein_target_g": 130, "carbs_target_g": 200, "fat_target_g": 65, "fiber_target_g": 30, "water_target_ml": 2500})
+            row["coach_token"] = token
+            row["coach_link_enabled"] = is_en
+            row["coach_display_alias"] = alias
+            self.rowcount = 1
+            return self
+
+        if "INSERT INTO nourish_user_goals" in norm and "coach_token" in norm:
+            uid = int(params[0])
+            token, is_en, alias = params[1], bool(params[2]), str(params[3] or "")
+            row = self.goals.setdefault(uid, {"user_id": uid, "calories_target": 2000, "protein_target_g": 130, "carbs_target_g": 200, "fat_target_g": 65, "fiber_target_g": 30, "water_target_ml": 2500})
+            row["coach_token"] = token
+            row["coach_link_enabled"] = is_en
+            row["coach_display_alias"] = alias
+            self.rowcount = 1
+            return self
+
+        # 27. Coach notes insert
+        if "INSERT INTO nourish_coach_notes" in norm:
+            nid = self._next_note_id
+            self._next_note_id += 1
+            row = {
+                "id": nid,
+                "user_id": int(params[0]),
+                "log_date": str(params[1])[:10],
+                "author_role": "coach",
+                "author_name": str(params[2] or "Coach"),
+                "message": str(params[3]),
+                "is_read": False,
+                "created_at": datetime.datetime.now().isoformat(),
+            }
+            self.coach_notes[nid] = row
+            self._result_rows = [dict(row)]
+            self.rowcount = 1
+            return self
+
+        # 28. Coach notes select & ack
+        if "FROM nourish_coach_notes" in norm:
+            if "log_date = ?::date" in norm:
+                uid, d_str = int(params[0]), str(params[1])[:10]
+                matched = [dict(n) for n in sorted(self.coach_notes.values(), key=lambda x: x["id"]) if n["user_id"] == uid and str(n["log_date"])[:10] == d_str]
+                self._result_rows = matched
+                self.rowcount = len(matched)
+                return self
+            if "is_read = FALSE" in norm:
+                uid = int(params[0])
+                matched = [dict(n) for n in sorted(self.coach_notes.values(), key=lambda x: x["id"], reverse=True) if n["user_id"] == uid and not n.get("is_read")]
+                self._result_rows = matched[:1] if matched else []
+                self.rowcount = len(self._result_rows)
+                return self
+            if "WHERE user_id = ?" in norm:
+                uid = int(params[0])
+                matched = [dict(n) for n in sorted(self.coach_notes.values(), key=lambda x: x["id"], reverse=True) if n["user_id"] == uid]
+                self._result_rows = matched
+                self.rowcount = len(matched)
+                return self
+
+        if "UPDATE nourish_coach_notes SET is_read = TRUE" in norm:
+            nid, uid = int(params[0]), int(params[1])
+            row = self.coach_notes.get(nid)
+            if row and row["user_id"] == uid:
+                row["is_read"] = True
+                self._result_rows = [{"id": nid}]
+                self.rowcount = 1
             return self
 
         return self
@@ -1603,6 +1746,192 @@ class TestNourishM2APIAndCron(unittest.TestCase):
 
             day_again = self.client.get("/api/nourish/day?date=2026-10-19")
             self.assertEqual(day_again.get_json()["biometrics"]["water_ml"], 500)
+
+    def test_20_nourish_macro_trends_and_analytics(self):
+        """Issue #692: Macro Trends & Analytics endpoint GET /api/nourish/analytics."""
+        with self._context_patches(user_id=10, household_id=1):
+            # Seed goals
+            self.fake_db.goals[10] = {
+                "user_id": 10,
+                "calories_target": 2000,
+                "protein_target_g": 140,
+                "carbs_target_g": 200,
+                "fat_target_g": 65,
+                "fiber_target_g": 30,
+                "water_target_ml": 2500,
+            }
+
+            # Seed 2 days of logs and biometrics
+            today = datetime.date.today().isoformat()
+            yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+
+            self.client.post("/api/nourish/logs", json={
+                "log_date": today,
+                "meal_slot": "Breakfast",
+                "items": [{"food_name": "Eggs & Toast", "calories": 400, "protein_g": 25, "carbs_g": 30, "fat_g": 15, "fiber_g": 4}],
+            })
+            self.client.post("/api/nourish/logs", json={
+                "log_date": yesterday,
+                "meal_slot": "Lunch",
+                "items": [{"food_name": "Chicken Rice Bowl", "calories": 600, "protein_g": 45, "carbs_g": 60, "fat_g": 12, "fiber_g": 6}],
+            })
+            self.client.post("/api/nourish/biometrics", json={"log_date": today, "water_ml": 1800, "weight_kg": 75.5})
+
+            # Call analytics for 7 days
+            res = self.client.get("/api/nourish/analytics?days=7")
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["days"], 7)
+            self.assertEqual(len(data["daily"]), 7)
+
+            # Daily entries
+            today_entry = next((d for d in data["daily"] if d["date"] == today), None)
+            self.assertIsNotNone(today_entry)
+            self.assertEqual(today_entry["calories"], 400.0)
+            self.assertEqual(today_entry["water_ml"], 1800)
+            self.assertEqual(today_entry["weight_kg"], 75.5)
+
+            # Averages
+            avg = data["averages"]
+            self.assertEqual(avg["days_logged"], 2)
+            self.assertEqual(avg["calories"], 500.0)  # (400 + 600) / 2
+            self.assertEqual(avg["protein_g"], 35.0)  # (25 + 45) / 2
+
+            # Macro split
+            split = data["macro_split"]
+            self.assertGreater(split["protein_pct"], 0)
+            self.assertGreater(split["carbs_pct"], 0)
+
+            # Test invalid / clamped days
+            res_clamped = self.client.get("/api/nourish/analytics?days=999")
+            self.assertEqual(res_clamped.get_json()["days"], 90)
+
+            res_invalid = self.client.get("/api/nourish/analytics?days=abc")
+            self.assertEqual(res_invalid.get_json()["days"], 7)
+
+    def test_21_evening_diary_and_hydration_push_reminders(self):
+        """Issue #693: Evening Diary (8pm) & Afternoon Hydration (3pm) push reminders."""
+        with patch("push_helper.send_push_to_user", return_value={"sent": 1, "failed": 0}) as mock_send:
+            # 1. Evening Diary push: candidate user has NOT logged dinner
+            cand_user = [{
+                "user_id": 10,
+                "user_name": "Test User",
+                "user_email": "test@example.com",
+                "user_timezone": "America/New_York",
+                "household_id": 1,
+                "household_name": "Test Household",
+                "subscription_status": "premium",
+                "is_premium": True,
+            }]
+
+            with patch("push_helper._run") as mock_run:
+                # First call returns candidate list, second returns food logs summary (count=1, cal_sum=500)
+                mock_run.side_effect = [cand_user, [{"count": 1, "cal_sum": 500}]]
+                res_diary = push_helper.check_nourish_evening_diary_pushes(target_hour=20, force_send=True)
+                self.assertTrue(res_diary["ok"])
+                self.assertEqual(res_diary["dispatched"], 1)
+                mock_send.assert_called()
+                call_args = mock_send.call_args[1]
+                self.assertEqual(call_args["title"], "📖 Wrap up today's Nourish diary")
+                self.assertEqual(call_args["data"]["campaign"], "nourish_evening_diary_8pm")
+
+            # 2. Afternoon Hydration push: user below water goal
+            mock_send.reset_mock()
+            with patch("push_helper._run") as mock_run:
+                # First returns candidates, second returns biometrics + goal (water_ml=1000, water_target_ml=2500)
+                mock_run.side_effect = [cand_user, [{"water_ml": 1000, "water_target_ml": 2500}]]
+                res_hyd = push_helper.check_nourish_afternoon_hydration_pushes(target_hour=15, force_send=True)
+                self.assertTrue(res_hyd["ok"])
+                self.assertEqual(res_hyd["dispatched"], 1)
+                call_args = mock_send.call_args[1]
+                self.assertEqual(call_args["title"], "💧 Afternoon Hydration Check")
+                self.assertIn("1000ml of your 2500ml", call_args["body"])
+                self.assertEqual(call_args["data"]["campaign"], "nourish_afternoon_hydration_3pm")
+
+            # 3. Afternoon Hydration push: user already reached goal -> skipped
+            mock_send.reset_mock()
+            with patch("push_helper._run") as mock_run:
+                mock_run.side_effect = [cand_user, [{"water_ml": 2500, "water_target_ml": 2500}]]
+                res_hyd_skip = push_helper.check_nourish_afternoon_hydration_pushes(target_hour=15, force_send=False)
+                self.assertTrue(res_hyd_skip["ok"])
+                self.assertEqual(res_hyd_skip["dispatched"], 0)
+                mock_send.assert_not_called()
+
+    def test_22_coach_link_portal_and_notes(self):
+        """Issue #694: VitalPath Coach Link Portal & Push Alert backend endpoints."""
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Generate coach link
+            res_link = self.client.post("/api/nourish/coach/link", json={
+                "enabled": True,
+                "alias": "Athlete Sam",
+                "regenerate": True,
+            })
+            self.assertEqual(res_link.status_code, 200)
+            link_data = res_link.get_json()
+            self.assertTrue(link_data["ok"])
+            token = link_data["coach_token"]
+            self.assertTrue(bool(token))
+            self.assertEqual(link_data["coach_display_alias"], "Athlete Sam")
+            self.assertTrue(link_data["coach_link_enabled"])
+            self.assertIn(token, link_data["coach_url"])
+
+            # 2. Coach views client data via token (GET /api/nourish/coach/view/<token>)
+            res_view = self.client.get(f"/api/nourish/coach/view/{token}")
+            self.assertEqual(res_view.status_code, 200)
+            view_data = res_view.get_json()
+            self.assertTrue(view_data["ok"])
+            self.assertEqual(view_data["client"]["alias"], "Athlete Sam")
+            self.assertEqual(len(view_data["days"]), 14)
+
+            # 3. Coach posts feedback note with push alert (POST /api/nourish/coach/notes/<token>)
+            with patch("push_helper.send_push_to_user", return_value={"sent": 1, "failed": 0}) as mock_coach_push:
+                res_note = self.client.post(f"/api/nourish/coach/notes/{token}", json={
+                    "message": "Great protein intake today! Add 500ml water after dinner.",
+                    "author_name": "Coach Maria",
+                    "log_date": "2026-10-19",
+                })
+                self.assertEqual(res_note.status_code, 200)
+                note_data = res_note.get_json()
+                self.assertTrue(note_data["ok"])
+                note_id = note_data["note"]["id"]
+                self.assertIsNotNone(note_id)
+
+                # Push was dispatched to user
+                mock_coach_push.assert_called_once()
+                push_args = mock_coach_push.call_args[1]
+                self.assertEqual(push_args["user_id"], 10)
+                self.assertEqual(push_args["title"], "💬 Coach Note from Coach Maria")
+                self.assertEqual(push_args["data"]["source"], "coach_note")
+
+            # 4. Client retrieves daily diary via GET /api/nourish/day and sees coach_notes & unread_coach_note
+            res_day = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertEqual(res_day.status_code, 200)
+            day_data = res_day.get_json()
+            self.assertEqual(len(day_data["coach_notes"]), 1)
+            self.assertEqual(day_data["coach_notes"][0]["author_name"], "Coach Maria")
+            self.assertIsNotNone(day_data["unread_coach_note"])
+            self.assertEqual(day_data["unread_coach_note"]["id"], note_id)
+
+            # 5. Client acknowledges note (POST /api/nourish/coach/notes/<id>/ack)
+            res_ack = self.client.post(f"/api/nourish/coach/notes/{note_id}/ack")
+            self.assertEqual(res_ack.status_code, 200)
+            self.assertTrue(res_ack.get_json()["ok"])
+
+            # Verify unread_coach_note is now None
+            res_day_read = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertIsNone(res_day_read.get_json()["unread_coach_note"])
+
+            # 6. Verify Web portal route GET /coach/<token> renders mobile-friendly HTML
+            res_portal = self.client.get(f"/coach/{token}")
+            self.assertEqual(res_portal.status_code, 200)
+            self.assertIn("VitalPath Coach Portal", res_portal.get_data(as_text=True))
+            self.assertIn(token, res_portal.get_data(as_text=True))
+
+            # 7. Disabling coach link revokes access
+            self.client.post("/api/nourish/coach/link", json={"enabled": False})
+            res_revoked = self.client.get(f"/api/nourish/coach/view/{token}")
+            self.assertEqual(res_revoked.status_code, 404)
 
 
 if __name__ == "__main__":
