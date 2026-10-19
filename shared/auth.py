@@ -766,6 +766,32 @@ def get_active_tokens_for_household(household_id: int, exclude_user_id: int = No
         return []
 
 
+def get_active_tokens_for_household_nourish(household_id: int, exclude_user_id: int = None):
+    """Retrieve all active push tokens for members of a household who have nourish_enabled = TRUE."""
+    if not household_id or household_id == 0:
+        return []
+    try:
+        _init_schema()
+        if exclude_user_id and exclude_user_id != 0:
+            rows = _run("""
+                SELECT ps.token, ps.platform, ps.device_model, ps.app_version, ps.user_id
+                FROM push_subscriptions ps
+                JOIN auth_users u ON ps.user_id = u.id
+                WHERE ps.household_id = %s AND ps.user_id != %s AND ps.is_active = TRUE AND u.nourish_enabled = TRUE
+            """, (int(household_id), int(exclude_user_id)))
+        else:
+            rows = _run("""
+                SELECT ps.token, ps.platform, ps.device_model, ps.app_version, ps.user_id
+                FROM push_subscriptions ps
+                JOIN auth_users u ON ps.user_id = u.id
+                WHERE ps.household_id = %s AND ps.is_active = TRUE AND u.nourish_enabled = TRUE
+            """, (int(household_id),))
+        return rows
+    except Exception as e:
+        print(f"[get_active_tokens_for_household_nourish error] {e}", flush=True)
+        return []
+
+
 def mark_tokens_inactive(tokens: list) -> bool:
     """Mark a batch of tokens as inactive (e.g. after receiving UNREGISTERED / BadDeviceToken)."""
     if not tokens:

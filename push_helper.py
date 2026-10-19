@@ -419,6 +419,38 @@ def send_push_to_household(household_id: int, title: str, body: str, data: Optio
     return _send_fcm_multicast(tokens, title, body, data, target_type="household", target_id=int(household_id))
 
 
+def send_push_to_household_nourish(household_id: int, title: str, body: str, data: Optional[Dict[str, str]] = None, exclude_user_id: Optional[int] = None) -> Dict[str, Any]:
+    """Send push notification to active members of a household who have nourish_enabled = TRUE.
+    Can exclude the actor's user_id so they don't get alerted for their own shared meals.
+    """
+    if not household_id or household_id == 0:
+        return {"sent": 0, "failed": 0, "error": "Invalid household_id"}
+
+    ex_uid = None if (exclude_user_id is None or exclude_user_id == 0) else int(exclude_user_id)
+    token_rows = authmod.get_active_tokens_for_household_nourish(household_id, exclude_user_id=ex_uid)
+    if not token_rows:
+        try:
+            authmod.log_push_dispatch(
+                target_type="household",
+                target_id=int(household_id),
+                title=title,
+                body=body,
+                url=(data or {}).get("url", "/"),
+                custom_data=data,
+                tokens_count=0,
+                sent_count=0,
+                failed_count=0,
+                errors=["No active nourish push tokens for household"],
+                is_mock=False
+            )
+        except Exception as log_err:
+            logger.warning(f"[PushHelper] Failed to log empty household nourish token dispatch: {log_err}")
+        return {"sent": 0, "failed": 0, "message": "No active nourish tokens for household"}
+
+    tokens = [r["token"] for r in token_rows if r.get("token")]
+    return _send_fcm_multicast(tokens, title, body, data, target_type="household", target_id=int(household_id))
+
+
 def send_push_broadcast(title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Send push notification to all registered active devices across the application."""
     try:

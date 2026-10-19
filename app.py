@@ -3975,7 +3975,7 @@ def nourish_create_logs_endpoint():
             raw_rec_id = entry.get("nourish_recipe_id")
             nourish_recipe_id = int(raw_rec_id) if (raw_rec_id is not None and str(raw_rec_id).strip().isdigit() and int(raw_rec_id) > 0) else None
 
-            raw_sg_id = entry.get("still_good_item_id")
+            raw_sg_id = entry.get("still_good_item_id") if entry.get("still_good_item_id") is not None else data.get("still_good_item_id")
             still_good_item_id = int(raw_sg_id) if (raw_sg_id is not None and str(raw_sg_id).strip().isdigit() and int(raw_sg_id) > 0) else None
 
             notes = str(entry.get("notes") or "").strip()
@@ -4901,6 +4901,9 @@ def api_user_nourish_enabled():
         db.close()
 
 
+_last_nourish_shared_push = {}
+
+
 @app.route("/api/nourish/meals/share", methods=["POST"])
 @require_user
 def api_nourish_share_meal():
@@ -5011,6 +5014,62 @@ def api_nourish_share_meal():
                 )
 
         db.commit()
+
+        # Trigger household push notification for members with nourish_enabled = TRUE (Issue #687)
+        if updated_rows:
+            try:
+                push_key = (int(hhid), str(date_str), meal_slot.lower())
+                now = time.time()
+                if now - _last_nourish_shared_push.get(push_key, 0) >= 600.0:
+                    _last_nourish_shared_push[push_key] = now
+
+                    actor_name = None
+                    try:
+                        u_cur = db.execute("SELECT name FROM auth_users WHERE id = ?", (uid,))
+                        u_row = u_cur.fetchone() if u_cur else None
+                        if u_row and u_row.get("name"):
+                            actor_name = u_row.get("name")
+                    except Exception:
+                        pass
+                    if not actor_name:
+                        actor_name = authmod.get_display_name() or "A family member"
+
+                    food_names = [
+                        str(r.get("food_name") or "").strip()
+                        for r in updated_rows
+                        if r.get("food_name") and str(r.get("food_name")).strip()
+                    ]
+                    if len(food_names) == 0:
+                        summary_foods = "A home-cooked meal"
+                    elif len(food_names) == 1:
+                        summary_foods = food_names[0]
+                    elif len(food_names) == 2:
+                        summary_foods = f"{food_names[0]} & {food_names[1]}"
+                    elif len(food_names) == 3:
+                        summary_foods = f"{food_names[0]}, {food_names[1]} & {food_names[2]}"
+                    else:
+                        summary_foods = f"{food_names[0]}, {food_names[1]} & {len(food_names) - 2} other items"
+
+                    push_title = f"🍽️ {meal_slot.capitalize()} logged by {actor_name}"
+                    push_body = f"{summary_foods}. Did you eat this too? Tap to log in 1 tap."
+                    payload = {
+                        "action": "open_nourish",
+                        "screen": "nourish",
+                        "date": str(date_str),
+                        "slot": str(meal_slot),
+                    }
+
+                    import push_helper
+                    push_helper.send_push_to_household_nourish(
+                        household_id=hhid,
+                        title=push_title,
+                        body=push_body,
+                        data=payload,
+                        exclude_user_id=uid,
+                    )
+            except Exception as push_err:
+                print(f"[NOURISH PUSH ERROR] Failed to send shared meal push: {push_err}", flush=True)
+
         return jsonify({"ok": True, "shared_count": len(updated_rows)})
     except Exception as exc:
         try: db.rollback()
