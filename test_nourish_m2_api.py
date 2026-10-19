@@ -485,55 +485,51 @@ class InMemoryNourishDB:
             return self
 
         # 15. User goals
-        if "SELECT * FROM nourish_user_goals WHERE user_id = ?" in norm:
+        if "FROM nourish_user_goals WHERE user_id = ?" in norm:
             uid = int(params[0])
             if uid in self.goals:
                 self._result_rows = [dict(self.goals[uid])]
                 self.rowcount = 1
             return self
 
-        if "INSERT INTO nourish_user_goals" in norm and "coach_token" in norm:
-            uid = int(params[0])
-            token, is_en, alias = params[1], bool(params[2]), str(params[3] or "")
-            row = self.goals.setdefault(uid, {"user_id": uid, "calories_target": 2000, "protein_target_g": 130, "carbs_target_g": 200, "fat_target_g": 65, "fiber_target_g": 30, "water_target_ml": 2500})
-            row["coach_token"] = token
-            row["coach_link_enabled"] = is_en
-            row["coach_display_alias"] = alias
-            self.rowcount = 1
-            return self
-
         if "INSERT INTO nourish_user_goals" in norm:
             uid = int(params[0])
-            if "coach_token" in norm:
-                token, is_en, alias = params[1], bool(params[2]), str(params[3] or "")
-                row = self.goals.setdefault(uid, {
-                    "user_id": uid,
-                    "calories_target": 2000,
-                    "calorie_target": 2000,
-                    "protein_target_g": 130,
-                    "carbs_target_g": 200,
-                    "fat_target_g": 65,
-                    "fiber_target_g": 30,
-                    "water_target_ml": 2500,
-                })
-                row["coach_token"] = token
-                row["coach_link_enabled"] = is_en
-                row["coach_display_alias"] = alias
+            row = self.goals.setdefault(uid, {
+                "user_id": uid,
+                "calories_target": 2000,
+                "calorie_target": 2000,
+                "protein_target_g": 130,
+                "carbs_target_g": 200,
+                "fat_target_g": 65,
+                "fiber_target_g": 30,
+                "water_target_ml": 2500,
+                "coach_token": None,
+                "coach_link_enabled": False,
+                "coach_display_alias": "",
+            })
+            if len(params) >= 10:
+                row["calories_target"] = int(params[1])
+                row["calorie_target"] = int(params[1])
+                row["protein_target_g"] = int(params[2])
+                row["carbs_target_g"] = int(params[3])
+                row["fat_target_g"] = int(params[4])
+                row["fiber_target_g"] = int(params[5])
+                row["water_target_ml"] = int(params[6])
+                row["coach_token"] = params[7]
+                row["coach_link_enabled"] = bool(params[8])
+                row["coach_display_alias"] = str(params[9] or "")
+            elif len(params) == 4:
+                row["coach_token"] = params[1]
+                row["coach_link_enabled"] = bool(params[2])
+                row["coach_display_alias"] = str(params[3] or "")
             else:
-                row = {
-                    "user_id": uid,
-                    "calories_target": int(params[1]),
-                    "calorie_target": int(params[1]),
-                    "protein_target_g": int(params[2]),
-                    "carbs_target_g": int(params[3]),
-                    "fat_target_g": int(params[4]),
-                    "fiber_target_g": int(params[5]),
-                    "water_target_ml": int(params[6]),
-                    "coach_token": None,
-                    "coach_link_enabled": False,
-                    "coach_display_alias": "",
-                }
-                self.goals[uid] = row
+                row["calories_target"] = int(params[1])
+                row["calorie_target"] = int(params[1])
+                row["protein_target_g"] = int(params[2])
+                row["carbs_target_g"] = int(params[3])
+                row["fat_target_g"] = int(params[4])
+                row["fiber_target_g"] = int(params[5])
+                row["water_target_ml"] = int(params[6])
             self._result_rows = [dict(row)]
             self.rowcount = 1
             return self
@@ -1932,6 +1928,47 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.client.post("/api/nourish/coach/link", json={"enabled": False})
             res_revoked = self.client.get(f"/api/nourish/coach/view/{token}")
             self.assertEqual(res_revoked.status_code, 404)
+
+    def test_23_goals_coach_link_persistence(self):
+        """Issue #696: Verifies coach link options persist when saved through /api/nourish/goals."""
+        with self._context_patches(user_id=88, household_id=1):
+            # 1. Save goals with coach link enabled and alias
+            post_res = self.client.post(
+                "/api/nourish/goals",
+                json={
+                    "calories_target": 2200,
+                    "protein_target_g": 150,
+                    "carbs_target_g": 220,
+                    "fat_target_g": 70,
+                    "fiber_target_g": 32,
+                    "water_target_ml": 2800,
+                    "coach_link_enabled": True,
+                    "coach_display_alias": "Venkat Runner",
+                },
+            )
+            self.assertEqual(post_res.status_code, 200)
+            data = post_res.get_json()
+            self.assertTrue(data["ok"])
+            goals = data["goals"]
+            self.assertTrue(goals["coach_link_enabled"])
+            self.assertEqual(goals["coach_display_alias"], "Venkat Runner")
+            self.assertTrue(bool(goals["coach_token"]))
+
+            # 2. Re-fetching goals reflects persistence
+            get_res = self.client.get("/api/nourish/goals")
+            self.assertEqual(get_res.status_code, 200)
+            saved_goals = get_res.get_json()["goals"]
+            self.assertTrue(saved_goals["coach_link_enabled"])
+            self.assertEqual(saved_goals["coach_display_alias"], "Venkat Runner")
+            self.assertEqual(saved_goals["coach_token"], goals["coach_token"])
+
+            # 3. GET /api/nourish/day also includes persisted coach link
+            day_res = self.client.get("/api/nourish/day?date=2026-10-19")
+            self.assertEqual(day_res.status_code, 200)
+            day_goals = day_res.get_json()["goals"]
+            self.assertTrue(day_goals["coach_link_enabled"])
+            self.assertEqual(day_goals["coach_display_alias"], "Venkat Runner")
+            self.assertEqual(day_goals["coach_token"], goals["coach_token"])
 
 
 if __name__ == "__main__":
