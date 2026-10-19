@@ -42,8 +42,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import app as app_module
 import nourish_ai
+import push_helper
 import scripts.cron_hourly as cron_hourly
 from seed_nourish import normalize_food_name
+import shared.auth as authmod
 
 
 class InMemoryNourishDB:
@@ -533,11 +535,18 @@ class InMemoryNourishDB:
             self.rowcount = 1
             return self
 
-        # 17. User nourish_enabled
+        # 17. User nourish_enabled / name
         if "SELECT nourish_enabled FROM auth_users WHERE id = ?" in norm:
             uid = int(params[0])
             user_data = self.users.get(uid, {"nourish_enabled": False})
             self._result_rows = [user_data]
+            self.rowcount = 1
+            return self
+
+        if "SELECT name FROM auth_users WHERE id = ?" in norm:
+            uid = int(params[0])
+            user_data = self.users.get(uid, {"name": f"User {uid}"})
+            self._result_rows = [{"name": user_data.get("name", f"User {uid}")}]
             self.rowcount = 1
             return self
 
@@ -1357,6 +1366,201 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertTrue(body3["limit_reached"])
             self.assertEqual(body3["daily_limit"], 2)
             self.assertIn("Daily AI evaluation limit reached", body3["error"])
+
+    def test_18_household_shared_meal_push_and_nourish_filter(self):
+        """Issue #687: Shared household meal push notifications with nourish_enabled filter and debounce."""
+        # 1. Test shared.auth.get_active_tokens_for_household_nourish
+        # Invalid household_id <= 0 returns empty immediately
+        self.assertEqual(authmod.get_active_tokens_for_household_nourish(0), [])
+        self.assertEqual(authmod.get_active_tokens_for_household_nourish(None), [])
+
+        with patch("shared.auth._run") as mock_run, patch("shared.auth._init_schema"):
+            mock_run.return_value = [{"token": "token_user11", "platform": "ios", "device_model": "iPhone", "app_version": "1.0", "user_id": 11}]
+
+            # Without exclude_user_id
+            tokens = authmod.get_active_tokens_for_household_nourish(1)
+            self.assertEqual(len(tokens), 1)
+            self.assertEqual(tokens[0]["token"], "token_user11")
+            sql_called = mock_run.call_args[0][0]
+            self.assertIn("u.nourish_enabled = TRUE", sql_called)
+            self.assertNotIn("ps.user_id != %s", sql_called)
+
+            # With exclude_user_id
+            mock_run.reset_mock()
+            tokens_ex = authmod.get_active_tokens_for_household_nourish(1, exclude_user_id=10)
+            self.assertEqual(len(tokens_ex), 1)
+            sql_called_ex = mock_run.call_args[0][0]
+            self.assertIn("u.nourish_enabled = TRUE", sql_called_ex)
+            self.assertIn("ps.user_id != %s", sql_called_ex)
+            self.assertEqual(mock_run.call_args[0][1], (1, 10))
+
+        # 2. Test push_helper.send_push_to_household_nourish
+        self.assertEqual(
+            push_helper.send_push_to_household_nourish(0, "Title", "Body"),
+            {"sent": 0, "failed": 0, "error": "Invalid household_id"}
+        )
+
+        with patch("shared.auth.get_active_tokens_for_household_nourish", return_value=[]), \
+             patch("shared.auth.log_push_dispatch"):
+            res_no_tok = push_helper.send_push_to_household_nourish(1, "Title", "Body")
+            self.assertEqual(res_no_tok.get("sent"), 0)
+            self.assertIn("No active nourish tokens", res_no_tok.get("message", ""))
+
+        with patch("shared.auth.get_active_tokens_for_household_nourish", return_value=[{"token": "fcm_tok_1"}]), \
+             patch("push_helper._send_fcm_multicast", return_value={"sent": 1, "failed": 0}) as mock_multicast:
+            res_sent = push_helper.send_push_to_household_nourish(
+                household_id=1,
+                title="Title",
+                body="Body",
+                data={"action": "open_nourish"},
+                exclude_user_id=10
+            )
+            self.assertEqual(res_sent.get("sent"), 1)
+            mock_multicast.assert_called_once_with(
+                ["fcm_tok_1"], "Title", "Body", {"action": "open_nourish"}, target_type="household", target_id=1
+            )
+
+        # 3. Test POST /api/nourish/meals/share push dispatch and debounce
+        app_module._last_nourish_shared_push.clear()
+        self.fake_db.users[10] = {"id": 10, "name": "Alice", "nourish_enabled": True}
+
+        with self._context_patches(user_id=10, household_id=1):
+            # Seed 2 logs for Lunch on 2026-10-19
+            self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Lunch",
+                    "items": [
+                        {"food_name": "Chicken Salad", "quantity": 1, "unit": "serving", "calories": 350, "gram_weight": 250},
+                        {"food_name": "Iced Tea", "quantity": 1, "unit": "serving", "calories": 50, "gram_weight": 240},
+                    ],
+                },
+            )
+
+            with patch("push_helper.send_push_to_household_nourish") as mock_push:
+                # First share: should trigger push notification
+                res_share1 = self.client.post(
+                    "/api/nourish/meals/share",
+                    json={"date": "2026-10-19", "meal_slot": "Lunch"},
+                )
+                self.assertEqual(res_share1.status_code, 200)
+                self.assertTrue(res_share1.get_json()["ok"])
+                self.assertEqual(mock_push.call_count, 1)
+
+                call_kwargs = mock_push.call_args[1]
+                self.assertEqual(call_kwargs["household_id"], 1)
+                self.assertEqual(call_kwargs["title"], "🍽️ Lunch logged by Alice")
+                self.assertIn("Chicken Salad & Iced Tea. Did you eat this too? Tap to log in 1 tap.", call_kwargs["body"])
+                self.assertEqual(call_kwargs["data"], {
+                    "action": "open_nourish",
+                    "screen": "nourish",
+                    "date": "2026-10-19",
+                    "slot": "Lunch",
+                })
+                self.assertEqual(call_kwargs["exclude_user_id"], 10)
+
+                # Second share immediately after: should be debounced (no second push)
+                res_share2 = self.client.post(
+                    "/api/nourish/meals/share",
+                    json={"date": "2026-10-19", "meal_slot": "Lunch"},
+                )
+                self.assertEqual(res_share2.status_code, 200)
+                self.assertEqual(mock_push.call_count, 1)
+
+                # Advance past 10 minutes (600 seconds) in the debounce cache
+                cache_key = (1, "2026-10-19", "lunch")
+                app_module._last_nourish_shared_push[cache_key] = 0.0
+
+                # Third share after debounce window: should trigger push again
+                res_share3 = self.client.post(
+                    "/api/nourish/meals/share",
+                    json={"date": "2026-10-19", "meal_slot": "Lunch"},
+                )
+                self.assertEqual(res_share3.status_code, 200)
+                self.assertEqual(mock_push.call_count, 2)
+
+    def test_19_still_good_item_id_bridge(self):
+        """Issue #688: still_good_item_id bridge into nourish_food_logs."""
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Entry-level still_good_item_id
+            res1 = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "items": [
+                        {
+                            "food_name": "Leftover Roast Chicken",
+                            "quantity": 1,
+                            "unit": "serving",
+                            "calories": 250,
+                            "gram_weight": 180,
+                            "still_good_item_id": 42,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(res1.status_code, 200)
+            data1 = res1.get_json()
+            self.assertTrue(data1["ok"])
+            self.assertEqual(len(data1["logs"]), 1)
+            self.assertEqual(data1["logs"][0]["still_good_item_id"], 42)
+
+            log_id1 = data1["logs"][0]["id"]
+            db_row1 = self.fake_db.logs.get(log_id1)
+            self.assertIsNotNone(db_row1)
+            self.assertEqual(db_row1.get("still_good_item_id"), 42)
+
+            # 2. Request payload top-level still_good_item_id fallback
+            res2 = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "still_good_item_id": 88,
+                    "items": [
+                        {
+                            "food_name": "Leftover Rice",
+                            "quantity": 1,
+                            "unit": "serving",
+                            "calories": 200,
+                            "gram_weight": 150,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(res2.status_code, 200)
+            data2 = res2.get_json()
+            self.assertTrue(data2["ok"])
+            self.assertEqual(data2["logs"][0]["still_good_item_id"], 88)
+
+            log_id2 = data2["logs"][0]["id"]
+            db_row2 = self.fake_db.logs.get(log_id2)
+            self.assertIsNotNone(db_row2)
+            self.assertEqual(db_row2.get("still_good_item_id"), 88)
+
+            # 3. Invalid / 0 still_good_item_id resolves to None
+            res3 = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "items": [
+                        {
+                            "food_name": "Fresh Apple",
+                            "quantity": 1,
+                            "unit": "serving",
+                            "calories": 95,
+                            "gram_weight": 182,
+                            "still_good_item_id": 0,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(res3.status_code, 200)
+            data3 = res3.get_json()
+            self.assertIsNone(data3["logs"][0]["still_good_item_id"])
 
 
 if __name__ == "__main__":
