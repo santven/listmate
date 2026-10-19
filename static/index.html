@@ -11642,14 +11642,23 @@ async function quickAddNourishWater(amountMl) {
   if (typeof toast === 'function') toast('💧 +' + amountMl + 'ml water logged!');
 
   try {
-    await fetch(API + '/nourish/biometrics', {
+    var res = await fetch(API + '/nourish/biometrics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         log_date: currentNourishDate,
+        water_delta_ml: amountMl,
         delta_water_ml: amountMl
       })
-    });
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok && res.biometrics && res.biometrics.water_ml !== undefined) {
+      if (valEl) valEl.textContent = String(res.biometrics.water_ml);
+      if (barEl) {
+        var sPct = Math.min(100, Math.round((res.biometrics.water_ml / targetVal) * 100));
+        barEl.style.width = sPct + '%';
+      }
+    }
   } catch(err) {
     console.error('Error logging water:', err);
   }

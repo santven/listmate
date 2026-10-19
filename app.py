@@ -4449,9 +4449,10 @@ def nourish_biometrics_endpoint():
                 new_water = max(0, int(float(data.get("water_ml"))))
             except (ValueError, TypeError):
                 new_water = curr_water
-        elif "water_delta_ml" in data and data.get("water_delta_ml") is not None:
+        elif ("water_delta_ml" in data and data.get("water_delta_ml") is not None) or ("delta_water_ml" in data and data.get("delta_water_ml") is not None):
+            raw_delta = data.get("water_delta_ml") if data.get("water_delta_ml") is not None else data.get("delta_water_ml")
             try:
-                new_water = max(0, curr_water + int(float(data.get("water_delta_ml"))))
+                new_water = max(0, curr_water + int(float(raw_delta)))
             except (ValueError, TypeError):
                 new_water = curr_water
         else:
