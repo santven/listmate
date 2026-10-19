@@ -55,6 +55,7 @@ class InMemoryNourishDB:
         self.logs = {}     # id -> dict
         self.goals = {}    # user_id -> dict
         self.biometrics = {}  # (user_id, log_date) -> dict
+        self.users = {}       # user_id -> dict
         self._next_cat_id = 1
         self._next_rec_id = 1
         self._next_log_id = 1
@@ -224,6 +225,7 @@ class InMemoryNourishDB:
                 "sodium_mg": float(params[17]),
                 "ai_enrich_status": params[18],
                 "notes": params[19],
+                "is_shared_household": bool(params[20]) if len(params) > 20 else False,
             }
             self.logs[lid] = row
             self._result_rows = [dict(row)]
@@ -353,6 +355,30 @@ class InMemoryNourishDB:
                     "serving_weight_g": float(params[11]),
                     "is_liquid": bool(params[12]),
                     "prep_state": params[13],
+                    "ai_verified": True,
+                }
+            elif "'household'" in norm:
+                # From api_nourish_logs and api_nourish_share_meal
+                payload = {
+                    "name": params[0],
+                    "normalized_name": params[1],
+                    "brand": "",
+                    "category": str(params[2]),
+                    "source": "household",
+                    "is_public": False,
+                    "created_by_user_id": int(params[3]),
+                    "household_id": int(params[4]),
+                    "calories_per_100g": float(params[5]),
+                    "protein_per_100g": float(params[6]),
+                    "carbs_per_100g": float(params[7]),
+                    "fat_per_100g": float(params[8]),
+                    "fiber_per_100g": float(params[9]),
+                    "sugar_per_100g": float(params[10]),
+                    "sodium_mg_per_100g": float(params[11]),
+                    "serving_label": params[12],
+                    "serving_weight_g": float(params[13]),
+                    "is_liquid": False,
+                    "prep_state": "as_is",
                     "ai_verified": True,
                 }
             else:
@@ -501,6 +527,54 @@ class InMemoryNourishDB:
             self.biometrics[key] = row
             self._result_rows = [dict(row)]
             self.rowcount = 1
+            return self
+
+        # 17. User nourish_enabled
+        if "SELECT nourish_enabled FROM auth_users WHERE id = ?" in norm:
+            uid = int(params[0])
+            user_data = self.users.get(uid, {"nourish_enabled": False})
+            self._result_rows = [user_data]
+            self.rowcount = 1
+            return self
+
+        if "UPDATE auth_users SET nourish_enabled = ? WHERE id = ?" in norm:
+            en = bool(params[0])
+            uid = int(params[1])
+            self.users.setdefault(uid, {"id": uid, "name": f"User {uid}"})["nourish_enabled"] = en
+            self.rowcount = 1
+            return self
+
+        # 18. Opt-in meal sharing: UPDATE nourish_food_logs SET is_shared_household = TRUE
+        if "UPDATE nourish_food_logs" in norm and "is_shared_household = TRUE" in norm:
+            uid, hhid, d_str, slot = int(params[0]), int(params[1]), str(params[2])[:10], str(params[3]).lower()
+            updated = []
+            for r in self.logs.values():
+                if int(r["user_id"]) == uid and int(r["household_id"]) == hhid and str(r["log_date"])[:10] == d_str and str(r.get("meal_slot", "")).lower() == slot:
+                    r["is_shared_household"] = True
+                    updated.append(dict(r))
+            self._result_rows = updated
+            self.rowcount = len(updated)
+            return self
+
+        # 19. Household shared meals: SELECT l.*, u.name as user_name FROM nourish_food_logs l
+        if "FROM nourish_food_logs l" in norm and "is_shared_household = TRUE" in norm:
+            hhid, uid, d_str = int(params[0]), int(params[1]), str(params[2])[:10]
+            matched = []
+            for r in sorted(self.logs.values(), key=lambda x: x["id"]):
+                if int(r["household_id"]) == hhid and int(r["user_id"]) != uid and str(r["log_date"])[:10] == d_str and r.get("is_shared_household"):
+                    m = dict(r)
+                    m["user_name"] = self.users.get(r["user_id"], {}).get("name", f"User {r['user_id']}")
+                    matched.append(m)
+            self._result_rows = matched
+            self.rowcount = len(matched)
+            return self
+
+        # 20. Auto-catalog check for household item
+        if "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?" in norm:
+            hhid, norm_name = int(params[0]), str(params[1])
+            matched = [dict(r) for r in self.catalog.values() if r.get("household_id") == hhid and r.get("normalized_name") == norm_name]
+            self._result_rows = matched
+            self.rowcount = len(matched)
             return self
 
         return self
@@ -936,6 +1010,118 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             d_data = day_res.get_json()
             self.assertEqual(d_data["goals"]["calories_target"], 2350)
             self.assertEqual(d_data["goals"]["protein_target_g"], 160)
+
+    def test_11_user_nourish_enabled_and_household_sharing(self):
+        """Tests per-user nourish enable/disable toggle, opt-in meal sharing, auto-cataloging, and shared-meals drawer endpoint."""
+        # 1. Default nourish_enabled is False
+        with self._context_patches(user_id=10, household_id=1):
+            res = self.client.get("/api/user/nourish-enabled")
+            self.assertEqual(res.status_code, 200)
+            self.assertFalse(res.get_json()["enabled"])
+
+            # 2. Toggle nourish_enabled to True for User 10
+            post_res = self.client.post("/api/user/nourish-enabled", json={"enabled": True})
+            self.assertEqual(post_res.status_code, 200)
+            self.assertTrue(post_res.get_json()["enabled"])
+
+            # Verify GET now returns True
+            res2 = self.client.get("/api/user/nourish-enabled")
+            self.assertTrue(res2.get_json()["enabled"])
+
+            # 3. User 10 logs a shared meal (Dinner: 3 Dosa + Paneer Burji)
+            log_res = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Dinner",
+                    "is_shared_household": True,
+                    "items": [
+                        {
+                            "name": "Dosa",
+                            "serving_amount": 3,
+                            "serving_unit": "serving",
+                            "calories": 360,
+                            "protein_g": 9,
+                            "carbs_g": 66,
+                            "fat_g": 6,
+                            "fiber_g": 3,
+                            "serving_weight_g": 100,
+                        },
+                        {
+                            "name": "Paneer Burji",
+                            "serving_amount": 1,
+                            "serving_unit": "serving",
+                            "calories": 280,
+                            "protein_g": 18,
+                            "carbs_g": 8,
+                            "fat_g": 20,
+                            "fiber_g": 2,
+                            "serving_weight_g": 150,
+                        },
+                    ],
+                },
+            )
+            self.assertEqual(log_res.status_code, 200)
+            self.assertTrue(log_res.get_json()["ok"])
+
+        # 4. User 11 (in same household 1) has Nourish DISABLED -> shared meals endpoint returns empty
+        with self._context_patches(user_id=11, household_id=1):
+            shared_res_dis = self.client.get("/api/nourish/household/shared-meals?date=2026-10-19")
+            self.assertEqual(shared_res_dis.status_code, 200)
+            # Must return empty list so bottom drawer NEVER shows for users who disabled Nourish
+            self.assertEqual(shared_res_dis.get_json()["shared_meals"], [])
+
+            # 5. User 11 ENABLES Nourish
+            self.client.post("/api/user/nourish-enabled", json={"enabled": True})
+
+            # Now User 11 sees the shared meal from User 10
+            shared_res_en = self.client.get("/api/nourish/household/shared-meals?date=2026-10-19")
+            self.assertEqual(shared_res_en.status_code, 200)
+            meals = shared_res_en.get_json()["shared_meals"]
+            self.assertEqual(len(meals), 1)
+            self.assertEqual(meals[0]["meal_slot"], "Dinner")
+            self.assertEqual(meals[0]["shared_by_user_id"], 10)
+            self.assertEqual(len(meals[0]["items"]), 2)
+            names = [it["food_name"] for it in meals[0]["items"]]
+            self.assertIn("Dosa", names)
+            self.assertIn("Paneer Burji", names)
+
+        # 6. User 10 tests bulk slot share via /api/nourish/meals/share
+        with self._context_patches(user_id=10, household_id=1):
+            # Log private Breakfast
+            self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-19",
+                    "meal_slot": "Breakfast",
+                    "is_shared_household": False,
+                    "items": [
+                        {
+                            "name": "Oatmeal with Almond Milk",
+                            "serving_amount": 1,
+                            "serving_unit": "serving",
+                            "calories": 210,
+                            "protein_g": 6,
+                            "carbs_g": 36,
+                            "fat_g": 4,
+                            "fiber_g": 5,
+                            "serving_weight_g": 200,
+                        }
+                    ],
+                },
+            )
+            # Share Breakfast slot
+            share_res = self.client.post(
+                "/api/nourish/meals/share",
+                json={
+                    "date": "2026-10-19",
+                    "meal_slot": "Breakfast",
+                },
+            )
+            self.assertEqual(share_res.status_code, 200)
+            s_data = share_res.get_json()
+            self.assertTrue(s_data["ok"])
+            self.assertEqual(s_data["shared_count"], 1)
 
 
 if __name__ == "__main__":

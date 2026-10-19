@@ -1088,6 +1088,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 .nourish-action-btn { background: transparent; border: none; cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: 14px; color: #9ca3af; transition: all 0.12s ease; }
 .nourish-action-btn:hover { background: #f3f4f6; color: var(--text); }
 .nourish-action-btn.delete:hover { background: #fee2e2; color: #ef4444; }
+.toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; margin: 0; cursor: pointer; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .25s; border-radius: 22px; }
+.toggle-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .25s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle-switch input:checked + .toggle-slider { background-color: #10b981; }
+.toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+.nourish-slot-share-btn { background: #f3f4f6; border: 1px solid #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; }
+.nourish-slot-share-btn:hover { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -1565,17 +1573,40 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 
   <!-- NOURISH SCREEN -->
   <div id="screenNourish" class="screen" style="display:none; padding-bottom:50px;">
-    <!-- Top Reassurance Header -->
-    <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
-      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-        <span style="font-size:22px; flex-shrink:0;">🍎</span>
-        <div style="min-width:0;">
-          <div style="font-size:14px; font-weight:700; color:#065f46;">Nourish · Daily Food &amp; Macro Log</div>
-          <div style="font-size:11.5px; color:#047857; opacity:0.9; margin-top:1px;">🔒 100% Private to your personal login.</div>
+    <!-- Nourish Disabled / Welcome View -->
+    <div id="nourishDisabledView" style="display:none; text-align:center; padding:36px 20px; background:#fff; border:1px solid var(--border); border-radius:18px; margin:16px 0; box-shadow:0 4px 14px rgba(0,0,0,0.04);">
+      <div style="font-size:46px; margin-bottom:12px;">🥗</div>
+      <div style="font-size:20px; font-weight:800; color:var(--text); margin-bottom:8px;">Welcome to Nourish</div>
+      <div style="font-size:13.5px; color:var(--muted); max-width:340px; margin:0 auto 22px; line-height:1.5;">
+        Smart daily meal &amp; macro tracking for your personal nutrition. Deconstruct plates with AI, track calories, macros &amp; hydration, and optionally share home-cooked meals with your household.
+      </div>
+      <button type="button" id="nourishBtnStart" onclick="setNourishEnabled(true)" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px 28px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 3px 10px rgba(16,185,129,0.35);">
+        🚀 Start Using Nourish
+      </button>
+    </div>
+
+    <!-- Nourish Active Content View -->
+    <div id="nourishActiveView">
+      <!-- Top Reassurance Header with Toggle -->
+      <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
+        <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+          <span style="font-size:22px; flex-shrink:0;">🍎</span>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px; font-weight:700; color:#065f46;">Nourish · Daily Food Log</div>
+            <div style="font-size:11px; color:#047857; opacity:0.9;">🔒 100% Private to your personal login.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <button type="button" id="nourishBtnToday" onclick="jumpNourishToToday()" style="background:#fff; border:1px solid #a7f3d0; color:#047857; font-size:11px; font-weight:700; padding:4px 8px; border-radius:10px; cursor:pointer;">Today</button>
+          <div style="display:flex; align-items:center; gap:5px;" title="Nourish Active (Flip switch to disable)">
+            <span style="font-size:11px; font-weight:600; color:#065f46;">Active</span>
+            <label class="toggle-switch" style="margin:0; width:34px; height:20px;">
+              <input type="checkbox" id="nourishPageToggle" checked onchange="setNourishEnabled(this.checked)">
+              <span class="toggle-slider" style="border-radius:20px;"></span>
+            </label>
+          </div>
         </div>
       </div>
-      <button type="button" id="nourishBtnToday" onclick="jumpNourishToToday()" style="background:#fff; border:1px solid #a7f3d0; color:#047857; font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:12px; cursor:pointer;">Today</button>
-    </div>
 
     <!-- Date Navigator -->
     <div class="nourish-date-nav" id="nourishDateNav">
@@ -1719,7 +1750,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           <span style="color:var(--muted); font-size:11.5px;">Search an item or type a custom food name to preview nutrition.</span>
         </div>
 
-        <button type="button" id="nourishBtnLog" onclick="submitNourishLog()" style="width:100%; margin-top:12px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
+        <div style="margin-top:8px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#4b5563;">
+            <input type="checkbox" id="nourishSearchShareHousehold" style="width:15px; height:15px; accent-color:#059669;">
+            <span>👨‍👩‍👧 Save to household catalog (makes searchable for family)</span>
+          </label>
+        </div>
+
+        <button type="button" id="nourishBtnLog" onclick="submitNourishLog()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
           ➕ Log to Breakfast
         </button>
       </div>
@@ -1746,7 +1784,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="nourish-slot-section" id="nourishDiarySection_breakfast">
         <div class="nourish-slot-header">
           <div class="nourish-slot-title">🌅 Breakfast</div>
-          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_breakfast">0 kcal · 0g P</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_breakfast">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_breakfast" onclick="shareNourishMealSlot('breakfast')" title="Share Breakfast with household">👨‍👩‍👧 Share</button>
+          </div>
         </div>
         <div id="nourishSlotItems_breakfast">
           <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
@@ -1757,7 +1798,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="nourish-slot-section" id="nourishDiarySection_lunch">
         <div class="nourish-slot-header">
           <div class="nourish-slot-title">☀️ Lunch</div>
-          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_lunch">0 kcal · 0g P</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_lunch">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_lunch" onclick="shareNourishMealSlot('lunch')" title="Share Lunch with household">👨‍👩‍👧 Share</button>
+          </div>
         </div>
         <div id="nourishSlotItems_lunch">
           <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
@@ -1768,7 +1812,10 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="nourish-slot-section" id="nourishDiarySection_dinner">
         <div class="nourish-slot-header">
           <div class="nourish-slot-title">🌙 Dinner</div>
-          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_dinner">0 kcal · 0g P</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_dinner">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_dinner" onclick="shareNourishMealSlot('dinner')" title="Share Dinner with household">👨‍👩‍👧 Share</button>
+          </div>
         </div>
         <div id="nourishSlotItems_dinner">
           <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
@@ -1779,12 +1826,16 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="nourish-slot-section" id="nourishDiarySection_snack">
         <div class="nourish-slot-header">
           <div class="nourish-slot-title">🍎 Snack</div>
-          <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_snack">0 kcal · 0g P</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_snack">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_snack" onclick="shareNourishMealSlot('snack')" title="Share Snack with household">👨‍👩‍👧 Share</button>
+          </div>
         </div>
         <div id="nourishSlotItems_snack">
           <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 
@@ -1854,6 +1905,32 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div style="display:flex; gap:8px;">
         <button type="button" onclick="closeNourishGoalsModal()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; cursor:pointer;">Cancel</button>
         <button type="button" id="nourishBtnSaveGoals" onclick="saveNourishGoals()" style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--green); color:#fff; font-weight:700; cursor:pointer;">Save Goals</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nourish Shared Household Meal Bottom Drawer -->
+  <div id="nourishSharedMealDrawer" class="modal-overlay" style="display:none; align-items:flex-end; justify-content:center; padding:0; z-index:1100;" onclick="if(event.target===this)closeNourishSharedMealDrawer();">
+    <div style="background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:20px; box-shadow:0 -10px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🍽️</span>
+          <div>
+            <div style="font-weight:700; font-size:15px; color:#111827;">Shared Family Meal</div>
+            <div id="nourishSharedDrawerSub" style="font-size:12px; color:#047857; font-weight:600;">A family member logged a meal</div>
+          </div>
+        </div>
+        <button type="button" onclick="closeNourishSharedMealDrawer()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer;">✕</button>
+      </div>
+      <div id="nourishSharedDrawerItems" style="background:#f9fafb; border:1px solid #f3f4f6; border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:13px; max-height:180px; overflow-y:auto;">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="button" id="nourishBtnAddSharedMeal" onclick="acceptNourishSharedMeal()" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer;">
+          ➕ Add to My Meal (1 Tap)
+        </button>
+        <button type="button" onclick="dismissNourishSharedMeal()" style="background:#f3f4f6; color:#4b5563; border:none; padding:12px 16px; border-radius:12px; font-weight:600; font-size:13.5px; cursor:pointer;">
+          Dismiss
+        </button>
       </div>
     </div>
   </div>
@@ -4224,7 +4301,15 @@ function showScreen(name){
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenNourish')) $('#screenNourish').style.display='block';
     $('#headerTitle').textContent='Nourish';
-    if (typeof loadNourishDay === 'function') {
+    if (typeof updateNourishEnabledView === 'function') {
+      updateNourishEnabledView();
+    }
+    if (typeof syncNourishEnabledFromServer === 'function') {
+      syncNourishEnabledFromServer();
+    }
+    if (typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
+      // Disabled view shown
+    } else if (typeof loadNourishDay === 'function') {
       loadNourishDay();
     }
     window.scrollTo(0, 0);
@@ -10900,11 +10985,13 @@ async function searchNourishCatalog(q) {
     items.slice(0, 8).forEach(function(item, idx) {
       var cal = item.calories_per_100g || item.per_serving_calories || (item.perServing && item.perServing.calories) || item.calories || 0;
       var prot = item.protein_per_100g || item.per_serving_protein_g || (item.perServing && item.perServing.protein) || 0;
-      var icon = item.is_recipe ? '🍳' : '🥗';
+      var isHousehold = Boolean(item.household_id || item.source === 'household');
+      var icon = item.is_recipe ? '🍳' : (isHousehold ? '👨‍👩‍👧' : '🥗');
+      var badge = isHousehold ? ' <span style="font-size:10px; background:#dcfce7; color:#166534; padding:2px 6px; border-radius:6px; font-weight:600; margin-left:4px;">👨‍👩‍👧 Household</span>' : '';
       var servDesc = item.standard_serving_desc || (item.serving_weight_g ? item.serving_weight_g + 'g serving' : '100g');
       html += '<div class="nourish-dropdown-item" onclick="selectNourishCatalogItemByIndex(' + idx + ')">' +
         '<div>' +
-          '<div style="font-weight:600; color:var(--text);">' + icon + ' ' + escapeHtml(item.name) + '</div>' +
+          '<div style="font-weight:600; color:var(--text);">' + icon + ' ' + escapeHtml(item.name) + badge + '</div>' +
           '<div style="font-size:11px; color:var(--muted); margin-top:1px;">' + escapeHtml(servDesc) + '</div>' +
         '</div>' +
         '<div style="text-align:right;">' +
@@ -11018,8 +11105,11 @@ async function submitNourishLog() {
   if (btn) btn.disabled = true;
 
   var item = selectedNourishItem;
+  var shareCb = document.getElementById('nourishSearchShareHousehold');
+  var isShared = shareCb ? shareCb.checked : false;
   var payload = {
     log_date: currentNourishDate,
+    is_shared_household: isShared,
     items: [{
       food_name: foodName,
       name: foodName,
@@ -11029,7 +11119,8 @@ async function submitNourishLog() {
       unit: nourishSelectedUnit,
       serving_unit: nourishSelectedUnit,
       catalog_id: (item && !item.is_recipe) ? item.id : null,
-      nourish_recipe_id: (item && item.is_recipe) ? item.id : null
+      nourish_recipe_id: (item && item.is_recipe) ? item.id : null,
+      is_shared_household: isShared
     }]
   };
 
@@ -11129,6 +11220,15 @@ async function analyzeNourishPlate() {
         '<span>Total Plate Estimate:</span>' +
         '<span>' + totalText + '</span>' +
       '</div>' +
+      '<div style="margin:10px 0 6px; padding:8px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px;">' +
+        '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:600; color:#166534; margin:0;">' +
+          '<input type="checkbox" id="nourishDescribeShareHousehold" style="width:15px; height:15px; accent-color:#059669; margin:0;">' +
+          '<span>👨‍👩‍👧 Share this meal with household</span>' +
+        '</label>' +
+        '<div style="font-size:10.5px; color:#047857; margin-left:23px; margin-top:2px;">' +
+          'Saves dishes to household catalog &amp; lets family 1-tap add to their diary.' +
+        '</div>' +
+      '</div>' +
       '<button type="button" id="nourishBtnLogAllPlate" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
         '➕ Log All ' + res.items.length + ' Items to ' + slotTitle +
       '</button>' +
@@ -11148,9 +11248,12 @@ async function analyzeNourishPlate() {
 async function logAllAnalyzedNourishItems() {
   var items = window._lastNourishAnalyzedItems || [];
   if (!items || items.length === 0) return;
+  var shareCb = document.getElementById('nourishDescribeShareHousehold');
+  var isShared = shareCb ? shareCb.checked : false;
   var payload = {
     log_date: currentNourishDate,
     meal_slot: currentNourishSlot,
+    is_shared_household: isShared,
     items: items.map(function(it) {
       var fName = it.food_name || it.name || 'Food item';
       var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
@@ -11168,7 +11271,16 @@ async function logAllAnalyzedNourishItems() {
         protein_g: it.protein_g,
         carbs_g: it.carbs_g,
         fat_g: it.fat_g,
-        fiber_g: it.fiber_g
+        fiber_g: it.fiber_g,
+        calories_per_100g: it.calories_per_100g || 0,
+        protein_per_100g: it.protein_per_100g || 0,
+        carbs_per_100g: it.carbs_per_100g || 0,
+        fat_per_100g: it.fat_per_100g || 0,
+        fiber_per_100g: it.fiber_per_100g || 0,
+        serving_weight_g: it.serving_weight_g || 100,
+        serving_label: it.serving_label || '1 serving',
+        category: it.category || 'Prepared Foods',
+        is_shared_household: isShared
       };
     })
   };
@@ -11238,6 +11350,11 @@ async function loadNourishDay(dateStr) {
     if (res && res.ok) {
       currentNourishData = res;
       renderNourishDay(res);
+      var startBtn = document.getElementById('nourishBtnStart');
+      if (startBtn && res.logs && res.logs.length > 0) {
+        startBtn.textContent = '🚀 Continue Using Nourish';
+      }
+      checkNourishSharedMeals();
     }
   } catch(err) {
     console.error('Error loading nourish day:', err);
@@ -11342,6 +11459,23 @@ function renderNourishSlotSection(slot, items) {
     subtotalEl.textContent = Math.round(totalCal) + ' kcal · ' + Math.round(totalP) + 'g P';
   }
 
+  var shareBtn = document.getElementById('nourishBtnShare_' + slot);
+  if (shareBtn) {
+    if (items.length === 0) {
+      shareBtn.style.display = 'none';
+    } else {
+      shareBtn.style.display = 'inline-block';
+      var allShared = items.every(function(it) { return it.is_shared_household; });
+      if (allShared) {
+        shareBtn.innerHTML = '✅ Shared';
+        shareBtn.style.opacity = '0.85';
+      } else {
+        shareBtn.innerHTML = '👨‍👩‍👧 Share';
+        shareBtn.style.opacity = '1';
+      }
+    }
+  }
+
   if (items.length === 0) {
     container.innerHTML = '<div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>';
     return;
@@ -11359,6 +11493,7 @@ function renderNourishSlotSection(slot, items) {
       : ' · <span>P: ' + Math.round(it.protein_g || 0) + 'g</span> · <span>C: ' + Math.round(it.carbs_g || 0) + 'g</span> · <span>F: ' + Math.round(it.fat_g || 0) + 'g</span>';
 
     var fName = it.food_name || it.name || 'Food item';
+    var shareBadge = it.is_shared_household ? ' <span style="font-size:10px; background:#dcfce7; color:#166534; padding:1px 6px; border-radius:6px; font-weight:600; margin-left:4px;">👨‍👩‍👧 Shared</span>' : '';
     var rawQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
     var numQty = parseFloat(rawQty);
     if (isNaN(numQty)) numQty = 1;
@@ -11374,7 +11509,7 @@ function renderNourishSlotSection(slot, items) {
     if (isPending) {
       html += '<div class="nourish-log-item nourish-log-item-pending" id="nourishLog_' + it.id + '" style="flex-direction:column; align-items:stretch; gap:6px;">' +
         '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">' +
-          '<div class="nourish-log-name" style="flex:1; min-width:0; word-break:break-word; line-height:1.35;">' + escapeHtml(fName) + '</div>' +
+          '<div class="nourish-log-name" style="flex:1; min-width:0; word-break:break-word; line-height:1.35;">' + escapeHtml(fName) + shareBadge + '</div>' +
           '<div class="nourish-item-actions" style="margin-left:0;">' +
             '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
             '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
@@ -11390,7 +11525,7 @@ function renderNourishSlotSection(slot, items) {
     } else {
       html += '<div class="nourish-log-item" id="nourishLog_' + it.id + '">' +
         '<div style="flex:1; min-width:0;">' +
-          '<div class="nourish-log-name">' + escapeHtml(fName) + '</div>' +
+          '<div class="nourish-log-name">' + escapeHtml(fName) + shareBadge + '</div>' +
           '<div class="nourish-log-sub">' +
             '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
             macroSub +
@@ -11562,6 +11697,272 @@ async function saveNourishGoals() {
   }
 }
 
+function isNourishEnabled() {
+  try {
+    return localStorage.getItem('nourish_enabled') === 'true';
+  } catch(e) {
+    return false;
+  }
+}
+
+async function setNourishEnabled(enabled) {
+  try {
+    localStorage.setItem('nourish_enabled', enabled ? 'true' : 'false');
+  } catch(e) {}
+
+  var toggle = document.getElementById('nourishPageToggle');
+  if (toggle) toggle.checked = !!enabled;
+
+  updateNourishEnabledView();
+
+  try {
+    await fetch(API + '/user/nourish-enabled', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled })
+    });
+  } catch(err) {
+    console.error('Failed to persist nourish enabled state:', err);
+  }
+
+  if (enabled) {
+    loadNourishDay(currentNourishDate);
+  }
+}
+
+function updateNourishEnabledView() {
+  var disView = document.getElementById('nourishDisabledView');
+  var actView = document.getElementById('nourishActiveView');
+  var toggle = document.getElementById('nourishPageToggle');
+  var enabled = isNourishEnabled();
+
+  if (toggle) toggle.checked = enabled;
+
+  if (!enabled) {
+    if (disView) disView.style.display = 'block';
+    if (actView) actView.style.display = 'none';
+  } else {
+    if (disView) disView.style.display = 'none';
+    if (actView) actView.style.display = 'block';
+  }
+}
+
+async function syncNourishEnabledFromServer() {
+  try {
+    var res = await fetch(API + '/user/nourish-enabled').then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      var isEn = res.enabled === true;
+      try {
+        localStorage.setItem('nourish_enabled', isEn ? 'true' : 'false');
+      } catch(e) {}
+      updateNourishEnabledView();
+      if (isEn && (!currentNourishData || !currentNourishData.logs)) {
+        loadNourishDay(currentNourishDate);
+      }
+    }
+  } catch(err) {
+    console.error('Error syncing nourish enabled state:', err);
+  }
+}
+
+async function shareNourishMealSlot(slot) {
+  var targetSlot = slot || currentNourishSlot;
+  try {
+    var res = await fetch(API + '/nourish/meals/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: currentNourishDate,
+        meal_slot: targetSlot
+      })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      var count = res.shared_count || 0;
+      var title = targetSlot.charAt(0).toUpperCase() + targetSlot.slice(1);
+      if (typeof toast === 'function') {
+        toast('👨‍👩‍👧 Shared ' + title + ' (' + count + ' items) with household!');
+      }
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') {
+        toast('Could not share meal: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    }
+  } catch(err) {
+    console.error('Error sharing meal slot:', err);
+    if (typeof toast === 'function') toast('Network error sharing meal');
+  }
+}
+
+window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+
+async function checkNourishSharedMeals() {
+  if (!isNourishEnabled()) return;
+  try {
+    var res = await fetch(API + '/nourish/household/shared-meals?date=' + encodeURIComponent(currentNourishDate)).then(function(r) { return r.json(); });
+    if (!res || !res.ok || !res.shared_meals || res.shared_meals.length === 0) return;
+
+    var unhandledMeal = null;
+    for (var i = 0; i < res.shared_meals.length; i++) {
+      var m = res.shared_meals[i];
+      var key = m.meal_slot + '_' + m.shared_by_user_id + '_' + m.log_date;
+      if (!window._dismissedSharedMeals[key]) {
+        unhandledMeal = m;
+        break;
+      }
+    }
+
+    if (unhandledMeal) {
+      openNourishSharedMealDrawer(unhandledMeal);
+    }
+  } catch(err) {
+    console.error('Error checking shared meals:', err);
+  }
+}
+
+function openNourishSharedMealDrawer(meal) {
+  window._currentSharedMeal = meal;
+  var drawer = document.getElementById('nourishSharedMealDrawer');
+  if (!drawer) return;
+
+  var sub = document.getElementById('nourishSharedDrawerSub');
+  if (sub) {
+    var who = meal.shared_by_name || 'A family member';
+    sub.textContent = who + ' shared ' + meal.meal_slot + ' with the household';
+  }
+
+  var itemsCont = document.getElementById('nourishSharedDrawerItems');
+  if (itemsCont) {
+    var items = meal.items || [];
+    var html = '';
+    var totalCal = 0;
+    items.forEach(function(it) {
+      var fName = it.food_name || it.name || 'Item';
+      var portion = (it.serving_amount || it.quantity || 1) + ' ' + (it.serving_unit || it.unit || 'serving');
+      var cal = it.calories || 0;
+      totalCal += cal;
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;">' +
+        '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portion) + ')</span></div>' +
+        '<div style="font-weight:600; color:#374151;">' + Math.round(cal) + ' kcal</div>' +
+      '</div>';
+    });
+    html += '<div style="display:flex; justify-content:space-between; font-weight:700; padding-top:6px; color:#047857;">' +
+      '<span>Total:</span>' +
+      '<span>' + Math.round(totalCal) + ' kcal</span>' +
+    '</div>';
+    itemsCont.innerHTML = html;
+  }
+
+  var btnAdd = document.getElementById('nourishBtnAddSharedMeal');
+  if (btnAdd) {
+    btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+  }
+
+  drawer.style.display = 'flex';
+}
+
+function closeNourishSharedMealDrawer() {
+  var drawer = document.getElementById('nourishSharedMealDrawer');
+  if (drawer) drawer.style.display = 'none';
+}
+
+function dismissNourishSharedMeal() {
+  window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+  if (window._currentSharedMeal) {
+    var m = window._currentSharedMeal;
+    var key = m.meal_slot + '_' + m.shared_by_user_id + '_' + m.log_date;
+    window._dismissedSharedMeals[key] = true;
+  }
+  closeNourishSharedMealDrawer();
+}
+
+async function acceptNourishSharedMeal() {
+  window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+  if (!window._currentSharedMeal) {
+    closeNourishSharedMealDrawer();
+    return;
+  }
+  var meal = window._currentSharedMeal;
+  var key = meal.meal_slot + '_' + meal.shared_by_user_id + '_' + meal.log_date;
+  window._dismissedSharedMeals[key] = true;
+
+  var items = meal.items || [];
+  if (items.length === 0) {
+    closeNourishSharedMealDrawer();
+    return;
+  }
+
+  var btnAdd = document.getElementById('nourishBtnAddSharedMeal');
+  if (btnAdd) {
+    btnAdd.disabled = true;
+    btnAdd.textContent = 'Adding...';
+  }
+
+  var payload = {
+    log_date: currentNourishDate,
+    meal_slot: meal.meal_slot,
+    is_shared_household: false,
+    items: items.map(function(it) {
+      var fName = it.food_name || it.name || 'Food item';
+      var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
+      var fUnit = it.unit || it.serving_unit || 'g';
+      return {
+        food_name: fName,
+        name: fName,
+        meal_slot: meal.meal_slot,
+        quantity: fQty,
+        serving_amount: fQty,
+        unit: fUnit,
+        serving_unit: fUnit,
+        catalog_id: it.catalog_id || null,
+        calories: it.calories,
+        protein_g: it.protein_g,
+        carbs_g: it.carbs_g,
+        fat_g: it.fat_g,
+        fiber_g: it.fiber_g,
+        calories_per_100g: it.calories_per_100g || 0,
+        protein_per_100g: it.protein_per_100g || 0,
+        carbs_per_100g: it.carbs_per_100g || 0,
+        fat_per_100g: it.fat_per_100g || 0,
+        fiber_per_100g: it.fiber_per_100g || 0,
+        serving_weight_g: it.serving_weight_g || 100,
+        serving_label: it.serving_label || '1 serving',
+        category: it.category || 'Prepared Foods',
+        is_shared_household: false
+      };
+    })
+  };
+
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (btnAdd) {
+      btnAdd.disabled = false;
+      btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+    }
+
+    if (res && res.ok) {
+      closeNourishSharedMealDrawer();
+      if (typeof toast === 'function') toast('✅ Added ' + meal.meal_slot + ' to your diary!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not add shared meal: ' + (res && res.error ? res.error : 'Error'));
+    }
+  } catch(err) {
+    if (btnAdd) {
+      btnAdd.disabled = false;
+      btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+    }
+    console.error('Error accepting shared meal:', err);
+    if (typeof toast === 'function') toast('Network error adding shared meal');
+  }
+}
+
 document.addEventListener('click', function(e) {
   var dropdown = document.getElementById('nourishSearchDropdown');
   var input = document.getElementById('nourishSearchInput');
@@ -11572,6 +11973,16 @@ document.addEventListener('click', function(e) {
   }
 });
 
+window.isNourishEnabled = isNourishEnabled;
+window.setNourishEnabled = setNourishEnabled;
+window.updateNourishEnabledView = updateNourishEnabledView;
+window.syncNourishEnabledFromServer = syncNourishEnabledFromServer;
+window.shareNourishMealSlot = shareNourishMealSlot;
+window.checkNourishSharedMeals = checkNourishSharedMeals;
+window.openNourishSharedMealDrawer = openNourishSharedMealDrawer;
+window.closeNourishSharedMealDrawer = closeNourishSharedMealDrawer;
+window.dismissNourishSharedMeal = dismissNourishSharedMeal;
+window.acceptNourishSharedMeal = acceptNourishSharedMeal;
 window.loadNourishDay = loadNourishDay;
 window.navigateNourishDate = navigateNourishDate;
 window.onNourishDateChange = onNourishDateChange;

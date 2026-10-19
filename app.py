@@ -4059,6 +4059,76 @@ def nourish_create_logs_endpoint():
                 }
                 ai_enrich_status = "pending"
 
+            is_shared = bool(entry.get("is_shared_household") or entry.get("share_with_household") or data.get("is_shared_household") or data.get("share_with_household"))
+
+            # If user opted into sharing with household or saving to catalog:
+            if is_shared and matched_baseline is None and explicit_calories > 0 and hhid is not None:
+                norm_name = normalize_food_name(food_name)
+                if norm_name:
+                    gw = float(scaled.get("gram_weight") or 100.0)
+                    cal_100 = float(entry.get("calories_per_100g") or 0.0)
+                    if cal_100 == 0.0 and gw > 0:
+                        cal_100 = round((scaled["calories"] / gw) * 100.0, 2)
+                        pro_100 = round((scaled["protein_g"] / gw) * 100.0, 2)
+                        carb_100 = round((scaled["carbs_g"] / gw) * 100.0, 2)
+                        fat_100 = round((scaled["fat_g"] / gw) * 100.0, 2)
+                        fib_100 = round((scaled["fiber_g"] / gw) * 100.0, 2)
+                    else:
+                        pro_100 = float(entry.get("protein_per_100g") or 0.0)
+                        carb_100 = float(entry.get("carbs_per_100g") or 0.0)
+                        fat_100 = float(entry.get("fat_per_100g") or 0.0)
+                        fib_100 = float(entry.get("fiber_per_100g") or 0.0)
+
+                    chk_cur = db.execute(
+                        "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?",
+                        (hhid, norm_name),
+                    )
+                    chk_row = chk_cur.fetchone() if chk_cur else None
+                    if chk_row:
+                        catalog_id = int(chk_row["id"])
+                        db.execute(
+                            "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                            (catalog_id,),
+                        )
+                    else:
+                        ins_cat_cur = db.execute(
+                            """
+                            INSERT INTO nourish_food_catalog (
+                                name, normalized_name, brand, category, source, is_public,
+                                created_by_user_id, household_id,
+                                calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                                fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                                serving_label, serving_weight_g, is_liquid, prep_state, ai_verified, usage_count
+                            ) VALUES (
+                                ?, ?, '', ?, 'household', FALSE,
+                                ?, ?,
+                                ?, ?, ?, ?,
+                                ?, ?, ?,
+                                ?, ?, FALSE, 'as_is', TRUE, 1
+                            )
+                            RETURNING id
+                            """,
+                            (
+                                food_name,
+                                norm_name,
+                                str(entry.get("category") or "Prepared Foods")[:80],
+                                uid,
+                                hhid,
+                                cal_100,
+                                pro_100,
+                                carb_100,
+                                fat_100,
+                                fib_100,
+                                float(entry.get("sugar_per_100g") or 0.0),
+                                float(entry.get("sodium_mg_per_100g") or 0.0),
+                                str(entry.get("serving_label") or f"1 serving ({int(round(serving_weight_g))}g)"),
+                                serving_weight_g,
+                            ),
+                        )
+                        ins_cat_row = ins_cat_cur.fetchone() if ins_cat_cur else None
+                        if ins_cat_row and ins_cat_row.get("id"):
+                            catalog_id = int(ins_cat_row["id"])
+
             ins_cur = db.execute(
                 """
                 INSERT INTO nourish_food_logs (
@@ -4066,13 +4136,13 @@ def nourish_create_logs_endpoint():
                     catalog_id, nourish_recipe_id, still_good_item_id,
                     quantity, unit, gram_weight,
                     calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg,
-                    ai_enrich_status, notes
+                    ai_enrich_status, notes, is_shared_household
                 ) VALUES (
                     ?, ?, ?::date, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?
+                    ?, ?, ?
                 )
                 RETURNING *
                 """,
@@ -4097,6 +4167,7 @@ def nourish_create_logs_endpoint():
                     scaled["sodium_mg"],
                     ai_enrich_status,
                     notes,
+                    is_shared,
                 ),
             )
             ins_row = ins_cur.fetchone() if ins_cur else None
@@ -4712,6 +4783,201 @@ def nourish_analyze_recipe_endpoint():
         try: db.rollback()
         except Exception: pass
         print(f"[NOURISH ERROR] POST /api/nourish/recipes/analyze failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/user/nourish-enabled", methods=["GET", "POST"])
+@require_user
+def api_user_nourish_enabled():
+    db = get_db()
+    try:
+        uid = authmod.get_user_id()
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            enabled = bool(data.get("enabled", False))
+            db.execute("UPDATE auth_users SET nourish_enabled = ? WHERE id = ?", (enabled, uid))
+            db.commit()
+            return jsonify({"ok": True, "enabled": enabled})
+        else:
+            cur = db.execute("SELECT nourish_enabled FROM auth_users WHERE id = ?", (uid,))
+            row = cur.fetchone() if cur else None
+            enabled = bool(row and row.get("nourish_enabled"))
+            return jsonify({"ok": True, "enabled": enabled})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] /api/user/nourish-enabled failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/meals/share", methods=["POST"])
+@require_user
+def api_nourish_share_meal():
+    """
+    Opt-in sharing for an entire meal slot logged by user.
+    Marks entries as is_shared_household = TRUE and auto-catalogs
+    unregistered items for the household so family members can search & reuse them.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from seed_nourish import normalize_food_name
+
+        data = request.get_json(silent=True) or {}
+        date_str = _parse_nourish_date(data.get("date")) or datetime.date.today().isoformat()
+        meal_slot = str(data.get("meal_slot") or "Dinner").strip()
+
+        up_cur = db.execute(
+            """
+            UPDATE nourish_food_logs
+            SET is_shared_household = TRUE
+            WHERE user_id = ? AND household_id = ? AND log_date = ?::date AND LOWER(meal_slot) = LOWER(?)
+            RETURNING *
+            """,
+            (uid, hhid, date_str, meal_slot),
+        )
+        updated_rows = up_cur.fetchall() if up_cur else []
+
+        for row in updated_rows:
+            f_name = row.get("food_name") or ""
+            norm_name = normalize_food_name(f_name)
+            if not norm_name or row.get("catalog_id") is not None:
+                continue
+
+            cal = float(row.get("calories") or 0.0)
+            gw = float(row.get("gram_weight") or 100.0)
+            if cal <= 0 or gw <= 0:
+                continue
+
+            cal_100 = round((cal / gw) * 100.0, 2)
+            pro_100 = round((float(row.get("protein_g") or 0.0) / gw) * 100.0, 2)
+            carb_100 = round((float(row.get("carbs_g") or 0.0) / gw) * 100.0, 2)
+            fat_100 = round((float(row.get("fat_g") or 0.0) / gw) * 100.0, 2)
+            fib_100 = round((float(row.get("fiber_g") or 0.0) / gw) * 100.0, 2)
+
+            chk_cur = db.execute(
+                "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?",
+                (hhid, norm_name),
+            )
+            chk_row = chk_cur.fetchone() if chk_cur else None
+            if chk_row:
+                new_cat_id = int(chk_row["id"])
+                db.execute(
+                    "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                    (new_cat_id,),
+                )
+            else:
+                ins_cat_cur = db.execute(
+                    """
+                    INSERT INTO nourish_food_catalog (
+                        name, normalized_name, brand, category, source, is_public,
+                        created_by_user_id, household_id,
+                        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                        fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                        serving_label, serving_weight_g, is_liquid, prep_state, ai_verified, usage_count
+                    ) VALUES (
+                        ?, ?, '', ?, 'household', FALSE,
+                        ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, FALSE, 'as_is', TRUE, 1
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        f_name,
+                        norm_name,
+                        str(row.get("category") or "Prepared Foods")[:80],
+                        uid,
+                        hhid,
+                        cal_100,
+                        pro_100,
+                        carb_100,
+                        fat_100,
+                        fib_100,
+                        float(row.get("sugar_g") or 0.0),
+                        float(row.get("sodium_mg") or 0.0),
+                        f"1 serving ({int(round(gw))}g)",
+                        gw,
+                    ),
+                )
+                ins_cat_row = ins_cat_cur.fetchone() if ins_cat_cur else None
+                new_cat_id = int(ins_cat_row["id"]) if ins_cat_row and ins_cat_row.get("id") else None
+
+            if new_cat_id:
+                db.execute(
+                    "UPDATE nourish_food_logs SET catalog_id = ? WHERE id = ?",
+                    (new_cat_id, row["id"]),
+                )
+
+        db.commit()
+        return jsonify({"ok": True, "shared_count": len(updated_rows)})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/meals/share failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/household/shared-meals", methods=["GET"])
+@require_user
+def api_nourish_household_shared_meals():
+    """
+    Returns meals shared with the household by other members today.
+    If the current user has Nourish disabled, returns empty so no bottom drawer is shown.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        # Check if current user has nourish enabled
+        u_cur = db.execute("SELECT nourish_enabled FROM auth_users WHERE id = ?", (uid,))
+        u_row = u_cur.fetchone() if u_cur else None
+        if not bool(u_row and u_row.get("nourish_enabled")):
+            return jsonify({"ok": True, "shared_meals": []})
+
+        date_str = _parse_nourish_date(request.args.get("date")) or datetime.date.today().isoformat()
+        cur = db.execute(
+            """
+            SELECT l.*, u.name as user_name
+            FROM nourish_food_logs l
+            JOIN auth_users u ON l.user_id = u.id
+            WHERE l.household_id = ? AND l.user_id != ? AND l.log_date = ?::date AND l.is_shared_household = TRUE
+            ORDER BY l.id ASC
+            """,
+            (hhid, uid, date_str),
+        )
+        rows = cur.fetchall() if cur else []
+
+        meals_by_slot = {}
+        for r in rows:
+            slot = r.get("meal_slot") or "Dinner"
+            user_name = r.get("user_name") or "A family member"
+            slot_key = f"{slot}_{r.get('user_id')}"
+            if slot_key not in meals_by_slot:
+                meals_by_slot[slot_key] = {
+                    "meal_slot": slot,
+                    "shared_by_user_id": r.get("user_id"),
+                    "shared_by_name": user_name,
+                    "log_date": date_str,
+                    "items": []
+                }
+            meals_by_slot[slot_key]["items"].append(_serialize_nourish_row(r))
+
+        return jsonify({"ok": True, "shared_meals": list(meals_by_slot.values())})
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/household/shared-meals failed: {exc}")
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()

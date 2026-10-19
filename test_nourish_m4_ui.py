@@ -128,6 +128,19 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishGoalWater"', self.html)
         self.assertIn('id="nourishBtnSaveGoals"', self.html)
 
+        # 9. Privacy, Household Sharing & User Disable Views
+        self.assertIn('id="nourishDisabledView"', self.html)
+        self.assertIn('id="nourishActiveView"', self.html)
+        self.assertIn('id="nourishPageToggle"', self.html)
+        self.assertIn('id="nourishSearchShareHousehold"', self.html)
+        self.assertIn('id="nourishDescribeShareHousehold"', self.html)
+        self.assertIn('id="nourishBtnShare_breakfast"', self.html)
+        self.assertIn('id="nourishBtnShare_lunch"', self.html)
+        self.assertIn('id="nourishBtnShare_dinner"', self.html)
+        self.assertIn('id="nourishBtnShare_snack"', self.html)
+        self.assertIn('id="nourishSharedMealDrawer"', self.html)
+        self.assertIn('id="nourishBtnAddSharedMeal"', self.html)
+
     def test_user_requested_ai_estimating_copy(self):
         # User requested pill badge and removed redundant subline
         self.assertIn("✨ AI Estimating · Check back in ~1 hr", self.html)
@@ -187,7 +200,17 @@ const fns = [
   'saveNourishEditLog',
   'openNourishGoalsModal',
   'closeNourishGoalsModal',
-  'saveNourishGoals'
+  'saveNourishGoals',
+  'isNourishEnabled',
+  'setNourishEnabled',
+  'updateNourishEnabledView',
+  'syncNourishEnabledFromServer',
+  'shareNourishMealSlot',
+  'checkNourishSharedMeals',
+  'openNourishSharedMealDrawer',
+  'closeNourishSharedMealDrawer',
+  'dismissNourishSharedMeal',
+  'acceptNourishSharedMeal'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -241,9 +264,21 @@ const elementIds = [
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
   'nourishDiarySection_dinner', 'nourishSlotSubtotal_dinner', 'nourishSlotItems_dinner',
   'nourishDiarySection_snack', 'nourishSlotSubtotal_snack', 'nourishSlotItems_snack',
-  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit'
+  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit',
+  'nourishDisabledView', 'nourishActiveView', 'nourishPageToggle', 'nourishBtnStart',
+  'nourishSearchShareHousehold', 'nourishDescribeShareHousehold',
+  'nourishBtnShare_breakfast', 'nourishBtnShare_lunch', 'nourishBtnShare_dinner', 'nourishBtnShare_snack',
+  'nourishSharedMealDrawer', 'nourishSharedDrawerSub', 'nourishSharedDrawerItems', 'nourishBtnAddSharedMeal'
 ];
 elementIds.forEach(id => { elements[id] = makeEl(id); });
+
+const storageMap = {};
+global.localStorage = {
+  getItem(k) { return storageMap[k] !== undefined ? storageMap[k] : null; },
+  setItem(k, v) { storageMap[k] = String(v); },
+  removeItem(k) { delete storageMap[k]; },
+  clear() { for (let k in storageMap) delete storageMap[k]; }
+};
 
 global.window = global;
 global.document = {
@@ -432,6 +467,45 @@ eval(fns);
   if (!goalsCall) throw new Error('Expected fetch call to /api/nourish/goals');
   if (!goalsCall.body || goalsCall.body.calories_target !== 2400) throw new Error('Expected payload with calories_target=2400');
   if (elements.nourishGoalsModal.classList.contains('active')) throw new Error('Modal should be closed after save');
+
+  // 11. User Enable/Disable Nourish
+  await setNourishEnabled(false);
+  if (isNourishEnabled() !== false) throw new Error('Expected isNourishEnabled to be false');
+  if (elements.nourishDisabledView.style.display !== 'block') throw new Error('Expected nourishDisabledView block');
+  if (elements.nourishActiveView.style.display !== 'none') throw new Error('Expected nourishActiveView none');
+
+  await setNourishEnabled(true);
+  if (isNourishEnabled() !== true) throw new Error('Expected isNourishEnabled to be true');
+  if (elements.nourishDisabledView.style.display !== 'none') throw new Error('Expected nourishDisabledView none');
+  if (elements.nourishActiveView.style.display !== 'block') throw new Error('Expected nourishActiveView block');
+
+  // 12. Shared Family Meal 1-Tap Drawer
+  const sharedMealSample = {
+    meal_slot: 'Dinner',
+    shared_by_user_id: 10,
+    shared_by_name: 'Venkat',
+    log_date: '2026-10-19',
+    items: [
+      { id: 101, food_name: 'Dosa', serving_amount: 3, serving_unit: 'serving', calories: 360 },
+      { id: 102, food_name: 'Paneer Burji', serving_amount: 1, serving_unit: 'serving', calories: 280 }
+    ]
+  };
+  openNourishSharedMealDrawer(sharedMealSample);
+  if (elements.nourishSharedMealDrawer.style.display !== 'flex') throw new Error('Expected shared meal drawer display flex');
+  if (!elements.nourishSharedDrawerSub.textContent.includes('Venkat')) throw new Error('Expected Venkat in drawer subtitle');
+  if (!elements.nourishSharedDrawerItems.innerHTML.includes('Dosa')) throw new Error('Expected Dosa in drawer items');
+  if (!elements.nourishBtnAddSharedMeal.textContent.includes('Dinner')) throw new Error('Expected Add to My Dinner button text');
+
+  await acceptNourishSharedMeal();
+  const acceptCall = allFetchCalls.find(c => c.url === '/api/nourish/logs' && c.body && c.body.meal_slot === 'Dinner');
+  if (!acceptCall) throw new Error('Expected /api/nourish/logs call when accepting shared meal');
+  if (elements.nourishSharedMealDrawer.style.display !== 'none') throw new Error('Expected drawer hidden after accept');
+
+  // 13. Slot bulk share
+  await shareNourishMealSlot('lunch');
+  const shareCall = allFetchCalls.find(c => c.url === '/api/nourish/meals/share');
+  if (!shareCall) throw new Error('Expected /api/nourish/meals/share fetch call');
+  if (shareCall.body.meal_slot !== 'lunch') throw new Error('Expected meal_slot lunch in share call');
 })();
 """
         res = subprocess.run(
@@ -442,6 +516,17 @@ eval(fns);
         self.assertEqual(
             res.returncode, 0, f"Runtime sandbox test failed: {res.stderr}"
         )
+
+    def test_settings_html_nourish_toggle(self):
+        settings_path = os.path.join(os.path.dirname(__file__), "static", "settings.html")
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings_html = f.read()
+
+        self.assertIn('id="nourishSettingsCard"', settings_html)
+        self.assertIn('id="nourishSettingToggle"', settings_html)
+        self.assertIn("initNourishUI", settings_html)
+        self.assertIn("toggleNourishSetting", settings_html)
+        self.assertIn("/api/user/nourish-enabled", settings_html)
 
 
 if __name__ == "__main__":
