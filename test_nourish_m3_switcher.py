@@ -36,6 +36,8 @@ class TestNourishM3AppSwitcher(unittest.TestCase):
         self.assertIn('id="appSwitcherBtn"', self.html)
         self.assertIn('onclick="toggleAppSwitcherMenu(event)"', self.html)
         self.assertIn('id="cartIcon"', self.html)
+        self.assertIn('id="appSwitcherSgIcon"', self.html)
+        self.assertIn('id="appSwitcherNourishIcon"', self.html)
         self.assertIn('id="headerTitle"', self.html)
         self.assertIn('id="appSwitcherChevron"', self.html)
         self.assertIn('id="appSwitcherUrgentDot"', self.html)
@@ -54,6 +56,7 @@ class TestNourishM3AppSwitcher(unittest.TestCase):
         self.assertIn('id="appSwitcherSpotlight"', self.html)
         self.assertIn("lm_app_switcher_seen_v1", self.html)
         self.assertIn("dismissAppSwitcherSpotlight", self.html)
+        self.assertIn("fireStillGoodConfetti", self.html)
 
     def test_screen_nourish_and_burger_menu_present(self):
         self.assertIn('<div id="screenNourish" class="screen"', self.html)
@@ -113,7 +116,8 @@ const fns = [
   'showNourishScreen',
   'showPremiumModal',
   'showScreen',
-  'updateFabVisibility'
+  'updateFabVisibility',
+  'fireStillGoodConfetti'
 ].map(n => extractFunction(html, n)).join('\n\n');
 
 const elements = {};
@@ -138,7 +142,7 @@ function makeEl(id) {
         return next;
       }
     },
-    getBoundingClientRect() { return { top: 500 }; }
+    getBoundingClientRect() { return { top: 500, left: 100, width: 60, height: 30 }; }
   };
 }
 
@@ -150,7 +154,8 @@ function makeEl(id) {
   'headerTitle', 'screenHome', 'screenCatalog', 'screenRecipes',
   'screenStillGood', 'screenNourish', 'screenGlobalVisits',
   'screenVisitDetail', 'screenAnalytics', 'catalogSearch', 'catalogQty',
-  'premiumModal', 'premiumModalTitle', 'premiumModalDesc', 'fabStores', 'storeGrid'
+  'premiumModal', 'premiumModalTitle', 'premiumModalDesc', 'fabStores', 'storeGrid',
+  'cartIcon', 'appSwitcherSgIcon', 'appSwitcherNourishIcon'
 ].forEach(id => { elements[id] = makeEl(id); });
 const headerEl = makeEl('header');
 
@@ -162,6 +167,16 @@ global.localStorage = {
 global.window = global;
 global.window.scrollTo = () => {};
 global.window.innerHeight = 800;
+global.window.innerWidth = 400;
+let confettiCalls = [];
+global.window.confetti = Object.assign(
+  function(opts) { confettiCalls.push(opts); },
+  {
+    create: function() {
+      return function(opts) { confettiCalls.push(opts); };
+    }
+  }
+);
 global.document = {
   body: { scrollTop: 0 },
   documentElement: { scrollTop: 0 },
@@ -204,7 +219,7 @@ eval(fns);
   if (!elements.premiumModal.classList.contains('active')) throw new Error('Paywall modal should open for free user');
   if (elements.premiumModalTitle.textContent !== 'Nourish is a Premium Feature') throw new Error('Unexpected modal title');
 
-  // 4. Premium user navigation to Nourish via selectSuiteApp
+  // 4. Premium user navigation to Nourish via selectSuiteApp and logo visibility
   elements.premiumModal.classList.remove('active');
   global.window.currentCfg = { subscription_status: 'active', is_premium: true };
   selectSuiteApp('nourish');
@@ -215,7 +230,27 @@ eval(fns);
   if (elements.screenHome.style.display !== 'none') throw new Error('Expected #screenHome hidden');
   if (!elements.appSwitchItemNourish.classList.contains('active')) throw new Error('Expected Nourish menu item active');
   if (nourishLoaded !== 1) throw new Error('Expected loadNourishDay() to be called');
+  if (elements.cartIcon.style.display !== 'none') throw new Error('Expected cartIcon hidden on nourish screen');
+  if (elements.appSwitcherSgIcon.style.display !== 'none') throw new Error('Expected sgIcon hidden on nourish screen');
+  if (elements.appSwitcherNourishIcon.style.display !== 'block') throw new Error('Expected nourishIcon visible on nourish screen');
+
+  // 5. Still Good active state logo visibility
+  updateAppSwitcherActiveState('stillGood');
+  if (elements.cartIcon.style.display !== 'none') throw new Error('Expected cartIcon hidden on stillGood');
+  if (elements.appSwitcherSgIcon.style.display !== 'flex') throw new Error('Expected sgIcon flex on stillGood');
+  if (elements.appSwitcherNourishIcon.style.display !== 'none') throw new Error('Expected nourishIcon hidden on stillGood');
+
+  // 6. Home active state logo visibility
+  updateAppSwitcherActiveState('home');
+  if (elements.cartIcon.style.display !== 'block') throw new Error('Expected cartIcon block on home');
+  if (elements.appSwitcherSgIcon.style.display !== 'none') throw new Error('Expected sgIcon hidden on home');
+  if (elements.appSwitcherNourishIcon.style.display !== 'none') throw new Error('Expected nourishIcon hidden on home');
+
+  // 7. Confetti triggering
+  fireStillGoodConfetti(elements.appSwitcherBtn);
+  if (confettiCalls.length === 0) throw new Error('Expected confetti to fire');
 })();
+
 """
         res = subprocess.run(
             ["node", "-e", node_test, INDEX_HTML_PATH],
