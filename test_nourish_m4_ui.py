@@ -328,6 +328,9 @@ eval(fns);
   const lunchHtml = elements.nourishSlotItems_lunch.innerHTML;
   if (!lunchHtml.includes('Steamed Dosai')) throw new Error('Expected Steamed Dosai in lunch items');
   if (!lunchHtml.includes('Moms Homemade Halwa')) throw new Error('Expected Moms Homemade Halwa in lunch items');
+  if (!lunchHtml.includes('nourish-log-item-pending')) {
+    throw new Error('Expected pending food log item to have class nourish-log-item-pending');
+  }
   if (!lunchHtml.includes('✨ AI Estimating · Check back in ~1 hr')) {
     throw new Error('Expected AI estimating badge in diary for pending item');
   }

@@ -10926,8 +10926,12 @@ function updateNourishPreview() {
   }
   var item = selectedNourishItem;
   if (!item) {
-    previewBar.innerHTML = '<span style="color:#b45309; font-weight:600; font-size:11.5px;">✨ Custom Item: ' + escapeHtml(foodName) + ' (' + amt + ' ' + nourishSelectedUnit + ')</span>' +
-      '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>';
+    previewBar.innerHTML = '<div style="width:100%; display:flex; flex-direction:column; gap:6px;">' +
+      '<div style="color:#b45309; font-weight:600; font-size:12px; word-break:break-word;">✨ Custom Item: ' + escapeHtml(foodName) + ' <span style="font-weight:500; color:#92400e; font-size:11px;">(' + amt + ' ' + nourishSelectedUnit + ')</span></div>' +
+      '<div style="display:flex; justify-content:flex-end;">' +
+        '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>' +
+      '</div>' +
+    '</div>';
     return;
   }
 
@@ -11066,10 +11070,20 @@ async function analyzeNourishPlate() {
         var calBadge = isPending
           ? '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>'
           : '<div style="font-weight:600; color:#1f2937;">' + Math.round(cal) + ' kcal</div>';
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
-          '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span></div>' +
-          calBadge +
-        '</div>';
+        if (isPending) {
+          html += '<div style="padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
+            '<div style="font-weight:600; color:var(--text); word-break:break-word; line-height:1.35; margin-bottom:4px;">' + escapeHtml(fName) + '</div>' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">' +
+              '<span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span>' +
+              calBadge +
+            '</div>' +
+          '</div>';
+        } else {
+          html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
+            '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span></div>' +
+            calBadge +
+          '</div>';
+        }
       });
       var hasPending = res.items.some(function(i) { return i.ai_enrich_status === 'pending' || ((i.calories || 0) === 0 && !i.catalog_id); });
       var totalText = hasPending
@@ -11321,22 +11335,40 @@ function renderNourishSlotSection(slot, items) {
       portionText = formattedQty + (fUnit === 'g' ? 'g' : (' ' + fUnit));
     }
 
-    html += '<div class="nourish-log-item" id="nourishLog_' + it.id + '">' +
-      '<div style="flex:1; min-width:0;">' +
-        '<div class="nourish-log-name">' + escapeHtml(fName) + '</div>' +
-        '<div class="nourish-log-sub">' +
-          '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
-          macroSub +
+    if (isPending) {
+      html += '<div class="nourish-log-item nourish-log-item-pending" id="nourishLog_' + it.id + '" style="flex-direction:column; align-items:stretch; gap:6px;">' +
+        '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">' +
+          '<div class="nourish-log-name" style="flex:1; min-width:0; word-break:break-word; line-height:1.35;">' + escapeHtml(fName) + '</div>' +
+          '<div class="nourish-item-actions" style="margin-left:0;">' +
+            '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
+            '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+          '</div>' +
         '</div>' +
-      '</div>' +
-      '<div style="display:flex; align-items:center;">' +
-        calText +
-        '<div class="nourish-item-actions">' +
-          '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
-          '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">' +
+          '<div class="nourish-log-sub" style="margin-top:0;">' +
+            '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
+          '</div>' +
+          calText +
         '</div>' +
-      '</div>' +
-    '</div>';
+      '</div>';
+    } else {
+      html += '<div class="nourish-log-item" id="nourishLog_' + it.id + '">' +
+        '<div style="flex:1; min-width:0;">' +
+          '<div class="nourish-log-name">' + escapeHtml(fName) + '</div>' +
+          '<div class="nourish-log-sub">' +
+            '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
+            macroSub +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center;">' +
+          calText +
+          '<div class="nourish-item-actions">' +
+            '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
+            '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
   });
   container.innerHTML = html;
 }
