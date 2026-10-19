@@ -53,10 +53,10 @@ def _discover_gemini_key():
 
 
 def _get_gemini_models():
-    """Returns the Gemini Lite fallback cascade: gemini-3.1-flash-lite -> gemini-2.5-flash-lite -> gemini-2.0-flash-lite."""
+    """Returns the Gemini Lite fallback cascade with resilient production fallbacks."""
     raw_models = os.environ.get(
         "GEMINI_MODEL_NAME",
-        "gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.0-flash-lite",
+        "gemini-3.1-flash-lite,gemini-flash-latest,gemini-2.0-flash,gemini-1.5-flash",
     )
     models_to_try = []
     for m in raw_models.split(","):
@@ -66,9 +66,17 @@ def _get_gemini_models():
         if clean_m and clean_m not in models_to_try:
             models_to_try.append(clean_m)
 
-    for fallback_lite in ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]:
-        if fallback_lite not in models_to_try:
-            models_to_try.append(fallback_lite)
+    for fallback in [
+        "gemini-3.1-flash-lite",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash-lite-preview-02-05",
+    ]:
+        if fallback not in models_to_try:
+            models_to_try.append(fallback)
     return models_to_try
 
 
@@ -78,6 +86,7 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
     if not key:
         return None
 
+    import time
     models_to_try = _get_gemini_models()
     body = {
         "contents": [
@@ -123,6 +132,8 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
                     return parsed
         except Exception as exc:
             print(f"[NOURISH AI ERROR] Call to {model_name} failed: {exc}")
+            if "503" in str(exc):
+                time.sleep(0.5)
             continue
     return None
 
