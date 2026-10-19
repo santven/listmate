@@ -11849,19 +11849,28 @@ function openNourishSharedMealDrawer(meal) {
     var items = meal.items || [];
     var html = '';
     var totalCal = 0;
+    var hasPending = false;
     items.forEach(function(it) {
       var fName = it.food_name || it.name || 'Item';
       var portion = (it.serving_amount || it.quantity || 1) + ' ' + (it.serving_unit || it.unit || 'serving');
+      var isPending = it.ai_enrich_status === 'pending' || ((it.calories || 0) === 0 && !it.catalog_id);
+      if (isPending) hasPending = true;
       var cal = it.calories || 0;
       totalCal += cal;
-      html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;">' +
+      var calText = isPending
+        ? '<span class="nourish-estimating-badge" style="font-size:10.5px;">✨ AI Estimating</span>'
+        : ('<div style="font-weight:600; color:#374151;">' + Math.round(cal) + ' kcal</div>');
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #f1f5f9; gap:8px;">' +
         '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portion) + ')</span></div>' +
-        '<div style="font-weight:600; color:#374151;">' + Math.round(cal) + ' kcal</div>' +
+        calText +
       '</div>';
     });
+    var totalDisplay = hasPending
+      ? (totalCal > 0 ? (Math.round(totalCal) + ' kcal (+ AI estimating)') : '<span style="font-size:11.5px; color:#047857;">✨ AI Estimating · Check back in ~1 hr</span>')
+      : (Math.round(totalCal) + ' kcal');
     html += '<div style="display:flex; justify-content:space-between; font-weight:700; padding-top:6px; color:#047857;">' +
       '<span>Total:</span>' +
-      '<span>' + Math.round(totalCal) + ' kcal</span>' +
+      '<span>' + totalDisplay + '</span>' +
     '</div>';
     itemsCont.innerHTML = html;
   }
