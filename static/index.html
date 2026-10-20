@@ -11361,6 +11361,10 @@ function selectNourishSlot(slot) {
   if (btn) {
     btn.innerHTML = '➕ Log to ' + slotTitle;
   }
+  var combBtn = document.getElementById('nourishBtnLogPlateCombined');
+  if (combBtn) {
+    combBtn.innerHTML = '➕ Log as Plate to ' + slotTitle;
+  }
   var plateBtn = document.getElementById('nourishBtnLogAllPlate');
   if (plateBtn && window._lastNourishAnalyzedItems && window._lastNourishAnalyzedItems.length) {
     plateBtn.innerHTML = '➕ Log All ' + window._lastNourishAnalyzedItems.length + ' Items to ' + slotTitle;
@@ -11721,8 +11725,14 @@ async function analyzeNourishPlate() {
 
     if (res && res.ok && Array.isArray(res.items) && res.items.length > 0) {
       window._lastNourishAnalyzedItems = res.items;
+      window._lastNourishAnalyzedPlateName = res.plate_name || 'My Plate';
+      var plateName = window._lastNourishAnalyzedPlateName;
       var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
       var html = '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:10px;">' +
+        '<div style="margin-bottom:12px;">' +
+          '<label for="nourishPlateNameInput" style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:4px;">🍽️ Plate / Dish Name</label>' +
+          '<input type="text" id="nourishPlateNameInput" value="' + escapeHtml(plateName) + '" style="width:100%; border:1.5px solid #cbd5e1; border-radius:8px; padding:8px 10px; font-size:13.5px; font-weight:600; box-sizing:border-box;">' +
+        '</div>' +
         '<div style="font-weight:700; font-size:13px; color:var(--text); margin-bottom:8px;">AI Plate Breakdown (' + res.items.length + ' items):</div>';
       var totalCal = 0;
       res.items.forEach(function(it) {
@@ -11773,8 +11783,11 @@ async function analyzeNourishPlate() {
           'Saves dishes to household catalog &amp; lets family 1-tap add to their diary.' +
         '</div>' +
       '</div>' +
-      '<button type="button" id="nourishBtnLogAllPlate" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
-        '➕ Log All ' + res.items.length + ' Items to ' + slotTitle +
+      '<button type="button" id="nourishBtnLogPlateCombined" onclick="logAnalyzedPlateCombined()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
+        '➕ Log as Plate to ' + slotTitle +
+      '</button>' +
+      '<button type="button" id="nourishBtnLogAllPlate" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:8px; background:none; border:1px dashed #cbd5e1; color:#475569; padding:8px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">' +
+        'Or log as ' + res.items.length + ' individual items' +
       '</button>' +
       '</div>';
       if (container) container.innerHTML = html;
@@ -11786,6 +11799,118 @@ async function analyzeNourishPlate() {
     if (loading) loading.style.display = 'none';
     console.error('Plate analysis error:', err);
     if (typeof toast === 'function') toast('Plate analysis failed');
+  }
+}
+
+async function logAnalyzedPlateCombined() {
+  var items = window._lastNourishAnalyzedItems || [];
+  if (!items || items.length === 0) return;
+  var btn = document.getElementById('nourishBtnLogPlateCombined');
+  var prevText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Logging plate...';
+  }
+  var btnAll = document.getElementById('nourishBtnLogAllPlate');
+  if (btnAll) btnAll.disabled = true;
+
+  var nameInput = document.getElementById('nourishPlateNameInput');
+  var plateName = (nameInput && nameInput.value.trim()) || window._lastNourishAnalyzedPlateName || 'Plate';
+
+  var shareCb = document.getElementById('nourishDescribeShareHousehold');
+  var isShared = shareCb ? shareCb.checked : false;
+
+  var totalCal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0, totalWeight = 0;
+  var ingredientStrings = [];
+  items.forEach(function(it) {
+    var c = it.calories || 0;
+    totalCal += c;
+    totalProtein += (it.protein_g || it.protein || 0);
+    totalCarbs += (it.carbs_g || it.carbs || 0);
+    totalFat += (it.fat_g || it.fat || 0);
+    totalFiber += (it.fiber_g || it.fiber || 0);
+
+    var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 1);
+    var numQty = parseFloat(fQty);
+    if (isNaN(numQty)) numQty = 1;
+    var formattedQty = Math.round(numQty * 100) / 100;
+    var fUnit = it.unit || it.serving_unit || 'serving';
+    var portionText = (fUnit === 'serving' || fUnit === 'servings')
+      ? (formattedQty + (formattedQty === 1 ? ' serving' : ' servings'))
+      : (formattedQty + (fUnit === 'g' ? 'g' : (' ' + fUnit)));
+
+    var srvWeight = it.serving_weight_g || (fUnit === 'g' ? numQty : 100);
+    totalWeight += (srvWeight * (fUnit === 'serving' || fUnit === 'servings' ? numQty : 1));
+
+    var iName = it.food_name || it.name || 'Item';
+    ingredientStrings.push(iName + ' (' + portionText + ')');
+  });
+
+  totalCal = Math.round(totalCal);
+  totalProtein = Math.round(totalProtein * 10) / 10;
+  totalCarbs = Math.round(totalCarbs * 10) / 10;
+  totalFat = Math.round(totalFat * 10) / 10;
+  totalFiber = Math.round(totalFiber * 10) / 10;
+  totalWeight = Math.round(totalWeight);
+  if (totalWeight <= 0) totalWeight = 100;
+
+  var notesText = 'Ingredients: ' + ingredientStrings.join(', ');
+
+  var payload = {
+    log_date: currentNourishDate,
+    meal_slot: currentNourishSlot,
+    is_shared_household: isShared,
+    items: [{
+      food_name: plateName,
+      name: plateName,
+      meal_slot: currentNourishSlot,
+      quantity: 1,
+      serving_amount: 1,
+      unit: 'serving',
+      serving_unit: 'serving',
+      calories: totalCal,
+      protein_g: totalProtein,
+      carbs_g: totalCarbs,
+      fat_g: totalFat,
+      fiber_g: totalFiber,
+      serving_weight_g: totalWeight,
+      serving_label: '1 plate',
+      category: 'Prepared Foods',
+      notes: notesText,
+      is_shared_household: isShared
+    }]
+  };
+
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      var descInput = document.getElementById('nourishDescribeInput');
+      if (descInput) descInput.value = '';
+      var container = document.getElementById('nourishParsedItems');
+      if (container) container.innerHTML = '';
+      window._lastNourishAnalyzedItems = null;
+      window._lastNourishAnalyzedPlateName = null;
+      var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
+      if (typeof toast === 'function') toast('✅ Logged ' + plateName + ' to ' + slotTitle + '!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      var errMsg = (res && res.error) ? res.error : 'Could not log plate';
+      if (typeof toast === 'function') toast('❌ ' + errMsg);
+    }
+  } catch(err) {
+    console.error('Error logging combined plate:', err);
+    if (typeof toast === 'function') toast('Network error logging plate');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (prevText) btn.textContent = prevText;
+    }
+    if (btnAll) btnAll.disabled = false;
   }
 }
 
@@ -11846,6 +11971,7 @@ async function logAllAnalyzedNourishItems() {
       var container = document.getElementById('nourishParsedItems');
       if (container) container.innerHTML = '';
       window._lastNourishAnalyzedItems = null;
+      window._lastNourishAnalyzedPlateName = null;
       var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
       if (typeof toast === 'function') toast('✅ Logged all plate items to ' + slotTitle + '!');
       loadNourishDay(currentNourishDate);
@@ -13257,6 +13383,7 @@ window.submitNourishLog = submitNourishLog;
 window.analyzeNourishPlate = analyzeNourishPlate;
 window.analyzeNourishPlateAI = analyzeNourishPlate;
 window.logAllAnalyzedNourishItems = logAllAnalyzedNourishItems;
+window.logAnalyzedPlateCombined = logAnalyzedPlateCombined;
 window.quickAddNourishWater = quickAddNourishWater;
 window.deleteNourishLog = deleteNourishLog;
 window.openNourishEditModal = openNourishEditModal;

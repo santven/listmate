@@ -3989,7 +3989,7 @@ def nourish_create_logs_endpoint():
         for entry in raw_items:
             if not isinstance(entry, dict):
                 continue
-            food_name = str(entry.get("food_name") or entry.get("name") or "").strip()
+            food_name = str(entry.get("food_name") or entry.get("plate_name") or entry.get("name") or "").strip()
             if not food_name:
                 return jsonify({"ok": False, "error": "food_name is required"}), 400
 
@@ -3999,7 +3999,7 @@ def nourish_create_logs_endpoint():
 
             meal_slot = str(entry.get("meal_slot") or data.get("meal_slot") or "Breakfast").strip()[:24] or "Breakfast"
             unit = str(entry.get("unit") or entry.get("serving_unit") or "g").strip().lower()
-            default_qty = 1.0 if unit in ("serving", "servings", "piece", "cup", "bowl") else 100.0
+            default_qty = 1.0 if unit in ("serving", "servings", "piece", "pieces", "cup", "bowl", "slice", "plate", "plates") else 100.0
             raw_qty = entry.get("quantity") if entry.get("quantity") is not None else entry.get("serving_amount")
             try:
                 quantity = float(raw_qty if raw_qty is not None else default_qty)
@@ -4017,10 +4017,16 @@ def nourish_create_logs_endpoint():
             raw_sg_id = entry.get("still_good_item_id") if entry.get("still_good_item_id") is not None else data.get("still_good_item_id")
             still_good_item_id = int(raw_sg_id) if (raw_sg_id is not None and str(raw_sg_id).strip().isdigit() and int(raw_sg_id) > 0) else None
 
-            notes = str(entry.get("notes") or "").strip()
+            raw_notes = entry.get("notes") if "notes" in entry else (entry.get("ingredients") or entry.get("ingredients_text") or (data.get("notes") if len(raw_items) == 1 else ""))
+            if isinstance(raw_notes, list):
+                notes = ", ".join(str(x).strip() for x in raw_notes if str(x).strip())
+            elif isinstance(raw_notes, dict):
+                notes = ", ".join(f"{k}: {v}" for k, v in raw_notes.items())
+            else:
+                notes = str(raw_notes or "").strip()
 
             matched_baseline = None
-            serving_weight_g = float(entry.get("serving_weight_g") or 100.0)
+            serving_weight_g = float(entry.get("serving_weight_g") or entry.get("gram_weight") or 100.0)
             density_g_per_ml = 1.0
 
             # Tier 1a: Explicit catalog_id
@@ -4192,7 +4198,7 @@ def nourish_create_logs_endpoint():
                                 fib_100,
                                 float(entry.get("sugar_per_100g") or 0.0),
                                 float(entry.get("sodium_mg_per_100g") or 0.0),
-                                str(entry.get("serving_label") or f"1 serving ({int(round(serving_weight_g))}g)"),
+                                str(entry.get("serving_label") or (f"1 plate ({int(round(serving_weight_g))}g)" if unit in ("plate", "plates") else f"1 serving ({int(round(serving_weight_g))}g)")),
                                 serving_weight_g,
                             ),
                         )
@@ -4303,9 +4309,19 @@ def nourish_modify_log_endpoint(log_id):
         from nourish_ai import compute_scaled_macros
 
         data = request.get_json(silent=True) or {}
-        new_food_name = str(data.get("food_name") or existing.get("food_name") or "").strip()
+        new_food_name = str(data.get("food_name") or data.get("plate_name") or existing.get("food_name") or "").strip()
         new_meal_slot = str(data.get("meal_slot") or existing.get("meal_slot") or "Breakfast").strip()[:24]
-        new_notes = str(data.get("notes") if "notes" in data else (existing.get("notes") or "")).strip()
+
+        if "notes" in data or "ingredients" in data:
+            raw_notes = data.get("notes") if "notes" in data else data.get("ingredients")
+            if isinstance(raw_notes, list):
+                new_notes = ", ".join(str(x).strip() for x in raw_notes if str(x).strip())
+            elif isinstance(raw_notes, dict):
+                new_notes = ", ".join(f"{k}: {v}" for k, v in raw_notes.items())
+            else:
+                new_notes = str(raw_notes or "").strip()
+        else:
+            new_notes = str(existing.get("notes") or "").strip()
 
         new_unit = str(data.get("unit") or data.get("serving_unit") or existing.get("unit") or "g").strip().lower()
         raw_qty = data.get("quantity") if "quantity" in data else data.get("serving_amount")
@@ -4847,6 +4863,7 @@ def nourish_analyze_meal_endpoint():
         remaining_today = max(0, limit - new_count)
         return jsonify({
             "ok": True,
+            "plate_name": analysis.get("plate_name", ""),
             "remaining_today": remaining_today,
             **analysis,
         })
