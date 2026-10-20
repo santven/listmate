@@ -190,6 +190,12 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishCoachDrawerMessage"', self.html)
         self.assertIn('id="nourishBtnAckCoachNote"', self.html)
 
+        # 13. AI Logical Plate Naming & Combined Logging (Issue #712)
+        self.assertIn('id="nourishPlateNameInput"', self.html)
+        self.assertIn('id="nourishBtnLogPlateCombined"', self.html)
+        self.assertIn("logAnalyzedPlateCombined", self.html)
+        self.assertIn("🍽️ Plate / Dish Name", self.html)
+
     def test_nourish_deep_link_and_push_handlers_present(self):
         # Query parameter deep link handling
         self.assertIn("screenParam === 'nourish' || actionParam === 'open_nourish'", self.html)
@@ -253,6 +259,7 @@ const fns = [
   'submitNourishLog',
   'analyzeNourishPlate',
   'logAllAnalyzedNourishItems',
+  'logAnalyzedPlateCombined',
   'quickAddNourishWater',
   'loadNourishDay',
   'renderNourishDay',
@@ -301,11 +308,27 @@ const fns = [
 const elements = {};
 function makeEl(id) {
   const classes = new Set();
+  let _innerHTML = '';
   return {
     id,
     textContent: '',
-    innerHTML: '',
+    get innerHTML() { return _innerHTML; },
+    set innerHTML(val) {
+      _innerHTML = String(val || '');
+      const idMatch = _innerHTML.match(/id="([^"]+)"/g);
+      if (idMatch) {
+        idMatch.forEach(m => {
+          const matchedId = m.slice(4, -1);
+          if (!elements[matchedId]) elements[matchedId] = makeEl(matchedId);
+          const valMatch = _innerHTML.match(new RegExp('id="' + matchedId + '"[^>]*value="([^"]*)"'));
+          if (valMatch && valMatch[1] !== undefined) {
+            elements[matchedId].value = valMatch[1];
+          }
+        });
+      }
+    },
     value: '',
+    checked: false,
     style: { display: '', width: '', background: '', color: '' },
     attrs: {},
     disabled: false,
@@ -343,7 +366,7 @@ const elementIds = [
   'nourishGramPill_50', 'nourishGramPill_100', 'nourishGramPill_150', 'nourishGramPill_200', 'nourishGramPill_250',
   'nourishBtnStepMinus', 'nourishBtnStepPlus',
   'nourishPreviewBar', 'nourishBtnLog',
-  'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems', 'nourishBtnLogAllPlate',
+  'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems', 'nourishBtnLogAllPlate', 'nourishBtnLogPlateCombined', 'nourishPlateNameInput',
   'nourishDiaryContainer',
   'nourishDiarySection_breakfast', 'nourishSlotSubtotal_breakfast', 'nourishSlotItems_breakfast',
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
@@ -988,6 +1011,87 @@ eval(fns);
   }
   if (sessionStorage.getItem('nourish_dismissed_coach_note_99') !== '1') {
     throw new Error('Expected dismissal stored in sessionStorage');
+  }
+
+  // 27. Issue #712: AI Logical Plate Naming & Combined Plate Logging
+  allFetchCalls.length = 0;
+  global.fetch = (url, opts) => {
+    const callObj = {
+      url: url,
+      opts: opts,
+      body: opts && opts.body ? JSON.parse(opts.body) : null
+    };
+    allFetchCalls.push(callObj);
+    if (url.includes('/api/nourish/analyze-meal')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({
+          ok: true,
+          plate_name: 'Mediterranean Salmon & Quinoa Bowl',
+          items: [
+            { food_name: 'Grilled Salmon', quantity: 150, unit: 'g', calories: 310, protein_g: 34, carbs_g: 0, fat_g: 18, fiber_g: 0, serving_weight_g: 150 },
+            { food_name: 'Cooked Quinoa', quantity: 1, unit: 'cup', calories: 220, protein_g: 8, carbs_g: 39, fat_g: 4, fiber_g: 5, serving_weight_g: 185 }
+          ],
+          totals: { calories: 530, protein_g: 42, carbs_g: 39, fat_g: 22, fiber_g: 5 }
+        })
+      });
+    }
+    return Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ ok: true })
+    });
+  };
+
+  currentNourishSlot = 'dinner';
+  elements.nourishDescribeInput.value = 'grilled salmon with quinoa';
+  await analyzeNourishPlate();
+
+  if (window._lastNourishAnalyzedPlateName !== 'Mediterranean Salmon & Quinoa Bowl') {
+    throw new Error('Expected plate name stored on window, got: ' + window._lastNourishAnalyzedPlateName);
+  }
+  if (!elements.nourishParsedItems.innerHTML.includes('id="nourishPlateNameInput"')) {
+    throw new Error('Expected plate name input rendered in parsed items');
+  }
+  if (!elements.nourishParsedItems.innerHTML.includes('id="nourishBtnLogPlateCombined"')) {
+    throw new Error('Expected combined plate log button rendered');
+  }
+  if (!elements.nourishParsedItems.innerHTML.includes('➕ Log as Plate to Dinner')) {
+    throw new Error('Expected combined plate button to target Dinner slot');
+  }
+  if (!elements.nourishParsedItems.innerHTML.includes('Or log as 2 individual items')) {
+    throw new Error('Expected secondary button to show individual items option');
+  }
+
+  // Customizing plate name and logging combined plate
+  elements.nourishPlateNameInput.value = 'Chef Signature Salmon Bowl';
+  elements.nourishDescribeShareHousehold.checked = true;
+  await logAnalyzedPlateCombined();
+
+  const combinedCall = allFetchCalls.find(c => c.url.includes('/api/nourish/logs') && c.body && c.body.items && c.body.items[0] && c.body.items[0].food_name === 'Chef Signature Salmon Bowl');
+  if (!combinedCall) {
+    throw new Error('Expected POST /api/nourish/logs with combined plate item');
+  }
+  const loggedItem = combinedCall.body.items[0];
+  if (loggedItem.calories !== 530) {
+    throw new Error('Expected combined calories 530, got: ' + loggedItem.calories);
+  }
+  if (loggedItem.protein_g !== 42) {
+    throw new Error('Expected combined protein 42g, got: ' + loggedItem.protein_g);
+  }
+  if (!loggedItem.notes.includes('Ingredients: Grilled Salmon') || !loggedItem.notes.includes('Cooked Quinoa')) {
+    throw new Error('Expected notes to contain ingredient breakdown, got: ' + loggedItem.notes);
+  }
+  if (combinedCall.body.is_shared_household !== true) {
+    throw new Error('Expected is_shared_household to be true');
+  }
+  if (elements.nourishDescribeInput.value !== '') {
+    throw new Error('Expected describe input cleared after logging');
+  }
+  if (elements.nourishParsedItems.innerHTML !== '') {
+    throw new Error('Expected parsed items container cleared after logging');
+  }
+  if (window._lastNourishAnalyzedItems !== null) {
+    throw new Error('Expected _lastNourishAnalyzedItems cleared');
   }
 })();
 """
