@@ -431,14 +431,32 @@
     <div class="success" id="inspirationSuccess" style="margin-top:8px;"></div>
   </div>
 
-  <!-- Support & Feedback -->
-  <div class="card">
+  <!-- Nourish Preferences -->
+  <div class="card" id="nourishSettingsCard">
+    <h2>🥗 Nourish · Daily Nutrition Tracking</h2>
+    <p class="note" style="margin-bottom:12px;">Track daily meals, calories, macros &amp; hydration. When disabled, Nourish stays hidden and family shared meals won't pop up.</p>
+    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <div style="flex:1; padding-right:12px;">
+        <div style="font-weight:600; font-size:14px; color:#1f2937;">Enable Nourish</div>
+        <div id="nourishStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Turn off if you don't track meals or want Nourish hidden.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="nourishSettingToggle" onchange="toggleNourishSetting(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="success" id="nourishSettingSuccess" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- Share ListMate -->
   <div class="card">
     <h2>🎁 Share ListMate</h2>
     <p style="font-size: 14px; margin-bottom: 12px; color: var(--muted);">Know someone who could use a better grocery list? Send them a link to download the app.</p>
     <button onclick="showShareAppModal();" style="width:100%; padding:12px; background:var(--green); border:none; color:#fff; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">Invite Friends</button>
   </div>
 
+  <!-- Support & Feedback -->
+  <div class="card">
     <h2>💬 Support & Feedback</h2>
     <p>Found a bug, have a suggestion, or just want to say hi? We'd love to hear from you!</p>
     <button onclick="document.getElementById('feedbackModal').classList.add('active')" style="width:100%; padding:12px; background:var(--green); border:none; color:#fff; font-weight:600; border-radius:10px; font-size:14px; cursor:pointer;">
@@ -729,6 +747,7 @@ var householdData = null;
 
   initDiscoveryTipsUI();
   initInspirationUI();
+  initNourishUI();
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
     checkUrlActions();
@@ -787,6 +806,60 @@ function toggleInspirationSetting(checked) {
     credentials: 'include'
   }).catch(function(e) {
     console.error('Failed to save inspiration setting to database:', e);
+  });
+}
+
+async function initNourishUI() {
+  const toggle = document.getElementById('nourishSettingToggle');
+  const statusText = document.getElementById('nourishStatusText');
+  if (!toggle) return;
+
+  try {
+    const res = await fetch('/api/user/nourish-enabled', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      const isEnabled = data.enabled === true;
+      toggle.checked = isEnabled;
+      try { localStorage.setItem('nourish_enabled', isEnabled ? 'true' : 'false'); } catch(e) {}
+      if (statusText) {
+        statusText.textContent = isEnabled
+          ? 'Nourish is active. Daily meal and macro tracking enabled.'
+          : 'Nourish is currently disabled. Food diary and family meal popups are hidden.';
+      }
+    }
+  } catch(e) {
+    console.error('Failed to load nourish setting from server:', e);
+    const localVal = localStorage.getItem('nourish_enabled') === 'true';
+    toggle.checked = localVal;
+  }
+}
+
+function toggleNourishSetting(checked) {
+  const statusText = document.getElementById('nourishStatusText');
+  const success = document.getElementById('nourishSettingSuccess');
+
+  try {
+    localStorage.setItem('nourish_enabled', checked ? 'true' : 'false');
+  } catch(e) {}
+
+  if (statusText) {
+    statusText.textContent = checked
+      ? 'Nourish is active. Daily meal and macro tracking enabled.'
+      : 'Nourish is currently disabled. Food diary and family meal popups are hidden.';
+  }
+  if (success) {
+    success.textContent = checked ? '🥗 Nourish enabled!' : 'Nourish disabled.';
+    success.style.display = 'block';
+    setTimeout(() => { success.style.display = 'none'; }, 3000);
+  }
+
+  fetch('/api/user/nourish-enabled', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: checked }),
+    credentials: 'include'
+  }).catch(function(e) {
+    console.error('Failed to save nourish setting to server:', e);
   });
 }
 

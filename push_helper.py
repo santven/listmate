@@ -419,6 +419,38 @@ def send_push_to_household(household_id: int, title: str, body: str, data: Optio
     return _send_fcm_multicast(tokens, title, body, data, target_type="household", target_id=int(household_id))
 
 
+def send_push_to_household_nourish(household_id: int, title: str, body: str, data: Optional[Dict[str, str]] = None, exclude_user_id: Optional[int] = None) -> Dict[str, Any]:
+    """Send push notification to active members of a household who have nourish_enabled = TRUE.
+    Can exclude the actor's user_id so they don't get alerted for their own shared meals.
+    """
+    if not household_id or household_id == 0:
+        return {"sent": 0, "failed": 0, "error": "Invalid household_id"}
+
+    ex_uid = None if (exclude_user_id is None or exclude_user_id == 0) else int(exclude_user_id)
+    token_rows = authmod.get_active_tokens_for_household_nourish(household_id, exclude_user_id=ex_uid)
+    if not token_rows:
+        try:
+            authmod.log_push_dispatch(
+                target_type="household",
+                target_id=int(household_id),
+                title=title,
+                body=body,
+                url=(data or {}).get("url", "/"),
+                custom_data=data,
+                tokens_count=0,
+                sent_count=0,
+                failed_count=0,
+                errors=["No active nourish push tokens for household"],
+                is_mock=False
+            )
+        except Exception as log_err:
+            logger.warning(f"[PushHelper] Failed to log empty household nourish token dispatch: {log_err}")
+        return {"sent": 0, "failed": 0, "message": "No active nourish tokens for household"}
+
+    tokens = [r["token"] for r in token_rows if r.get("token")]
+    return _send_fcm_multicast(tokens, title, body, data, target_type="household", target_id=int(household_id))
+
+
 def send_push_broadcast(title: str, body: str, data: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Send push notification to all registered active devices across the application."""
     try:
@@ -1966,6 +1998,383 @@ def check_post_shopping_smart_stash_pushes(dry_run: bool = False, force_send: bo
                 "user_id": uid,
                 "household_id": hhid,
                 "campaign": "still_good_smart_stash_3h",
+                "status": "error",
+                "error": str(dispatch_err)
+            })
+
+    return {
+        "ok": True,
+        "candidates": len(candidates),
+        "dispatched": dispatched_count,
+        "results": results
+    }
+
+
+def check_nourish_evening_diary_pushes(target_hour: int = 20, dry_run: bool = False, force_send: bool = False):
+    """
+    8:00 PM Local Time Smart Evening Diary Push Reminder (Issue #693)
+
+    Reminds users who have Nourish enabled to wrap up their daily food diary
+    if they haven't logged dinner yet.
+    """
+    _init_schema()
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Nourish evening diary push reminders (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    cadence_clause = ""
+    if not force_send:
+        cadence_clause = """
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'nourish_evening_diary_8pm'
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
+        )
+        """
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE u.nourish_enabled = TRUE
+          AND (
+              h.subscription_status IN ('premium', 'active')
+              OR (
+                  h.subscription_status = 'trial' 
+                  AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+              )
+          )
+          {hour_clause}
+          AND EXISTS (
+              SELECT 1 FROM push_subscriptions ps
+              WHERE ps.user_id = u.id
+                AND ps.is_active = TRUE
+                AND ps.permission_status = 'granted'
+          )
+          {cadence_clause}
+          AND NOT EXISTS (
+              SELECT 1 FROM nourish_food_logs nfl
+              WHERE nfl.user_id = u.id
+                AND nfl.log_date = DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+                AND LOWER(nfl.meal_slot) = 'dinner'
+          )
+        ORDER BY h.id ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_nourish_evening_diary_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Nourish evening diary pushes.")
+    results = []
+    dispatched_count = 0
+    dispatched_uids = set()
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
+
+        tz_str = cand.get("user_timezone") or "America/Chicago"
+        try:
+            summary = _run("""
+                SELECT COUNT(*) as count, COALESCE(SUM(calories), 0) as cal_sum
+                FROM nourish_food_logs
+                WHERE user_id = %s AND log_date = DATE(NOW() AT TIME ZONE %s)
+            """, (uid, tz_str))
+            count = summary[0]["count"] if summary else 0
+        except Exception:
+            count = 0
+
+        title = "📖 Wrap up today's Nourish diary"
+        if count > 0:
+            body = "Did you have dinner tonight? Log it in 30 seconds to complete today's macro tracking."
+        else:
+            body = "Don't break your streak! Take a minute to log today's meals in Nourish."
+
+        deep_link_url = "/?screen=nourish&source=push_evening_diary_8pm"
+        push_data = {
+            "action": "open_nourish",
+            "screen": "nourish",
+            "campaign": "nourish_evening_diary_8pm",
+            "source": "push_evening_diary_8pm",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'nourish_evening_diary_8pm' to User #{uid}: '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_evening_diary_8pm",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'nourish_evening_diary_8pm' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            dispatched_uids.add(uid)
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_evening_diary_8pm",
+                "title": title,
+                "body": body,
+                "status": "sent" if (sent_cnt > 0 or mock_mode) else "skipped_no_tokens",
+                "result": res
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to send 'nourish_evening_diary_8pm' to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_evening_diary_8pm",
+                "status": "error",
+                "error": str(dispatch_err)
+            })
+
+    return {
+        "ok": True,
+        "candidates": len(candidates),
+        "dispatched": dispatched_count,
+        "results": results
+    }
+
+
+def check_nourish_afternoon_hydration_pushes(target_hour: int = 15, dry_run: bool = False, force_send: bool = False):
+    """
+    3:00 PM Local Time Afternoon Hydration Push Reminder (Issue #693)
+
+    Alerts Nourish users to stay hydrated and hit their daily water target.
+    """
+    _init_schema()
+    print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Checking Nourish afternoon hydration push reminders (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    params = {}
+    if not force_send and target_hour is not None:
+        hour_clause = "AND EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = %(target_hour)s"
+        params["target_hour"] = int(target_hour)
+
+    cadence_clause = ""
+    if not force_send:
+        cadence_clause = """
+        AND NOT EXISTS (
+            SELECT 1 FROM push_notifications_log pnl
+            WHERE pnl.target_type = 'user'
+              AND pnl.target_id = u.id
+              AND pnl.custom_data->>'campaign' = 'nourish_afternoon_hydration_3pm'
+              AND (
+                  pnl.created_at >= NOW() - INTERVAL '20 hours'
+                  OR DATE((pnl.created_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) = 
+                     DATE(NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))
+              )
+        )
+        """
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(HOUR FROM NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago')) AS current_local_hour,
+            h.id AS household_id,
+            h.name AS household_name,
+            h.subscription_status,
+            h.is_premium
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE u.nourish_enabled = TRUE
+          AND (
+              h.subscription_status IN ('premium', 'active')
+              OR (
+                  h.subscription_status = 'trial' 
+                  AND (h.trial_ends_at IS NULL OR h.trial_ends_at >= NOW())
+              )
+          )
+          {hour_clause}
+          AND EXISTS (
+              SELECT 1 FROM push_subscriptions ps
+              WHERE ps.user_id = u.id
+                AND ps.is_active = TRUE
+                AND ps.permission_status = 'granted'
+          )
+          {cadence_clause}
+        ORDER BY h.id ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_nourish_afternoon_hydration_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for Nourish afternoon hydration pushes.")
+    results = []
+    dispatched_count = 0
+    dispatched_uids = set()
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
+
+        tz_str = cand.get("user_timezone") or "America/Chicago"
+        try:
+            bio_res = _run("""
+                SELECT b.water_ml, g.water_target_ml
+                FROM auth_users u
+                LEFT JOIN nourish_daily_biometrics b ON b.user_id = u.id AND b.log_date = DATE(NOW() AT TIME ZONE %s)
+                LEFT JOIN nourish_user_goals g ON g.user_id = u.id
+                WHERE u.id = %s
+            """, (tz_str, uid))
+            water_ml = int(bio_res[0].get("water_ml") or 0) if bio_res else 0
+            target_ml = int(bio_res[0].get("water_target_ml") or 2500) if bio_res and bio_res[0].get("water_target_ml") else 2500
+        except Exception:
+            water_ml = 0
+            target_ml = 2500
+
+        if water_ml >= target_ml and not force_send:
+            # User has already hit their water goal today
+            continue
+
+        title = "💧 Afternoon Hydration Check"
+        if water_ml > 0:
+            body = f"You're at {water_ml}ml of your {target_ml}ml daily goal. Drink a glass of water to beat the afternoon slump!"
+        else:
+            body = f"Remember to stay hydrated! Log a glass of water toward your {target_ml}ml daily goal."
+
+        deep_link_url = "/?screen=nourish&source=push_afternoon_hydration_3pm"
+        push_data = {
+            "action": "open_nourish",
+            "screen": "nourish",
+            "campaign": "nourish_afternoon_hydration_3pm",
+            "source": "push_afternoon_hydration_3pm",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "water_ml": str(water_ml),
+            "water_target_ml": str(target_ml),
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'nourish_afternoon_hydration_3pm' to User #{uid}: '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_afternoon_hydration_3pm",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'nourish_afternoon_hydration_3pm' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            dispatched_uids.add(uid)
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_afternoon_hydration_3pm",
+                "title": title,
+                "body": body,
+                "status": "sent" if (sent_cnt > 0 or mock_mode) else "skipped_no_tokens",
+                "result": res
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to send 'nourish_afternoon_hydration_3pm' to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "nourish_afternoon_hydration_3pm",
                 "status": "error",
                 "error": str(dispatch_err)
             })

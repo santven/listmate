@@ -2,7 +2,7 @@
 """ListMate — store-specific grocery list for households.
 Each household's data is completely isolated by household_id on every query.
 Uses SQLite locally; switches to PostgreSQL when DATABASE_URL is set."""
-import os, json, sys, time, re, urllib.request
+import os, json, sys, time, re, urllib.request, datetime
 from functools import wraps
 from urllib.parse import quote, urlencode
 
@@ -165,7 +165,7 @@ def _ensure_schema():
 @app.before_request
 def enforce_read_only():
     if request.method in ["POST", "PUT", "DELETE"]:
-        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path.startswith("/api/still-good") or request.path == "/api/sync":
+        if request.path.startswith("/api/list") or request.path.startswith("/api/stores") or request.path.startswith("/api/recipes") or request.path.startswith("/api/still-good") or request.path.startswith("/api/nourish") or request.path == "/api/sync":
             # Allowed for read-only: None, but wait, maybe some specific ones?
             if request.path == "/api/recipes/generate":
                 # Recipes generate might require premium entirely, but let's just guard modifications to data.
@@ -3731,6 +3731,3333 @@ def still_good_add_to_list_endpoint(item_id):
         return jsonify({"ok": False, "error": str(exc)}), 500
     finally:
         db.close()
+
+
+# ── Nourish (Personal Food Diary, Macro Tracker & Recipe Nutrition) ──
+
+NOURISH_DEFAULT_GOALS = {
+    "calories_target": 2000,
+    "protein_target_g": 130,
+    "carbs_target_g": 200,
+    "fat_target_g": 65,
+    "fiber_target_g": 30,
+    "water_target_ml": 2500,
+    "coach_token": None,
+    "coach_link_enabled": False,
+    "coach_display_alias": "",
+}
+
+
+def _serialize_nourish_row(row):
+    """Converts Decimal/date/datetime values in a DB dict row into JSON-safe Python primitives."""
+    if not row:
+        return {}
+    from decimal import Decimal
+    import datetime as _dt
+    out = {}
+    for k, v in dict(row).items():
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        elif isinstance(v, (_dt.date, _dt.datetime)):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    if "food_name" in out and "name" not in out:
+        out["name"] = out["food_name"]
+    if "name" in out and "food_name" not in out:
+        out["food_name"] = out["name"]
+    if "quantity" in out and "serving_amount" not in out:
+        out["serving_amount"] = out["quantity"]
+    if "serving_amount" in out and "quantity" not in out:
+        out["quantity"] = out["serving_amount"]
+    if "unit" in out and "serving_unit" not in out:
+        out["serving_unit"] = out["unit"]
+    if "serving_unit" in out and "unit" not in out:
+        out["unit"] = out["serving_unit"]
+    if "calories_target" in out and "calorie_target" not in out:
+        out["calorie_target"] = out["calories_target"]
+    if "calorie_target" in out and "calories_target" not in out:
+        out["calories_target"] = out["calorie_target"]
+    return out
+
+
+def _resolve_nourish_context(db):
+    """
+    Resolves authenticated user_id (`uid`) and household_id (`hhid`) for Nourish endpoints.
+    Enforces strict non-zero ID validation (Falsiness Rule) and household Premium entitlement gating.
+    Returns `(uid, hhid, error_response_tuple)`.
+    """
+    uid = authmod.get_user_id()
+    hhid = _resolve_still_good_hh(db)
+
+    if uid is None or uid == 0 or uid < 0 or hhid is None or hhid == 0 or hhid < 0:
+        return None, None, (
+            jsonify({"ok": False, "error": "Authentication required: valid user and household required"}),
+            401,
+        )
+
+    if not _can_household_access_still_good(db, hhid):
+        return int(uid), int(hhid), (
+            jsonify({
+                "ok": False,
+                "error": "Nourish requires a Premium subscription.",
+                "paywall_required": True,
+            }),
+            403,
+        )
+
+    return int(uid), int(hhid), None
+
+
+def _parse_nourish_date(raw_date):
+    import datetime as _dt
+    if not raw_date:
+        return _dt.date.today().isoformat()
+    s = str(raw_date).strip()[:10]
+    try:
+        return _dt.date.fromisoformat(s).isoformat()
+    except ValueError:
+        return None
+
+
+def _to_bool(val, default=False):
+    """
+    Canonical boolean parser for query parameters, JSON fields, and form payloads.
+    Handles booleans, integers (1/0), and strings ('true'/'false'/'1'/'0').
+    """
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    s = str(val).strip().lower()
+    if s in ("true", "1", "t", "yes", "y", "on"):
+        return True
+    if s in ("false", "0", "f", "no", "n", "off", ""):
+        return False
+    return default
+
+
+@app.route("/api/nourish/day", methods=["GET"])
+@require_user
+def nourish_day_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        log_date_str = _parse_nourish_date(request.args.get("date"))
+        if not log_date_str:
+            return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+
+        # 1. Strictly user_id-scoped food logs for the day
+        log_cur = db.execute(
+            "SELECT * FROM nourish_food_logs WHERE user_id = ? AND log_date = ?::date ORDER BY id ASC",
+            (uid, log_date_str),
+        )
+        raw_logs = (log_cur.fetchall() if log_cur else []) or []
+        logs = [_serialize_nourish_row(r) for r in raw_logs]
+
+        # 2. Strictly user_id-scoped goals (or default targets)
+        goal_cur = db.execute(
+            "SELECT * FROM nourish_user_goals WHERE user_id = ?",
+            (uid,),
+        )
+        goal_row = goal_cur.fetchone() if goal_cur else None
+        if goal_row:
+            goals = _serialize_nourish_row(goal_row)
+            for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                if goals.get(k) is None:
+                    goals[k] = default_v
+        else:
+            goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+
+        # 3. Strictly user_id-scoped daily biometrics
+        bio_cur = db.execute(
+            "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date",
+            (uid, log_date_str),
+        )
+        bio_row = bio_cur.fetchone() if bio_cur else None
+        if bio_row:
+            biometrics = _serialize_nourish_row(bio_row)
+        else:
+            biometrics = {
+                "user_id": uid,
+                "log_date": log_date_str,
+                "water_ml": 0,
+                "weight_kg": None,
+                "notes": "",
+            }
+
+        # 4. Household + Public recipes
+        rec_cur = db.execute(
+            "SELECT * FROM nourish_recipes WHERE household_id = ? OR is_public = TRUE "
+            "ORDER BY household_id IS NULL ASC, id DESC LIMIT 50",
+            (hhid,),
+        )
+        raw_recipes = (rec_cur.fetchall() if rec_cur else []) or []
+        recipes = [_serialize_nourish_row(r) for r in raw_recipes]
+
+        # 5. Compute daily totals
+        totals = {
+            "calories": round(sum(float(l.get("calories") or 0.0) for l in logs), 2),
+            "protein_g": round(sum(float(l.get("protein_g") or 0.0) for l in logs), 2),
+            "carbs_g": round(sum(float(l.get("carbs_g") or 0.0) for l in logs), 2),
+            "fat_g": round(sum(float(l.get("fat_g") or 0.0) for l in logs), 2),
+            "fiber_g": round(sum(float(l.get("fiber_g") or 0.0) for l in logs), 2),
+            "sugar_g": round(sum(float(l.get("sugar_g") or 0.0) for l in logs), 2),
+            "sodium_mg": round(sum(float(l.get("sodium_mg") or 0.0) for l in logs), 2),
+        }
+        pending_ai_count = sum(1 for l in logs if l.get("ai_enrich_status") == "pending")
+
+        # 6. Coach notes for this date & unread coach note (Issue #694)
+        coach_notes = []
+        unread_coach_note = None
+        try:
+            notes_cur = db.execute(
+                """
+                SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+                FROM nourish_coach_notes
+                WHERE user_id = ? AND log_date = ?::date
+                ORDER BY id ASC
+                """,
+                (uid, log_date_str),
+            )
+            raw_notes = (notes_cur.fetchall() if notes_cur else []) or []
+            coach_notes = [_serialize_nourish_row(r) for r in raw_notes]
+
+            unread_cur = db.execute(
+                """
+                SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+                FROM nourish_coach_notes
+                WHERE user_id = ? AND is_read = FALSE
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (uid,),
+            )
+            unread_row = unread_cur.fetchone() if unread_cur else None
+            unread_coach_note = _serialize_nourish_row(unread_row) if unread_row else None
+        except Exception as note_err:
+            print(f"[NOURISH NOTICE] Coach notes query notice: {note_err}")
+
+        return jsonify({
+            "ok": True,
+            "date": log_date_str,
+            "user_id": uid,
+            "household_id": hhid,
+            "logs": logs,
+            "totals": totals,
+            "goals": goals,
+            "biometrics": biometrics,
+            "recipes": recipes,
+            "pending_ai_count": pending_ai_count,
+            "coach_notes": coach_notes,
+            "unread_coach_note": unread_coach_note,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/day failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/logs", methods=["POST"])
+@require_user
+def nourish_create_logs_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from nourish_ai import compute_scaled_macros
+        from seed_nourish import normalize_food_name
+
+        data = request.get_json(silent=True) or {}
+        default_date = _parse_nourish_date(data.get("log_date"))
+        if not default_date:
+            return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+        raw_items = data.get("items") if isinstance(data.get("items"), list) else [data]
+        if not raw_items:
+            return jsonify({"ok": False, "error": "No food items provided"}), 400
+
+        created_logs = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                continue
+            food_name = str(entry.get("food_name") or entry.get("name") or "").strip()
+            if not food_name:
+                return jsonify({"ok": False, "error": "food_name is required"}), 400
+
+            item_date = _parse_nourish_date(entry.get("log_date") or default_date)
+            if not item_date:
+                return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+            meal_slot = str(entry.get("meal_slot") or data.get("meal_slot") or "Breakfast").strip()[:24] or "Breakfast"
+            unit = str(entry.get("unit") or entry.get("serving_unit") or "g").strip().lower()
+            default_qty = 1.0 if unit in ("serving", "servings", "piece", "cup", "bowl") else 100.0
+            raw_qty = entry.get("quantity") if entry.get("quantity") is not None else entry.get("serving_amount")
+            try:
+                quantity = float(raw_qty if raw_qty is not None else default_qty)
+                if quantity <= 0:
+                    quantity = default_qty
+            except (ValueError, TypeError):
+                quantity = default_qty
+
+            raw_cat_id = entry.get("catalog_id")
+            catalog_id = int(raw_cat_id) if (raw_cat_id is not None and str(raw_cat_id).strip().isdigit() and int(raw_cat_id) > 0) else None
+
+            raw_rec_id = entry.get("nourish_recipe_id")
+            nourish_recipe_id = int(raw_rec_id) if (raw_rec_id is not None and str(raw_rec_id).strip().isdigit() and int(raw_rec_id) > 0) else None
+
+            raw_sg_id = entry.get("still_good_item_id") if entry.get("still_good_item_id") is not None else data.get("still_good_item_id")
+            still_good_item_id = int(raw_sg_id) if (raw_sg_id is not None and str(raw_sg_id).strip().isdigit() and int(raw_sg_id) > 0) else None
+
+            notes = str(entry.get("notes") or "").strip()
+
+            matched_baseline = None
+            serving_weight_g = float(entry.get("serving_weight_g") or 100.0)
+            density_g_per_ml = 1.0
+
+            # Tier 1a: Explicit catalog_id
+            if catalog_id is not None:
+                c_cur = db.execute(
+                    "SELECT * FROM nourish_food_catalog WHERE id = ? AND (is_public = TRUE OR household_id = ?)",
+                    (catalog_id, hhid),
+                )
+                c_row = c_cur.fetchone() if c_cur else None
+                if c_row:
+                    matched_baseline = c_row
+                    serving_weight_g = float(c_row.get("serving_weight_g") or 100.0)
+                else:
+                    catalog_id = None
+
+            # Tier 1b: Explicit nourish_recipe_id
+            if matched_baseline is None and nourish_recipe_id is not None:
+                r_cur = db.execute(
+                    "SELECT * FROM nourish_recipes WHERE id = ? AND (household_id = ? OR is_public = TRUE)",
+                    (nourish_recipe_id, hhid),
+                )
+                r_row = r_cur.fetchone() if r_cur else None
+                if r_row:
+                    matched_baseline = r_row
+                    serving_weight_g = float(r_row.get("serving_weight_g") or 100.0)
+                    density_g_per_ml = float(r_row.get("density_g_per_ml") or 1.0)
+                else:
+                    nourish_recipe_id = None
+
+            # Tier 1c: Automatic normalized_name lookup in nourish_food_catalog
+            if matched_baseline is None:
+                norm_name = normalize_food_name(food_name)
+                if norm_name:
+                    n_cur = db.execute(
+                        "SELECT * FROM nourish_food_catalog "
+                        "WHERE normalized_name = ? AND (household_id = ? OR is_public = TRUE) "
+                        "ORDER BY (CASE WHEN household_id = ? THEN 0 ELSE 1 END), id ASC LIMIT 1",
+                        (norm_name, hhid, hhid),
+                    )
+                    n_row = n_cur.fetchone() if n_cur else None
+                    if n_row:
+                        matched_baseline = n_row
+                        catalog_id = int(n_row["id"])
+                        serving_weight_g = float(n_row.get("serving_weight_g") or 100.0)
+
+            try:
+                explicit_calories = float(entry.get("calories") or 0.0)
+            except (ValueError, TypeError):
+                explicit_calories = 0.0
+
+            if matched_baseline is not None:
+                scaled = compute_scaled_macros(
+                    matched_baseline,
+                    quantity,
+                    unit,
+                    serving_weight_g=serving_weight_g,
+                    density_g_per_ml=density_g_per_ml,
+                )
+                ai_enrich_status = "complete"
+                if catalog_id is not None:
+                    db.execute(
+                        "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                        (catalog_id,),
+                    )
+            elif explicit_calories > 0:
+                unit_info = compute_scaled_macros({}, quantity, unit, serving_weight_g=serving_weight_g)
+                scaled = {
+                    "quantity": unit_info["quantity"],
+                    "unit": unit_info["unit"],
+                    "gram_weight": float(entry.get("gram_weight") or unit_info["gram_weight"]),
+                    "calories": round(explicit_calories, 2),
+                    "protein_g": round(max(0.0, float(entry.get("protein_g") or 0.0)), 2),
+                    "carbs_g": round(max(0.0, float(entry.get("carbs_g") or 0.0)), 2),
+                    "fat_g": round(max(0.0, float(entry.get("fat_g") or 0.0)), 2),
+                    "fiber_g": round(max(0.0, float(entry.get("fiber_g") or 0.0)), 2),
+                    "sugar_g": round(max(0.0, float(entry.get("sugar_g") or 0.0)), 2),
+                    "sodium_mg": round(max(0.0, float(entry.get("sodium_mg") or 0.0)), 2),
+                }
+                ai_enrich_status = "manual"
+            else:
+                # Unknown food logged with 0 kcal -> mark 'pending' for hourly cron AI enrichment
+                unit_info = compute_scaled_macros({}, quantity, unit, serving_weight_g=serving_weight_g)
+                scaled = {
+                    "quantity": unit_info["quantity"],
+                    "unit": unit_info["unit"],
+                    "gram_weight": unit_info["gram_weight"],
+                    "calories": 0.0,
+                    "protein_g": 0.0,
+                    "carbs_g": 0.0,
+                    "fat_g": 0.0,
+                    "fiber_g": 0.0,
+                    "sugar_g": 0.0,
+                    "sodium_mg": 0.0,
+                }
+                ai_enrich_status = "pending"
+
+            raw_shared = (
+                entry.get("is_shared_household")
+                if entry.get("is_shared_household") is not None
+                else (
+                    entry.get("share_with_household")
+                    if entry.get("share_with_household") is not None
+                    else (
+                        data.get("is_shared_household")
+                        if data.get("is_shared_household") is not None
+                        else data.get("share_with_household")
+                    )
+                )
+            )
+            is_shared = _to_bool(raw_shared, default=False)
+
+            # Automatically save/update custom & non-baseline food items into household catalog so family can reuse:
+            if matched_baseline is None and explicit_calories > 0 and hhid is not None:
+                norm_name = normalize_food_name(food_name)
+                if norm_name:
+                    gw = float(scaled.get("gram_weight") or 100.0)
+                    cal_100 = float(entry.get("calories_per_100g") or 0.0)
+                    if cal_100 == 0.0 and gw > 0:
+                        cal_100 = round((scaled["calories"] / gw) * 100.0, 2)
+                        pro_100 = round((scaled["protein_g"] / gw) * 100.0, 2)
+                        carb_100 = round((scaled["carbs_g"] / gw) * 100.0, 2)
+                        fat_100 = round((scaled["fat_g"] / gw) * 100.0, 2)
+                        fib_100 = round((scaled["fiber_g"] / gw) * 100.0, 2)
+                    else:
+                        pro_100 = float(entry.get("protein_per_100g") or 0.0)
+                        carb_100 = float(entry.get("carbs_per_100g") or 0.0)
+                        fat_100 = float(entry.get("fat_per_100g") or 0.0)
+                        fib_100 = float(entry.get("fiber_per_100g") or 0.0)
+
+                    chk_cur = db.execute(
+                        "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?",
+                        (hhid, norm_name),
+                    )
+                    chk_row = chk_cur.fetchone() if chk_cur else None
+                    if chk_row:
+                        catalog_id = int(chk_row["id"])
+                        db.execute(
+                            "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                            (catalog_id,),
+                        )
+                    else:
+                        ins_cat_cur = db.execute(
+                            """
+                            INSERT INTO nourish_food_catalog (
+                                name, normalized_name, brand, category, source, is_public,
+                                created_by_user_id, household_id,
+                                calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                                fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                                serving_label, serving_weight_g, is_liquid, prep_state, ai_verified, usage_count
+                            ) VALUES (
+                                ?, ?, '', ?, 'household', FALSE,
+                                ?, ?,
+                                ?, ?, ?, ?,
+                                ?, ?, ?,
+                                ?, ?, FALSE, 'as_is', TRUE, 1
+                            )
+                            RETURNING id
+                            """,
+                            (
+                                food_name,
+                                norm_name,
+                                str(entry.get("category") or "Prepared Foods")[:80],
+                                uid,
+                                hhid,
+                                cal_100,
+                                pro_100,
+                                carb_100,
+                                fat_100,
+                                fib_100,
+                                float(entry.get("sugar_per_100g") or 0.0),
+                                float(entry.get("sodium_mg_per_100g") or 0.0),
+                                str(entry.get("serving_label") or f"1 serving ({int(round(serving_weight_g))}g)"),
+                                serving_weight_g,
+                            ),
+                        )
+                        ins_cat_row = ins_cat_cur.fetchone() if ins_cat_cur else None
+                        if ins_cat_row and ins_cat_row.get("id"):
+                            catalog_id = int(ins_cat_row["id"])
+
+            ins_cur = db.execute(
+                """
+                INSERT INTO nourish_food_logs (
+                    user_id, household_id, log_date, meal_slot, food_name,
+                    catalog_id, nourish_recipe_id, still_good_item_id,
+                    quantity, unit, gram_weight,
+                    calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg,
+                    ai_enrich_status, notes, is_shared_household
+                ) VALUES (
+                    ?, ?, ?::date, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?
+                )
+                RETURNING *
+                """,
+                (
+                    uid,
+                    hhid,
+                    item_date,
+                    meal_slot,
+                    food_name,
+                    catalog_id,
+                    nourish_recipe_id,
+                    still_good_item_id,
+                    scaled["quantity"],
+                    scaled["unit"],
+                    scaled["gram_weight"],
+                    scaled["calories"],
+                    scaled["protein_g"],
+                    scaled["carbs_g"],
+                    scaled["fat_g"],
+                    scaled["fiber_g"],
+                    scaled["sugar_g"],
+                    scaled["sodium_mg"],
+                    ai_enrich_status,
+                    notes,
+                    is_shared,
+                ),
+            )
+            ins_row = ins_cur.fetchone() if ins_cur else None
+            if ins_row:
+                created_logs.append(_serialize_nourish_row(ins_row))
+            else:
+                created_logs.append({
+                    "user_id": uid,
+                    "household_id": hhid,
+                    "log_date": item_date,
+                    "meal_slot": meal_slot,
+                    "food_name": food_name,
+                    "catalog_id": catalog_id,
+                    "nourish_recipe_id": nourish_recipe_id,
+                    "still_good_item_id": still_good_item_id,
+                    **scaled,
+                    "ai_enrich_status": ai_enrich_status,
+                    "notes": notes,
+                })
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "log": created_logs[0] if created_logs else None,
+            "logs": created_logs,
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/logs failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/logs/<int:log_id>", methods=["PUT", "DELETE"])
+@require_user
+def nourish_modify_log_endpoint(log_id):
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        # Strictly scoped to user_id and household_id
+        existing_cur = db.execute(
+            "SELECT * FROM nourish_food_logs WHERE id = ? AND user_id = ? AND household_id = ?",
+            (log_id, uid, hhid),
+        )
+        existing = existing_cur.fetchone() if existing_cur else None
+        if not existing:
+            return jsonify({"ok": False, "error": "Food log not found"}), 404
+
+        if request.method == "DELETE":
+            db.execute(
+                "DELETE FROM nourish_food_logs WHERE id = ? AND user_id = ? AND household_id = ?",
+                (log_id, uid, hhid),
+            )
+            db.commit()
+            return jsonify({"ok": True, "deleted_id": log_id})
+
+        from nourish_ai import compute_scaled_macros
+
+        data = request.get_json(silent=True) or {}
+        new_food_name = str(data.get("food_name") or existing.get("food_name") or "").strip()
+        new_meal_slot = str(data.get("meal_slot") or existing.get("meal_slot") or "Breakfast").strip()[:24]
+        new_notes = str(data.get("notes") if "notes" in data else (existing.get("notes") or "")).strip()
+
+        new_unit = str(data.get("unit") or data.get("serving_unit") or existing.get("unit") or "g").strip().lower()
+        raw_qty = data.get("quantity") if "quantity" in data else data.get("serving_amount")
+        try:
+            new_quantity = float(raw_qty if raw_qty is not None else existing.get("quantity") or 100.0)
+            if new_quantity <= 0:
+                new_quantity = float(existing.get("quantity") or 100.0)
+        except (ValueError, TypeError):
+            new_quantity = float(existing.get("quantity") or 100.0)
+
+        qty_or_unit_changed = (
+            ("quantity" in data or "serving_amount" in data or "unit" in data or "serving_unit" in data)
+            and "calories" not in data
+        )
+
+        if "calories" in data and not qty_or_unit_changed:
+            unit_info = compute_scaled_macros({}, new_quantity, new_unit)
+            scaled = {
+                "quantity": unit_info["quantity"],
+                "unit": unit_info["unit"],
+                "gram_weight": float(data.get("gram_weight") or unit_info["gram_weight"]),
+                "calories": round(max(0.0, float(data.get("calories") or 0.0)), 2),
+                "protein_g": round(max(0.0, float(data.get("protein_g", existing.get("protein_g")) or 0.0)), 2),
+                "carbs_g": round(max(0.0, float(data.get("carbs_g", existing.get("carbs_g")) or 0.0)), 2),
+                "fat_g": round(max(0.0, float(data.get("fat_g", existing.get("fat_g")) or 0.0)), 2),
+                "fiber_g": round(max(0.0, float(data.get("fiber_g", existing.get("fiber_g")) or 0.0)), 2),
+                "sugar_g": round(max(0.0, float(data.get("sugar_g", existing.get("sugar_g")) or 0.0)), 2),
+                "sodium_mg": round(max(0.0, float(data.get("sodium_mg", existing.get("sodium_mg")) or 0.0)), 2),
+            }
+            new_status = "manual"
+        else:
+            # Rescale proportionally from linked catalog_id, nourish_recipe_id, or existing gram_weight
+            baseline = None
+            serving_weight_g = 100.0
+            density_g_per_ml = 1.0
+
+            cat_id = existing.get("catalog_id")
+            rec_id = existing.get("nourish_recipe_id")
+
+            if cat_id is not None and int(cat_id) > 0:
+                c_cur = db.execute(
+                    "SELECT * FROM nourish_food_catalog WHERE id = ? AND (is_public = TRUE OR household_id = ?)",
+                    (int(cat_id), hhid),
+                )
+                c_row = c_cur.fetchone() if c_cur else None
+                if c_row:
+                    baseline = c_row
+                    serving_weight_g = float(c_row.get("serving_weight_g") or 100.0)
+
+            if baseline is None and rec_id is not None and int(rec_id) > 0:
+                r_cur = db.execute(
+                    "SELECT * FROM nourish_recipes WHERE id = ? AND (household_id = ? OR is_public = TRUE)",
+                    (int(rec_id), hhid),
+                )
+                r_row = r_cur.fetchone() if r_cur else None
+                if r_row:
+                    baseline = r_row
+                    serving_weight_g = float(r_row.get("serving_weight_g") or 100.0)
+                    density_g_per_ml = float(r_row.get("density_g_per_ml") or 1.0)
+
+            if baseline is None:
+                old_gw = float(existing.get("gram_weight") or 100.0)
+                if old_gw <= 0:
+                    old_gw = 100.0
+                old_qty = float(existing.get("quantity") or 1.0)
+                if str(existing.get("unit") or "").lower() == "serving" and old_qty > 0:
+                    serving_weight_g = old_gw / old_qty
+                inv = 100.0 / old_gw
+                baseline = {
+                    "calories_per_100g": float(existing.get("calories") or 0.0) * inv,
+                    "protein_per_100g": float(existing.get("protein_g") or 0.0) * inv,
+                    "carbs_per_100g": float(existing.get("carbs_g") or 0.0) * inv,
+                    "fat_per_100g": float(existing.get("fat_g") or 0.0) * inv,
+                    "fiber_per_100g": float(existing.get("fiber_g") or 0.0) * inv,
+                    "sugar_per_100g": float(existing.get("sugar_g") or 0.0) * inv,
+                    "sodium_mg_per_100g": float(existing.get("sodium_mg") or 0.0) * inv,
+                }
+
+            scaled = compute_scaled_macros(
+                baseline,
+                new_quantity,
+                new_unit,
+                serving_weight_g=serving_weight_g,
+                density_g_per_ml=density_g_per_ml,
+            )
+            new_status = existing.get("ai_enrich_status") or "complete"
+
+        upd_cur = db.execute(
+            """
+            UPDATE nourish_food_logs
+            SET food_name = ?,
+                meal_slot = ?,
+                quantity = ?,
+                unit = ?,
+                gram_weight = ?,
+                calories = ?,
+                protein_g = ?,
+                carbs_g = ?,
+                fat_g = ?,
+                fiber_g = ?,
+                sugar_g = ?,
+                sodium_mg = ?,
+                ai_enrich_status = ?,
+                notes = ?,
+                updated_at = NOW()
+            WHERE id = ? AND user_id = ? AND household_id = ?
+            RETURNING *
+            """,
+            (
+                new_food_name,
+                new_meal_slot,
+                scaled["quantity"],
+                scaled["unit"],
+                scaled["gram_weight"],
+                scaled["calories"],
+                scaled["protein_g"],
+                scaled["carbs_g"],
+                scaled["fat_g"],
+                scaled["fiber_g"],
+                scaled["sugar_g"],
+                scaled["sodium_mg"],
+                new_status,
+                new_notes,
+                log_id,
+                uid,
+                hhid,
+            ),
+        )
+        upd_row = upd_cur.fetchone() if upd_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "log": _serialize_nourish_row(upd_row) if upd_row else {
+                "id": log_id,
+                "user_id": uid,
+                "food_name": new_food_name,
+                "meal_slot": new_meal_slot,
+                **scaled,
+                "ai_enrich_status": new_status,
+                "notes": new_notes,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] Modify /api/nourish/logs/{log_id} failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/biometrics", methods=["POST"])
+@require_user
+def nourish_biometrics_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        data = request.get_json(silent=True) or {}
+        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"))
+        if not log_date_str:
+            return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
+
+        existing_cur = db.execute(
+            "SELECT * FROM nourish_daily_biometrics WHERE user_id = ? AND log_date = ?::date",
+            (uid, log_date_str),
+        )
+        existing = existing_cur.fetchone() if existing_cur else None
+        curr_water = int(existing.get("water_ml") or 0) if existing else 0
+        curr_weight = existing.get("weight_kg") if existing else None
+        curr_notes = (existing.get("notes") or "") if existing else ""
+
+        if "water_ml" in data and data.get("water_ml") is not None:
+            try:
+                new_water = max(0, int(float(data.get("water_ml"))))
+            except (ValueError, TypeError):
+                new_water = curr_water
+        elif ("water_delta_ml" in data and data.get("water_delta_ml") is not None) or ("delta_water_ml" in data and data.get("delta_water_ml") is not None):
+            raw_delta = data.get("water_delta_ml") if data.get("water_delta_ml") is not None else data.get("delta_water_ml")
+            try:
+                new_water = max(0, curr_water + int(float(raw_delta)))
+            except (ValueError, TypeError):
+                new_water = curr_water
+        else:
+            new_water = curr_water
+
+        if "weight_kg" in data:
+            raw_w = data.get("weight_kg")
+            if raw_w is None or raw_w == "":
+                new_weight = None
+            else:
+                try:
+                    new_weight = round(max(1.0, float(raw_w)), 2)
+                except (ValueError, TypeError):
+                    new_weight = curr_weight
+        else:
+            new_weight = float(curr_weight) if curr_weight is not None else None
+
+        new_notes = str(data.get("notes") if "notes" in data else curr_notes).strip()
+
+        up_cur = db.execute(
+            """
+            INSERT INTO nourish_daily_biometrics (user_id, log_date, water_ml, weight_kg, notes, updated_at)
+            VALUES (?, ?::date, ?, ?, ?, NOW())
+            ON CONFLICT (user_id, log_date)
+            DO UPDATE SET
+                water_ml = EXCLUDED.water_ml,
+                weight_kg = EXCLUDED.weight_kg,
+                notes = EXCLUDED.notes,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            (uid, log_date_str, new_water, new_weight, new_notes),
+        )
+        up_row = up_cur.fetchone() if up_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "biometrics": _serialize_nourish_row(up_row) if up_row else {
+                "user_id": uid,
+                "log_date": log_date_str,
+                "water_ml": new_water,
+                "weight_kg": new_weight,
+                "notes": new_notes,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/biometrics failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/goals", methods=["GET", "POST", "PUT"])
+@require_user
+def nourish_goals_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        if request.method == "GET":
+            goal_cur = db.execute(
+                "SELECT * FROM nourish_user_goals WHERE user_id = ?",
+                (uid,),
+            )
+            goal_row = goal_cur.fetchone() if goal_cur else None
+            if goal_row:
+                goals = _serialize_nourish_row(goal_row)
+                for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                    if goals.get(k) is None:
+                        goals[k] = default_v
+            else:
+                goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+            return jsonify({"ok": True, "goals": goals})
+
+        data = request.get_json(silent=True) or {}
+        raw_cal = data.get("calories_target") if data.get("calories_target") is not None else data.get("calorie_target")
+        try:
+            cal_target = max(500, min(10000, int(float(raw_cal)))) if (raw_cal is not None and str(raw_cal).strip() != "") else 2000
+        except (ValueError, TypeError):
+            cal_target = 2000
+
+        raw_p = data.get("protein_target_g")
+        try:
+            p_target = max(0, min(500, int(float(raw_p)))) if (raw_p is not None and str(raw_p).strip() != "") else 130
+        except (ValueError, TypeError):
+            p_target = 130
+
+        raw_c = data.get("carbs_target_g")
+        try:
+            c_target = max(0, min(800, int(float(raw_c)))) if (raw_c is not None and str(raw_c).strip() != "") else 200
+        except (ValueError, TypeError):
+            c_target = 200
+
+        raw_f = data.get("fat_target_g")
+        try:
+            f_target = max(0, min(300, int(float(raw_f)))) if (raw_f is not None and str(raw_f).strip() != "") else 65
+        except (ValueError, TypeError):
+            f_target = 65
+
+        raw_fib = data.get("fiber_target_g")
+        try:
+            fib_target = max(0, min(150, int(float(raw_fib)))) if (raw_fib is not None and str(raw_fib).strip() != "") else 30
+        except (ValueError, TypeError):
+            fib_target = 30
+
+        raw_w = data.get("water_target_ml")
+        try:
+            w_target = max(500, min(10000, int(float(raw_w)))) if (raw_w is not None and str(raw_w).strip() != "") else 2500
+        except (ValueError, TypeError):
+            w_target = 2500
+
+        # Check existing goals row for coach fields
+        exist_cur = db.execute("SELECT coach_token, coach_link_enabled, coach_display_alias FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        exist_row = exist_cur.fetchone() if exist_cur else None
+
+        coach_link_enabled = None
+        if "coach_link_enabled" in data:
+            coach_link_enabled = _to_bool(data.get("coach_link_enabled"))
+        elif exist_row:
+            coach_link_enabled = bool(exist_row.get("coach_link_enabled"))
+        else:
+            coach_link_enabled = False
+
+        coach_display_alias = None
+        if "coach_display_alias" in data:
+            coach_display_alias = str(data.get("coach_display_alias") or "").strip()[:64]
+        elif exist_row:
+            coach_display_alias = exist_row.get("coach_display_alias") or ""
+        else:
+            coach_display_alias = ""
+
+        reset_token = _to_bool(data.get("reset_coach_token"))
+        existing_token = exist_row.get("coach_token") if exist_row else None
+
+        import secrets
+        if reset_token or (coach_link_enabled and not existing_token):
+            coach_token = secrets.token_urlsafe(16)
+        else:
+            coach_token = existing_token
+
+        up_cur = db.execute(
+            """
+            INSERT INTO nourish_user_goals (
+                user_id, calories_target, protein_target_g, carbs_target_g,
+                fat_target_g, fiber_target_g, water_target_ml,
+                coach_token, coach_link_enabled, coach_display_alias,
+                coach_created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                calories_target = EXCLUDED.calories_target,
+                protein_target_g = EXCLUDED.protein_target_g,
+                carbs_target_g = EXCLUDED.carbs_target_g,
+                fat_target_g = EXCLUDED.fat_target_g,
+                fiber_target_g = EXCLUDED.fiber_target_g,
+                water_target_ml = EXCLUDED.water_target_ml,
+                coach_token = EXCLUDED.coach_token,
+                coach_link_enabled = EXCLUDED.coach_link_enabled,
+                coach_display_alias = EXCLUDED.coach_display_alias,
+                coach_created_at = COALESCE(nourish_user_goals.coach_created_at, NOW()),
+                updated_at = NOW()
+            RETURNING *
+            """,
+            (uid, cal_target, p_target, c_target, f_target, fib_target, w_target, coach_token, coach_link_enabled, coach_display_alias),
+        )
+        up_row = up_cur.fetchone() if up_cur else None
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "goals": _serialize_nourish_row(up_row) if up_row else {
+                "user_id": uid,
+                "calories_target": cal_target,
+                "calorie_target": cal_target,
+                "protein_target_g": p_target,
+                "carbs_target_g": c_target,
+                "fat_target_g": f_target,
+                "fiber_target_g": fib_target,
+                "water_target_ml": w_target,
+                "coach_token": coach_token,
+                "coach_link_enabled": coach_link_enabled,
+                "coach_display_alias": coach_display_alias,
+            },
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] /api/nourish/goals failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/catalog/search", methods=["GET"])
+@require_user
+def nourish_catalog_search_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from seed_nourish import normalize_food_name
+        from nourish_ai import search_public_nutrition_apis
+
+        q = (request.args.get("q") or "").strip()
+        include_external = str(request.args.get("include_external") or "").strip().lower() in ("1", "true", "yes")
+
+        if not q:
+            cat_cur = db.execute(
+                "SELECT * FROM nourish_food_catalog WHERE is_public = TRUE OR household_id = ? "
+                "ORDER BY usage_count DESC, id ASC LIMIT 25",
+                (hhid,),
+            )
+            rec_cur = db.execute(
+                "SELECT * FROM nourish_recipes WHERE household_id = ? OR is_public = TRUE "
+                "ORDER BY household_id IS NULL ASC, id DESC LIMIT 10",
+                (hhid,),
+            )
+            foods = [_serialize_nourish_row(r) for r in ((cat_cur.fetchall() if cat_cur else []) or [])]
+            recipes = [_serialize_nourish_row(r) for r in ((rec_cur.fetchall() if rec_cur else []) or [])]
+            return jsonify({"ok": True, "foods": foods, "recipes": recipes, "results": foods})
+
+        norm_q = normalize_food_name(q)
+        like_pattern = f"%{norm_q}%"
+
+        cat_cur = db.execute(
+            "SELECT * FROM nourish_food_catalog "
+            "WHERE (is_public = TRUE OR household_id = ?) "
+            "  AND (LOWER(name) LIKE ? OR normalized_name LIKE ?) "
+            "ORDER BY (CASE WHEN normalized_name = ? THEN 0 WHEN normalized_name LIKE ? THEN 1 ELSE 2 END), "
+            "usage_count DESC, id ASC LIMIT 25",
+            (hhid, like_pattern, like_pattern, norm_q, f"{norm_q}%"),
+        )
+        foods = [_serialize_nourish_row(r) for r in ((cat_cur.fetchall() if cat_cur else []) or [])]
+
+        rec_cur = db.execute(
+            "SELECT * FROM nourish_recipes "
+            "WHERE (household_id = ? OR is_public = TRUE) AND LOWER(name) LIKE ? "
+            "ORDER BY household_id IS NULL ASC, id DESC LIMIT 10",
+            (hhid, like_pattern),
+        )
+        recipes = [_serialize_nourish_row(r) for r in ((rec_cur.fetchall() if rec_cur else []) or [])]
+
+        if len(foods) < 3 and include_external and len(norm_q) >= 2:
+            ext_hits = search_public_nutrition_apis(q)
+            seen_norms = {f.get("normalized_name") for f in foods}
+            for hit in ext_hits:
+                h_norm = hit.get("normalized_name")
+                if not h_norm or h_norm in seen_norms:
+                    continue
+                seen_norms.add(h_norm)
+                ins_cur = db.execute(
+                    """
+                    INSERT INTO nourish_food_catalog (
+                        name, normalized_name, brand, category, source, is_public,
+                        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                        fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                        serving_label, serving_weight_g, is_liquid, prep_state, ai_verified
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, TRUE,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, FALSE, 'as_is', TRUE
+                    )
+                    ON CONFLICT (normalized_name) WHERE is_public = TRUE
+                    DO UPDATE SET updated_at = NOW()
+                    RETURNING *
+                    """,
+                    (
+                        hit["name"],
+                        h_norm,
+                        hit.get("brand", ""),
+                        hit.get("category", "Packaged Foods"),
+                        hit.get("source", "openfoodfacts"),
+                        hit["calories_per_100g"],
+                        hit["protein_per_100g"],
+                        hit["carbs_per_100g"],
+                        hit["fat_per_100g"],
+                        hit["fiber_per_100g"],
+                        hit["sugar_per_100g"],
+                        hit["sodium_mg_per_100g"],
+                        hit.get("serving_label", "1 serving (100g)"),
+                        hit.get("serving_weight_g", 100.0),
+                    ),
+                )
+                cached_row = ins_cur.fetchone() if ins_cur else None
+                foods.append(_serialize_nourish_row(cached_row) if cached_row else hit)
+            db.commit()
+
+        return jsonify({"ok": True, "foods": foods, "recipes": recipes, "results": foods})
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/catalog/search failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/analyze-meal", methods=["POST"])
+@require_user
+def nourish_analyze_meal_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        data = request.get_json(silent=True) or {}
+        text = str(data.get("text") or data.get("description") or data.get("meal") or "").strip()
+        if not text:
+            return jsonify({"ok": False, "error": "Meal description text is required"}), 400
+
+        try:
+            limit = int(os.environ.get("NOURISH_AI_DAILY_LIMIT", "10"))
+        except (ValueError, TypeError):
+            limit = 10
+
+        # Check user's daily usage count for today
+        usage_cur = db.execute(
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
+            (uid,),
+        )
+        usage_row = usage_cur.fetchone() if usage_cur else None
+        curr_count = int(usage_row.get("request_count") or 0) if usage_row else 0
+
+        if curr_count >= limit:
+            return jsonify({
+                "ok": False,
+                "error": f"Daily AI evaluation limit reached ({limit}/day). You can still log foods manually and AI will enrich them in the background.",
+                "limit_reached": True,
+                "daily_limit": limit,
+            }), 429
+
+        from nourish_ai import analyze_natural_language_meal
+
+        analysis = analyze_natural_language_meal(text)
+
+        # Record / increment count in nourish_ai_usage
+        inc_cur = db.execute(
+            """
+            INSERT INTO nourish_ai_usage (user_id, usage_date, request_count, updated_at)
+            VALUES (?, CURRENT_DATE, 1, NOW())
+            ON CONFLICT (user_id, usage_date)
+            DO UPDATE SET request_count = nourish_ai_usage.request_count + 1, updated_at = NOW()
+            RETURNING request_count
+            """,
+            (uid,),
+        )
+        inc_row = inc_cur.fetchone() if inc_cur else None
+        new_count = int(inc_row.get("request_count") or (curr_count + 1)) if inc_row else (curr_count + 1)
+        db.commit()
+
+        remaining_today = max(0, limit - new_count)
+        return jsonify({
+            "ok": True,
+            "remaining_today": remaining_today,
+            **analysis,
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/analyze-meal failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/recipes/analyze", methods=["POST"])
+@require_user
+def nourish_analyze_recipe_endpoint():
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from nourish_ai import analyze_recipe_nutrition
+
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name") or data.get("title") or "Custom Recipe").strip()
+        raw_ingredients = str(data.get("raw_ingredients_text") or data.get("ingredients") or "").strip()
+        if not raw_ingredients:
+            return jsonify({"ok": False, "error": "raw_ingredients_text is required"}), 400
+
+        try:
+            servings = max(1.0, float(data.get("servings") or 4.0))
+        except (ValueError, TypeError):
+            servings = 4.0
+
+        recipe_calc = analyze_recipe_nutrition(name, servings, raw_ingredients)
+
+        if data.get("save"):
+            linked_id = data.get("linked_recipe_id")
+            linked_recipe_id = int(linked_id) if (linked_id is not None and str(linked_id).strip().isdigit() and int(linked_id) > 0) else None
+            ins_cur = db.execute(
+                """
+                INSERT INTO nourish_recipes (
+                    household_id, created_by_user_id, linked_recipe_id, name,
+                    servings, total_cooked_weight_g, total_volume_ml, density_g_per_ml,
+                    serving_weight_g, raw_ingredients_text, ingredients_json,
+                    calories_per_serving, protein_per_serving, carbs_per_serving, fat_per_serving,
+                    fiber_per_serving, sugar_per_serving, sodium_mg_per_serving,
+                    calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g,
+                    ai_notes, is_public
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?::jsonb,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, FALSE
+                )
+                RETURNING id
+                """,
+                (
+                    hhid,
+                    uid,
+                    linked_recipe_id,
+                    recipe_calc["name"],
+                    recipe_calc["servings"],
+                    recipe_calc["total_cooked_weight_g"],
+                    recipe_calc["total_volume_ml"],
+                    recipe_calc["density_g_per_ml"],
+                    recipe_calc["serving_weight_g"],
+                    recipe_calc["raw_ingredients_text"],
+                    json.dumps(recipe_calc["ingredients_json"]),
+                    recipe_calc["calories_per_serving"],
+                    recipe_calc["protein_per_serving"],
+                    recipe_calc["carbs_per_serving"],
+                    recipe_calc["fat_per_serving"],
+                    recipe_calc["fiber_per_serving"],
+                    recipe_calc["sugar_per_serving"],
+                    recipe_calc["sodium_mg_per_serving"],
+                    recipe_calc["calories_per_100g"],
+                    recipe_calc["protein_per_100g"],
+                    recipe_calc["carbs_per_100g"],
+                    recipe_calc["fat_per_100g"],
+                    recipe_calc["fiber_per_100g"],
+                    recipe_calc["ai_notes"],
+                ),
+            )
+            ins_row = ins_cur.fetchone() if ins_cur else None
+            if ins_row and ins_row.get("id"):
+                recipe_calc["id"] = int(ins_row["id"])
+            db.commit()
+
+        return jsonify({"ok": True, "recipe": recipe_calc})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/recipes/analyze failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/user/nourish-enabled", methods=["GET", "POST"])
+@app.route("/api/nourish/user/nourish-enabled", methods=["GET", "POST"])
+@require_user
+def api_user_nourish_enabled():
+    db = get_db()
+    try:
+        uid = authmod.get_user_id()
+        if uid is None or uid <= 0:
+            return jsonify({"ok": False, "error": "Authentication required"}), 401
+
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            enabled = _to_bool(data.get("enabled"), False)
+            db.execute("UPDATE auth_users SET nourish_enabled = ? WHERE id = ?", (enabled, uid))
+            db.commit()
+            return jsonify({"ok": True, "enabled": enabled})
+        else:
+            cur = db.execute("SELECT nourish_enabled FROM auth_users WHERE id = ?", (uid,))
+            row = cur.fetchone() if cur else None
+            enabled = bool(row and row.get("nourish_enabled"))
+            return jsonify({"ok": True, "enabled": enabled})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] /api/user/nourish-enabled failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+_last_nourish_shared_push = {}
+
+
+@app.route("/api/nourish/meals/share", methods=["POST"])
+@require_user
+def api_nourish_share_meal():
+    """
+    Opt-in sharing for an entire meal slot logged by user.
+    Marks entries as is_shared_household = TRUE and auto-catalogs
+    unregistered items for the household so family members can search & reuse them.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        from seed_nourish import normalize_food_name
+
+        data = request.get_json(silent=True) or {}
+        raw_date = data.get("date")
+        if raw_date:
+            date_str = _parse_nourish_date(raw_date)
+            if not date_str:
+                return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+        else:
+            date_str = datetime.date.today().isoformat()
+        meal_slot = str(data.get("meal_slot") or "Dinner").strip()
+
+        up_cur = db.execute(
+            """
+            UPDATE nourish_food_logs
+            SET is_shared_household = TRUE
+            WHERE user_id = ? AND household_id = ? AND log_date = ?::date AND LOWER(meal_slot) = LOWER(?)
+            RETURNING *
+            """,
+            (uid, hhid, date_str, meal_slot),
+        )
+        updated_rows = up_cur.fetchall() if up_cur else []
+
+        for row in updated_rows:
+            f_name = row.get("food_name") or ""
+            norm_name = normalize_food_name(f_name)
+            if not norm_name or row.get("catalog_id") is not None:
+                continue
+
+            cal = float(row.get("calories") or 0.0)
+            gw = float(row.get("gram_weight") or 100.0)
+            if cal <= 0 or gw <= 0:
+                continue
+
+            cal_100 = round((cal / gw) * 100.0, 2)
+            pro_100 = round((float(row.get("protein_g") or 0.0) / gw) * 100.0, 2)
+            carb_100 = round((float(row.get("carbs_g") or 0.0) / gw) * 100.0, 2)
+            fat_100 = round((float(row.get("fat_g") or 0.0) / gw) * 100.0, 2)
+            fib_100 = round((float(row.get("fiber_g") or 0.0) / gw) * 100.0, 2)
+
+            chk_cur = db.execute(
+                "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?",
+                (hhid, norm_name),
+            )
+            chk_row = chk_cur.fetchone() if chk_cur else None
+            if chk_row:
+                new_cat_id = int(chk_row["id"])
+                db.execute(
+                    "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
+                    (new_cat_id,),
+                )
+            else:
+                ins_cat_cur = db.execute(
+                    """
+                    INSERT INTO nourish_food_catalog (
+                        name, normalized_name, brand, category, source, is_public,
+                        created_by_user_id, household_id,
+                        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                        fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                        serving_label, serving_weight_g, is_liquid, prep_state, ai_verified, usage_count
+                    ) VALUES (
+                        ?, ?, '', ?, 'household', FALSE,
+                        ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?, FALSE, 'as_is', TRUE, 1
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        f_name,
+                        norm_name,
+                        str(row.get("category") or "Prepared Foods")[:80],
+                        uid,
+                        hhid,
+                        cal_100,
+                        pro_100,
+                        carb_100,
+                        fat_100,
+                        fib_100,
+                        float(row.get("sugar_g") or 0.0),
+                        float(row.get("sodium_mg") or 0.0),
+                        f"1 serving ({int(round(gw))}g)",
+                        gw,
+                    ),
+                )
+                ins_cat_row = ins_cat_cur.fetchone() if ins_cat_cur else None
+                new_cat_id = int(ins_cat_row["id"]) if ins_cat_row and ins_cat_row.get("id") else None
+
+            if new_cat_id:
+                db.execute(
+                    "UPDATE nourish_food_logs SET catalog_id = ? WHERE id = ? AND household_id = ? AND user_id = ?",
+                    (new_cat_id, row["id"], hhid, uid),
+                )
+
+        db.commit()
+
+        # Trigger household push notification for members with nourish_enabled = TRUE (Issue #687)
+        if updated_rows:
+            try:
+                push_key = (int(hhid), str(date_str), meal_slot.lower())
+                now = time.time()
+                if now - _last_nourish_shared_push.get(push_key, 0) >= 600.0:
+                    _last_nourish_shared_push[push_key] = now
+
+                    actor_name = None
+                    try:
+                        u_cur = db.execute("SELECT name FROM auth_users WHERE id = ?", (uid,))
+                        u_row = u_cur.fetchone() if u_cur else None
+                        if u_row and u_row.get("name"):
+                            actor_name = u_row.get("name")
+                    except Exception:
+                        pass
+                    if not actor_name:
+                        actor_name = authmod.get_display_name() or "A family member"
+
+                    food_names = [
+                        str(r.get("food_name") or "").strip()
+                        for r in updated_rows
+                        if r.get("food_name") and str(r.get("food_name")).strip()
+                    ]
+                    if len(food_names) == 0:
+                        summary_foods = "A home-cooked meal"
+                    elif len(food_names) == 1:
+                        summary_foods = food_names[0]
+                    elif len(food_names) == 2:
+                        summary_foods = f"{food_names[0]} & {food_names[1]}"
+                    elif len(food_names) == 3:
+                        summary_foods = f"{food_names[0]}, {food_names[1]} & {food_names[2]}"
+                    else:
+                        summary_foods = f"{food_names[0]}, {food_names[1]} & {len(food_names) - 2} other items"
+
+                    push_title = f"🍽️ {meal_slot.capitalize()} logged by {actor_name}"
+                    push_body = f"{summary_foods}. Did you eat this too? Tap to log in 1 tap."
+                    payload = {
+                        "action": "open_nourish",
+                        "screen": "nourish",
+                        "date": str(date_str),
+                        "slot": str(meal_slot),
+                    }
+
+                    import push_helper
+                    push_helper.send_push_to_household_nourish(
+                        household_id=hhid,
+                        title=push_title,
+                        body=push_body,
+                        data=payload,
+                        exclude_user_id=uid,
+                    )
+            except Exception as push_err:
+                print(f"[NOURISH PUSH ERROR] Failed to send shared meal push: {push_err}", flush=True)
+
+        return jsonify({"ok": True, "shared_count": len(updated_rows)})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/meals/share failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/household/shared-meals", methods=["GET"])
+@require_user
+def api_nourish_household_shared_meals():
+    """
+    Returns meals shared with the household by other members today.
+    If the current user has Nourish disabled, returns empty so no bottom drawer is shown.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        # Check if current user has nourish enabled
+        u_cur = db.execute("SELECT nourish_enabled FROM auth_users WHERE id = ?", (uid,))
+        u_row = u_cur.fetchone() if u_cur else None
+        if not bool(u_row and u_row.get("nourish_enabled")):
+            return jsonify({"ok": True, "shared_meals": []})
+
+        raw_date = request.args.get("date")
+        if raw_date:
+            date_str = _parse_nourish_date(raw_date)
+            if not date_str:
+                return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
+        else:
+            date_str = datetime.date.today().isoformat()
+
+        cur = db.execute(
+            """
+            SELECT l.*, u.name as user_name
+            FROM nourish_food_logs l
+            JOIN auth_users u ON l.user_id = u.id
+            WHERE l.household_id = ? AND l.user_id != ? AND l.log_date = ?::date AND l.is_shared_household = TRUE
+            ORDER BY l.id ASC
+            """,
+            (hhid, uid, date_str),
+        )
+        rows = cur.fetchall() if cur else []
+
+        meals_by_slot = {}
+        for r in rows:
+            slot = r.get("meal_slot") or "Dinner"
+            user_name = r.get("user_name") or "A family member"
+            slot_key = f"{slot}_{r.get('user_id')}"
+            if slot_key not in meals_by_slot:
+                meals_by_slot[slot_key] = {
+                    "meal_slot": slot,
+                    "shared_by_user_id": r.get("user_id"),
+                    "shared_by_name": user_name,
+                    "log_date": date_str,
+                    "items": []
+                }
+            meals_by_slot[slot_key]["items"].append(_serialize_nourish_row(r))
+
+        return jsonify({"ok": True, "shared_meals": list(meals_by_slot.values())})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] GET /api/nourish/household/shared-meals failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ── Nourish Trends & Coach Link Portal (Issues #692, #694) ──
+
+@app.route("/api/nourish/analytics", methods=["GET"])
+@require_user
+def api_nourish_analytics():
+    """
+    Issue #692: Macro Trends & Analytics endpoint.
+    Aggregates user's daily food logs and biometrics over the requested days window (default 7, max 90).
+    Computes daily totals, rolling averages, macro distribution split, and goal adherence.
+    """
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        raw_days = request.args.get("days", "7")
+        try:
+            days = int(raw_days)
+            if days < 1:
+                days = 7
+            elif days > 90:
+                days = 90
+        except (ValueError, TypeError):
+            days = 7
+
+        raw_end = request.args.get("end_date")
+        if raw_end:
+            end_date_str = _parse_nourish_date(raw_end)
+            if not end_date_str:
+                return jsonify({"ok": False, "error": "Invalid end_date format. Expected YYYY-MM-DD."}), 400
+        else:
+            end_date_str = datetime.date.today().isoformat()
+
+        end_d = datetime.date.fromisoformat(end_date_str)
+        start_d = end_d - datetime.timedelta(days=days - 1)
+        start_date_str = start_d.isoformat()
+
+        # 1. Strictly user_id and household_id-scoped food logs
+        log_cur = db.execute(
+            """
+            SELECT log_date, calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg
+            FROM nourish_food_logs
+            WHERE user_id = ? AND household_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date ASC
+            """,
+            (uid, hhid, start_date_str, end_date_str),
+        )
+        log_rows = log_cur.fetchall() if log_cur else []
+
+        # 2. Strictly user_id-scoped biometrics
+        bio_cur = db.execute(
+            """
+            SELECT log_date, water_ml, weight_kg
+            FROM nourish_daily_biometrics
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date ASC
+            """,
+            (uid, start_date_str, end_date_str),
+        )
+        bio_rows = bio_cur.fetchall() if bio_cur else []
+
+        # 3. User goals
+        goal_cur = db.execute("SELECT * FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        goal_row = goal_cur.fetchone() if goal_cur else None
+        if goal_row:
+            goals = _serialize_nourish_row(goal_row)
+            for k, default_v in NOURISH_DEFAULT_GOALS.items():
+                if goals.get(k) is None:
+                    goals[k] = default_v
+        else:
+            goals = {"user_id": uid, **NOURISH_DEFAULT_GOALS}
+
+        # 4. Map daily entries
+        daily_map = {}
+        curr = start_d
+        while curr <= end_d:
+            d_str = curr.isoformat()
+            daily_map[d_str] = {
+                "date": d_str,
+                "calories": 0.0,
+                "protein_g": 0.0,
+                "carbs_g": 0.0,
+                "fat_g": 0.0,
+                "fiber_g": 0.0,
+                "sugar_g": 0.0,
+                "sodium_mg": 0.0,
+                "water_ml": 0,
+                "weight_kg": None,
+                "logged_meals_count": 0,
+            }
+            curr += datetime.timedelta(days=1)
+
+        for r in log_rows:
+            ld = str(r["log_date"])[:10]
+            if ld in daily_map:
+                d = daily_map[ld]
+                d["calories"] += float(r.get("calories") or 0.0)
+                d["protein_g"] += float(r.get("protein_g") or 0.0)
+                d["carbs_g"] += float(r.get("carbs_g") or 0.0)
+                d["fat_g"] += float(r.get("fat_g") or 0.0)
+                d["fiber_g"] += float(r.get("fiber_g") or 0.0)
+                d["sugar_g"] += float(r.get("sugar_g") or 0.0)
+                d["sodium_mg"] += float(r.get("sodium_mg") or 0.0)
+                d["logged_meals_count"] += 1
+
+        for r in bio_rows:
+            ld = str(r["log_date"])[:10]
+            if ld in daily_map:
+                d = daily_map[ld]
+                d["water_ml"] = int(r.get("water_ml") or 0)
+                if r.get("weight_kg") is not None:
+                    d["weight_kg"] = float(r["weight_kg"])
+
+        for d in daily_map.values():
+            d["calories"] = round(d["calories"], 1)
+            d["protein_g"] = round(d["protein_g"], 1)
+            d["carbs_g"] = round(d["carbs_g"], 1)
+            d["fat_g"] = round(d["fat_g"], 1)
+            d["fiber_g"] = round(d["fiber_g"], 1)
+            d["sugar_g"] = round(d["sugar_g"], 1)
+            d["sodium_mg"] = round(d["sodium_mg"], 1)
+
+        daily_list = [daily_map[k] for k in sorted(daily_map.keys())]
+
+        # 5. Averages & Adherence
+        logged_days = [d for d in daily_list if d["logged_meals_count"] > 0 or d["water_ml"] > 0]
+        num_logged = len(logged_days)
+
+        if num_logged > 0:
+            avg_calories = round(sum(d["calories"] for d in logged_days) / num_logged, 1)
+            avg_protein = round(sum(d["protein_g"] for d in logged_days) / num_logged, 1)
+            avg_carbs = round(sum(d["carbs_g"] for d in logged_days) / num_logged, 1)
+            avg_fat = round(sum(d["fat_g"] for d in logged_days) / num_logged, 1)
+            avg_fiber = round(sum(d["fiber_g"] for d in logged_days) / num_logged, 1)
+            avg_water = round(sum(d["water_ml"] for d in logged_days) / num_logged, 0)
+        else:
+            avg_calories = avg_protein = avg_carbs = avg_fat = avg_fiber = avg_water = 0.0
+
+        total_p_kcal = sum(d["protein_g"] * 4.0 for d in daily_list)
+        total_c_kcal = sum(d["carbs_g"] * 4.0 for d in daily_list)
+        total_f_kcal = sum(d["fat_g"] * 9.0 for d in daily_list)
+        total_macro_kcal = total_p_kcal + total_c_kcal + total_f_kcal
+
+        if total_macro_kcal > 0:
+            macro_split = {
+                "protein_pct": round((total_p_kcal / total_macro_kcal) * 100.0, 1),
+                "carbs_pct": round((total_c_kcal / total_macro_kcal) * 100.0, 1),
+                "fat_pct": round((total_f_kcal / total_macro_kcal) * 100.0, 1),
+            }
+        else:
+            macro_split = {"protein_pct": 0.0, "carbs_pct": 0.0, "fat_pct": 0.0}
+
+        cal_target = float(goals.get("calories_target") or 2000)
+        p_target = float(goals.get("protein_target_g") or 130)
+        w_target = float(goals.get("water_target_ml") or 2500)
+
+        days_meeting_cal = sum(1 for d in logged_days if 0.85 * cal_target <= d["calories"] <= 1.15 * cal_target)
+        days_meeting_p = sum(1 for d in logged_days if d["protein_g"] >= 0.85 * p_target)
+        days_meeting_w = sum(1 for d in logged_days if d["water_ml"] >= 0.85 * w_target)
+
+        adherence = {
+            "days_logged": num_logged,
+            "total_days": days,
+            "calories_hit_count": days_meeting_cal,
+            "calories_adherence_pct": round((days_meeting_cal / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+            "protein_hit_count": days_meeting_p,
+            "protein_adherence_pct": round((days_meeting_p / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+            "water_hit_count": days_meeting_w,
+            "water_adherence_pct": round((days_meeting_w / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
+        }
+
+        return jsonify({
+            "ok": True,
+            "days": days,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "daily": daily_list,
+            "averages": {
+                "calories": avg_calories,
+                "protein_g": avg_protein,
+                "carbs_g": avg_carbs,
+                "fat_g": avg_fat,
+                "fiber_g": avg_fiber,
+                "water_ml": int(avg_water),
+                "days_logged": num_logged,
+            },
+            "macro_split": macro_split,
+            "goals": goals,
+            "adherence": adherence,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/analytics failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/link", methods=["POST"])
+@require_user
+def api_nourish_coach_link():
+    """
+    Issue #694: Generates or updates the user's Coach Link token, status, and display alias.
+    """
+    import secrets
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        data = request.get_json(silent=True) or {}
+        enabled = data.get("enabled")
+        alias = str(data.get("alias") or "").strip()[:64] if data.get("alias") is not None else None
+        regenerate = bool(data.get("regenerate"))
+
+        cur = db.execute("SELECT * FROM nourish_user_goals WHERE user_id = ?", (uid,))
+        row = cur.fetchone() if cur else None
+
+        if not row:
+            token = secrets.token_urlsafe(16)
+            is_enabled = bool(enabled) if enabled is not None else True
+            disp_alias = alias or ""
+            db.execute(
+                """
+                INSERT INTO nourish_user_goals (
+                    user_id, coach_token, coach_link_enabled, coach_display_alias, coach_created_at, updated_at
+                ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                """,
+                (uid, token, is_enabled, disp_alias),
+            )
+        else:
+            current_token = row.get("coach_token")
+            if regenerate or not current_token:
+                token = secrets.token_urlsafe(16)
+            else:
+                token = current_token
+
+            is_enabled = bool(enabled) if enabled is not None else (bool(row.get("coach_link_enabled")) if not regenerate else True)
+            disp_alias = alias if alias is not None else (row.get("coach_display_alias") or "")
+
+            db.execute(
+                """
+                UPDATE nourish_user_goals
+                SET coach_token = ?,
+                    coach_link_enabled = ?,
+                    coach_display_alias = ?,
+                    coach_created_at = COALESCE(coach_created_at, NOW()),
+                    updated_at = NOW()
+                WHERE user_id = ?
+                """,
+                (token, is_enabled, disp_alias, uid),
+            )
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "coach_token": token,
+            "coach_link_enabled": is_enabled,
+            "coach_display_alias": disp_alias,
+            "coach_url": f"/coach/{token}",
+        })
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/link failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/view/<token>", methods=["GET"])
+def api_nourish_coach_view(token):
+    """
+    Issue #694: Token-authenticated view of client's past 14 days of diary logs and biometrics.
+    """
+    if not token or not str(token).strip():
+        return jsonify({"ok": False, "error": "Invalid token", "code": "invalid_token"}), 404
+
+    clean_token = str(token).strip()
+    db = get_db()
+    try:
+        g_cur = db.execute(
+            """
+            SELECT g.*, u.name as client_name, u.household_id
+            FROM nourish_user_goals g
+            JOIN auth_users u ON u.id = g.user_id
+            WHERE g.coach_token = ? AND g.coach_link_enabled = TRUE
+            """,
+            (clean_token,),
+        )
+        goal_row = g_cur.fetchone() if g_cur else None
+        if not goal_row:
+            return jsonify({
+                "ok": False,
+                "error": "This coach link is invalid or has been disabled by the client.",
+                "code": "invalid_token"
+            }), 404
+
+        client_uid = int(goal_row["user_id"])
+        alias = str(goal_row.get("coach_display_alias") or goal_row.get("client_name") or "Client").strip() or "Client"
+
+        goals = _serialize_nourish_row(goal_row)
+        for k, default_v in NOURISH_DEFAULT_GOALS.items():
+            if goals.get(k) is None:
+                goals[k] = default_v
+
+        # Past 14 days
+        end_d = datetime.date.today()
+        start_d = end_d - datetime.timedelta(days=13)
+        start_date_str = start_d.isoformat()
+        end_date_str = end_d.isoformat()
+
+        # Food logs
+        l_cur = db.execute(
+            """
+            SELECT * FROM nourish_food_logs
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date DESC, id ASC
+            """,
+            (client_uid, start_date_str, end_date_str),
+        )
+        raw_logs = (l_cur.fetchall() if l_cur else []) or []
+        logs = [_serialize_nourish_row(r) for r in raw_logs]
+
+        # Biometrics
+        b_cur = db.execute(
+            """
+            SELECT * FROM nourish_daily_biometrics
+            WHERE user_id = ? AND log_date BETWEEN ?::date AND ?::date
+            ORDER BY log_date DESC
+            """,
+            (client_uid, start_date_str, end_date_str),
+        )
+        raw_bios = (b_cur.fetchall() if b_cur else []) or []
+        bios = {str(b["log_date"])[:10]: _serialize_nourish_row(b) for b in raw_bios}
+
+        # Coach notes
+        n_cur = db.execute(
+            """
+            SELECT id, user_id, log_date, author_role, author_name, message, is_read, created_at
+            FROM nourish_coach_notes
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (client_uid,),
+        )
+        raw_notes = (n_cur.fetchall() if n_cur else []) or []
+        notes = [_serialize_nourish_row(r) for r in raw_notes]
+
+        # Group by day
+        days_list = []
+        curr = end_d
+        while curr >= start_d:
+            d_str = curr.isoformat()
+            day_logs = [l for l in logs if str(l.get("log_date"))[:10] == d_str]
+            day_bio = bios.get(d_str, {"water_ml": 0, "weight_kg": None, "notes": ""})
+            day_notes = [n for n in notes if str(n.get("log_date"))[:10] == d_str]
+
+            totals = {
+                "calories": round(sum(float(l.get("calories") or 0.0) for l in day_logs), 1),
+                "protein_g": round(sum(float(l.get("protein_g") or 0.0) for l in day_logs), 1),
+                "carbs_g": round(sum(float(l.get("carbs_g") or 0.0) for l in day_logs), 1),
+                "fat_g": round(sum(float(l.get("fat_g") or 0.0) for l in day_logs), 1),
+                "fiber_g": round(sum(float(l.get("fiber_g") or 0.0) for l in day_logs), 1),
+                "water_ml": int(day_bio.get("water_ml") or 0),
+                "weight_kg": float(day_bio["weight_kg"]) if day_bio.get("weight_kg") is not None else None,
+            }
+
+            days_list.append({
+                "date": d_str,
+                "totals": totals,
+                "logs": day_logs,
+                "biometrics": day_bio,
+                "notes": day_notes,
+            })
+            curr -= datetime.timedelta(days=1)
+
+        return jsonify({
+            "ok": True,
+            "client": {
+                "alias": alias,
+                "user_id": client_uid,
+            },
+            "goals": goals,
+            "days": days_list,
+            "recent_notes": notes,
+        })
+    except Exception as exc:
+        print(f"[NOURISH ERROR] GET /api/nourish/coach/view failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/notes/<token>", methods=["POST"])
+def api_nourish_coach_create_note(token):
+    """
+    Issue #694: Coach posts feedback note for client.
+    Triggers immediate push notification alert to client via push_helper.send_push_to_user().
+    """
+    if not token or not str(token).strip():
+        return jsonify({"ok": False, "error": "Invalid token"}), 404
+
+    clean_token = str(token).strip()
+    db = get_db()
+    try:
+        g_cur = db.execute(
+            """
+            SELECT g.user_id, g.coach_display_alias, u.name as client_name
+            FROM nourish_user_goals g
+            JOIN auth_users u ON u.id = g.user_id
+            WHERE g.coach_token = ? AND g.coach_link_enabled = TRUE
+            """,
+            (clean_token,),
+        )
+        client_row = g_cur.fetchone() if g_cur else None
+        if not client_row:
+            return jsonify({"ok": False, "error": "Invalid or disabled coach link", "code": "invalid_token"}), 404
+
+        client_uid = int(client_row["user_id"])
+        data = request.get_json(silent=True) or {}
+        message = str(data.get("message") or "").strip()[:1000]
+        if not message:
+            return jsonify({"ok": False, "error": "Message cannot be empty."}), 400
+
+        author_name = str(data.get("author_name") or "Coach").strip()[:64] or "Coach"
+        raw_date = data.get("log_date")
+        log_date_str = _parse_nourish_date(raw_date) if raw_date else datetime.date.today().isoformat()
+
+        ins_cur = db.execute(
+            """
+            INSERT INTO nourish_coach_notes (
+                user_id, log_date, author_role, author_name, message, is_read, created_at
+            ) VALUES (
+                ?, ?::date, 'coach', ?, ?, FALSE, NOW()
+            )
+            RETURNING id, user_id, log_date, author_role, author_name, message, is_read, created_at
+            """,
+            (client_uid, log_date_str, author_name, message),
+        )
+        note_row = ins_cur.fetchone() if ins_cur else None
+        db.commit()
+
+        note_data = _serialize_nourish_row(note_row) if note_row else {
+            "id": None,
+            "user_id": client_uid,
+            "log_date": log_date_str,
+            "author_role": "coach",
+            "author_name": author_name,
+            "message": message,
+            "is_read": False,
+        }
+
+        # Trigger immediate push notification to client
+        try:
+            import push_helper
+            push_title = f"💬 Coach Note from {author_name}"
+            push_body = message if len(message) <= 120 else (message[:117] + "...")
+            push_data = {
+                "action": "open_nourish",
+                "screen": "nourish",
+                "source": "coach_note",
+                "note_id": str(note_data.get("id") or ""),
+                "date": str(log_date_str),
+                "url": f"/?screen=nourish&date={log_date_str}",
+            }
+            push_helper.send_push_to_user(
+                user_id=client_uid,
+                title=push_title,
+                body=push_body,
+                data=push_data,
+            )
+        except Exception as push_err:
+            print(f"[NOURISH PUSH ERROR] Failed to send coach note push: {push_err}", flush=True)
+
+        return jsonify({"ok": True, "note": note_data})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/notes failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/nourish/coach/notes/<int:note_id>/ack", methods=["POST"])
+@require_user
+def api_nourish_coach_ack_note(note_id):
+    """
+    Issue #694: Marks a coach feedback note as read by the client.
+    Scoped strictly by user_id.
+    """
+    if not note_id or note_id <= 0:
+        return jsonify({"ok": False, "error": "Invalid note_id"}), 400
+
+    db = get_db()
+    try:
+        uid, hhid, err_resp = _resolve_nourish_context(db)
+        if err_resp is not None:
+            return err_resp
+
+        up_cur = db.execute(
+            """
+            UPDATE nourish_coach_notes
+            SET is_read = TRUE
+            WHERE id = ? AND user_id = ?
+            RETURNING id
+            """,
+            (note_id, uid),
+        )
+        row = up_cur.fetchone() if up_cur else None
+        if not row:
+            return jsonify({"ok": False, "error": "Note not found or already acknowledged."}), 404
+
+        db.commit()
+        return jsonify({"ok": True, "note_id": note_id, "is_read": True})
+    except Exception as exc:
+        try: db.rollback()
+        except Exception: pass
+        print(f"[NOURISH ERROR] POST /api/nourish/coach/notes/<id>/ack failed: {exc}")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/coach/<token>", methods=["GET"])
+@app.route("/coach", methods=["GET"])
+@app.route("/nourish/coach/<token>", methods=["GET"])
+@app.route("/nourish/coach", methods=["GET"])
+def coach_portal_view(token=None):
+    """
+    Issue #694 & #698: Web page for coaches to view client's past 14 days and submit feedback notes.
+    Accepts token in the path (/coach/<token>) or as query parameter (?token=... or ?t=...).
+    """
+    if not token:
+        token = request.args.get("token") or request.args.get("t") or ""
+    clean_token = str(token).strip()
+    if not clean_token:
+        return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nourish Coach Portal — Link Missing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #F8FAFC; color: #0F172A; }
+    .box { max-width: 440px; margin: 0 auto; background: white; border: 1px solid #E2E8F0; padding: 36px 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+    .badge { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; background: #FEF2F2; color: #DC2626; border-radius: 12px; font-size: 24px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="badge">⚠️</div>
+    <h2 style="color:#DC2626; margin-bottom:8px; font-size: 1.25rem;">Invalid Coach Link</h2>
+    <p style="color:#64748B; font-size: 0.95rem; line-height: 1.5;">No coach token was provided in the URL. Please verify the link provided by your client in ListMate Nourish.</p>
+  </div>
+</body>
+</html>""", 404
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Nourish Coach Portal — ListMate</title>
+  <!-- ListMate Nourish Coach Portal -->
+  <style>
+    :root {{
+      --primary: #10B981;
+      --primary-dark: #059669;
+      --primary-deep: #064E3B;
+      --primary-light: #ECFDF5;
+      --border: #E2E8F0;
+      --border-light: #F1F5F9;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --text-subtle: #94A3B8;
+      --ring: rgba(16, 185, 129, 0.25);
+      --macro-protein: #10B981;
+      --macro-carbs: #F59E0B;
+      --macro-fat: #8B5CF6;
+      --macro-water: #3B82F6;
+      --macro-cals: #F97316;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 80px;
+      -webkit-font-smoothing: antialiased;
+    }}
+    .header {{
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 14px 20px;
+    }}
+    .header-inner {{
+      max-width: 820px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }}
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }}
+    .brand-icon {{
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: white;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+      font-size: 20px;
+    }}
+    .brand-title {{
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0F172A;
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+    }}
+    .brand-sub {{
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #059669;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }}
+    .header-actions {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .badge-client {{
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      font-size: 0.82rem;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .badge-client .status-dot {{
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #10B981;
+      display: inline-block;
+    }}
+    .btn-icon {{
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }}
+    .btn-icon:hover {{
+      background: #E2E8F0;
+      color: var(--text);
+    }}
+    .container {{
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 16px 16px;
+    }}
+    .card {{
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }}
+    .card-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }}
+    .card-title {{
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .controls-bar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }}
+    .week-nav {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .btn-nav {{
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }}
+    .btn-nav:hover {{
+      background: #F1F5F9;
+      border-color: #CBD5E1;
+    }}
+    .view-toggles {{
+      display: flex;
+      background: #F1F5F9;
+      padding: 3px;
+      border-radius: 10px;
+      gap: 2px;
+    }}
+    .view-toggle-btn {{
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }}
+    .view-toggle-btn.active {{
+      background: white;
+      color: #065F46;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }}
+    .summary-pill {{
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+    .summary-pill-label {{
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }}
+    .summary-pill-val {{
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }}
+    .summary-pill-sub {{
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }}
+    .macro-bar-wrap {{
+      margin-top: 10px;
+      padding-top: 14px;
+      border-top: 1px solid #F1F5F9;
+    }}
+    .macro-split-bar {{
+      display: flex;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #E2E8F0;
+      margin-bottom: 8px;
+    }}
+    .macro-split-seg {{
+      height: 100%;
+      transition: width 0.3s ease;
+    }}
+    .macro-split-legend {{
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }}
+    .legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }}
+    .legend-dot {{
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }}
+    /* Interactive Trend Chart */
+    .chart-card {{
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }}
+    .chart-container {{
+      position: relative;
+      height: 180px;
+      padding: 26px 6px 6px 6px;
+      margin-top: 12px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }}
+    .chart-target-line {{
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 2px dashed #94A3B8;
+      pointer-events: none;
+      z-index: 1;
+    }}
+    .chart-target-badge {{
+      position: absolute;
+      right: 6px;
+      top: -18px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #475569;
+      background: #F1F5F9;
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }}
+    .chart-col {{
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      cursor: pointer;
+      z-index: 2;
+      transition: transform 0.15s ease;
+      user-select: none;
+    }}
+    .chart-col:hover {{
+      transform: translateY(-2px);
+    }}
+    .chart-val {{
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.15s;
+    }}
+    .chart-bar-wrap {{
+      width: 100%;
+      max-width: 38px;
+      height: 100px;
+      background: #F1F5F9;
+      border-radius: 8px 8px 4px 4px;
+      display: flex;
+      align-items: flex-end;
+      padding: 2px;
+      overflow: hidden;
+      border: 1.5px solid transparent;
+      transition: all 0.2s;
+    }}
+    .chart-col.active .chart-bar-wrap {{
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+      background: #ECFDF5;
+    }}
+    .chart-col.active .chart-val {{
+      color: var(--primary-dark);
+      font-weight: 800;
+    }}
+    .chart-bar {{
+      width: 100%;
+      border-radius: 6px 6px 2px 2px;
+      transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+    .chart-label {{
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-top: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }}
+    .chart-date-num {{
+      font-size: 9px;
+      color: var(--text-subtle);
+      font-weight: 600;
+    }}
+    .chart-col.active .chart-label {{
+      color: var(--primary-dark);
+      font-weight: 800;
+    }}
+    /* Day Accordion */
+    .day-card {{
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      background: var(--card-bg);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }}
+    .day-card.selected {{
+      border-color: #10B981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }}
+    .day-header {{
+      padding: 12px 16px;
+      background: #FFFFFF;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+      gap: 10px;
+    }}
+    .day-header:hover {{
+      background: #F8FAFC;
+    }}
+    .day-date-badge {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }}
+    .day-avatar {{
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #F1F5F9;
+      color: #334155;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }}
+    .day-avatar.is-today {{
+      background: #10B981;
+      color: white;
+    }}
+    .day-title {{
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .today-pill {{
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }}
+    .day-meta {{
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }}
+    .day-body {{
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-light);
+      background: #FAFAFA;
+    }}
+    .slot-block {{
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }}
+    .slot-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #334155;
+      text-transform: capitalize;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #F1F5F9;
+    }}
+    .log-item {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 0.86rem;
+      border-bottom: 1px solid #F8FAFC;
+    }}
+    .log-item:last-child {{ border-bottom: none; }}
+    .log-name {{
+      font-weight: 600;
+      color: var(--text);
+    }}
+    .log-qty {{
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin-left: 4px;
+    }}
+    .log-cals {{
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }}
+    .log-macros {{
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }}
+    .water-row {{
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.84rem;
+      color: #1E40AF;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }}
+    .notes-list {{
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }}
+    .note-bubble {{
+      background: #F0FDF4;
+      border-left: 3px solid var(--primary);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+    }}
+    .note-author {{
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #065F46;
+      margin-bottom: 2px;
+    }}
+    .note-text {{
+      color: #1F2937;
+      white-space: pre-wrap;
+    }}
+    .note-time {{
+      font-size: 0.7rem;
+      color: #059669;
+      margin-top: 4px;
+    }}
+    /* Feedback Form */
+    .feedback-form textarea {{
+      width: 100%;
+      min-height: 80px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 0.92rem;
+      resize: vertical;
+      outline: none;
+      background: #FAFAFA;
+      transition: all 0.15s;
+    }}
+    .feedback-form textarea:focus {{
+      background: white;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+    }}
+    .quick-chips {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }}
+    .quick-chip {{
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }}
+    .quick-chip:hover {{
+      background: #ECFDF5;
+      border-color: #A7F3D0;
+      color: #065F46;
+    }}
+    .form-row {{
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }}
+    .form-input {{
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+      background: #FAFAFA;
+    }}
+    .form-input:focus {{
+      background: white;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+    }}
+    .btn-send {{
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .btn-send:hover {{
+      background: linear-gradient(135deg, #059669, #047857);
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }}
+    .btn-send:disabled {{
+      opacity: 0.6;
+      cursor: not-allowed;
+    }}
+    .targets-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+      gap: 10px;
+    }}
+    .target-pill {{
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 10px;
+      text-align: center;
+    }}
+    .target-label {{ font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }}
+    .target-val {{ font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 2px; }}
+    .toast {{
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #065F46;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      display: none;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }}
+    @keyframes fadeIn {{
+      from {{ opacity: 0; transform: translate(-50%, 10px); }}
+      to {{ opacity: 1; transform: translate(-50%, 0); }}
+    }}
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🥗</div>
+        <div>
+          <div class="brand-title">Nourish Coach</div>
+          <div class="brand-sub">ListMate Nutrition</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="clientBadge" class="badge-client">
+          <span class="status-dot"></span>
+          <span id="clientNameText">Loading...</span>
+        </div>
+        <button id="btnRefresh" onclick="loadCoachView(true)" class="btn-icon" title="Refresh Data">
+          🔄
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div id="errorBanner" class="card" style="display:none; border-color:#FCA5A5; background:#FEF2F2; color:#991B1B;">
+      <h2 style="font-size:1.1rem; font-weight:700; margin-bottom:6px;">⚠️ Access Denied</h2>
+      <p id="errorText">This coach link is invalid or has been disabled by the client.</p>
+    </div>
+
+    <div id="portalContent" style="display:none;">
+      <!-- Period & View Navigation Bar -->
+      <div class="controls-bar">
+        <div class="week-nav">
+          <button class="btn-nav" id="btnPrevWeek" onclick="changeWeek(-1)">◀ Prev</button>
+          <span id="dateRangeLabel" style="font-size:0.86rem; font-weight:700; color:#1E293B; padding:0 6px;"></span>
+          <button class="btn-nav" id="btnNextWeek" onclick="changeWeek(1)">Next ▶</button>
+          <button class="btn-nav" id="btnToday" onclick="resetToCurrentWeek()" style="color:#059669; font-weight:800;">Today</button>
+        </div>
+        <div class="view-toggles">
+          <button class="view-toggle-btn active" id="btnViewWeek" onclick="setViewMode('week')">📊 7-Day Trend</button>
+          <button class="view-toggle-btn" id="btnViewAll" onclick="setViewMode('all')">📅 14-Day Full</button>
+        </div>
+      </div>
+
+      <!-- Weekly Summary & Averages -->
+      <div class="card" id="summaryCard">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📊</span> <span id="summaryTitle">7-Day Nutrition Averages</span>
+          </div>
+          <span id="loggedDaysCount" style="font-size:0.78rem; font-weight:700; color:#059669; background:#ECFDF5; padding:3px 8px; border-radius:999px;">0 days logged</span>
+        </div>
+        <div class="summary-grid" id="summaryGrid">
+          <!-- Populated by JS -->
+        </div>
+        <div class="macro-bar-wrap">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase;">Macro Calorie Distribution</span>
+            <span id="macroSplitSummary" style="font-size:0.75rem; color:#64748B; font-weight:600;"></span>
+          </div>
+          <div class="macro-split-bar" id="macroSplitBar">
+            <div id="splitProtein" class="macro-split-seg" style="width:30%; background:#10B981;" title="Protein"></div>
+            <div id="splitCarbs" class="macro-split-seg" style="width:45%; background:#F59E0B;" title="Carbs"></div>
+            <div id="splitFat" class="macro-split-seg" style="width:25%; background:#8B5CF6;" title="Fat"></div>
+          </div>
+          <div class="macro-split-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#10B981;"></span> Protein: <b id="legProtein" style="color:#0F172A;">--</b></span>
+            <span class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> Carbs: <b id="legCarbs" style="color:#0F172A;">--</b></span>
+            <span class="legend-item"><span class="legend-dot" style="background:#8B5CF6;"></span> Fat: <b id="legFat" style="color:#0F172A;">--</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Calorie Intake Trend Chart (The VitalPath Chart) -->
+      <div class="chart-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📈</span> Daily Calorie Intake Trend
+          </div>
+          <span style="font-size:0.75rem; color:#64748B; font-weight:600;">Tap any bar to inspect day</span>
+        </div>
+        <div class="chart-container" id="trendChart">
+          <div class="chart-target-line" id="chartTargetLine" style="bottom: 50%;">
+            <span class="chart-target-badge" id="chartTargetBadge">Target: 2,000 kcal</span>
+          </div>
+          <!-- Bars populated by JS -->
+        </div>
+      </div>
+
+      <!-- Coach Feedback Composer Card -->
+      <div class="card" id="coachComposerCard">
+        <div class="card-header">
+          <div class="card-title">
+            <span>💬</span> <span id="feedbackCardTitle">Leave Feedback for Client</span>
+          </div>
+          <span id="feedbackTargetDateBadge" style="font-size:0.78rem; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:6px;">For: Today</span>
+        </div>
+        <div class="quick-chips">
+          <div class="quick-chip" onclick="applyQuickNote('🎯 Hit protein goal! Strong day')">🎯 Great Protein</div>
+          <div class="quick-chip" onclick="applyQuickNote('💧 Don\'t forget to stay hydrated today')">💧 Hydration Reminder</div>
+          <div class="quick-chip" onclick="applyQuickNote('🥗 Excellent whole-foods balance & veggies')">🥗 Balanced Meals</div>
+          <div class="quick-chip" onclick="applyQuickNote('🔥 Calorie deficit adherence is on track')">🔥 Great Deficit</div>
+          <div class="quick-chip" onclick="applyQuickNote('⚡ Good pre-workout meal timing today')">⚡ Fuel Timing</div>
+        </div>
+        <div class="feedback-form">
+          <textarea id="noteMessage" placeholder="Leave an encouraging note, dietary adjustment, or macro guidance for your client..."></textarea>
+          <div class="form-row">
+            <input type="text" id="noteAuthor" class="form-input" placeholder="Coach Name" value="Coach" style="flex:1; min-width:140px;">
+            <input type="date" id="noteDate" class="form-input" style="flex:1; min-width:140px;">
+            <button class="btn-send" id="sendBtn" onclick="submitCoachNote()">
+              <span>✉️</span>
+              <span id="sendBtnText">Send Note</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Client Target Goals Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>🎯</span> Client Daily Macro Targets</div>
+        </div>
+        <div class="targets-grid" id="goalsGrid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Day-by-Day Accordion -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin: 20px 4px 12px 4px;">
+        <h2 style="font-size:1.05rem; font-weight:800; color:#1E293B; display:flex; align-items:center; gap:8px;">
+          <span>📅</span> Day-by-Day Meal Breakdown
+        </h2>
+        <span style="font-size:0.75rem; color:#64748B; font-weight:600;">Tap day to view meals</span>
+      </div>
+      <div id="daysList">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Feedback note sent to client!</div>
+
+  <script>
+    const TOKEN = "{clean_token}";
+    let clientData = null;
+    let weekOffset = 0; // 0 = current 7 days, -1 = older 7 days
+    let viewMode = 'week'; // 'week' or 'all'
+    let selectedDate = new Date().toISOString().slice(0, 10);
+    const expandedDays = {{}};
+
+    // Restore coach name
+    try {{
+      const savedCoach = localStorage.getItem('nourish_coach_name');
+      if (savedCoach) document.getElementById('noteAuthor').value = savedCoach;
+    }} catch(e) {{}}
+
+    document.getElementById("noteDate").value = selectedDate;
+
+    function parseDate(iso) {{
+      const d = new Date(iso + 'T12:00:00');
+      const dayName = d.toLocaleDateString('en-US', {{ weekday: 'short' }}).toUpperCase();
+      const monthDay = d.toLocaleDateString('en-US', {{ month: 'short', day: 'numeric' }});
+      const dayNum = d.getDate();
+      const full = d.toLocaleDateString('en-US', {{ weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }});
+      return {{ dayName, monthDay, dayNum, full }};
+    }}
+
+    function applyQuickNote(text) {{
+      const ta = document.getElementById('noteMessage');
+      if (!ta) return;
+      if (ta.value.trim().length > 0) {{
+        ta.value = ta.value.trim() + " " + text;
+      }} else {{
+        ta.value = text;
+      }}
+      ta.focus();
+    }}
+
+    function setViewMode(mode) {{
+      viewMode = mode;
+      document.getElementById('btnViewWeek').classList.toggle('active', mode === 'week');
+      document.getElementById('btnViewAll').classList.toggle('active', mode === 'all');
+      renderDashboard();
+    }}
+
+    function changeWeek(delta) {{
+      weekOffset += delta;
+      if (weekOffset > 0) weekOffset = 0;
+      if (weekOffset < -1) weekOffset = -1; // Max 14 days
+      renderDashboard();
+    }}
+
+    function resetToCurrentWeek() {{
+      weekOffset = 0;
+      selectedDate = new Date().toISOString().slice(0, 10);
+      document.getElementById('noteDate').value = selectedDate;
+      renderDashboard();
+    }}
+
+    function selectDate(iso, shouldScroll) {{
+      selectedDate = iso;
+      expandedDays[iso] = true;
+      document.getElementById('noteDate').value = iso;
+      const parsed = parseDate(iso);
+      document.getElementById('feedbackTargetDateBadge').textContent = 'For: ' + parsed.monthDay;
+      renderChart();
+      renderDaysList();
+
+      if (shouldScroll) {{
+        const el = document.getElementById('day-card-' + iso);
+        if (el) {{
+          el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+        }}
+      }}
+    }}
+
+    function toggleDay(iso) {{
+      expandedDays[iso] = !expandedDays[iso];
+      renderDaysList();
+    }}
+
+    function getVisibleDays() {{
+      if (!clientData || !clientData.days) return [];
+      const allDays = clientData.days;
+      if (viewMode === 'all') return allDays;
+
+      // Week mode (7 days per chunk)
+      if (weekOffset === 0) {{
+        return allDays.slice(0, 7);
+      }} else {{
+        return allDays.slice(7, 14);
+      }}
+    }}
+
+    function renderDashboard() {{
+      if (!clientData) return;
+      const visibleDays = getVisibleDays();
+
+      // Controls Bar Date Range Label
+      if (visibleDays.length > 0) {{
+        const first = parseDate(visibleDays[visibleDays.length - 1].date);
+        const last = parseDate(visibleDays[0].date);
+        document.getElementById('dateRangeLabel').textContent = first.monthDay + ' – ' + last.monthDay;
+      }}
+
+      document.getElementById('btnNextWeek').disabled = (weekOffset >= 0);
+      document.getElementById('btnPrevWeek').disabled = (weekOffset <= -1);
+
+      renderSummary(visibleDays);
+      renderChart();
+      renderGoals();
+      renderDaysList();
+    }}
+
+    function renderSummary(days) {{
+      const goals = clientData.goals || {{}};
+      const targetCals = goals.calories_target || 2000;
+      const targetP = goals.protein_target_g || 130;
+      const targetC = goals.carbs_target_g || 200;
+      const targetF = goals.fat_target_g || 65;
+      const targetW = goals.water_target_ml || 2500;
+
+      const loggedDays = days.filter(d => (d.logs && d.logs.length > 0) || (d.totals && d.totals.calories > 0));
+      const count = loggedDays.length;
+      document.getElementById('loggedDaysCount').textContent = count + ' of ' + days.length + ' days logged';
+
+      let sumCals = 0, sumP = 0, sumC = 0, sumF = 0, sumW = 0;
+      loggedDays.forEach(d => {{
+        const t = d.totals || {{}};
+        sumCals += (t.calories || 0);
+        sumP += (t.protein_g || 0);
+        sumC += (t.carbs_g || 0);
+        sumF += (t.fat_g || 0);
+        sumW += (t.water_ml || 0);
+      }});
+
+      const avgCals = count > 0 ? Math.round(sumCals / count) : 0;
+      const avgP = count > 0 ? Math.round(sumP / count) : 0;
+      const avgC = count > 0 ? Math.round(sumC / count) : 0;
+      const avgF = count > 0 ? Math.round(sumF / count) : 0;
+      const avgW = count > 0 ? Math.round(sumW / count) : 0;
+
+      // Macro calorie ratio
+      const pKcal = avgP * 4;
+      const cKcal = avgC * 4;
+      const fKcal = avgF * 9;
+      const macroKcal = pKcal + cKcal + fKcal;
+      const pPct = macroKcal > 0 ? Math.round((pKcal / macroKcal) * 100) : 0;
+      const cPct = macroKcal > 0 ? Math.round((cKcal / macroKcal) * 100) : 0;
+      const fPct = macroKcal > 0 ? Math.max(0, 100 - pPct - cPct) : 0;
+
+      const calDiff = avgCals - targetCals;
+      const calSub = calDiff === 0 ? 'Exact target' : (calDiff > 0 ? ('+' + calDiff + ' over target') : (calDiff + ' below target'));
+
+      document.getElementById('summaryGrid').innerHTML = `
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🔥</span> Avg Calories</div>
+          <div class="summary-pill-val">${{avgCals.toLocaleString()}}</div>
+          <div class="summary-pill-sub">${{calSub}}</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🥩</span> Avg Protein</div>
+          <div class="summary-pill-val" style="color:#10B981;">${{avgP}}g</div>
+          <div class="summary-pill-sub">${{pPct}}% • Target ${{targetP}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🌾</span> Avg Carbs</div>
+          <div class="summary-pill-val" style="color:#F59E0B;">${{avgC}}g</div>
+          <div class="summary-pill-sub">${{cPct}}% • Target ${{targetC}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>🥑</span> Avg Fat</div>
+          <div class="summary-pill-val" style="color:#8B5CF6;">${{avgF}}g</div>
+          <div class="summary-pill-sub">${{fPct}}% • Target ${{targetF}}g</div>
+        </div>
+        <div class="summary-pill">
+          <div class="summary-pill-label"><span>💧</span> Avg Water</div>
+          <div class="summary-pill-val" style="color:#3B82F6;">${{avgW.toLocaleString()}} <span style="font-size:0.75rem; font-weight:600;">ml</span></div>
+          <div class="summary-pill-sub">${{Math.round(avgW / 29.5735)}} oz • Target ${{targetW}}ml</div>
+        </div>
+      `;
+
+      // Update Macro Split Bar
+      document.getElementById('splitProtein').style.width = pPct + '%';
+      document.getElementById('splitCarbs').style.width = cPct + '%';
+      document.getElementById('splitFat').style.width = fPct + '%';
+      document.getElementById('legProtein').textContent = `${{pPct}}% (${{avgP}}g)`;
+      document.getElementById('legCarbs').textContent = `${{cPct}}% (${{avgC}}g)`;
+      document.getElementById('legFat').textContent = `${{fPct}}% (${{avgF}}g)`;
+      document.getElementById('macroSplitSummary').textContent = `${{avgCals}} kcal avg`;
+    }}
+
+    function renderChart() {{
+      const days = getVisibleDays().slice().reverse(); // Show chronological L to R
+      const goals = clientData.goals || {{}};
+      const targetCals = goals.calories_target || 2000;
+
+      let maxCal = targetCals;
+      days.forEach(d => {{
+        const c = (d.totals && d.totals.calories) || 0;
+        if (c > maxCal) maxCal = c;
+      }});
+      if (maxCal <= 0) maxCal = 2000;
+
+      // Position target line
+      const targetPct = Math.min(95, Math.round((targetCals / maxCal) * 100));
+      const targetLine = document.getElementById('chartTargetLine');
+      targetLine.style.bottom = targetPct + '%';
+      document.getElementById('chartTargetBadge').textContent = 'Target: ' + targetCals.toLocaleString() + ' kcal';
+
+      const chart = document.getElementById('trendChart');
+      // Keep target line, remove old cols
+      chart.querySelectorAll('.chart-col').forEach(c => c.remove());
+
+      days.forEach(d => {{
+        const cals = Math.round((d.totals && d.totals.calories) || 0);
+        const heightPct = cals > 0 ? Math.max(6, Math.min(100, Math.round((cals / maxCal) * 100))) : 0;
+        const parsed = parseDate(d.date);
+        const isSelected = (d.date === selectedDate);
+
+        // Color logic
+        let barColor = '#E2E8F0';
+        if (cals > 0) {{
+          if (cals > targetCals * 1.15) barColor = '#F97316'; // Higher
+          else if (cals < targetCals * 0.85) barColor = '#F59E0B'; // Lower
+          else barColor = '#10B981'; // Target met
+        }}
+
+        const col = document.createElement('div');
+        col.className = 'chart-col' + (isSelected ? ' active' : '');
+        col.onclick = () => selectDate(d.date, true);
+        col.innerHTML = `
+          <span class="chart-val">${{cals > 0 ? cals : '-'}}</span>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="height:${{heightPct}}%; background:${{barColor}};"></div>
+          </div>
+          <span class="chart-label">${{parsed.dayName}}</span>
+          <span class="chart-date-num">${{parsed.dayNum}}</span>
+        `;
+        chart.appendChild(col);
+      }});
+    }}
+
+    function renderGoals() {{
+      const g = clientData.goals || {{}};
+      document.getElementById("goalsGrid").innerHTML = `
+        <div class="target-pill"><div class="target-label">🔥 Calories</div><div class="target-val">${{Math.round(g.calories_target || 2000)}}</div></div>
+        <div class="target-pill"><div class="target-label">🥩 Protein</div><div class="target-val">${{Math.round(g.protein_target_g || 130)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🌾 Carbs</div><div class="target-val">${{Math.round(g.carbs_target_g || 200)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🥑 Fat</div><div class="target-val">${{Math.round(g.fat_target_g || 65)}}g</div></div>
+        <div class="target-pill"><div class="target-label">🌱 Fiber</div><div class="target-val">${{Math.round(g.fiber_target_g || 30)}}g</div></div>
+        <div class="target-pill"><div class="target-label">💧 Water</div><div class="target-val">${{Math.round(g.water_target_ml || 2500)}}ml</div></div>
+      `;
+    }}
+
+    function renderDaysList() {{
+      const days = getVisibleDays();
+      const container = document.getElementById("daysList");
+      container.innerHTML = "";
+      const todayISO = new Date().toISOString().slice(0, 10);
+
+      days.forEach(day => {{
+        const t = day.totals || {{}};
+        const parsed = parseDate(day.date);
+        const isToday = (day.date === todayISO);
+        const isSelected = (day.date === selectedDate);
+        const isExpanded = (expandedDays[day.date] === undefined ? isToday : !!expandedDays[day.date]);
+
+        // Group logs by slot
+        const logsBySlot = {{}};
+        (day.logs || []).forEach(l => {{
+          const slot = (l.meal_slot || 'meals').toLowerCase();
+          if (!logsBySlot[slot]) logsBySlot[slot] = [];
+          logsBySlot[slot].push(l);
+        }});
+
+        let slotsHtml = '';
+        const order = ['breakfast', 'lunch', 'dinner', 'snack', 'meals'];
+        const slotsPresent = Object.keys(logsBySlot);
+        const sortedSlots = order.filter(s => slotsPresent.includes(s)).concat(slotsPresent.filter(s => !order.includes(s)));
+
+        if (sortedSlots.length === 0) {{
+          slotsHtml = '<div style="color:#94A3B8; font-size:0.86rem; padding:12px; text-align:center; background:white; border-radius:10px; border:1px dashed #E2E8F0;">No meals logged for this day.</div>';
+        }} else {{
+          sortedSlots.forEach(slot => {{
+            const items = logsBySlot[slot];
+            const slotKcal = Math.round(items.reduce((s, i) => s + (parseFloat(i.calories) || 0), 0));
+            const slotItemsHtml = items.map(l => `
+              <div class="log-item">
+                <div>
+                  <span class="log-name">${{l.food_name}}</span>
+                  <span class="log-qty">(${{l.quantity}} ${{l.unit || 'serving'}})</span>
+                </div>
+                <div>
+                  <span class="log-cals">${{Math.round(l.calories || 0)}} kcal</span>
+                  <span class="log-macros">P:${{Math.round(l.protein_g||0)}}g C:${{Math.round(l.carbs_g||0)}}g F:${{Math.round(l.fat_g||0)}}g</span>
+                </div>
+              </div>
+            `).join('');
+
+            const slotIcons = {{ 'breakfast': '🍳', 'lunch': '🥗', 'dinner': '🍽️', 'snack': '🍎' }};
+            const icon = slotIcons[slot] || '🍴';
+
+            slotsHtml += `
+              <div class="slot-block">
+                <div class="slot-header">
+                  <span>${{icon}} ${{slot}}</span>
+                  <span style="color:#059669; font-variant-numeric:tabular-nums;">${{slotKcal}} kcal</span>
+                </div>
+                ${{slotItemsHtml}}
+              </div>
+            `;
+          }});
+        }}
+
+        // Water bar
+        const waterMl = t.water_ml || 0;
+        const waterOz = Math.round(waterMl / 29.5735);
+        const waterHtml = waterMl > 0 ? `
+          <div class="water-row">
+            <span>💧 Water Intake: <b>${{waterMl.toLocaleString()}} ml</b> (${{waterOz}} oz)</span>
+            <span>✓ Hydrated</span>
+          </div>
+        ` : '';
+
+        // Notes html
+        const notes = day.notes || [];
+        const notesHtml = notes.map(n => `
+          <div class="note-bubble">
+            <div class="note-author">💬 ${{n.author_name || 'Coach'}} (${{n.author_role || 'coach'}}):</div>
+            <div class="note-text">${{n.message}}</div>
+            <div class="note-time">${{new Date(n.created_at || Date.now()).toLocaleTimeString([], {{hour: '2-digit', minute:'2-digit'}})}}</div>
+          </div>
+        `).join('');
+
+        const card = document.createElement("div");
+        card.id = 'day-card-' + day.date;
+        card.className = "day-card" + (isSelected ? " selected" : "");
+        card.innerHTML = `
+          <div class="day-header" onclick="toggleDay('${{day.date}}')">
+            <div class="day-date-badge">
+              <div class="day-avatar ${{isToday ? 'is-today' : ''}}">
+                <span>${{parsed.dayName}}</span>
+                <span>${{parsed.dayNum}}</span>
+              </div>
+              <div>
+                <div class="day-title">
+                  <span>${{parsed.monthDay}}</span>
+                  ${{isToday ? '<span class="today-pill">Today</span>' : ''}}
+                  ${{notes.length > 0 ? '<span style="background:#FEF3C7; color:#92400E; font-size:0.7rem; font-weight:700; padding:1px 6px; border-radius:4px;">💬 ' + notes.length + ' note' + (notes.length > 1 ? 's' : '') + '</span>' : ''}}
+                </div>
+                <div class="day-meta">
+                  <span style="font-weight:700; color:#0F172A;">🔥 ${{Math.round(t.calories || 0)}} kcal</span>
+                  <span>🥩 ${{Math.round(t.protein_g || 0)}}g P</span>
+                  <span>🌾 ${{Math.round(t.carbs_g || 0)}}g C</span>
+                  <span>🥑 ${{Math.round(t.fat_g || 0)}}g F</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:0.85rem; color:#64748B;">${{isExpanded ? '▲' : '▼'}}</span>
+            </div>
+          </div>
+          <div class="day-body" style="${{isExpanded ? '' : 'display:none;'}}">
+            ${{waterHtml}}
+            ${{slotsHtml}}
+            ${{notes.length > 0 ? '<div class="notes-list"><h4 style="font-size:0.75rem; font-weight:700; color:#475569; text-transform:uppercase;">Coach Feedback:</h4>' + notesHtml + '</div>' : ''}}
+            <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+              <button onclick="event.stopPropagation(); selectDate('${{day.date}}', false); document.getElementById('coachComposerCard').scrollIntoView({{behavior:'smooth'}});" style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:6px 12px; font-size:0.78rem; font-weight:700; color:#334155; cursor:pointer;">
+                ✍️ Write Note for ${{parsed.monthDay}}
+              </button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      }});
+    }}
+
+    async function loadCoachView(isRefresh) {{
+      const refreshBtn = document.getElementById('btnRefresh');
+      if (isRefresh && refreshBtn) refreshBtn.textContent = '⏳';
+      try {{
+        const res = await fetch("/api/nourish/coach/view/" + TOKEN);
+        const data = await res.json();
+        if (!res.ok || !data.ok) {{
+          document.getElementById("errorBanner").style.display = "block";
+          if (data.error) document.getElementById("errorText").textContent = data.error;
+          return;
+        }}
+
+        clientData = data;
+        document.getElementById("portalContent").style.display = "block";
+        const alias = data.client?.alias || "Client";
+        document.getElementById("clientNameText").textContent = alias;
+        document.getElementById("feedbackCardTitle").textContent = "Leave Feedback for " + alias;
+
+        renderDashboard();
+      }} catch (err) {{
+        document.getElementById("errorBanner").style.display = "block";
+        document.getElementById("errorText").textContent = "Network error loading client data.";
+      }} finally {{
+        if (refreshBtn) refreshBtn.textContent = '🔄';
+      }}
+    }}
+
+    async function submitCoachNote() {{
+      const msg = document.getElementById("noteMessage").value.trim();
+      if (!msg) return alert("Please enter a feedback message.");
+      const author = document.getElementById("noteAuthor").value.trim() || "Coach";
+      const date = document.getElementById("noteDate").value;
+      const btn = document.getElementById("sendBtn");
+      const btnText = document.getElementById("sendBtnText");
+
+      try {{
+        localStorage.setItem('nourish_coach_name', author);
+      }} catch(e) {{}}
+
+      btn.disabled = true;
+      btnText.textContent = "Sending...";
+
+      try {{
+        const res = await fetch("/api/nourish/coach/notes/" + TOKEN, {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ message: msg, author_name: author, log_date: date }}),
+        }});
+        const data = await res.json();
+        if (data.ok) {{
+          document.getElementById("noteMessage").value = "";
+          showToast("✓ Feedback note sent to client!");
+          loadCoachView(false);
+        }} else {{
+          alert(data.error || "Failed to send note");
+        }}
+      }} catch (err) {{
+        alert("Failed to post note: " + err);
+      }} finally {{
+        btn.disabled = false;
+        btnText.textContent = "Send Note";
+      }}
+    }}
+
+    function showToast(text) {{
+      const t = document.getElementById("toast");
+      t.textContent = text;
+      t.style.display = "block";
+      setTimeout(() => {{ t.style.display = "none"; }}, 3500);
+    }}
+
+    loadCoachView(false);
+  </script>
+</body>
+</html>
+"""
 
 
 @app.route("/logout")

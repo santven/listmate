@@ -33,6 +33,8 @@ from push_helper import (
     check_still_good_produce_expiry_pushes,
     check_still_good_freezer_expiry_pushes,
     check_post_shopping_smart_stash_pushes,
+    check_nourish_evening_diary_pushes,
+    check_nourish_afternoon_hydration_pushes,
 )
 
 
@@ -55,7 +57,7 @@ def safe_execute_task(task_name: str, task_fn, *args, **kwargs):
         return {"status": "error", "error": str(exc), "duration_ms": duration_ms}
 
 
-def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_hour: int = 8, now_utc: datetime.datetime = None):
+def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_hour: int = 8, now_utc: datetime.datetime = None, db=None):
     """
     Main hourly pipeline coordinating all hourly jobs.
     """
@@ -132,18 +134,59 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         force_send=force_send
     )
 
-    # -------------------------------------------------------------------------
-    # Future Piggybacked Hourly Tasks can be added here cleanly:
-    # e.g.,
-    # pipeline_results["cart_reminders"] = safe_execute_task(...)
-    # pipeline_results["cache_cleanup"] = safe_execute_task(...)
-    # -------------------------------------------------------------------------
+    # Task 7: Nourish AI Pending Food Log Batch Enrichment (Runs hourly)
+    try:
+        from nourish_ai import enrich_pending_nourish_logs_batch
+        nourish_task_res = safe_execute_task(
+            "Nourish AI Pending Food Log Batch Enrichment",
+            enrich_pending_nourish_logs_batch,
+            db=db,
+            dry_run=dry_run
+        )
+        if isinstance(nourish_task_res.get("result"), dict):
+            for k, v in nourish_task_res["result"].items():
+                nourish_task_res.setdefault(k, v)
+        pipeline_results["nourish_ai_enrichment"] = nourish_task_res
+    except Exception as exc:
+        logger.error(f"Nourish AI task failed to launch: {exc}")
+        pipeline_results["nourish_ai_enrichment"] = {"status": "error", "error": str(exc)}
+
+    # Task 8: Nourish Smart Evening Diary Push Reminder (8:00 PM local)
+    pipeline_results["nourish_evening_diary_pushes"] = safe_execute_task(
+        "Nourish Smart Evening Diary Push Reminder (8:00 PM local)",
+        check_nourish_evening_diary_pushes,
+        target_hour=20,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
+    # Task 9: Nourish Afternoon Hydration Push Reminder (3:00 PM local)
+    pipeline_results["nourish_afternoon_hydration_pushes"] = safe_execute_task(
+        "Nourish Afternoon Hydration Push Reminder (3:00 PM local)",
+        check_nourish_afternoon_hydration_pushes,
+        target_hour=15,
+        dry_run=dry_run,
+        force_send=force_send
+    )
 
     logger.info(f"Hourly pipeline finished. Tasks evaluated: {len(pipeline_results)}")
     for task_name, res in pipeline_results.items():
         logger.info(f" - {task_name}: {res.get('status')} ({res.get('duration_ms', 0):.1f}ms)")
 
     return pipeline_results
+
+
+def run_hourly_jobs(db=None, dry_run: bool = False, force_send: bool = False, target_hour: int = 8, now_utc: datetime.datetime = None):
+    """
+    Runs all hourly jobs (including Nourish AI batch enrichment) and returns summary dict.
+    """
+    return run_hourly_pipeline(
+        dry_run=dry_run,
+        force_send=force_send,
+        target_hour=target_hour,
+        now_utc=now_utc,
+        db=db
+    )
 
 
 def main():
@@ -168,6 +211,11 @@ def main():
         "--still-good-ai",
         action="store_true",
         help="Run Still Good AI batch shelf-life enhancement immediately"
+    )
+    parser.add_argument(
+        "--nourish-ai",
+        action="store_true",
+        help="Run Nourish AI pending food log batch enrichment immediately"
     )
     parser.add_argument(
         "--still-good-lunch",
@@ -211,6 +259,17 @@ def main():
             print(f"Still Good AI result: {stats}")
         except Exception as exc:
             print(f"Still Good AI failed: {exc}")
+        print("Done.")
+        sys.exit(0)
+
+    if args.nourish_ai:
+        print(f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] Running Nourish AI batch food log enrichment via cron_hourly...")
+        try:
+            from nourish_ai import enrich_pending_nourish_logs_batch
+            stats = enrich_pending_nourish_logs_batch(dry_run=args.dry_run)
+            print(f"Nourish AI result: {stats}")
+        except Exception as exc:
+            print(f"Nourish AI failed: {exc}")
         print("Done.")
         sys.exit(0)
 

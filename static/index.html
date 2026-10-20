@@ -85,8 +85,8 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
   @media screen and (max-width: 768px) {
     input, select, textarea { font-size: 16px !important; }
   }
-  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; gap: 8px; }
-  .header h1 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .header { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 500; gap: 8px; }
+  .header h1 { font-size: 17px; font-weight: 700; white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sandbox-badge { display: none; font-size: 11px; font-weight: 700; background: #f59e0b; color: #fff; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-left: 4px; }
   #tierBadge { flex-shrink: 0; white-space: nowrap; }
   .header.hide-badges .header-meta .user { display: none !important; }
@@ -96,6 +96,23 @@ function showActionConfirm(title, desc, confirmText, confirmColor, cb) {
   #cartIcon { cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; user-select: none; -webkit-user-drag: none; }
   #cartIcon:hover { transform: scale(1.05); opacity: 0.95; }
   #cartIcon:active { transform: scale(0.92); }
+  .app-switcher-wrap { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+  .app-switcher-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 3px 10px 3px 4px; border-radius: 14px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.28); cursor: pointer; user-select: none; max-width: 100%; min-width: 0; position: relative; transition: background 0.15s ease, transform 0.12s ease, border-color 0.15s ease; }
+  .app-switcher-btn:hover { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.45); }
+  .app-switcher-btn:active { transform: scale(0.97); }
+  .app-switcher-overlay { display: none; position: fixed; inset: 0; z-index: 9499; background: rgba(0,0,0,0.12); }
+  .app-switcher-overlay.show { display: block; }
+  .app-switcher-menu { display: none; position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 50px); left: max(12px, env(safe-area-inset-left)); width: min(320px, calc(100vw - 24px)); background: #fff; color: var(--text); border-radius: 16px; box-shadow: 0 10px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08); border: 1px solid var(--border); z-index: 9500; padding: 8px; animation: appSwitcherFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+  .app-switcher-menu.show { display: block; }
+  @keyframes appSwitcherFadeIn { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .app-switch-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1.5px solid transparent; background: transparent; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.15s ease, border-color 0.15s ease; }
+  .app-switch-item + .app-switch-item { margin-top: 4px; }
+  .app-switch-item:hover, .app-switch-item:active { background: #f5faf3; }
+  .app-switch-item.active { background: #f0fdf4; border-color: #bbf7d0; }
+  .app-switch-check { font-size: 16px; font-weight: 800; color: #059669; opacity: 0; flex-shrink: 0; margin-left: auto; transition: opacity 0.15s ease; }
+  .app-switch-item.active .app-switch-check { opacity: 1; }
+  .app-switcher-spotlight { display: none; position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + 54px); left: max(12px, env(safe-area-inset-left)); width: min(315px, calc(100vw - 24px)); background: #064e3b; color: #fff; border-radius: 14px; padding: 11px 13px; box-shadow: 0 8px 24px rgba(6,78,59,0.35); border: 1px solid rgba(167,243,208,0.4); z-index: 9490; font-size: 12.5px; line-height: 1.4; }
+  .app-switcher-spotlight.show { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
   .container { max-width: 600px; margin: 0 auto; padding: 16px; }
 
@@ -1031,6 +1048,54 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
   color: #64748b;
   text-decoration: underline;
 }
+
+/* ── Nourish Screen Styles (Issue #676) ── */
+#screenNourish, .nourish-screen { max-width: 680px; margin: 0 auto; }
+.nourish-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.nourish-date-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; }
+.nourish-nav-btn { background: #f3f4f6; border: 1px solid var(--border); border-radius: 10px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; cursor: pointer; color: var(--text); user-select: none; transition: background 0.15s ease; }
+.nourish-nav-btn:hover { background: #e5e7eb; }
+.nourish-nav-btn:active { transform: scale(0.94); }
+.nourish-date-label { font-size: 15px; font-weight: 700; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.nourish-slot-pills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+.nourish-slot-pill { padding: 9px 4px; border-radius: 10px; border: 1.5px solid var(--border); background: #f9fafb; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; text-align: center; transition: all 0.15s ease; user-select: none; }
+.nourish-slot-pill:hover { background: #f3f4f6; }
+.nourish-slot-pill.active { background: #ecfdf5; border-color: var(--green); color: #065f46; font-weight: 700; box-shadow: 0 1px 3px rgba(16,185,129,0.15); }
+.nourish-entry-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+.nourish-tab-btn { background: none; border: none; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: all 0.15s ease; }
+.nourish-tab-btn.active { background: #ecfdf5; color: #065f46; font-weight: 700; }
+.nourish-unit-pill { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f9fafb; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s ease; user-select: none; }
+.nourish-unit-pill.active { background: #10b981; border-color: #10b981; color: #fff; font-weight: 700; }
+.nourish-gram-pill { padding: 4px 10px; border-radius: 14px; border: 1px solid #e5e7eb; background: #f9fafb; font-size: 11px; font-weight: 600; color: #4b5563; cursor: pointer; transition: all 0.12s ease; user-select: none; }
+.nourish-gram-pill:hover { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.nourish-gram-pill.active { background: #059669; border-color: #059669; color: #fff; }
+.nourish-preview-bar { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #334155; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.nourish-estimating-badge { display: inline-flex; align-items: center; gap: 4px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; }
+.nourish-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-top: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 240px; overflow-y: auto; z-index: 1000; display: none; }
+.nourish-dropdown-item { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.nourish-dropdown-item:last-child { border-bottom: none; }
+.nourish-dropdown-item:hover { background: #f0fdf4; }
+.nourish-slot-section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+.nourish-slot-header { background: #fafafa; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
+.nourish-slot-title { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.nourish-slot-subtotal { font-size: 12px; font-weight: 600; color: var(--muted); }
+.nourish-log-item { padding: 12px 14px; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nourish-log-item:last-child { border-bottom: none; }
+.nourish-log-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.nourish-log-sub { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.nourish-log-cals { font-size: 13px; font-weight: 700; color: #1f2937; white-space: nowrap; }
+.nourish-item-actions { display: flex; align-items: center; gap: 4px; margin-left: 8px; flex-shrink: 0; }
+.nourish-action-btn { background: transparent; border: none; cursor: pointer; padding: 6px 8px; border-radius: 6px; font-size: 14px; color: #9ca3af; transition: all 0.12s ease; }
+.nourish-action-btn:hover { background: #f3f4f6; color: var(--text); }
+.nourish-action-btn.delete:hover { background: #fee2e2; color: #ef4444; }
+.toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; margin: 0; cursor: pointer; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .25s; border-radius: 22px; }
+.toggle-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .25s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle-switch input:checked + .toggle-slider { background-color: #10b981; }
+.toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+.nourish-slot-share-btn { background: #f3f4f6; border: 1px solid #e5e7eb; color: #4b5563; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; }
+.nourish-slot-share-btn:hover { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
 </style>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8608054862395616" crossorigin="anonymous"></script>
 <script>
@@ -1155,6 +1220,37 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       setTimeout(() => {
         checkPostTripStashCandidates(true, true);
       }, 500);
+    } else if (screenParam === 'nourish' || actionParam === 'open_nourish' || localStorage.getItem('open_nourish') === '1') {
+      localStorage.removeItem('open_nourish');
+      var dateParam = urlParams.get('date');
+      var slotParam = urlParams.get('slot');
+      var showCoach = urlParams.get('show_coach_drawer') === '1' || urlParams.get('coach_note') === '1';
+      var subviewParam = urlParams.get('subview') || urlParams.get('tab');
+      setTimeout(() => {
+        if (typeof showNourishScreen === 'function') {
+          showNourishScreen();
+        } else if (typeof showScreen === 'function') {
+          showScreen('nourish');
+        }
+        if (subviewParam === 'trends' && typeof switchNourishSubView === 'function') {
+          switchNourishSubView('trends');
+        }
+        if (dateParam && typeof loadNourishDay === 'function') {
+          loadNourishDay(dateParam);
+        }
+        if (slotParam && typeof selectNourishSlot === 'function') {
+          selectNourishSlot(slotParam);
+        }
+        if (typeof checkNourishSharedMeals === 'function') {
+          checkNourishSharedMeals();
+        }
+        if (showCoach) {
+          window._pendingShowCoachDrawer = true;
+          if (typeof openNourishCoachDrawer === 'function') {
+            openNourishCoachDrawer(window._lastCoachNote || { log_date: dateParam || getTodayDateString(), message: 'Your coach left feedback on your log.' });
+          }
+        }
+      }, 500);
     } else if (screenParam === 'recipes' || localStorage.getItem('open_recipes') === '1') {
       localStorage.removeItem('open_recipes');
       setTimeout(() => {
@@ -1213,9 +1309,57 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 <body>
 
 <div class="header">
-  <img src="/icon-192.png" id="cartIcon" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onLogoClick(event)) return false; showScreen('home');}" style="width:40px;height:40px;min-width:40px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate Logo" title="Go to Grocery List" aria-label="Go to Grocery List">
-  <h1 id="headerTitle" style="margin-left:6px;">Grocery List</h1>
-  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
+  <div class="app-switcher-wrap">
+    <div id="appSwitcherBtn" class="app-switcher-btn" onclick="toggleAppSwitcherMenu(event)" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAppSwitcherMenu(event);}" title="Switch Suite App (ListMate | Still Good | Nourish)" aria-label="Switch Suite App">
+      <img src="/icon-192.png" id="cartIcon" style="width:36px;height:36px;min-width:36px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.12);flex-shrink:0;background:#fff;cursor:pointer;" alt="ListMate">
+      <div id="appSwitcherSgIcon" aria-hidden="true" style="display:none; width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #059669, #10b981); align-items:center; justify-content:center; font-size:19px; box-shadow:0 1px 3px rgba(0,0,0,0.18); flex-shrink:0;">🥗</div>
+      <img src="/static/nourish-icon.png" id="appSwitcherNourishIcon" alt="Nourish" style="display:none; width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.18); flex-shrink:0;">
+      <h1 id="headerTitle" style="position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;">Grocery List</h1>
+      <span id="appSwitcherChevron" style="font-size:12px; opacity:0.85; margin-left:4px;">▾</span>
+      <span id="appSwitcherUrgentDot" style="display:none; width:9px; height:9px; border-radius:50%; background:#ef4444; border:1.5px solid #fff; position:absolute; top:4px; left:30px; box-shadow:0 1px 3px rgba(0,0,0,0.25);"></span>
+    </div>
+    <div class="app-switcher-overlay" id="appSwitcherOverlay" onclick="closeAppSwitcherMenu()"></div>
+    <div class="app-switcher-menu" id="appSwitcherMenu" role="menu" aria-label="ListMate Suite Apps">
+      <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; padding:4px 10px 6px;">Household Suite</div>
+      <button type="button" id="appSwitchItemHome" class="app-switch-item active" onclick="selectSuiteApp('home')" role="menuitem">
+        <img src="/icon-192.png" alt="ListMate" style="width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.12); background:#fff; flex-shrink:0;">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🛒 ListMate</span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Smart Store Grocery Lists</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckHome">✓</span>
+      </button>
+      <button type="button" id="appSwitchItemStillGood" class="app-switch-item" onclick="selectSuiteApp('stillGood')" role="menuitem">
+        <div style="width:36px; height:36px; min-width:36px; border-radius:10px; background:linear-gradient(135deg, #059669, #10b981); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 2px 6px rgba(16,185,129,0.25); flex-shrink:0;">🥗</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🥗 Still Good</span>
+            <span id="appSwitcherSgBadge" style="display:none; background:#ef4444; color:#fff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:999px;"></span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Fridge, Freezer &amp; Leftover Freshness</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckStillGood">✓</span>
+      </button>
+      <button type="button" id="appSwitchItemNourish" class="app-switch-item" onclick="selectSuiteApp('nourish')" role="menuitem">
+        <img src="/static/nourish-icon.png" alt="Nourish" style="width:36px; height:36px; min-width:36px; border-radius:10px; box-shadow:0 2px 6px rgba(22,163,74,0.25); flex-shrink:0;">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; font-size:14px; font-weight:700; color:var(--text);">
+            <span>🍎 Nourish</span>
+            <span style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:999px;margin-left:6px;">NEW</span>
+          </div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Private Daily Food &amp; Macro Log</div>
+        </div>
+        <span class="app-switch-check" id="appSwitchCheckNourish">✓</span>
+      </button>
+    </div>
+    <div class="app-switcher-spotlight" id="appSwitcherSpotlight" role="status">
+      <span>✨ Tap here anytime to switch between ListMate, Still Good &amp; Nourish!</span>
+      <button type="button" onclick="dismissAppSwitcherSpotlight(event)" style="background:#10b981; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11.5px; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0;">Got it</button>
+    </div>
+  </div>
+  <span id="tierBadge" style="background:rgba(255,255,255,0.2);color:#fff;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;border:1px solid rgba(255,255,255,0.4);" onclick="showPaywall()">Free</span>
   <span id="sandboxBadge" class="sandbox-badge">🧪 Sandbox</span>
   <div class="header-meta">
     <span class="user" id="headerUser"></span>
@@ -1228,6 +1372,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div class="divider"></div>
       <a href="#" onclick="showScreen('home'); if(typeof toggleBurger==='function') toggleBurger(false); return false;">📋 Grocery List</a>
       <a id="menuStillGoodLink" href="#" onclick="showStillGoodScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🍲 Still Good</a>
+      <button onclick="showNourishScreen()">🍎 Nourish (Food Log)</button>
       <a id="menuRecipesLink" href="#" onclick="showRecipesScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🍳 Recipe Planner</a>
       <a id="menuStoreVisitsLink" href="#" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onMenuItemClick('menuStoreVisitsLink', event)) return false; showScreen('globalVisits'); if(typeof toggleBurger==='function') toggleBurger(false); return false;">🗓️ Store Visits</a>
       <a href="#" onclick="showAnalyticsScreen(); if(typeof toggleBurger==='function') toggleBurger(false); return false;">📊 Analytics</a>
@@ -1264,7 +1409,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           📅 Plan Visits
         </button>
         <button id="btnOpenStillGood" onclick="if(window.featureDiscoveryEngine && window.featureDiscoveryEngine.onStillGoodClick(event)) return; showStillGoodScreen();" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(16,185,129,0.25);">
-          🍲 Still Good
+          🍲 Still Good <span id="sgHomeBadge" style="display:none; background:#ef4444; color:#fff; font-size:10px; font-weight:800; padding:1px 6px; border-radius:999px; margin-left:2px;"></span>
         </button>
       </div>
     </div>
@@ -1454,6 +1599,590 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     <!-- List of Still Good Items -->
     <div id="sgItemsList" style="display:flex; flex-direction:column; gap:6px;">
       <div style="text-align:center; padding:30px; color:var(--muted);">Loading Still Good items...</div>
+    </div>
+  </div>
+
+  <!-- NOURISH SCREEN -->
+  <div id="screenNourish" class="screen" style="display:none; padding-bottom:50px;">
+    <!-- Nourish Disabled / Welcome View -->
+    <div id="nourishDisabledView" style="display:none; text-align:center; padding:36px 20px; background:#fff; border:1px solid var(--border); border-radius:18px; margin:16px 0; box-shadow:0 4px 14px rgba(0,0,0,0.04);">
+      <div style="font-size:46px; margin-bottom:12px;">🥗</div>
+      <div style="font-size:20px; font-weight:800; color:var(--text); margin-bottom:8px;">Welcome to Nourish</div>
+      <div style="font-size:13.5px; color:var(--muted); max-width:340px; margin:0 auto 22px; line-height:1.5;">
+        Smart daily meal &amp; macro tracking for your personal nutrition. Deconstruct plates with AI, track calories, macros &amp; hydration, and optionally share home-cooked meals with your household.
+      </div>
+      <button type="button" id="nourishBtnStart" onclick="setNourishEnabled(true)" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px 28px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 3px 10px rgba(16,185,129,0.35);">
+        🚀 Start Using Nourish
+      </button>
+    </div>
+
+    <!-- Nourish Active Content View -->
+    <div id="nourishActiveView">
+      <!-- Top Reassurance Header with Toggle -->
+      <div style="background:linear-gradient(135deg, #ecfdf5, #d1fae5); border:1.5px solid #a7f3d0; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 6px rgba(16,185,129,0.08);">
+        <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+          <span style="font-size:22px; flex-shrink:0;">🍎</span>
+          <div style="min-width:0;">
+            <div style="font-size:13.5px; font-weight:700; color:#065f46;">Nourish · Daily Food Log</div>
+            <div style="font-size:11px; color:#047857; opacity:0.9;">🔒 100% Private to your personal login.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <button type="button" id="nourishBtnToday" onclick="jumpNourishToToday()" style="background:#fff; border:1px solid #a7f3d0; color:#047857; font-size:11px; font-weight:700; padding:4px 8px; border-radius:10px; cursor:pointer;">Today</button>
+          <div style="display:flex; align-items:center; gap:5px;" title="Nourish Active (Flip switch to disable)">
+            <span style="font-size:11px; font-weight:600; color:#065f46;">Active</span>
+            <label class="toggle-switch" style="margin:0; width:34px; height:20px;">
+              <input type="checkbox" id="nourishPageToggle" checked onchange="setNourishEnabled(this.checked)">
+              <span class="toggle-slider" style="border-radius:20px;"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nourish Sub-Navigation Toggle: Day vs Trends (Issue #692) -->
+      <div style="display:flex; background:#e2e8f0; padding:3px; border-radius:12px; margin-bottom:12px; gap:4px;">
+        <button type="button" id="nourishTabDay" onclick="switchNourishSubView('day')" style="flex:1; padding:8px 12px; border:none; border-radius:9px; background:#fff; color:#065f46; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.08); transition:all 0.15s ease;">
+          📅 Day
+        </button>
+        <button type="button" id="nourishTabTrends" onclick="switchNourishSubView('trends')" style="flex:1; padding:8px 12px; border:none; border-radius:9px; background:transparent; color:#64748b; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.15s ease;">
+          📊 Trends
+        </button>
+      </div>
+
+      <!-- Day View Container -->
+      <div id="nourishDayView">
+        <!-- Date Navigator -->
+        <div class="nourish-date-nav" id="nourishDateNav">
+      <button type="button" class="nourish-nav-btn" id="nourishBtnPrevDay" onclick="navigateNourishDate(-1)" title="Previous Day">‹</button>
+      <div class="nourish-date-label" onclick="var p = document.getElementById('nourishDatePicker'); if(p.showPicker){p.showPicker();}else{p.click();}">
+        <span>📅</span>
+        <span id="nourishDateLabel">Today</span>
+        <span style="font-size:11px; opacity:0.6;">▾</span>
+        <input type="date" id="nourishDatePicker" onchange="onNourishDateChange(this.value)" style="position:absolute; opacity:0; pointer-events:none; width:0; height:0;">
+      </div>
+      <button type="button" class="nourish-nav-btn" id="nourishBtnNextDay" onclick="navigateNourishDate(1)" title="Next Day">›</button>
+    </div>
+
+    <!-- Dashboard Summary Card -->
+    <div class="nourish-card" id="nourishDashboardCard">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+        <div style="display:flex; flex-direction:column; justify-content:center;">
+          <span style="font-size:30px; font-weight:800; letter-spacing:-0.5px; line-height:1;" id="nourishCalRemaining">0</span>
+          <span style="font-size:12px; font-weight:600; color:var(--muted); margin-top:4px; white-space:nowrap;" id="nourishCalSub">kcal remaining</span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button type="button" id="nourishBtnCoachQuickLink" onclick="openNourishCoachQuickShare()" title="Nourish Coach Link" style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:4px 9px; font-size:11.5px; font-weight:700; cursor:pointer; color:#065f46; display:inline-flex; align-items:center; gap:3px;">
+              💬 Coach Link
+            </button>
+            <button type="button" id="nourishBtnOpenGoals" onclick="openNourishGoalsModal()" title="Set Calorie Goal & Macro Budgets" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px; padding:4px 9px; font-size:11.5px; font-weight:700; cursor:pointer; color:#334155; display:inline-flex; align-items:center; gap:3px;">
+              ⚙️ Goals
+            </button>
+          </div>
+          <div style="font-size:12px; color:var(--muted); white-space:nowrap;">
+            Budget: <b id="nourishCalBudget" style="color:var(--text);">2000</b> · Food: <b id="nourishCalConsumed" style="color:var(--text);">0</b>
+          </div>
+        </div>
+      </div>
+      <div style="height:8px; border-radius:999px; background:#f1f5f9; overflow:hidden; margin-bottom:14px;">
+        <div id="nourishCalProgress" style="height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg, #10b981, #059669); transition:width 0.3s ease;"></div>
+      </div>
+
+      <!-- 4 Macro Bars -->
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:14px;">
+        <!-- Protein -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#047857; margin-bottom:2px;">🥩 Protein</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_protein">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_protein">120</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_protein" style="height:100%; width:0%; background:#10b981; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Carbs -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#b45309; margin-bottom:2px;">🌾 Carbs</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_carbs">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_carbs">220</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_carbs" style="height:100%; width:0%; background:#f59e0b; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Fat -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#0369a1; margin-bottom:2px;">🥑 Fat</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_fat">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_fat">65</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_fat" style="height:100%; width:0%; background:#0284c7; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <!-- Fiber -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:12px; padding:8px 6px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#6d28d9; margin-bottom:2px;">🌱 Fiber</div>
+          <div style="font-size:12.5px; font-weight:800; color:var(--text);"><span id="nourishVal_fiber">0</span><span style="font-size:10px; font-weight:600; color:var(--muted);">/<span id="nourishTarget_fiber">30</span>g</span></div>
+          <div style="height:4px; border-radius:999px; background:#e5e7eb; margin-top:4px; overflow:hidden;">
+            <div id="nourishBar_fiber" style="height:100%; width:0%; background:#8b5cf6; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hydration Row -->
+      <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div style="flex:1; min-width:140px;">
+          <div style="font-size:12px; font-weight:700; color:#1e40af; display:flex; align-items:center; gap:4px;">
+            <span>💧 Hydration:</span>
+            <span id="nourishValWater" style="font-weight:800;">0</span> / <span id="nourishTargetWater">2500</span> ml
+          </div>
+          <div style="height:4px; border-radius:999px; background:#dbeafe; margin-top:4px; overflow:hidden;">
+            <div id="nourishWaterProgress" style="height:100%; width:0%; background:#3b82f6; border-radius:999px; transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button type="button" onclick="quickAddNourishWater(250)" style="background:#fff; border:1px solid #93c5fd; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:5px 9px; border-radius:8px; cursor:pointer;">+1 Cup (250ml)</button>
+          <button type="button" onclick="quickAddNourishWater(500)" style="background:#fff; border:1px solid #93c5fd; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:5px 9px; border-radius:8px; cursor:pointer;">+500ml</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Food Entry Engine Card -->
+    <div class="nourish-card" id="nourishEntryCard">
+      <!-- Meal Slot Selector -->
+      <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Select Meal Slot</div>
+      <div class="nourish-slot-pills">
+        <div class="nourish-slot-pill active" id="nourishSlot_breakfast" onclick="selectNourishSlot('breakfast')">🌅 Breakfast</div>
+        <div class="nourish-slot-pill" id="nourishSlot_lunch" onclick="selectNourishSlot('lunch')">☀️ Lunch</div>
+        <div class="nourish-slot-pill" id="nourishSlot_dinner" onclick="selectNourishSlot('dinner')">🌙 Dinner</div>
+        <div class="nourish-slot-pill" id="nourishSlot_snack" onclick="selectNourishSlot('snack')">🍎 Snack</div>
+      </div>
+
+      <!-- Entry Mode Tabs -->
+      <div class="nourish-entry-tabs">
+        <button type="button" class="nourish-tab-btn active" id="nourishTabSearch" onclick="switchNourishEntryTab('search')">🔍 Search Catalog</button>
+        <button type="button" class="nourish-tab-btn" id="nourishTabDescribe" onclick="switchNourishEntryTab('describe')">✨ Describe Plate (AI)</button>
+      </div>
+
+      <!-- Search Mode Content -->
+      <div id="nourishContentSearch">
+        <div style="position:relative; margin-bottom:10px;">
+          <input type="text" id="nourishSearchInput" placeholder="Search foods or type custom item (e.g. idli, oats, chicken, banana)..." autocomplete="off" oninput="onNourishSearchInput(event)" style="width:100%; padding:12px 14px; font-size:15px; border-radius:12px; border:1.5px solid var(--border); outline:none; background:#fff;">
+          <div id="nourishSearchDropdown" class="nourish-dropdown"></div>
+        </div>
+
+        <!-- Quantity & 4-Unit Switcher Row -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <button type="button" id="nourishBtnStepMinus" onclick="stepNourishAmount(-1)" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">-</button>
+            <input type="number" id="nourishAmountInput" value="100" min="0.1" step="any" oninput="updateNourishPreview(); updateNourishGramPillActiveState();" style="width:75px; text-align:center; padding:7px; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:8px; outline:none;">
+            <button type="button" id="nourishBtnStepPlus" onclick="stepNourishAmount(1)" style="background:#f3f4f6; border:1px solid var(--border); width:32px; height:36px; border-radius:8px; font-size:16px; font-weight:700; cursor:pointer;">+</button>
+          </div>
+
+          <!-- 4-Unit Selector -->
+          <div style="display:flex; gap:4px; flex-shrink:0;">
+            <button type="button" class="nourish-unit-pill active" id="nourishUnit_g" onclick="setNourishUnit('g')">g</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_oz" onclick="setNourishUnit('oz')">oz</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_ml" onclick="setNourishUnit('ml')">ml</button>
+            <button type="button" class="nourish-unit-pill" id="nourishUnit_serving" onclick="setNourishUnit('serving')">serving</button>
+          </div>
+        </div>
+
+        <!-- 1-Tap Gram Presets -->
+        <div id="nourishGramPillsRow" style="display:flex; align-items:center; gap:6px; margin-bottom:10px; overflow-x:auto; padding-bottom:2px;">
+          <span style="font-size:11px; font-weight:600; color:var(--muted); flex-shrink:0;">Quick:</span>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_50" onclick="setNourishGramPill(50)">50g</button>
+          <button type="button" class="nourish-gram-pill active" id="nourishGramPill_100" onclick="setNourishGramPill(100)">100g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_150" onclick="setNourishGramPill(150)">150g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_200" onclick="setNourishGramPill(200)">200g</button>
+          <button type="button" class="nourish-gram-pill" id="nourishGramPill_250" onclick="setNourishGramPill(250)">250g</button>
+        </div>
+
+        <!-- Live Macro Preview Bar -->
+        <div id="nourishPreviewBar" class="nourish-preview-bar">
+          <span style="color:var(--muted); font-size:11.5px;">Search an item or type a custom food name to preview nutrition.</span>
+        </div>
+
+        <div style="margin-top:8px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#4b5563;">
+            <input type="checkbox" id="nourishSearchShareHousehold" style="width:15px; height:15px; accent-color:#059669;">
+            <span id="nourishSearchShareLabel">👨‍👩‍👧 Share this meal with household (lets family 1-tap add)</span>
+          </label>
+          <div id="nourishSearchShareSub" style="font-size:10.5px; color:#6b7280; margin-left:21px; margin-top:2px;">
+            New custom foods are automatically saved to your household catalog for future searches.
+          </div>
+        </div>
+
+        <button type="button" id="nourishBtnLog" onclick="submitNourishLog()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(16,185,129,0.25);">
+          ➕ Log to Breakfast
+        </button>
+      </div>
+
+      <!-- Describe Plate Mode Content -->
+      <div id="nourishContentDescribe" style="display:none;">
+        <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">
+          Type whatever you ate in plain English (e.g. <i>"2 dosas with 1 cup sambar and coconut chutney"</i>). AI will deconstruct the plate and scale portions.
+        </div>
+        <textarea id="nourishDescribeInput" rows="3" placeholder="Describe your meal..." style="width:100%; padding:12px 14px; font-size:14px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff; font-family:inherit; resize:vertical;"></textarea>
+        <button type="button" id="nourishBtnAnalyzePlate" onclick="analyzeNourishPlate()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #4d7c0f, #16a34a); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer;">
+          ✨ Analyze Plate
+        </button>
+        <div id="nourishAnalyzeLoading" style="display:none; text-align:center; padding:14px; font-size:13px; font-weight:600; color:#047857;">
+          ⏳ Analyzing ingredients and scaling macros...
+        </div>
+        <div id="nourishParsedItems"></div>
+      </div>
+    </div>
+
+    <!-- Today's Meal Diary -->
+    <div id="nourishDiaryContainer">
+      <!-- Coach Feedback Card (Issue #694) -->
+      <div id="nourishCoachFeedbackCard" style="display:none; background:linear-gradient(135deg, #f0fdf4, #ecfdf5); border:1.5px solid #a7f3d0; border-radius:14px; padding:12px 14px; margin-bottom:12px; box-shadow:0 2px 6px rgba(16,185,129,0.06);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <span style="font-size:20px;">🩺</span>
+            <div>
+              <span id="nourishCoachCardAuthor" style="font-weight:700; font-size:13px; color:#065f46;">Coach Note</span>
+              <span id="nourishCoachCardRole" style="font-size:11px; color:#047857; margin-left:4px; opacity:0.85;">· Dietitian</span>
+            </div>
+          </div>
+          <span id="nourishCoachCardDate" style="font-size:11px; color:#059669; font-weight:600;">Today</span>
+        </div>
+        <div id="nourishCoachCardMessage" style="font-size:13px; color:#1e293b; line-height:1.45; white-space:pre-wrap;"></div>
+      </div>
+
+      <!-- Breakfast -->
+      <div class="nourish-slot-section" id="nourishDiarySection_breakfast">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🌅 Breakfast</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_breakfast">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_breakfast" onclick="shareNourishMealSlot('breakfast')" title="Share Breakfast with household">👨‍👩‍👧 Share</button>
+          </div>
+        </div>
+        <div id="nourishSlotItems_breakfast">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Lunch -->
+      <div class="nourish-slot-section" id="nourishDiarySection_lunch">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">☀️ Lunch</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_lunch">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_lunch" onclick="shareNourishMealSlot('lunch')" title="Share Lunch with household">👨‍👩‍👧 Share</button>
+          </div>
+        </div>
+        <div id="nourishSlotItems_lunch">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Dinner -->
+      <div class="nourish-slot-section" id="nourishDiarySection_dinner">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🌙 Dinner</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_dinner">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_dinner" onclick="shareNourishMealSlot('dinner')" title="Share Dinner with household">👨‍👩‍👧 Share</button>
+          </div>
+        </div>
+        <div id="nourishSlotItems_dinner">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+
+      <!-- Snack -->
+      <div class="nourish-slot-section" id="nourishDiarySection_snack">
+        <div class="nourish-slot-header">
+          <div class="nourish-slot-title">🍎 Snack</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="nourish-slot-subtotal" id="nourishSlotSubtotal_snack">0 kcal · 0g P</div>
+            <button type="button" class="nourish-slot-share-btn" id="nourishBtnShare_snack" onclick="shareNourishMealSlot('snack')" title="Share Snack with household">👨‍👩‍👧 Share</button>
+          </div>
+        </div>
+        <div id="nourishSlotItems_snack">
+          <div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>
+        </div>
+      </div>
+    </div>
+    </div> <!-- Close #nourishDayView -->
+
+    <!-- Nourish Trends View (Issue #692) -->
+    <div id="nourishTrendsView" style="display:none;">
+      <!-- Time Range Selector -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="font-weight:700; font-size:15px; color:#1e293b;">Macro Trends &amp; Analytics</div>
+        <div style="display:flex; background:#f1f5f9; padding:2px; border-radius:10px; border:1px solid #e2e8f0;">
+          <button type="button" id="nourishTrendsRange_7" onclick="loadNourishTrends(7)" style="padding:5px 10px; border:none; border-radius:8px; background:#059669; color:#fff; font-size:12px; font-weight:700; cursor:pointer;">7 Days</button>
+          <button type="button" id="nourishTrendsRange_14" onclick="loadNourishTrends(14)" style="padding:5px 10px; border:none; border-radius:8px; background:transparent; color:#64748b; font-size:12px; font-weight:700; cursor:pointer;">14 Days</button>
+          <button type="button" id="nourishTrendsRange_30" onclick="loadNourishTrends(30)" style="padding:5px 10px; border:none; border-radius:8px; background:transparent; color:#64748b; font-size:12px; font-weight:700; cursor:pointer;">30 Days</button>
+        </div>
+      </div>
+
+      <!-- Macro Summary Chips -->
+      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:12px;">
+        <!-- Calories Chip -->
+        <div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Daily Avg Calories</div>
+          <div style="display:flex; align-items:baseline; gap:4px; margin-top:2px;">
+            <span id="nourishTrendsAvgCal" style="font-size:18px; font-weight:800; color:var(--text);">--</span>
+            <span style="font-size:11px; color:var(--muted);">/ <span id="nourishTrendsTargetCal">2000</span> kcal</span>
+          </div>
+          <div id="nourishTrendsCalSub" style="font-size:10.5px; font-weight:600; color:#059669; margin-top:2px;">On-track</div>
+        </div>
+
+        <!-- Adherence % Chip -->
+        <div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+          <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Target Adherence</div>
+          <div style="display:flex; align-items:baseline; gap:4px; margin-top:2px;">
+            <span id="nourishTrendsAdherence" style="font-size:18px; font-weight:800; color:#059669;">--%</span>
+          </div>
+          <div style="font-size:10.5px; color:var(--muted); margin-top:2px;">within ±10% goal</div>
+        </div>
+      </div>
+
+      <!-- 4 Macros & Hydration Chips -->
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:14px;">
+        <!-- Avg Protein -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:10px; padding:8px 4px; text-align:center;">
+          <div style="font-size:10px; font-weight:700; color:#047857;">🥩 Protein</div>
+          <div style="font-size:12px; font-weight:800; color:var(--text); margin-top:2px;"><span id="nourishTrendsAvgProtein">0</span>g</div>
+          <div style="font-size:9.5px; color:var(--muted);">goal <span id="nourishTrendsTargetProtein">130</span>g</div>
+        </div>
+        <!-- Avg Carbs -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:10px; padding:8px 4px; text-align:center;">
+          <div style="font-size:10px; font-weight:700; color:#b45309;">🌾 Carbs</div>
+          <div style="font-size:12px; font-weight:800; color:var(--text); margin-top:2px;"><span id="nourishTrendsAvgCarbs">0</span>g</div>
+          <div style="font-size:9.5px; color:var(--muted);">goal <span id="nourishTrendsTargetCarbs">200</span>g</div>
+        </div>
+        <!-- Avg Fat -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:10px; padding:8px 4px; text-align:center;">
+          <div style="font-size:10px; font-weight:700; color:#0369a1;">🥑 Fat</div>
+          <div style="font-size:12px; font-weight:800; color:var(--text); margin-top:2px;"><span id="nourishTrendsAvgFat">0</span>g</div>
+          <div style="font-size:9.5px; color:var(--muted);">goal <span id="nourishTrendsTargetFat">65</span>g</div>
+        </div>
+        <!-- Avg Water -->
+        <div style="background:#f9fafb; border:1px solid #f1f5f9; border-radius:10px; padding:8px 4px; text-align:center;">
+          <div style="font-size:10px; font-weight:700; color:#1e40af;">💧 Water</div>
+          <div style="font-size:12px; font-weight:800; color:var(--text); margin-top:2px;"><span id="nourishTrendsAvgWater">0</span>ml</div>
+          <div style="font-size:9.5px; color:var(--muted);">goal <span id="nourishTrendsTargetWater">2.5k</span></div>
+        </div>
+      </div>
+
+      <!-- Responsive Bar Chart Card -->
+      <div class="nourish-card" style="padding:14px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; font-weight:700; color:#1e293b;">Daily Calories vs Target</div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:10.5px; color:var(--muted);">
+            <span style="display:inline-flex; align-items:center; gap:3px;"><span style="width:8px; height:8px; border-radius:2px; background:#10b981; display:inline-block;"></span> On-track</span>
+            <span style="display:inline-flex; align-items:center; gap:3px;"><span style="width:8px; height:8px; border-radius:2px; background:#f59e0b; display:inline-block;"></span> Over</span>
+            <span style="display:inline-flex; align-items:center; gap:3px;"><span style="width:8px; height:8px; border-radius:2px; background:#60a5fa; display:inline-block;"></span> Under</span>
+          </div>
+        </div>
+        <!-- SVG Chart Container -->
+        <div id="nourishTrendsChartContainer" style="width:100%; min-height:175px; overflow:hidden;">
+          <!-- Populated by renderNourishTrendsChart -->
+        </div>
+      </div>
+    </div>
+    </div> <!-- Close #nourishActiveView -->
+  </div>
+
+  <!-- Nourish Portion Edit Modal -->
+  <div id="nourishEditModal" class="modal-overlay" onclick="if(event.target===this)closeNourishEditModal();" style="align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; width:100%; max-width:380px; border-radius:18px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Edit Portion</div>
+      <div id="nourishEditName" style="font-size:13.5px; color:#047857; font-weight:600; margin-bottom:14px;"></div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Serving Amount</label>
+        <input type="number" id="nourishEditAmount" min="0.1" step="any" style="width:100%; padding:10px; font-size:16px; border:1px solid var(--border); border-radius:10px; margin-top:4px; outline:none;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Serving Unit</label>
+        <select id="nourishEditUnit" style="width:100%; padding:10px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:4px; background:#fff; outline:none;">
+          <option value="g">g (grams)</option>
+          <option value="oz">oz (ounces)</option>
+          <option value="ml">ml (milliliters)</option>
+          <option value="serving">serving</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="closeNourishEditModal()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; cursor:pointer;">Cancel</button>
+        <button type="button" id="nourishBtnSaveEditLog" onclick="saveNourishEditLog()" style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--green); color:#fff; font-weight:700; cursor:pointer;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nourish Goals & Macro Budgets Modal -->
+  <div id="nourishGoalsModal" class="modal-overlay" onclick="if(event.target===this)closeNourishGoalsModal();" style="align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; width:100%; max-width:400px; border-radius:18px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div style="font-weight:700; font-size:16px; color:var(--text);">🎯 Daily Goals &amp; Macro Budgets</div>
+        <button type="button" onclick="closeNourishGoalsModal()" style="border:none; background:none; font-size:18px; cursor:pointer; color:var(--muted);">✕</button>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Set your personal targets. Calorie and macro bars recalculate instantly.</div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Daily Calories (kcal)</label>
+        <input type="number" id="nourishGoalCalories" min="500" max="10000" step="10" placeholder="2000" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#047857; text-transform:uppercase;">🥩 Protein (g)</label>
+          <input type="number" id="nourishGoalProtein" min="0" max="500" step="1" placeholder="130" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#b45309; text-transform:uppercase;">🌾 Carbs (g)</label>
+          <input type="number" id="nourishGoalCarbs" min="0" max="800" step="1" placeholder="200" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#0369a1; text-transform:uppercase;">🥑 Fat (g)</label>
+          <input type="number" id="nourishGoalFat" min="0" max="300" step="1" placeholder="65" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#6d28d9; text-transform:uppercase;">🌱 Fiber (g)</label>
+          <input type="number" id="nourishGoalFiber" min="0" max="150" step="1" placeholder="30" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="font-size:11px; font-weight:700; color:#1e40af; text-transform:uppercase;">💧 Daily Water (ml)</label>
+        <input type="number" id="nourishGoalWater" min="500" max="10000" step="50" placeholder="2500" style="width:100%; padding:9px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:3px; outline:none;">
+      </div>
+
+      <!-- Nourish Coach Link Section (Issue #694 & #698) -->
+      <div id="nourishCoachLinkSection" style="margin-bottom:16px; padding:12px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:12.5px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:5px;">
+              <span>🥗</span> Nourish Coach Link
+            </div>
+            <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:1px;">Share read-only diary &amp; receive coach notes</div>
+          </div>
+          <label class="toggle-switch" style="margin:0; width:34px; height:20px; flex-shrink:0;">
+            <input type="checkbox" id="nourishCoachLinkToggle" onchange="toggleNourishCoachLink(this.checked)">
+            <span class="toggle-slider" style="border-radius:20px;"></span>
+          </label>
+        </div>
+        <div id="nourishCoachLinkDetails" style="display:none; margin-top:10px;">
+          <div style="margin-bottom:8px;">
+            <label style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Client Display Alias</label>
+            <input type="text" id="nourishCoachAliasInput" onchange="saveNourishCoachAlias(this.value)" onblur="saveNourishCoachAlias(this.value)" placeholder="e.g. Venkat S. (Athlete #4)" style="width:100%; padding:8px 10px; font-size:13px; border:1px solid var(--border); border-radius:8px; margin-top:3px; outline:none;">
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Shareable Coach Link</label>
+            <div style="display:flex; gap:6px; margin-top:3px;">
+              <input type="text" id="nourishCoachShareUrl" readonly placeholder="Auto-generating link..." style="flex:1; padding:8px 10px; font-size:12px; border:1px solid var(--border); border-radius:8px; background:#f1f5f9; color:#475569; outline:none; text-overflow:ellipsis;">
+              <button type="button" id="nourishBtnCopyCoachLink" onclick="copyNourishCoachLink()" style="background:#059669; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">📋 Copy Link</button>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <button type="button" id="nourishBtnResetCoachToken" onclick="resetNourishCoachToken()" style="background:none; border:none; color:#dc2626; font-size:11.5px; font-weight:600; cursor:pointer; padding:2px 4px; display:inline-flex; align-items:center; gap:3px;">
+              🔄 Reset Token
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="closeNourishGoalsModal()" style="flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:#f3f4f6; font-weight:600; cursor:pointer;">Cancel</button>
+        <button type="button" id="nourishBtnSaveGoals" onclick="saveNourishGoals()" style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--green); color:#fff; font-weight:700; cursor:pointer;">Save Goals</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nourish Shared Household Meal Bottom Drawer -->
+  <div id="nourishSharedMealDrawer" class="modal-overlay" style="display:none; align-items:flex-end; justify-content:center; padding:0; z-index:1100;" onclick="if(event.target===this)dismissNourishSharedMeal();">
+    <div style="background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom, 0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🍽️</span>
+          <div>
+            <div style="font-weight:700; font-size:15px; color:#111827;">Shared Family Meal</div>
+            <div id="nourishSharedDrawerSub" style="font-size:12px; color:#047857; font-weight:600;">A family member logged a meal</div>
+          </div>
+        </div>
+        <button type="button" onclick="dismissNourishSharedMeal()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer;">✕</button>
+      </div>
+      <div id="nourishSharedDrawerItems" style="background:#f9fafb; border:1px solid #f3f4f6; border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:13px; max-height:180px; overflow-y:auto;">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="button" id="nourishBtnAddSharedMeal" onclick="acceptNourishSharedMeal()" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer;">
+          ➕ Add to My Meal (1 Tap)
+        </button>
+        <button type="button" onclick="dismissNourishSharedMeal()" style="background:#f3f4f6; color:#4b5563; border:none; padding:12px 16px; border-radius:12px; font-weight:600; font-size:13.5px; cursor:pointer;">
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Still Good to Nourish 1-Tap Bridge Drawer (Issue #688) -->
+  <div id="sgNourishBridgeDrawer" class="modal-overlay" style="display:none; align-items:flex-end; justify-content:center; padding:0; z-index:11000;" onclick="if(event.target===this)skipSgNourishBridge();">
+    <div style="background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom, 0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🍽️</span>
+          <div>
+            <div style="font-weight:700; font-size:16px; color:#111827;">Log this to Nourish?</div>
+            <div id="sgNourishBridgeSub" style="font-size:12.5px; color:#047857; font-weight:600;">1 serving</div>
+          </div>
+        </div>
+        <button type="button" onclick="skipSgNourishBridge()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer;" aria-label="Close">✕</button>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:14px; line-height:1.4;">
+        Marking as enjoyed! Which meal did you enjoy this for?
+      </div>
+      <!-- 4 Quick Meal Slot Buttons -->
+      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:16px;">
+        <button type="button" id="sgBridgeBtn_breakfast" class="sg-nourish-slot-btn" onclick="submitSgNourishBridge('breakfast')" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:12px; border-radius:12px; border:1.5px solid #d1fae5; background:#f0fdf4; color:#065f46; font-weight:700; font-size:13.5px; cursor:pointer; transition:all 0.15s ease;">
+          <span>🌅</span> Breakfast
+        </button>
+        <button type="button" id="sgBridgeBtn_lunch" class="sg-nourish-slot-btn" onclick="submitSgNourishBridge('lunch')" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:12px; border-radius:12px; border:1.5px solid #d1fae5; background:#f0fdf4; color:#065f46; font-weight:700; font-size:13.5px; cursor:pointer; transition:all 0.15s ease;">
+          <span>☀️</span> Lunch
+        </button>
+        <button type="button" id="sgBridgeBtn_dinner" class="sg-nourish-slot-btn" onclick="submitSgNourishBridge('dinner')" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:12px; border-radius:12px; border:1.5px solid #d1fae5; background:#f0fdf4; color:#065f46; font-weight:700; font-size:13.5px; cursor:pointer; transition:all 0.15s ease;">
+          <span>🌙</span> Dinner
+        </button>
+        <button type="button" id="sgBridgeBtn_snack" class="sg-nourish-slot-btn" onclick="submitSgNourishBridge('snack')" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:12px; border-radius:12px; border:1.5px solid #d1fae5; background:#f0fdf4; color:#065f46; font-weight:700; font-size:13.5px; cursor:pointer; transition:all 0.15s ease;">
+          <span>🍎</span> Snack
+        </button>
+      </div>
+      <!-- Subtle Skip Button -->
+      <div style="text-align:center;">
+        <button type="button" id="sgNourishBridgeBtnSkip" onclick="skipSgNourishBridge()" style="background:none; border:none; color:#6b7280; font-size:13px; font-weight:600; cursor:pointer; padding:6px 12px; text-decoration:underline;">
+          Skip (Just mark as enjoyed)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nourish Coach Feedback Drawer (Issue #694) -->
+  <div id="nourishCoachFeedbackDrawer" class="modal-overlay" style="display:none; align-items:flex-end; justify-content:center; padding:0; z-index:11000;" onclick="if(event.target===this)closeNourishCoachDrawer();">
+    <div style="background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom, 0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🩺</span>
+          <div>
+            <div style="font-weight:700; font-size:16px; color:#111827;" id="nourishCoachDrawerTitle">Coach Feedback</div>
+            <div id="nourishCoachDrawerSub" style="font-size:12px; color:#047857; font-weight:600;">Nourish Coaching</div>
+          </div>
+        </div>
+        <button type="button" onclick="closeNourishCoachDrawer()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer;" aria-label="Close">✕</button>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span id="nourishCoachDrawerAuthor" style="font-size:13px; font-weight:700; color:#1e293b;">Coach</span>
+          <span id="nourishCoachDrawerDate" style="font-size:11.5px; color:#64748b; font-weight:600;"></span>
+        </div>
+        <div id="nourishCoachDrawerMessage" style="font-size:13.5px; color:#334155; line-height:1.5; white-space:pre-wrap;"></div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="button" id="nourishBtnAckCoachNote" onclick="acknowledgeCoachFeedbackNote()" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+          ✓ Acknowledge
+        </button>
+        <button type="button" onclick="closeNourishCoachDrawer()" style="background:#f3f4f6; color:#4b5563; border:none; padding:12px 16px; border-radius:12px; font-weight:600; font-size:13.5px; cursor:pointer;">
+          Close
+        </button>
+      </div>
     </div>
   </div>
 
@@ -2024,6 +2753,9 @@ function toggleBurger(force) {
   const menu = document.getElementById("burgerMenu");
   const overlay = document.getElementById("burgerOverlay");
   const shouldOpen = (typeof force === 'boolean') ? force : (menu ? !menu.classList.contains("show") : false);
+  if (shouldOpen && typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
   if (menu) menu.classList.toggle("show", shouldOpen);
   if (overlay) overlay.classList.toggle("show", shouldOpen);
   if (window.featureDiscoveryEngine && menu) {
@@ -2034,6 +2766,162 @@ function toggleBurger(force) {
 function closeBurger() {
   toggleBurger(false);
 }
+
+function closeAppSwitcherMenu() {
+  var menu = document.getElementById('appSwitcherMenu');
+  var overlay = document.getElementById('appSwitcherOverlay');
+  var btn = document.getElementById('appSwitcherBtn');
+  var chev = document.getElementById('appSwitcherChevron');
+  if (menu) menu.classList.remove('show');
+  if (overlay) overlay.classList.remove('show');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (chev) chev.style.transform = 'rotate(0deg)';
+}
+window.closeAppSwitcherMenu = closeAppSwitcherMenu;
+
+function dismissAppSwitcherSpotlight(event) {
+  if (event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  try {
+    localStorage.setItem('lm_app_switcher_seen_v1', '1');
+  } catch (e) {}
+  var spot = document.getElementById('appSwitcherSpotlight');
+  if (spot) {
+    spot.classList.remove('show');
+    spot.style.display = 'none';
+  }
+}
+window.dismissAppSwitcherSpotlight = dismissAppSwitcherSpotlight;
+
+function initAppSwitcherSpotlight() {
+  var seen = null;
+  try {
+    seen = localStorage.getItem('lm_app_switcher_seen_v1');
+  } catch (e) {}
+  var spot = document.getElementById('appSwitcherSpotlight');
+  if (!spot) return;
+  if (!seen) {
+    spot.style.display = '';
+    spot.classList.add('show');
+  } else {
+    spot.classList.remove('show');
+    spot.style.display = 'none';
+  }
+}
+window.initAppSwitcherSpotlight = initAppSwitcherSpotlight;
+
+function toggleAppSwitcherMenu(event) {
+  if (event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  if (window.featureDiscoveryEngine && typeof window.featureDiscoveryEngine.onLogoClick === 'function') {
+    if (window.featureDiscoveryEngine.onLogoClick(event)) return false;
+  }
+  var menu = document.getElementById('appSwitcherMenu');
+  var overlay = document.getElementById('appSwitcherOverlay');
+  var btn = document.getElementById('appSwitcherBtn');
+  var chev = document.getElementById('appSwitcherChevron');
+  if (!menu) return false;
+  var shouldOpen = !menu.classList.contains('show');
+  if (shouldOpen) {
+    closeBurger();
+    dismissAppSwitcherSpotlight();
+    if (typeof syncStillGoodSwitcherBadges === 'function') {
+      syncStillGoodSwitcherBadges();
+    }
+    if (typeof updateAppSwitcherActiveState === 'function') {
+      updateAppSwitcherActiveState(window.currentScreen || 'home');
+    }
+  }
+  menu.classList.toggle('show', shouldOpen);
+  if (overlay) overlay.classList.toggle('show', shouldOpen);
+  if (btn) btn.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (chev) chev.style.transform = shouldOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+  return false;
+}
+window.toggleAppSwitcherMenu = toggleAppSwitcherMenu;
+
+function updateAppSwitcherActiveState(screenName) {
+  var homeItem = document.getElementById('appSwitchItemHome');
+  var sgItem = document.getElementById('appSwitchItemStillGood');
+  var nourishItem = document.getElementById('appSwitchItemNourish');
+  if (homeItem) homeItem.classList.toggle('active', screenName === 'home' || screenName === 'catalog');
+  if (sgItem) sgItem.classList.toggle('active', screenName === 'stillGood');
+  if (nourishItem) nourishItem.classList.toggle('active', screenName === 'nourish');
+
+  var lmLogo = document.getElementById('cartIcon');
+  var sgLogo = document.getElementById('appSwitcherSgIcon');
+  var nLogo = document.getElementById('appSwitcherNourishIcon');
+  var isSg = screenName === 'stillGood';
+  var isN = screenName === 'nourish';
+  if (lmLogo) lmLogo.style.display = (isSg || isN) ? 'none' : 'block';
+  if (sgLogo) sgLogo.style.display = isSg ? 'flex' : 'none';
+  if (nLogo) nLogo.style.display = isN ? 'block' : 'none';
+}
+window.updateAppSwitcherActiveState = updateAppSwitcherActiveState;
+
+function syncStillGoodSwitcherBadges(explicitUrgentCount) {
+  var homeBadge = document.getElementById('sgHomeBadge');
+  var switcherBadge = document.getElementById('appSwitcherSgBadge');
+  var urgentDot = document.getElementById('appSwitcherUrgentDot');
+
+  var count = 0;
+  if (typeof explicitUrgentCount === 'number') {
+    count = explicitUrgentCount;
+  } else if (typeof sgItems !== 'undefined' && Array.isArray(sgItems) && sgItems.length > 0) {
+    count = sgItems.filter(function(item) {
+      return item && item.status === 'active' && !item.is_inactive && item.lifecycle_status !== 'inactive' && item.urgency === 'urgent';
+    }).length;
+  } else if (homeBadge && homeBadge.textContent && homeBadge.textContent.trim()) {
+    var parsed = parseInt(homeBadge.textContent.trim(), 10);
+    if (!isNaN(parsed) && parsed > 0) count = parsed;
+  }
+
+  if (count > 0) {
+    if (homeBadge) {
+      homeBadge.textContent = String(count);
+      homeBadge.style.display = 'inline-block';
+    }
+    if (switcherBadge) {
+      switcherBadge.textContent = count + ' urgent';
+      switcherBadge.style.display = 'inline-block';
+    }
+    if (urgentDot) {
+      urgentDot.style.display = 'block';
+    }
+  } else {
+    if (homeBadge) {
+      homeBadge.textContent = '';
+      homeBadge.style.display = 'none';
+    }
+    if (switcherBadge) {
+      switcherBadge.textContent = '';
+      switcherBadge.style.display = 'none';
+    }
+    if (urgentDot) {
+      urgentDot.style.display = 'none';
+    }
+  }
+}
+window.syncStillGoodSwitcherBadges = syncStillGoodSwitcherBadges;
+
+function selectSuiteApp(appName) {
+  closeAppSwitcherMenu();
+  dismissAppSwitcherSpotlight();
+  if (appName === 'home') {
+    showScreen('home');
+  } else if (appName === 'stillGood') {
+    showStillGoodScreen();
+  } else if (appName === 'nourish') {
+    showNourishScreen();
+  }
+}
+window.selectSuiteApp = selectSuiteApp;
+
+document.addEventListener('DOMContentLoaded', function() {
+  initAppSwitcherSpotlight();
+});
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s), API='/api';
 
@@ -3244,12 +4132,16 @@ function updateCatalogGroupByUI() {
 
 async function openStore(sid) {
   currentScreen = 'catalog';
+  window.currentScreen = 'catalog';
+  if (typeof closeAppSwitcherMenu === 'function') closeAppSwitcherMenu();
   window.scrollTo(0, 0);
   currentStore=stores.find(s=>s.id===sid);
   if (!currentStore) return;
   $('#headerTitle').textContent='Add to ' + currentStore.name;
   if($('#catalogStoreName')) $('#catalogStoreName').textContent='Add to ' + currentStore.name;
   $('#screenHome').style.display='none'; $('#screenCatalog').classList.add('active');
+  if($('#screenNourish')) $('#screenNourish').style.display='none';
+  if (typeof updateAppSwitcherActiveState === 'function') updateAppSwitcherActiveState('catalog');
   $('#catalogSearch').value=''; if($('#catalogQty'))$('#catalogQty').value='';
   if (navigator.onLine) {
     try {
@@ -3548,6 +4440,8 @@ function showScreen(name){
   window.currentScreen = name;
   if (typeof closeBurger === 'function') closeBurger();
   else if (typeof toggleBurger === 'function') toggleBurger(false);
+  if (typeof closeAppSwitcherMenu === 'function') closeAppSwitcherMenu();
+  if (typeof updateAppSwitcherActiveState === 'function') updateAppSwitcherActiveState(name);
   window.scrollTo(0, 0);
   document.body.scrollTop = 0;
   document.documentElement.scrollTop = 0;
@@ -3559,6 +4453,7 @@ function showScreen(name){
     $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -3580,6 +4475,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -3591,6 +4487,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='block';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
@@ -3602,6 +4499,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='block';
@@ -3616,6 +4514,7 @@ function showScreen(name){
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='block';
     if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
@@ -3631,12 +4530,39 @@ function showScreen(name){
     if($('#screenHome')) $('#screenHome').style.display='none';
     if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
     if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='none';
     if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
     if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
     if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
     if($('#screenStillGood')) $('#screenStillGood').style.display='block';
     $('#headerTitle').textContent='Still Good';
     loadStillGood();
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+  } else if(name==='nourish'){
+    if (typeof closeBurger === 'function') closeBurger();
+    document.querySelector('.header').classList.add('hide-badges');
+    if($('#screenHome')) $('#screenHome').style.display='none';
+    if($('#screenCatalog')) $('#screenCatalog').classList.remove('active');
+    if($('#screenRecipes')) $('#screenRecipes').style.display='none';
+    if($('#screenStillGood')) $('#screenStillGood').style.display='none';
+    if($('#screenAnalytics')) $('#screenAnalytics').style.display='none';
+    if($('#screenGlobalVisits')) $('#screenGlobalVisits').style.display='none';
+    if($('#screenVisitDetail')) $('#screenVisitDetail').style.display='none';
+    if($('#screenNourish')) $('#screenNourish').style.display='block';
+    $('#headerTitle').textContent='Nourish';
+    if (typeof updateNourishEnabledView === 'function') {
+      updateNourishEnabledView();
+    }
+    if (typeof syncNourishEnabledFromServer === 'function') {
+      syncNourishEnabledFromServer();
+    }
+    if (typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
+      // Disabled view shown
+    } else if (typeof loadNourishDay === 'function') {
+      loadNourishDay();
+    }
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
     document.documentElement.scrollTop = 0;
@@ -4888,6 +5814,9 @@ async function showStillGoodScreen() {
   } else if (typeof toggleBurger === 'function') {
     toggleBurger(false);
   }
+  if (typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
   if (!window.currentCfg && window.authConfigPromise) {
     try {
       await window.authConfigPromise;
@@ -4899,6 +5828,28 @@ async function showStillGoodScreen() {
   }
   showScreen('stillGood');
 }
+
+async function showNourishScreen() {
+  if (typeof closeBurger === 'function') {
+    closeBurger();
+  } else if (typeof toggleBurger === 'function') {
+    toggleBurger(false);
+  }
+  if (typeof closeAppSwitcherMenu === 'function') {
+    closeAppSwitcherMenu();
+  }
+  if (!window.currentCfg && window.authConfigPromise) {
+    try {
+      await window.authConfigPromise;
+    } catch(e) {}
+  }
+  if (!canAccessStillGood()) {
+    showPremiumModal('Nourish');
+    return;
+  }
+  showScreen('nourish');
+}
+window.showNourishScreen = showNourishScreen;
 
 function switchSgTab(tab) {
   sgActiveTab = tab;
@@ -4944,6 +5895,9 @@ async function loadStillGood() {
     if (res && res.ok) {
       sgItems = res.items || [];
       sgStats = res.stats || {};
+      if (typeof syncStillGoodSwitcherBadges === 'function') {
+        syncStillGoodSwitcherBadges();
+      }
 
       var countFridgeEl = document.getElementById('sgCountFridge');
       if (countFridgeEl) countFridgeEl.textContent = sgStats.active_fridge || 0;
@@ -5796,6 +6750,22 @@ function attachSgSwipe(itemId) {
 }
 
 function fireStillGoodConfetti(targetEl) {
+  var c = window.confetti;
+  if (c && typeof c.create === 'function') {
+    if (!window._mainConfetti) {
+      try {
+        window._mainConfetti = c.create(null, { resize: true, useWorker: false });
+      } catch (e) {
+        window._mainConfetti = c;
+      }
+    }
+    c = window._mainConfetti;
+  }
+
+  if (!c || typeof c !== 'function') {
+    return;
+  }
+
   var originX = 0.5;
   var originY = 0.55;
   if (targetEl && targetEl.getBoundingClientRect) {
@@ -5819,9 +6789,7 @@ function fireStillGoodConfetti(targetEl) {
   };
 
   try {
-    if (typeof window.confetti === 'function') {
-      window.confetti(opts1);
-    }
+    c(opts1);
   } catch (e) {}
 
   setTimeout(function() {
@@ -5838,12 +6806,152 @@ function fireStillGoodConfetti(targetEl) {
       colors: ['#10b981', '#34d399', '#6ee7b7', '#fcd34d', '#3b82f6', '#fbbf24', '#f59e0b']
     };
     try {
-      if (typeof window.confetti === 'function') {
-        window.confetti(opts2);
-      }
+      c(opts2);
     } catch (e) {}
   }, 120);
 }
+
+// ── Still Good to Nourish 1-Tap Bridge (Issue #688) ──
+var _sgBridgeContext = null;
+
+function openSgNourishBridgeDrawer(ctx) {
+  _sgBridgeContext = ctx;
+  var sub = document.getElementById('sgNourishBridgeSub');
+  if (sub) {
+    sub.textContent = (ctx.itemName || 'Meal') + ' · 1 serving';
+  }
+  var drawer = document.getElementById('sgNourishBridgeDrawer');
+  if (drawer) {
+    drawer.style.display = 'flex';
+    drawer.classList.add('active');
+  }
+}
+
+function closeSgNourishBridgeDrawer() {
+  var drawer = document.getElementById('sgNourishBridgeDrawer');
+  if (drawer) {
+    drawer.style.display = 'none';
+    drawer.classList.remove('active');
+  }
+}
+
+function getTodayDateString() {
+  var d = new Date();
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  return [year, month, day].join('-');
+}
+
+async function submitSgNourishBridge(slot) {
+  var ctx = _sgBridgeContext;
+  if (!ctx) return;
+  _sgBridgeContext = null;
+  closeSgNourishBridgeDrawer();
+
+  var itemId = ctx.itemId;
+  var itemName = ctx.itemName;
+  var triggerEl = ctx.triggerEl;
+  var card = ctx.card;
+  var wrap = ctx.wrap;
+
+  if (triggerEl && triggerEl.classList) {
+    triggerEl.classList.add('sg-btn-enjoying');
+  }
+  if (wrap) {
+    wrap.classList.add('sg-card-celebrating');
+  }
+
+  // 1. Post to /api/nourish/logs
+  var todayStr = getTodayDateString();
+  try {
+    await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        log_date: todayStr,
+        meal_slot: slot,
+        food_name: itemName,
+        quantity: 1,
+        unit: 'serving',
+        still_good_item_id: itemId
+      })
+    });
+  } catch(err) {
+    console.error('Bridge nourish log error:', err);
+  }
+
+  // 2. Execute the Still Good consume action
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'consume' })
+    }).then(function(r) { return r.json(); });
+
+    // 3. Fire confetti!
+    fireStillGoodConfetti(triggerEl || card);
+
+    // 4. Show toast
+    var slotTitle = slot.charAt(0).toUpperCase() + slot.slice(1);
+    if (typeof toast === 'function') toast('🎉 Enjoyed & logged to ' + slotTitle + '!');
+    loadStillGood();
+    if (typeof currentNourishDate !== 'undefined' && currentNourishDate === todayStr && typeof loadNourishDay === 'function') {
+      loadNourishDay(currentNourishDate);
+    }
+  } catch(err) {
+    console.error('Error executing bridge consume:', err);
+    if (triggerEl && triggerEl.disabled !== undefined) triggerEl.disabled = false;
+    loadStillGood();
+  }
+}
+
+async function skipSgNourishBridge() {
+  var ctx = _sgBridgeContext;
+  if (!ctx) return;
+  _sgBridgeContext = null;
+  closeSgNourishBridgeDrawer();
+
+  var itemId = ctx.itemId;
+  var triggerEl = ctx.triggerEl;
+  var card = ctx.card;
+  var wrap = ctx.wrap;
+
+  if (triggerEl && triggerEl.classList) {
+    triggerEl.classList.add('sg-btn-enjoying');
+  }
+  if (wrap) {
+    wrap.classList.add('sg-card-celebrating');
+  }
+
+  // 1. Execute the Still Good consume action directly
+  try {
+    var res = await fetch(API + '/still-good/' + itemId + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'consume' })
+    }).then(function(r) { return r.json(); });
+
+    // 2. Fire confetti!
+    fireStillGoodConfetti(triggerEl || card);
+
+    // 3. Show toast
+    if (typeof toast === 'function') toast('🎉 Kitchen win! Meal put to good use.');
+    loadStillGood();
+  } catch(err) {
+    console.error('Error executing consume on skip:', err);
+    if (triggerEl && triggerEl.disabled !== undefined) triggerEl.disabled = false;
+    loadStillGood();
+  }
+}
+
+window.openSgNourishBridgeDrawer = openSgNourishBridgeDrawer;
+window.closeSgNourishBridgeDrawer = closeSgNourishBridgeDrawer;
+window.submitSgNourishBridge = submitSgNourishBridge;
+window.skipSgNourishBridge = skipSgNourishBridge;
+window.getTodayDateString = getTodayDateString;
 
 async function stillGoodAction(itemId, action, evt) {
   var triggerEl = (evt && (evt.currentTarget || evt.target)) ? (evt.currentTarget || evt.target) : document.getElementById('sgCard_' + itemId);
@@ -5855,6 +6963,20 @@ async function stillGoodAction(itemId, action, evt) {
     var wrap = document.getElementById('sgWrap_' + itemId);
 
     if (action === 'consume') {
+      var nourishActive = (window._nourishEnabled === true) || (typeof isNourishEnabled === 'function' && isNourishEnabled());
+      if (nourishActive) {
+        var item = (typeof sgItems !== 'undefined' && Array.isArray(sgItems)) ? sgItems.find(function(i) { return i.id === itemId; }) : null;
+        var itemName = item ? (item.name || item.food_name || 'Meal') : 'Meal';
+        openSgNourishBridgeDrawer({
+          itemId: itemId,
+          itemName: itemName,
+          triggerEl: triggerEl,
+          card: card,
+          wrap: wrap
+        });
+        return;
+      }
+
       if (triggerEl && triggerEl.classList) {
         triggerEl.classList.add('sg-btn-enjoying');
       }
@@ -6784,6 +7906,9 @@ function showPremiumModal(featureName) {
     } else if (featureName === 'Still Good') {
       title.textContent = 'Still Good is a Premium Feature';
       desc.textContent = 'Track leftovers, reduce household food waste, and get AI-powered safe shelf-life recommendations with ListMate Premium.';
+    } else if (featureName === 'Nourish') {
+      title.textContent = 'Nourish is a Premium Feature';
+      desc.textContent = 'Track daily calories, protein, and macros effortlessly for your whole household with AI meal parsing, 4-unit scaling, and 100% private personal logs.';
     } else {
       title.textContent = 'Recipe Planner is Premium';
       desc.textContent = 'Unlock AI Recipe Planner & Meal Generator, smart store mapping, and custom dietary recommendations.';
@@ -9487,6 +10612,46 @@ window.onDay7ShowMeHow = function() {
           showFeedbackModal();
         }
       }, 500);
+    } else if (action === 'open_nourish' || action === 'nourish') {
+      const dateParam = urlParams.get('date');
+      const slotParam = urlParams.get('slot');
+      const showCoach = urlParams.get('show_coach_drawer') === '1' || urlParams.get('coach_note') === '1';
+      const subviewParam = urlParams.get('subview') || urlParams.get('tab');
+      urlParams.delete('action');
+      urlParams.delete('source');
+      urlParams.delete('date');
+      urlParams.delete('slot');
+      urlParams.delete('show_coach_drawer');
+      urlParams.delete('coach_note');
+      urlParams.delete('subview');
+      urlParams.delete('tab');
+      const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+      window.history.replaceState({}, document.title, cleanUrl);
+      setTimeout(() => {
+        if (typeof showNourishScreen === 'function') {
+          showNourishScreen();
+        } else if (typeof showScreen === 'function') {
+          showScreen('nourish');
+        }
+        if (subviewParam === 'trends' && typeof switchNourishSubView === 'function') {
+          switchNourishSubView('trends');
+        }
+        if (dateParam && typeof loadNourishDay === 'function') {
+          loadNourishDay(dateParam);
+        }
+        if (slotParam && typeof selectNourishSlot === 'function') {
+          selectNourishSlot(slotParam);
+        }
+        if (typeof checkNourishSharedMeals === 'function') {
+          checkNourishSharedMeals();
+        }
+        if (showCoach) {
+          window._pendingShowCoachDrawer = true;
+          if (typeof openNourishCoachDrawer === 'function') {
+            openNourishCoachDrawer(window._lastCoachNote || { log_date: dateParam || getTodayDateString(), message: 'Your coach left feedback on your log.' });
+          }
+        }
+      }, 500);
     } else if (action === 'invite' || action === 'invite_friends' || action === 'invite-friends' || action === 'share' || action === 'share_app' || action === 'share-app') {
       urlParams.delete('action');
       urlParams.delete('source');
@@ -9644,6 +10809,53 @@ window.initPushNotifications = async function() {
             showStillGoodScreen();
           } else if (typeof showScreen === 'function') {
             showScreen('stillGood');
+          }
+        }, 150);
+        return;
+      }
+
+      const isNourishPush = action === 'open_nourish' ||
+                            action === 'nourish' ||
+                            action === 'open_coach_note' ||
+                            data.screen === 'nourish' ||
+                            data.campaign === 'nourish_reminder' ||
+                            data.campaign === 'nourish_coach_note' ||
+                            data.show_coach_drawer ||
+                            targetUrl.includes('action=open_nourish') ||
+                            targetUrl.includes('screen=nourish');
+      if (isNourishPush) {
+        console.log('[Push] Handled Nourish push tap. Opening Nourish screen.');
+        setTimeout(() => {
+          if (typeof showNourishScreen === 'function') {
+            showNourishScreen();
+          } else if (typeof showScreen === 'function') {
+            showScreen('nourish');
+          }
+          if (data.subview === 'trends' || targetUrl.includes('subview=trends')) {
+            if (typeof switchNourishSubView === 'function') switchNourishSubView('trends');
+          }
+          const targetDate = data.date || notifObj.date;
+          const targetSlot = data.slot || notifObj.slot;
+          if (targetDate && typeof loadNourishDay === 'function') {
+            loadNourishDay(targetDate);
+          }
+          if (targetSlot && typeof selectNourishSlot === 'function') {
+            selectNourishSlot(targetSlot);
+          }
+          if (typeof checkNourishSharedMeals === 'function') {
+            checkNourishSharedMeals();
+          }
+          const showCoach = data.show_coach_drawer || data.coach_note_id || action === 'open_coach_note' || targetUrl.includes('show_coach_drawer=1');
+          if (showCoach) {
+            window._pendingShowCoachDrawer = true;
+            if (typeof openNourishCoachDrawer === 'function') {
+              openNourishCoachDrawer(window._lastCoachNote || {
+                author_name: data.coach_name || 'Coach',
+                author_role: data.coach_role || 'Coach',
+                log_date: targetDate || getTodayDateString(),
+                message: data.message || notifObj.body || 'Your coach left feedback on your nutrition log.'
+              });
+            }
           }
         }, 150);
         return;
@@ -10032,6 +11244,1942 @@ window.checkAppUpdatePrompt = async function() {
     });
   }
 })();
+
+// ── Nourish Client Controller (Issue #676) ──
+var currentNourishDate = (function() {
+  var d = new Date();
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  return [year, month, day].join('-');
+})();
+
+var currentNourishSlot = (function() {
+  var h = new Date().getHours();
+  if (h >= 4 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 16) return 'lunch';
+  if (h >= 16 && h < 21) return 'dinner';
+  return 'snack';
+})();
+
+var currentNourishData = null;
+var selectedNourishItem = null;
+var nourishSelectedUnit = 'g';
+var nourishSearchDebounceTimer = null;
+var nourishEntryMode = 'search';
+
+function formatNourishDisplayDate(dateStr) {
+  if (!dateStr) return 'Today';
+  var today = (function() {
+    var d = new Date();
+    var month = '' + (d.getMonth() + 1);
+    var day = '' + d.getDate();
+    var year = d.getFullYear();
+    if (month.length < 2) month = '0' + month;
+    if (day.length < 2) day = '0' + day;
+    return [year, month, day].join('-');
+  })();
+  if (dateStr === today) return 'Today, ' + formatNourishShortDate(dateStr);
+
+  var yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  var ym = '' + (yesterday.getMonth() + 1);
+  var yd = '' + yesterday.getDate();
+  var yStr = [yesterday.getFullYear(), (ym.length < 2 ? '0' + ym : ym), (yd.length < 2 ? '0' + yd : yd)].join('-');
+  if (dateStr === yStr) return 'Yesterday, ' + formatNourishShortDate(dateStr);
+
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function formatNourishShortDate(dateStr) {
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function navigateNourishDate(offsetDays) {
+  var parts = currentNourishDate.split('-');
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  d.setDate(d.getDate() + offsetDays);
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  currentNourishDate = [year, month, day].join('-');
+  loadNourishDay(currentNourishDate);
+}
+
+function onNourishDateChange(val) {
+  if (val) {
+    currentNourishDate = val;
+    loadNourishDay(currentNourishDate);
+  }
+}
+
+function jumpNourishToToday() {
+  var d = new Date();
+  var month = '' + (d.getMonth() + 1);
+  var day = '' + d.getDate();
+  var year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  currentNourishDate = [year, month, day].join('-');
+  loadNourishDay(currentNourishDate);
+}
+
+function selectNourishSlot(slot) {
+  currentNourishSlot = slot;
+  ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function(s) {
+    var el = document.getElementById('nourishSlot_' + s);
+    if (el) el.classList.toggle('active', s === slot);
+  });
+  var slotTitle = slot.charAt(0).toUpperCase() + slot.slice(1);
+  var btn = document.getElementById('nourishBtnLog');
+  if (btn) {
+    btn.innerHTML = '➕ Log to ' + slotTitle;
+  }
+  var plateBtn = document.getElementById('nourishBtnLogAllPlate');
+  if (plateBtn && window._lastNourishAnalyzedItems && window._lastNourishAnalyzedItems.length) {
+    plateBtn.innerHTML = '➕ Log All ' + window._lastNourishAnalyzedItems.length + ' Items to ' + slotTitle;
+  }
+}
+
+function switchNourishEntryTab(tab) {
+  nourishEntryMode = tab;
+  var btnSearch = document.getElementById('nourishTabSearch');
+  var btnDescribe = document.getElementById('nourishTabDescribe');
+  var cSearch = document.getElementById('nourishContentSearch');
+  var cDescribe = document.getElementById('nourishContentDescribe');
+  if (btnSearch) btnSearch.classList.toggle('active', tab === 'search');
+  if (btnDescribe) btnDescribe.classList.toggle('active', tab === 'describe');
+  if (cSearch) cSearch.style.display = (tab === 'search') ? 'block' : 'none';
+  if (cDescribe) cDescribe.style.display = (tab === 'describe') ? 'block' : 'none';
+}
+
+function setNourishUnit(unit) {
+  var prevUnit = nourishSelectedUnit;
+  nourishSelectedUnit = unit;
+  ['g', 'oz', 'ml', 'serving'].forEach(function(u) {
+    var el = document.getElementById('nourishUnit_' + u);
+    if (el) el.classList.toggle('active', u === unit);
+  });
+  var amtInput = document.getElementById('nourishAmountInput');
+  var curVal = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  if (amtInput) {
+    if (prevUnit === 'g' && unit === 'oz') {
+      amtInput.value = String(Math.max(0.1, Math.round((curVal / 28.3495) * 10) / 10));
+    } else if (prevUnit === 'oz' && unit === 'g') {
+      amtInput.value = String(Math.max(1, Math.round(curVal * 28.3495)));
+    } else if (unit === 'serving') {
+      amtInput.value = (curVal >= 10) ? '1' : String(curVal <= 0 ? 1 : curVal);
+    } else if (unit === 'ml') {
+      if (prevUnit === 'oz') {
+        amtInput.value = String(Math.max(1, Math.round(curVal * 29.5735)));
+      } else if (curVal <= 0) {
+        amtInput.value = '100';
+      }
+    } else if (unit === 'g') {
+      if (curVal < 10) amtInput.value = '100';
+    } else if (unit === 'oz') {
+      if (curVal <= 0 || curVal >= 20) amtInput.value = '3.5';
+    }
+  }
+  var gramRow = document.getElementById('nourishGramPillsRow');
+  if (gramRow) gramRow.style.display = (unit === 'g') ? 'flex' : 'none';
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function setNourishGramPill(grams) {
+  if (nourishSelectedUnit !== 'g') {
+    setNourishUnit('g');
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  if (amtInput) amtInput.value = String(grams);
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function updateNourishGramPillActiveState() {
+  var amtInput = document.getElementById('nourishAmountInput');
+  var val = amtInput ? parseFloat(amtInput.value) : 0;
+  [50, 100, 150, 200, 250].forEach(function(g) {
+    var pill = document.getElementById('nourishGramPill_' + g);
+    if (pill) pill.classList.toggle('active', nourishSelectedUnit === 'g' && val === g);
+  });
+}
+
+function stepNourishAmount(direction) {
+  var input = document.getElementById('nourishAmountInput');
+  if (!input) return;
+  var cur = parseFloat(input.value) || 0;
+  var next = cur;
+  if (cur <= 0) {
+    next = (nourishSelectedUnit === 'serving' ? 1 : (nourishSelectedUnit === 'oz' ? 1 : 10));
+    input.value = String(next);
+    updateNourishGramPillActiveState();
+    updateNourishPreview();
+    return;
+  }
+  if (nourishSelectedUnit === 'serving') {
+    var step = 1;
+    if (cur <= 1 && direction < 0) {
+      step = 0.5;
+    } else if (cur < 1 && direction > 0) {
+      step = 0.5;
+    }
+    next = Math.round((cur + direction * step) * 10) / 10;
+    if (next < 0.5) next = 0.5;
+  } else if (nourishSelectedUnit === 'oz') {
+    var step = 0.5;
+    next = Math.round((cur + direction * step) * 10) / 10;
+    if (next < 0.5) next = 0.5;
+  } else {
+    // 'g' or 'ml'
+    var step = 10;
+    next = Math.round(cur + direction * step);
+    if (next < 5) next = 5;
+  }
+  input.value = String(next);
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function onNourishSearchInput(e) {
+  var q = e.target.value.trim();
+  if (selectedNourishItem && selectedNourishItem.name && selectedNourishItem.name.toLowerCase() !== q.toLowerCase()) {
+    selectedNourishItem = null;
+  }
+  if (nourishSearchDebounceTimer) clearTimeout(nourishSearchDebounceTimer);
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  if (!q) {
+    if (dropdown) dropdown.style.display = 'none';
+    updateNourishPreview();
+    return;
+  }
+  nourishSearchDebounceTimer = setTimeout(function() {
+    searchNourishCatalog(q);
+  }, 220);
+}
+
+async function searchNourishCatalog(q) {
+  try {
+    var res = await fetch(API + '/nourish/catalog/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); });
+    var dropdown = document.getElementById('nourishSearchDropdown');
+    if (!dropdown) return;
+    if (!res || !res.ok) {
+      dropdown.style.display = 'none';
+      return;
+    }
+    var items = (res.foods || []).concat((res.recipes || []).map(function(r) { r.is_recipe = true; return r; }));
+    if (items.length === 0) {
+      dropdown.innerHTML = '<div style="padding:12px 14px; font-size:12px; color:var(--muted); text-align:center;">Unmatched food. Tap <b>Log</b> to create (AI will estimate nutrition in background).</div>';
+      dropdown.style.display = 'block';
+      updateNourishPreview();
+      return;
+    }
+    var html = '';
+    items.slice(0, 8).forEach(function(item, idx) {
+      var cal = item.calories_per_100g || item.per_serving_calories || (item.perServing && item.perServing.calories) || item.calories || 0;
+      var prot = item.protein_per_100g || item.per_serving_protein_g || (item.perServing && item.perServing.protein) || 0;
+      var isHousehold = Boolean(item.household_id || item.source === 'household');
+      var icon = item.is_recipe ? '🍳' : (isHousehold ? '👨‍👩‍👧' : '🥗');
+      var badge = isHousehold ? ' <span style="font-size:10px; background:#dcfce7; color:#166534; padding:2px 6px; border-radius:6px; font-weight:600; margin-left:4px;">👨‍👩‍👧 Household</span>' : '';
+      var servDesc = item.standard_serving_desc || (item.serving_weight_g ? item.serving_weight_g + 'g serving' : '100g');
+      html += '<div class="nourish-dropdown-item" onclick="selectNourishCatalogItemByIndex(' + idx + ')">' +
+        '<div>' +
+          '<div style="font-weight:600; color:var(--text);">' + icon + ' ' + escapeHtml(item.name) + badge + '</div>' +
+          '<div style="font-size:11px; color:var(--muted); margin-top:1px;">' + escapeHtml(servDesc) + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;">' +
+          '<div style="font-weight:700; color:#1f2937;">' + Math.round(cal) + ' kcal</div>' +
+          '<div style="font-size:11px; color:#059669; font-weight:600;">' + Math.round(prot) + 'g P</div>' +
+        '</div>' +
+      '</div>';
+    });
+    window._lastNourishSearchHits = items;
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+  } catch(err) {
+    console.error('Nourish catalog search error:', err);
+  }
+}
+
+function selectNourishCatalogItemByIndex(idx) {
+  var items = window._lastNourishSearchHits || [];
+  if (items[idx]) {
+    selectNourishCatalogItem(items[idx]);
+  }
+}
+
+function selectNourishCatalogItem(item) {
+  selectedNourishItem = item;
+  var input = document.getElementById('nourishSearchInput');
+  if (input) input.value = item.name;
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+
+  if (item.standard_serving_unit && ['g', 'oz', 'ml', 'serving'].includes(item.standard_serving_unit)) {
+    setNourishUnit(item.standard_serving_unit);
+  } else {
+    setNourishUnit('g');
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  if (amtInput) {
+    var defAmt = item.standard_serving_amount || (nourishSelectedUnit === 'serving' ? 1 : (item.serving_weight_g || 100));
+    amtInput.value = String(defAmt);
+  }
+  updateNourishGramPillActiveState();
+  updateNourishPreview();
+}
+
+function updateNourishPreview() {
+  var previewBar = document.getElementById('nourishPreviewBar');
+  if (!previewBar) return;
+  var amtInput = document.getElementById('nourishAmountInput');
+  var amt = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  var nameInput = document.getElementById('nourishSearchInput');
+  var foodName = nameInput ? nameInput.value.trim() : '';
+  if (!foodName) {
+    previewBar.innerHTML = '<span style="color:var(--muted); font-size:11.5px;">Search an item or type a custom food name to preview nutrition.</span>';
+    return;
+  }
+  var item = selectedNourishItem;
+  if (!item) {
+    previewBar.innerHTML = '<div style="width:100%; display:flex; flex-direction:column; gap:6px;">' +
+      '<div style="color:#b45309; font-weight:600; font-size:12px; word-break:break-word;">✨ Custom Item: ' + escapeHtml(foodName) + ' <span style="font-weight:500; color:#92400e; font-size:11px;">(' + amt + ' ' + nourishSelectedUnit + ')</span></div>' +
+      '<div style="display:flex; justify-content:flex-end;">' +
+        '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>' +
+      '</div>' +
+    '</div>';
+    return;
+  }
+
+  var cal100 = item.calories_per_100g || 0;
+  var p100 = item.protein_per_100g || 0;
+  var c100 = item.carbs_per_100g || 0;
+  var f100 = item.fat_per_100g || 0;
+  var fib100 = item.fiber_per_100g || 0;
+  var servWeight = item.serving_weight_g || 100;
+  var density = item.density_g_per_ml || 1.0;
+
+  var gramWeight = amt;
+  if (nourishSelectedUnit === 'oz') {
+    gramWeight = amt * 28.3495;
+  } else if (nourishSelectedUnit === 'ml') {
+    gramWeight = amt * density;
+  } else if (nourishSelectedUnit === 'serving') {
+    gramWeight = amt * servWeight;
+  }
+  var scale = gramWeight / 100.0;
+  var estCal = Math.round(cal100 * scale);
+  var estP = Math.round((p100 * scale) * 10) / 10;
+  var estC = Math.round((c100 * scale) * 10) / 10;
+  var estF = Math.round((f100 * scale) * 10) / 10;
+
+  var isHousehold = item && Boolean(item.household_id || item.source === 'household');
+  var houseBadge = isHousehold ? '<span style="font-size:10px; background:#dcfce7; color:#166534; padding:1px 6px; border-radius:5px; font-weight:700; margin-right:5px;">👨‍👩‍👧 In Household Catalog</span>' : '';
+  previewBar.innerHTML = '<div>' + houseBadge + '<b style="color:var(--text);">' + estCal + ' kcal</b> <span style="font-size:11px; color:var(--muted);">for ' + amt + ' ' + nourishSelectedUnit + ' (' + Math.round(gramWeight) + 'g)</span></div>' +
+    '<div style="display:flex; gap:8px; font-size:11.5px; font-weight:600;">' +
+      '<span style="color:#059669;">🥩 ' + estP + 'g P</span>' +
+      '<span style="color:#d97706;">🌾 ' + estC + 'g C</span>' +
+      '<span style="color:#0284c7;">🥑 ' + estF + 'g F</span>' +
+    '</div>';
+
+  var subEl = document.getElementById('nourishSearchShareSub');
+  if (subEl) {
+    subEl.textContent = isHousehold
+      ? 'Already saved in your household catalog. Check above if family is eating this together right now.'
+      : 'New custom foods are automatically saved to your household catalog for future searches.';
+  }
+}
+
+async function submitNourishLog() {
+  var nameInput = document.getElementById('nourishSearchInput');
+  var foodName = nameInput ? nameInput.value.trim() : '';
+  if (!foodName) {
+    if (typeof toast === 'function') toast('Please enter a food name');
+    return;
+  }
+  var amtInput = document.getElementById('nourishAmountInput');
+  var amt = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+  if (amt <= 0) {
+    if (typeof toast === 'function') toast('Please enter a valid amount');
+    return;
+  }
+  var btn = document.getElementById('nourishBtnLog');
+  if (btn) btn.disabled = true;
+
+  var item = selectedNourishItem;
+  var shareCb = document.getElementById('nourishSearchShareHousehold');
+  var isShared = shareCb ? shareCb.checked : false;
+  var payload = {
+    log_date: currentNourishDate,
+    is_shared_household: isShared,
+    items: [{
+      food_name: foodName,
+      name: foodName,
+      meal_slot: currentNourishSlot,
+      quantity: amt,
+      serving_amount: amt,
+      unit: nourishSelectedUnit,
+      serving_unit: nourishSelectedUnit,
+      catalog_id: (item && !item.is_recipe) ? item.id : null,
+      nourish_recipe_id: (item && item.is_recipe) ? item.id : null,
+      is_shared_household: isShared
+    }]
+  };
+
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (btn) btn.disabled = false;
+    if (res && res.ok) {
+      if (nameInput) nameInput.value = '';
+      selectedNourishItem = null;
+      var dropdown = document.getElementById('nourishSearchDropdown');
+      if (dropdown) dropdown.style.display = 'none';
+      updateNourishPreview();
+      var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
+      if (typeof toast === 'function') toast('✅ Logged to ' + slotTitle + '!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not log food: ' + (res && res.error ? res.error : 'Network error'));
+    }
+  } catch(err) {
+    if (btn) btn.disabled = false;
+    console.error('Error logging nourish food:', err);
+    if (typeof toast === 'function') toast('Network error while logging food');
+  }
+}
+
+async function analyzeNourishPlate() {
+  var input = document.getElementById('nourishDescribeInput');
+  var text = input ? input.value.trim() : '';
+  if (!text) {
+    if (typeof toast === 'function') toast('Please describe what you ate');
+    return;
+  }
+  var btn = document.getElementById('nourishBtnAnalyzePlate');
+  var loading = document.getElementById('nourishAnalyzeLoading');
+  var container = document.getElementById('nourishParsedItems');
+  if (btn) btn.disabled = true;
+  if (loading) loading.style.display = 'block';
+  if (container) container.innerHTML = '';
+
+  try {
+    var resp = await fetch(API + '/nourish/analyze-meal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    });
+    var is429 = resp.status === 429;
+    var res = await resp.json().catch(function() { return {}; });
+
+    if (btn) btn.disabled = false;
+    if (loading) loading.style.display = 'none';
+
+    if (is429 || (res && (res.limit_reached || res.error_code === 'limit_reached' || res.status === 429))) {
+      var limitMsg = (res && res.error) ? res.error : 'Daily AI plate analysis limit reached. You can still search and log foods manually!';
+      if (typeof toast === 'function') toast('⚠️ ' + limitMsg);
+      if (container) {
+        container.innerHTML = '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:12px; margin-top:10px; color:#92400e; font-size:12.5px;">' +
+          '<b>⚠️ Daily AI Plate Limit Reached</b><br>' +
+          escapeHtml(limitMsg) + '<br><br>' +
+          '💡 <i>Tip: Switch to the <b>Search Catalog</b> tab above to search or type your foods manually with full macro tracking.</i>' +
+        '</div>';
+      }
+      return;
+    }
+
+    if (res && res.ok && Array.isArray(res.items) && res.items.length > 0) {
+      window._lastNourishAnalyzedItems = res.items;
+      var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
+      var html = '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:10px;">' +
+        '<div style="font-weight:700; font-size:13px; color:var(--text); margin-bottom:8px;">AI Plate Breakdown (' + res.items.length + ' items):</div>';
+      var totalCal = 0;
+      res.items.forEach(function(it) {
+        var cal = it.calories || 0;
+        totalCal += cal;
+        var fName = it.food_name || it.name || 'Item';
+        var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 1);
+        var numQty = parseFloat(fQty);
+        if (isNaN(numQty)) numQty = 1;
+        var formattedQty = Math.round(numQty * 100) / 100;
+        var fUnit = it.unit || it.serving_unit || 'serving';
+        var portionText = (fUnit === 'serving' || fUnit === 'servings')
+          ? (formattedQty + (formattedQty === 1 ? ' serving' : ' servings'))
+          : (formattedQty + (fUnit === 'g' ? 'g' : (' ' + fUnit)));
+        var isPending = it.ai_enrich_status === 'pending' || (cal === 0 && !it.catalog_id);
+        var calBadge = isPending
+          ? '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>'
+          : '<div style="font-weight:600; color:#1f2937;">' + Math.round(cal) + ' kcal</div>';
+        if (isPending) {
+          html += '<div style="padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
+            '<div style="font-weight:600; color:var(--text); word-break:break-word; line-height:1.35; margin-bottom:4px;">' + escapeHtml(fName) + '</div>' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">' +
+              '<span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span>' +
+              calBadge +
+            '</div>' +
+          '</div>';
+        } else {
+          html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;">' +
+            '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portionText) + ')</span></div>' +
+            calBadge +
+          '</div>';
+        }
+      });
+      var hasPending = res.items.some(function(i) { return i.ai_enrich_status === 'pending' || ((i.calories || 0) === 0 && !i.catalog_id); });
+      var totalText = hasPending
+        ? (totalCal > 0 ? (Math.round(totalCal) + ' kcal (+ AI estimating)') : '✨ AI Estimating · Check back in ~1 hr')
+        : (Math.round(totalCal) + ' kcal');
+      html += '<div style="display:flex; justify-content:space-between; font-weight:700; font-size:13px; padding-top:8px; color:var(--green-dark);">' +
+        '<span>Total Plate Estimate:</span>' +
+        '<span>' + totalText + '</span>' +
+      '</div>' +
+      '<div style="margin:10px 0 6px; padding:8px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px;">' +
+        '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:600; color:#166534; margin:0;">' +
+          '<input type="checkbox" id="nourishDescribeShareHousehold" style="width:15px; height:15px; accent-color:#059669; margin:0;">' +
+          '<span>👨‍👩‍👧 Share this meal with household</span>' +
+        '</label>' +
+        '<div style="font-size:10.5px; color:#047857; margin-left:23px; margin-top:2px;">' +
+          'Saves dishes to household catalog &amp; lets family 1-tap add to their diary.' +
+        '</div>' +
+      '</div>' +
+      '<button type="button" id="nourishBtnLogAllPlate" onclick="logAllAnalyzedNourishItems()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer;">' +
+        '➕ Log All ' + res.items.length + ' Items to ' + slotTitle +
+      '</button>' +
+      '</div>';
+      if (container) container.innerHTML = html;
+    } else {
+      if (container) container.innerHTML = '<div style="padding:10px; color:#b91c1c; font-size:12px;">Could not parse plate items. Please try describing more simply.</div>';
+    }
+  } catch(err) {
+    if (btn) btn.disabled = false;
+    if (loading) loading.style.display = 'none';
+    console.error('Plate analysis error:', err);
+    if (typeof toast === 'function') toast('Plate analysis failed');
+  }
+}
+
+async function logAllAnalyzedNourishItems() {
+  var items = window._lastNourishAnalyzedItems || [];
+  if (!items || items.length === 0) return;
+  var btn = document.getElementById('nourishBtnLogAllPlate');
+  var prevText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Logging...';
+  }
+  var shareCb = document.getElementById('nourishDescribeShareHousehold');
+  var isShared = shareCb ? shareCb.checked : false;
+  var payload = {
+    log_date: currentNourishDate,
+    meal_slot: currentNourishSlot,
+    is_shared_household: isShared,
+    items: items.map(function(it) {
+      var fName = it.food_name || it.name || 'Food item';
+      var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
+      var fUnit = it.unit || it.serving_unit || 'g';
+      return {
+        food_name: fName,
+        name: fName,
+        meal_slot: currentNourishSlot,
+        quantity: fQty,
+        serving_amount: fQty,
+        unit: fUnit,
+        serving_unit: fUnit,
+        catalog_id: it.catalog_id || null,
+        calories: it.calories,
+        protein_g: it.protein_g,
+        carbs_g: it.carbs_g,
+        fat_g: it.fat_g,
+        fiber_g: it.fiber_g,
+        calories_per_100g: it.calories_per_100g || 0,
+        protein_per_100g: it.protein_per_100g || 0,
+        carbs_per_100g: it.carbs_per_100g || 0,
+        fat_per_100g: it.fat_per_100g || 0,
+        fiber_per_100g: it.fiber_per_100g || 0,
+        serving_weight_g: it.serving_weight_g || 100,
+        serving_label: it.serving_label || '1 serving',
+        category: it.category || 'Prepared Foods',
+        is_shared_household: isShared
+      };
+    })
+  };
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      var input = document.getElementById('nourishDescribeInput');
+      if (input) input.value = '';
+      var container = document.getElementById('nourishParsedItems');
+      if (container) container.innerHTML = '';
+      window._lastNourishAnalyzedItems = null;
+      var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
+      if (typeof toast === 'function') toast('✅ Logged all plate items to ' + slotTitle + '!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not log items: ' + (res && res.error ? res.error : 'Validation error'));
+    }
+  } catch(err) {
+    console.error('Error logging analyzed items:', err);
+    if (typeof toast === 'function') toast('Network error logging plate items');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (prevText) btn.textContent = prevText;
+    }
+  }
+}
+
+async function quickAddNourishWater(amountMl) {
+  var valEl = document.getElementById('nourishValWater');
+  var targetEl = document.getElementById('nourishTargetWater');
+  var currentVal = valEl ? parseInt(valEl.textContent, 10) || 0 : 0;
+  var targetVal = targetEl ? parseInt(targetEl.textContent, 10) || 2500 : 2500;
+  var newVal = currentVal + amountMl;
+  if (valEl) valEl.textContent = String(newVal);
+  var barEl = document.getElementById('nourishWaterProgress');
+  if (barEl) {
+    var pct = Math.min(100, Math.round((newVal / targetVal) * 100));
+    barEl.style.width = pct + '%';
+  }
+  if (typeof toast === 'function') toast('💧 +' + amountMl + 'ml water logged!');
+
+  try {
+    var res = await fetch(API + '/nourish/biometrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        log_date: currentNourishDate,
+        water_delta_ml: amountMl,
+        delta_water_ml: amountMl
+      })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok && res.biometrics && res.biometrics.water_ml !== undefined) {
+      if (valEl) valEl.textContent = String(res.biometrics.water_ml);
+      if (barEl) {
+        var sPct = Math.min(100, Math.round((res.biometrics.water_ml / targetVal) * 100));
+        barEl.style.width = sPct + '%';
+      }
+    }
+  } catch(err) {
+    console.error('Error logging water:', err);
+  }
+}
+
+async function loadNourishDay(dateStr) {
+  var targetDate = dateStr || currentNourishDate;
+  currentNourishDate = targetDate;
+  var dateInput = document.getElementById('nourishDatePicker');
+  if (dateInput) dateInput.value = targetDate;
+  var dateLabel = document.getElementById('nourishDateLabel');
+  if (dateLabel) dateLabel.textContent = formatNourishDisplayDate(targetDate);
+  selectNourishSlot(currentNourishSlot);
+
+  try {
+    var res = await fetch(API + '/nourish/day?date=' + encodeURIComponent(targetDate)).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      currentNourishData = res;
+      renderNourishDay(res);
+      var startBtn = document.getElementById('nourishBtnStart');
+      if (startBtn && res.logs && res.logs.length > 0) {
+        startBtn.textContent = '🚀 Continue Using Nourish';
+      }
+      checkNourishSharedMeals();
+    }
+  } catch(err) {
+    console.error('Error loading nourish day:', err);
+  }
+}
+
+function renderNourishDay(data) {
+  if (!data) return;
+  var totals = data.totals || {};
+  var goals = data.goals || {};
+  var biometrics = data.biometrics || {};
+  var logs = data.logs || [];
+
+  var budget = goals.calorie_target || 2000;
+  var consumed = Math.round(totals.calories || 0);
+  var remaining = budget - consumed;
+
+  var calRemEl = document.getElementById('nourishCalRemaining');
+  var calSubEl = document.getElementById('nourishCalSub');
+  var calBudgetEl = document.getElementById('nourishCalBudget');
+  var calConsumedEl = document.getElementById('nourishCalConsumed');
+  var calBar = document.getElementById('nourishCalProgress');
+
+  if (calRemEl) {
+    calRemEl.textContent = String(Math.abs(remaining));
+    calRemEl.style.color = (remaining >= 0) ? '#047857' : '#b91c1c';
+  }
+  if (calSubEl) {
+    calSubEl.textContent = (remaining >= 0) ? 'kcal remaining' : 'kcal over budget';
+    calSubEl.style.color = (remaining >= 0) ? 'var(--muted)' : '#b91c1c';
+  }
+  if (calBudgetEl) calBudgetEl.textContent = String(budget);
+  if (calConsumedEl) calConsumedEl.textContent = String(consumed);
+  if (calBar) {
+    var pct = Math.min(100, Math.round((consumed / budget) * 100));
+    calBar.style.width = pct + '%';
+    calBar.style.background = (remaining >= 0) ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f59e0b, #ef4444)';
+  }
+
+  var pTarget = goals.protein_target_g || 120;
+  var cTarget = goals.carbs_target_g || 220;
+  var fTarget = goals.fat_target_g || 65;
+  var fibTarget = goals.fiber_target_g || 30;
+
+  var pVal = Math.round(totals.protein_g || 0);
+  var cVal = Math.round(totals.carbs_g || 0);
+  var fVal = Math.round(totals.fat_g || 0);
+  var fibVal = Math.round(totals.fiber_g || 0);
+
+  var setMacro = function(name, val, target) {
+    var vEl = document.getElementById('nourishVal_' + name);
+    var tEl = document.getElementById('nourishTarget_' + name);
+    var bEl = document.getElementById('nourishBar_' + name);
+    if (vEl) vEl.textContent = String(val);
+    if (tEl) tEl.textContent = String(target);
+    if (bEl) {
+      var pct = Math.min(100, Math.round((val / (target || 1)) * 100));
+      bEl.style.width = pct + '%';
+    }
+  };
+  setMacro('protein', pVal, pTarget);
+  setMacro('carbs', cVal, cTarget);
+  setMacro('fat', fVal, fTarget);
+  setMacro('fiber', fibVal, fibTarget);
+
+  var waterVal = biometrics.water_ml || 0;
+  var waterTarget = goals.water_target_ml || 2500;
+  var wValEl = document.getElementById('nourishValWater');
+  var wTargetEl = document.getElementById('nourishTargetWater');
+  var wBar = document.getElementById('nourishWaterProgress');
+  if (wValEl) wValEl.textContent = String(waterVal);
+  if (wTargetEl) wTargetEl.textContent = String(waterTarget);
+  if (wBar) {
+    var wPct = Math.min(100, Math.round((waterVal / waterTarget) * 100));
+    wBar.style.width = wPct + '%';
+  }
+
+  var slots = { breakfast: [], lunch: [], dinner: [], snack: [] };
+  logs.forEach(function(l) {
+    var slot = (l.meal_slot || 'snack').toLowerCase();
+    if (!slots[slot]) slots[slot] = [];
+    slots[slot].push(l);
+  });
+
+  ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function(slot) {
+    renderNourishSlotSection(slot, slots[slot]);
+  });
+
+  // Coach Feedback Card rendering (Issue #694)
+  var coachCard = document.getElementById('nourishCoachFeedbackCard');
+  var coachNotes = data.coach_notes || (data.coach_note ? [data.coach_note] : []);
+  if (coachCard) {
+    if (coachNotes && coachNotes.length > 0) {
+      var latestNote = coachNotes[0];
+      window._lastCoachNote = latestNote;
+      var authorEl = document.getElementById('nourishCoachCardAuthor');
+      var roleEl = document.getElementById('nourishCoachCardRole');
+      var dateEl = document.getElementById('nourishCoachCardDate');
+      var msgEl = document.getElementById('nourishCoachCardMessage');
+      if (authorEl) authorEl.textContent = latestNote.author_name || 'Coach Note';
+      if (roleEl) roleEl.textContent = '· ' + (latestNote.author_role || 'Dietitian');
+      if (dateEl) dateEl.textContent = latestNote.log_date || 'Today';
+      if (msgEl) msgEl.textContent = latestNote.message || '';
+      coachCard.style.display = 'block';
+    } else {
+      coachCard.style.display = 'none';
+    }
+  }
+
+  // Automatic Coach Drawer trigger if unread or requested via deep link
+  var unreadNote = data.unread_coach_note || (coachNotes.find(function(n) { return !n.is_read; }));
+  if (unreadNote) {
+    window._lastCoachNote = unreadNote;
+    var noteKey = 'nourish_dismissed_coach_note_' + unreadNote.id;
+    if (!sessionStorage.getItem(noteKey)) {
+      openNourishCoachDrawer(unreadNote);
+    }
+  } else if (window._pendingShowCoachDrawer && window._lastCoachNote) {
+    window._pendingShowCoachDrawer = false;
+    openNourishCoachDrawer(window._lastCoachNote);
+  }
+}
+
+function renderNourishSlotSection(slot, items) {
+  var container = document.getElementById('nourishSlotItems_' + slot);
+  var subtotalEl = document.getElementById('nourishSlotSubtotal_' + slot);
+  if (!container) return;
+
+  var totalCal = 0;
+  var totalP = 0;
+  items.forEach(function(it) {
+    totalCal += (it.calories || 0);
+    totalP += (it.protein_g || 0);
+  });
+
+  if (subtotalEl) {
+    subtotalEl.textContent = Math.round(totalCal) + ' kcal · ' + Math.round(totalP) + 'g P';
+  }
+
+  var shareBtn = document.getElementById('nourishBtnShare_' + slot);
+  if (shareBtn) {
+    if (items.length === 0) {
+      shareBtn.style.display = 'none';
+    } else {
+      shareBtn.style.display = 'inline-block';
+      var allShared = items.every(function(it) { return it.is_shared_household; });
+      if (allShared) {
+        shareBtn.innerHTML = '✅ Shared';
+        shareBtn.style.opacity = '0.85';
+      } else {
+        shareBtn.innerHTML = '👨‍👩‍👧 Share';
+        shareBtn.style.opacity = '1';
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">No items logged yet.</div>';
+    return;
+  }
+
+  var html = '';
+  items.forEach(function(it) {
+    var isPending = it.ai_enrich_status === 'pending' || (it.calories === 0 && !it.catalog_id);
+    var calText = isPending
+      ? '<span class="nourish-estimating-badge" title="AI nutrition estimation runs hourly. Check back in ~1 hr.">✨ AI Estimating · Check back in ~1 hr</span>'
+      : '<span class="nourish-log-cals">' + Math.round(it.calories) + ' kcal</span>';
+
+    var macroSub = isPending
+      ? ''
+      : ' · <span>P: ' + Math.round(it.protein_g || 0) + 'g</span> · <span>C: ' + Math.round(it.carbs_g || 0) + 'g</span> · <span>F: ' + Math.round(it.fat_g || 0) + 'g</span>';
+
+    var fName = it.food_name || it.name || 'Food item';
+    var shareBadge = it.is_shared_household ? ' <span style="font-size:10px; background:#dcfce7; color:#166534; padding:1px 6px; border-radius:6px; font-weight:600; margin-left:4px;">👨‍👩‍👧 Shared</span>' : '';
+    var rawQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
+    var numQty = parseFloat(rawQty);
+    if (isNaN(numQty)) numQty = 1;
+    var formattedQty = Math.round(numQty * 100) / 100;
+    var fUnit = String(it.unit || it.serving_unit || 'g').trim();
+    var portionText = '';
+    if (fUnit === 'serving' || fUnit === 'servings') {
+      portionText = formattedQty + (formattedQty === 1 ? ' serving' : ' servings');
+    } else {
+      portionText = formattedQty + (fUnit === 'g' ? 'g' : (' ' + fUnit));
+    }
+
+    if (isPending) {
+      html += '<div class="nourish-log-item nourish-log-item-pending" id="nourishLog_' + it.id + '" style="flex-direction:column; align-items:stretch; gap:6px;">' +
+        '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">' +
+          '<div class="nourish-log-name" style="flex:1; min-width:0; word-break:break-word; line-height:1.35;">' + escapeHtml(fName) + shareBadge + '</div>' +
+          '<div class="nourish-item-actions" style="margin-left:0;">' +
+            '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
+            '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">' +
+          '<div class="nourish-log-sub" style="margin-top:0;">' +
+            '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
+          '</div>' +
+          calText +
+        '</div>' +
+      '</div>';
+    } else {
+      html += '<div class="nourish-log-item" id="nourishLog_' + it.id + '">' +
+        '<div style="flex:1; min-width:0;">' +
+          '<div class="nourish-log-name">' + escapeHtml(fName) + shareBadge + '</div>' +
+          '<div class="nourish-log-sub">' +
+            '<span style="font-weight:600; color:#374151;">' + escapeHtml(portionText) + '</span>' +
+            macroSub +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center;">' +
+          calText +
+          '<div class="nourish-item-actions">' +
+            '<button type="button" class="nourish-action-btn" title="Edit portion" onclick="openNourishEditModal(' + it.id + ')">✏️</button>' +
+            '<button type="button" class="nourish-action-btn delete" title="Delete entry" onclick="deleteNourishLog(' + it.id + ')">🗑</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+  });
+  container.innerHTML = html;
+}
+
+async function deleteNourishLog(logId) {
+  if (!confirm('Delete this food log entry?')) return;
+  try {
+    var res = await fetch(API + '/nourish/logs/' + logId, {
+      method: 'DELETE'
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('Entry removed.');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not delete entry.');
+    }
+  } catch(err) {
+    console.error('Error deleting log:', err);
+    if (typeof toast === 'function') toast('Network error');
+  }
+}
+
+function openNourishEditModal(logId) {
+  var logs = (currentNourishData && currentNourishData.logs) || [];
+  var entry = logs.find(function(l) { return l.id === logId; });
+  if (!entry) return;
+  window._activeNourishEditLogId = logId;
+  var nameEl = document.getElementById('nourishEditName');
+  var amtEl = document.getElementById('nourishEditAmount');
+  var unitEl = document.getElementById('nourishEditUnit');
+  if (nameEl) nameEl.textContent = entry.food_name || entry.name || '';
+  var qtyVal = (entry.quantity !== undefined && entry.quantity !== null) ? entry.quantity : entry.serving_amount;
+  if (amtEl) amtEl.value = String(qtyVal !== undefined && qtyVal !== null ? qtyVal : 100);
+  if (unitEl) unitEl.value = entry.unit || entry.serving_unit || 'g';
+  var modal = document.getElementById('nourishEditModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeNourishEditModal() {
+  var modal = document.getElementById('nourishEditModal');
+  if (modal) modal.classList.remove('active');
+  window._activeNourishEditLogId = null;
+}
+
+async function saveNourishEditLog() {
+  var logId = window._activeNourishEditLogId;
+  if (!logId) return;
+  var amtEl = document.getElementById('nourishEditAmount');
+  var unitEl = document.getElementById('nourishEditUnit');
+  var amt = amtEl ? parseFloat(amtEl.value) || 0 : 0;
+  var unit = unitEl ? unitEl.value : 'g';
+  if (amt <= 0) {
+    if (typeof toast === 'function') toast('Please enter a valid amount');
+    return;
+  }
+  var btn = document.getElementById('nourishBtnSaveEditLog');
+  var prevText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+  try {
+    var res = await fetch(API + '/nourish/logs/' + logId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quantity: amt,
+        serving_amount: amt,
+        unit: unit,
+        serving_unit: unit
+      })
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      closeNourishEditModal();
+      if (typeof toast === 'function') toast('Portion updated.');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not update portion');
+    }
+  } catch(err) {
+    console.error('Error updating log:', err);
+    if (typeof toast === 'function') toast('Network error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (prevText) btn.textContent = prevText;
+    }
+  }
+}
+
+function getAppOrigin() {
+  try {
+    return (window.location && window.location.origin) ? window.location.origin : '';
+  } catch(e) {
+    return '';
+  }
+}
+
+function openNourishGoalsModal() {
+  var goals = (currentNourishData && currentNourishData.goals) || {};
+  var calInput = document.getElementById('nourishGoalCalories');
+  var pInput = document.getElementById('nourishGoalProtein');
+  var cInput = document.getElementById('nourishGoalCarbs');
+  var fInput = document.getElementById('nourishGoalFat');
+  var fibInput = document.getElementById('nourishGoalFiber');
+  var wInput = document.getElementById('nourishGoalWater');
+
+  if (calInput) calInput.value = goals.calories_target || goals.calorie_target || 2000;
+  if (pInput) pInput.value = goals.protein_target_g || 130;
+  if (cInput) cInput.value = goals.carbs_target_g || 200;
+  if (fInput) fInput.value = goals.fat_target_g || 65;
+  if (fibInput) fibInput.value = goals.fiber_target_g || 30;
+  if (wInput) wInput.value = goals.water_target_ml || 2500;
+
+  var coachToggle = document.getElementById('nourishCoachLinkToggle');
+  var coachAlias = document.getElementById('nourishCoachAliasInput');
+  var coachUrl = document.getElementById('nourishCoachShareUrl');
+  var coachDetails = document.getElementById('nourishCoachLinkDetails');
+
+  var isCoachEn = !!(goals.coach_link_enabled);
+  if (coachToggle) coachToggle.checked = isCoachEn;
+  if (coachAlias) coachAlias.value = goals.coach_display_alias || '';
+  if (coachDetails) coachDetails.style.display = isCoachEn ? 'block' : 'none';
+
+  var coachToken = goals.coach_token || '';
+  if (coachUrl) {
+    if (coachToken) {
+      coachUrl.value = getCoachShareLink(coachToken);
+    } else {
+      coachUrl.value = '';
+    }
+  }
+
+  var modal = document.getElementById('nourishGoalsModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeNourishGoalsModal() {
+  var modal = document.getElementById('nourishGoalsModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function getCoachShareLink(token) {
+  if (!token) return '';
+  return getAppOrigin() + '/coach/' + encodeURIComponent(token);
+}
+
+function openNourishCoachQuickShare() {
+  var goals = (currentNourishData && currentNourishData.goals) || {};
+  if (goals.coach_link_enabled && goals.coach_token) {
+    var link = getCoachShareLink(goals.coach_token);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link);
+      }
+    } catch(e) {}
+    if (typeof toast === 'function') toast('📋 Coach link copied: ' + link);
+    openNourishGoalsModal();
+    setTimeout(function() {
+      var sec = document.getElementById('nourishCoachLinkSection');
+      if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  } else {
+    openNourishGoalsModal();
+    setTimeout(function() {
+      var sec = document.getElementById('nourishCoachLinkSection');
+      if (sec && sec.scrollIntoView) sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var toggle = document.getElementById('nourishCoachLinkToggle');
+      if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        toggleNourishCoachLink(true);
+      }
+    }, 150);
+  }
+}
+
+async function toggleNourishCoachLink(enabled) {
+  var details = document.getElementById('nourishCoachLinkDetails');
+  if (details) details.style.display = enabled ? 'block' : 'none';
+  var coachUrl = document.getElementById('nourishCoachShareUrl');
+
+  if (enabled) {
+    if (coachUrl && !coachUrl.value) coachUrl.value = 'Auto-generating link...';
+    var aliasInput = document.getElementById('nourishCoachAliasInput');
+    var aliasVal = aliasInput ? aliasInput.value.trim() : '';
+
+    try {
+      var res = await fetch(API + '/nourish/coach/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, alias: aliasVal })
+      }).then(function(r) { return r.json(); });
+
+      if (res && res.ok && res.coach_token) {
+        if (!currentNourishData) currentNourishData = {};
+        if (!currentNourishData.goals) currentNourishData.goals = {};
+        currentNourishData.goals.coach_token = res.coach_token;
+        currentNourishData.goals.coach_link_enabled = true;
+        if (res.coach_display_alias !== undefined) currentNourishData.goals.coach_display_alias = res.coach_display_alias;
+        if (coachUrl) coachUrl.value = getCoachShareLink(res.coach_token);
+        if (typeof toast === 'function') toast('🔗 Coach link auto-generated & enabled!');
+      } else {
+        if (coachUrl) coachUrl.value = '';
+        if (typeof toast === 'function') toast('Could not generate coach link');
+      }
+    } catch(err) {
+      console.error('Error auto-enabling coach link:', err);
+      if (typeof toast === 'function') toast('Network error enabling coach link');
+    }
+  } else {
+    try {
+      var resOff = await fetch(API + '/nourish/coach/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false })
+      }).then(function(r) { return r.json(); });
+      if (resOff && resOff.ok) {
+        if (currentNourishData && currentNourishData.goals) {
+          currentNourishData.goals.coach_link_enabled = false;
+        }
+        if (typeof toast === 'function') toast('🔒 Coach link disabled');
+      }
+    } catch(err) {
+      console.error('Error disabling coach link:', err);
+    }
+  }
+}
+
+async function saveNourishCoachAlias(alias) {
+  var aliasVal = (alias || '').trim();
+  if (currentNourishData && currentNourishData.goals) {
+    currentNourishData.goals.coach_display_alias = aliasVal;
+  }
+  try {
+    var res = await fetch(API + '/nourish/coach/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alias: aliasVal, enabled: true })
+    }).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      if (typeof toast === 'function') toast('✓ Display alias updated');
+    }
+  } catch(e) {
+    console.warn('Error auto-saving coach alias:', e);
+  }
+}
+
+async function copyNourishCoachLink() {
+  var coachUrl = document.getElementById('nourishCoachShareUrl');
+  var link = coachUrl ? coachUrl.value : '';
+  if (!link || link === 'Auto-generating link...') {
+    var goals = (currentNourishData && currentNourishData.goals) || {};
+    if (goals.coach_token) {
+      link = getCoachShareLink(goals.coach_token);
+      if (coachUrl) coachUrl.value = link;
+    }
+  }
+  if (!link || link === 'Auto-generating link...') {
+    if (typeof toast === 'function') toast('Enable coach link first to generate link');
+    return;
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(link);
+    } else if (coachUrl) {
+      coachUrl.select();
+      document.execCommand('copy');
+    }
+    if (typeof toast === 'function') toast('📋 Coach link copied to clipboard!');
+  } catch(e) {
+    if (typeof toast === 'function') toast('Link copied: ' + link);
+  }
+}
+
+async function resetNourishCoachToken() {
+  if (typeof confirm === 'function' && !confirm('Are you sure you want to reset your coach share token? Any existing links will stop working.')) {
+    return;
+  }
+  var btn = document.getElementById('nourishBtnResetCoachToken');
+  if (btn) btn.disabled = true;
+  var aliasInput = document.getElementById('nourishCoachAliasInput');
+  var aliasVal = aliasInput ? aliasInput.value.trim() : '';
+  try {
+    var res = await fetch(API + '/nourish/coach/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, regenerate: true, alias: aliasVal })
+    }).then(function(r) { return r.json(); }).catch(function() { return null; });
+
+    if (res && res.ok && res.coach_token) {
+      if (!currentNourishData) currentNourishData = {};
+      if (!currentNourishData.goals) currentNourishData.goals = {};
+      currentNourishData.goals.coach_token = res.coach_token;
+      currentNourishData.goals.coach_link_enabled = true;
+      var coachUrl = document.getElementById('nourishCoachShareUrl');
+      if (coachUrl) {
+        coachUrl.value = getCoachShareLink(res.coach_token);
+      }
+      if (typeof toast === 'function') toast('🔄 New coach link generated & copied!');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(getCoachShareLink(res.coach_token));
+        }
+      } catch(e) {}
+    } else {
+      if (typeof toast === 'function') toast('Could not reset token');
+    }
+  } catch(err) {
+    console.error('Error resetting coach token:', err);
+    if (typeof toast === 'function') toast('Network error resetting token');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function saveNourishGoals() {
+  var calInput = document.getElementById('nourishGoalCalories');
+  var pInput = document.getElementById('nourishGoalProtein');
+  var cInput = document.getElementById('nourishGoalCarbs');
+  var fInput = document.getElementById('nourishGoalFat');
+  var fibInput = document.getElementById('nourishGoalFiber');
+  var wInput = document.getElementById('nourishGoalWater');
+  var coachToggle = document.getElementById('nourishCoachLinkToggle');
+  var coachAlias = document.getElementById('nourishCoachAliasInput');
+
+  var cal = calInput ? parseInt(calInput.value, 10) : 2000;
+  var prot = pInput ? parseInt(pInput.value, 10) : 130;
+  var carbs = cInput ? parseInt(cInput.value, 10) : 200;
+  var fat = fInput ? parseInt(fInput.value, 10) : 65;
+  var fib = fibInput ? parseInt(fibInput.value, 10) : 30;
+  var water = wInput ? parseInt(wInput.value, 10) : 2500;
+  var coachLinkEnabled = coachToggle ? !!coachToggle.checked : false;
+  var coachDisplayAlias = coachAlias ? coachAlias.value.trim() : '';
+
+  if (isNaN(cal) || cal <= 0) {
+    if (typeof toast === 'function') toast('Please enter a valid calorie target');
+    return;
+  }
+
+  var btn = document.getElementById('nourishBtnSaveGoals');
+  if (btn) btn.disabled = true;
+
+  try {
+    var res = await fetch(API + '/nourish/goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        calories_target: cal,
+        calorie_target: cal,
+        protein_target_g: prot,
+        carbs_target_g: carbs,
+        fat_target_g: fat,
+        fiber_target_g: fib,
+        water_target_ml: water,
+        coach_link_enabled: coachLinkEnabled,
+        coach_display_alias: coachDisplayAlias
+      })
+    }).then(function(r) { return r.json(); });
+
+    if (btn) btn.disabled = false;
+    if (res && res.ok) {
+      if (res.goals && currentNourishData) {
+        currentNourishData.goals = res.goals;
+      }
+      closeNourishGoalsModal();
+      if (typeof toast === 'function') toast('🎯 Nutrition goals saved!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not save goals: ' + (res && res.error ? res.error : 'Network error'));
+    }
+  } catch(err) {
+    if (btn) btn.disabled = false;
+    console.error('Error saving nourish goals:', err);
+    if (typeof toast === 'function') toast('Network error saving goals');
+  }
+}
+
+// ── Coach Feedback Drawer Handlers (Issue #694) ──
+window._currentCoachNote = null;
+
+function openNourishCoachDrawer(note) {
+  window._currentCoachNote = note;
+  var drawer = document.getElementById('nourishCoachFeedbackDrawer');
+  if (!drawer) return;
+  var authorEl = document.getElementById('nourishCoachDrawerAuthor');
+  var dateEl = document.getElementById('nourishCoachDrawerDate');
+  var msgEl = document.getElementById('nourishCoachDrawerMessage');
+  var subEl = document.getElementById('nourishCoachDrawerSub');
+
+  if (authorEl) authorEl.textContent = (note && note.author_name) ? (note.author_name + ' (' + (note.author_role || 'Coach') + ')') : 'Coach';
+  if (dateEl) dateEl.textContent = (note && note.log_date) ? note.log_date : '';
+  if (msgEl) msgEl.textContent = (note && note.message) ? note.message : 'Keep up the great work!';
+  if (subEl) subEl.textContent = (note && note.author_role) ? ('Feedback from ' + note.author_role) : 'Nourish Coaching';
+
+  drawer.style.display = 'flex';
+  drawer.classList.add('active');
+}
+
+function closeNourishCoachDrawer() {
+  var drawer = document.getElementById('nourishCoachFeedbackDrawer');
+  if (drawer) {
+    drawer.style.display = 'none';
+    drawer.classList.remove('active');
+  }
+  if (window._currentCoachNote && window._currentCoachNote.id) {
+    try {
+      sessionStorage.setItem('nourish_dismissed_coach_note_' + window._currentCoachNote.id, '1');
+    } catch(e) {}
+  }
+}
+
+async function acknowledgeCoachFeedbackNote() {
+  var note = window._currentCoachNote;
+  var btn = document.getElementById('nourishBtnAckCoachNote');
+  if (btn) btn.disabled = true;
+
+  if (note && note.id) {
+    try {
+      await fetch(API + '/nourish/coach/notes/' + note.id + '/ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      sessionStorage.setItem('nourish_dismissed_coach_note_' + note.id, '1');
+    } catch(err) {
+      console.error('Error acknowledging coach note:', err);
+    }
+  }
+  if (btn) btn.disabled = false;
+  closeNourishCoachDrawer();
+  if (typeof toast === 'function') toast('✓ Coach feedback acknowledged');
+}
+
+// ── Trends & Macro Analytics View Handlers (Issue #692) ──
+window._currentNourishSubView = 'day';
+window._currentTrendsDays = 7;
+
+function switchNourishSubView(view) {
+  var target = (view === 'trends') ? 'trends' : 'day';
+  window._currentNourishSubView = target;
+  var dayView = document.getElementById('nourishDayView');
+  var trendsView = document.getElementById('nourishTrendsView');
+  var tabDay = document.getElementById('nourishTabDay');
+  var tabTrends = document.getElementById('nourishTabTrends');
+
+  if (target === 'trends') {
+    if (dayView) dayView.style.display = 'none';
+    if (trendsView) trendsView.style.display = 'block';
+    if (tabDay) {
+      tabDay.style.background = 'transparent';
+      tabDay.style.color = '#64748b';
+      tabDay.style.boxShadow = 'none';
+    }
+    if (tabTrends) {
+      tabTrends.style.background = '#fff';
+      tabTrends.style.color = '#065f46';
+      tabTrends.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+    }
+    loadNourishTrends(window._currentTrendsDays || 7);
+  } else {
+    if (dayView) dayView.style.display = 'block';
+    if (trendsView) trendsView.style.display = 'none';
+    if (tabDay) {
+      tabDay.style.background = '#fff';
+      tabDay.style.color = '#065f46';
+      tabDay.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+    }
+    if (tabTrends) {
+      tabTrends.style.background = 'transparent';
+      tabTrends.style.color = '#64748b';
+      tabTrends.style.boxShadow = 'none';
+    }
+  }
+}
+
+async function loadNourishTrends(days) {
+  var numDays = [7, 14, 30].indexOf(days) !== -1 ? days : 7;
+  window._currentTrendsDays = numDays;
+
+  [7, 14, 30].forEach(function(d) {
+    var btn = document.getElementById('nourishTrendsRange_' + d);
+    if (btn) {
+      if (d === numDays) {
+        btn.style.background = '#059669';
+        btn.style.color = '#fff';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = '#64748b';
+      }
+    }
+  });
+
+  var container = document.getElementById('nourishTrendsChartContainer');
+  if (container) {
+    container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--muted); font-size:13px;">Loading analytics...</div>';
+  }
+
+  try {
+    var res = await fetch(API + '/nourish/analytics?days=' + numDays).then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      renderNourishTrends(res, numDays);
+    } else {
+      if (container) {
+        container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--muted); font-size:13px;">No trend data available for this range yet.</div>';
+      }
+    }
+  } catch(err) {
+    console.error('Error loading nourish analytics:', err);
+    if (container) {
+      container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--muted); font-size:13px;">Could not load analytics.</div>';
+    }
+  }
+}
+
+function renderNourishTrends(data, days) {
+  var summary = data.summary || {};
+  var daily = data.daily || data.days_data || data.history || data.days || [];
+  var goals = (currentNourishData && currentNourishData.goals) || {};
+
+  var targetCal = summary.target_calories || goals.calories_target || goals.calorie_target || 2000;
+  var targetP = summary.target_protein || goals.protein_target_g || 130;
+  var targetC = summary.target_carbs || goals.carbs_target_g || 200;
+  var targetF = summary.target_fat || goals.fat_target_g || 65;
+  var targetW = summary.target_water_ml || goals.water_target_ml || 2500;
+
+  var avgCal = summary.avg_calories;
+  var avgP = summary.avg_protein !== undefined ? summary.avg_protein : summary.avg_protein_g;
+  var avgC = summary.avg_carbs !== undefined ? summary.avg_carbs : summary.avg_carbs_g;
+  var avgF = summary.avg_fat !== undefined ? summary.avg_fat : summary.avg_fat_g;
+  var avgW = summary.avg_water_ml !== undefined ? summary.avg_water_ml : summary.avg_water;
+  var adhPct = summary.adherence_pct;
+
+  if (daily.length > 0 && (avgCal === undefined || isNaN(avgCal))) {
+    var sumCal = 0, sumP = 0, sumC = 0, sumF = 0, sumW = 0, onTrackCount = 0;
+    daily.forEach(function(d) {
+      var c = d.calories || 0;
+      sumCal += c;
+      sumP += (d.protein_g || d.protein || 0);
+      sumC += (d.carbs_g || d.carbs || 0);
+      sumF += (d.fat_g || d.fat || 0);
+      sumW += (d.water_ml || d.water || 0);
+      if (Math.abs(c - targetCal) <= targetCal * 0.15) onTrackCount++;
+    });
+    avgCal = Math.round(sumCal / daily.length);
+    avgP = Math.round(sumP / daily.length);
+    avgC = Math.round(sumC / daily.length);
+    avgF = Math.round(sumF / daily.length);
+    avgW = Math.round(sumW / daily.length);
+    adhPct = Math.round((onTrackCount / daily.length) * 100);
+  }
+
+  avgCal = Math.round(avgCal || 0);
+  avgP = Math.round(avgP || 0);
+  avgC = Math.round(avgC || 0);
+  avgF = Math.round(avgF || 0);
+  avgW = Math.round(avgW || 0);
+  adhPct = (adhPct !== undefined && !isNaN(adhPct)) ? Math.round(adhPct) : 100;
+
+  var elAvgCal = document.getElementById('nourishTrendsAvgCal');
+  var elTargetCal = document.getElementById('nourishTrendsTargetCal');
+  var elCalSub = document.getElementById('nourishTrendsCalSub');
+  var elAdh = document.getElementById('nourishTrendsAdherence');
+
+  if (elAvgCal) elAvgCal.textContent = avgCal.toLocaleString();
+  if (elTargetCal) elTargetCal.textContent = targetCal.toLocaleString();
+  if (elAdh) elAdh.textContent = adhPct + '%';
+
+  if (elCalSub) {
+    if (avgCal === 0) {
+      elCalSub.textContent = 'No logs yet';
+      elCalSub.style.color = '#94a3b8';
+    } else if (Math.abs(avgCal - targetCal) <= targetCal * 0.1) {
+      elCalSub.textContent = '🎯 Target matched';
+      elCalSub.style.color = '#059669';
+    } else if (avgCal > targetCal) {
+      elCalSub.textContent = '+' + (avgCal - targetCal) + ' kcal over';
+      elCalSub.style.color = '#d97706';
+    } else {
+      elCalSub.textContent = (targetCal - avgCal) + ' kcal under';
+      elCalSub.style.color = '#0284c7';
+    }
+  }
+
+  var elAvgP = document.getElementById('nourishTrendsAvgProtein');
+  var elTargetP = document.getElementById('nourishTrendsTargetProtein');
+  var elAvgC = document.getElementById('nourishTrendsAvgCarbs');
+  var elTargetC = document.getElementById('nourishTrendsTargetCarbs');
+  var elAvgF = document.getElementById('nourishTrendsAvgFat');
+  var elTargetF = document.getElementById('nourishTrendsTargetFat');
+  var elAvgW = document.getElementById('nourishTrendsAvgWater');
+  var elTargetW = document.getElementById('nourishTrendsTargetWater');
+
+  if (elAvgP) elAvgP.textContent = String(avgP);
+  if (elTargetP) elTargetP.textContent = String(targetP);
+  if (elAvgC) elAvgC.textContent = String(avgC);
+  if (elTargetC) elTargetC.textContent = String(targetC);
+  if (elAvgF) elAvgF.textContent = String(avgF);
+  if (elTargetF) elTargetF.textContent = String(targetF);
+  if (elAvgW) elAvgW.textContent = String(avgW);
+  if (elTargetW) elTargetW.textContent = (targetW >= 1000) ? ((targetW / 1000).toFixed(1) + 'k') : String(targetW);
+
+  renderNourishTrendsChart(daily, targetCal, days);
+}
+
+function renderNourishTrendsChart(daily, targetCal, days) {
+  var container = document.getElementById('nourishTrendsChartContainer');
+  if (!container) return;
+
+  if (!daily || daily.length === 0) {
+    container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--muted); font-size:13px;">No daily data logged in this ' + days + '-day window.</div>';
+    return;
+  }
+
+  var totalW = 360;
+  var totalH = 175;
+  var padLeft = 12;
+  var padRight = 12;
+  var padTop = 22;
+  var padBottom = 26;
+  var chartW = totalW - padLeft - padRight;
+  var chartH = totalH - padTop - padBottom;
+
+  var maxVal = Math.max(targetCal * 1.25, 1000);
+  daily.forEach(function(d) {
+    if ((d.calories || 0) > maxVal) maxVal = d.calories * 1.15;
+  });
+
+  var count = daily.length;
+  var gap = count > 14 ? 3 : (count > 7 ? 6 : 12);
+  var barW = Math.max(4, Math.floor((chartW - (count - 1) * gap) / count));
+  var actualChartW = count * barW + (count - 1) * gap;
+  var startX = padLeft + Math.floor((chartW - actualChartW) / 2);
+
+  var targetY = Math.round(padTop + chartH - (targetCal / maxVal) * chartH);
+
+  var svgParts = [];
+  svgParts.push('<svg viewBox="0 0 ' + totalW + ' ' + totalH + '" style="width:100%; height:auto; display:block;" xmlns="http://www.w3.org/2000/svg">');
+
+  // Baseline
+  svgParts.push('<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (totalW - padRight) + '" y2="' + (padTop + chartH) + '" stroke="#e2e8f0" stroke-width="1" />');
+
+  // Target dashed reference line
+  svgParts.push('<line x1="' + padLeft + '" y1="' + targetY + '" x2="' + (totalW - padRight) + '" y2="' + targetY + '" stroke="#94a3b8" stroke-dasharray="4,4" stroke-width="1.5" />');
+  svgParts.push('<text x="' + (totalW - padRight) + '" y="' + (targetY - 4) + '" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">Target ' + targetCal + '</text>');
+
+  // Bars
+  for (var i = 0; i < count; i++) {
+    var it = daily[i];
+    var cal = it.calories || 0;
+    var barH = Math.max(2, Math.round((cal / maxVal) * chartH));
+    var x = startX + i * (barW + gap);
+    var y = padTop + chartH - barH;
+
+    var color = '#10b981'; // green on-track
+    if (cal > targetCal * 1.1) {
+      color = '#f59e0b'; // orange over
+    } else if (cal < targetCal * 0.75 && cal > 0) {
+      color = '#60a5fa'; // blue under
+    } else if (cal === 0) {
+      color = '#e2e8f0'; // empty
+    }
+
+    svgParts.push('<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + color + '"><title>' + (it.date || '') + ': ' + cal + ' kcal</title></rect>');
+
+    // Label on top of bar if count <= 14
+    if (count <= 14 && cal > 0) {
+      svgParts.push('<text x="' + (x + barW / 2) + '" y="' + Math.max(12, y - 3) + '" text-anchor="middle" font-size="8" font-weight="700" fill="#334155">' + cal + '</text>');
+    }
+
+    // Date/Day label at bottom
+    var label = it.label || (it.date ? it.date.slice(5) : (i + 1));
+    if (count > 14 && (i % 5 !== 0 && i !== count - 1)) {
+      // Skip labels for readability on 30-day view
+    } else {
+      svgParts.push('<text x="' + (x + barW / 2) + '" y="' + (totalH - 8) + '" text-anchor="middle" font-size="8.5" fill="#64748b">' + label + '</text>');
+    }
+  }
+
+  svgParts.push('</svg>');
+  container.innerHTML = svgParts.join('');
+}
+
+window._nourishEnabled = (function() {
+  try {
+    return localStorage.getItem('nourish_enabled') === 'true';
+  } catch(e) {
+    return false;
+  }
+})();
+
+function isNourishEnabled() {
+  if (typeof window._nourishEnabled === 'boolean') {
+    return window._nourishEnabled;
+  }
+  try {
+    var val = localStorage.getItem('nourish_enabled') === 'true';
+    window._nourishEnabled = val;
+    return val;
+  } catch(e) {
+    return false;
+  }
+}
+
+async function setNourishEnabled(enabled) {
+  window._nourishEnabled = !!enabled;
+  try {
+    localStorage.setItem('nourish_enabled', enabled ? 'true' : 'false');
+  } catch(e) {}
+
+  var toggle = document.getElementById('nourishPageToggle');
+  if (toggle) toggle.checked = !!enabled;
+
+  updateNourishEnabledView();
+
+  try {
+    await fetch(API + '/user/nourish-enabled', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled })
+    });
+  } catch(err) {
+    console.error('Failed to persist nourish enabled state:', err);
+  }
+
+  if (enabled) {
+    loadNourishDay(currentNourishDate);
+  }
+}
+
+function updateNourishEnabledView() {
+  var disView = document.getElementById('nourishDisabledView');
+  var actView = document.getElementById('nourishActiveView');
+  var toggle = document.getElementById('nourishPageToggle');
+  var enabled = isNourishEnabled();
+
+  if (toggle) toggle.checked = enabled;
+
+  if (!enabled) {
+    if (disView) disView.style.display = 'block';
+    if (actView) actView.style.display = 'none';
+    closeNourishSharedMealDrawer();
+  } else {
+    if (disView) disView.style.display = 'none';
+    if (actView) actView.style.display = 'block';
+  }
+}
+
+async function syncNourishEnabledFromServer() {
+  try {
+    var res = await fetch(API + '/user/nourish-enabled').then(function(r) { return r.json(); });
+    if (res && res.ok) {
+      var isEn = res.enabled === true;
+      window._nourishEnabled = isEn;
+      try {
+        localStorage.setItem('nourish_enabled', isEn ? 'true' : 'false');
+      } catch(e) {}
+      updateNourishEnabledView();
+      if (isEn && (!currentNourishData || !currentNourishData.logs)) {
+        loadNourishDay(currentNourishDate);
+      }
+    }
+  } catch(err) {
+    console.error('Error syncing nourish enabled state:', err);
+  }
+}
+
+async function shareNourishMealSlot(slot) {
+  var targetSlot = slot || currentNourishSlot;
+  var btn = document.getElementById('nourishBtnShare_' + targetSlot);
+  var prevHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Sharing...';
+  }
+  try {
+    var res = await fetch(API + '/nourish/meals/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: currentNourishDate,
+        meal_slot: targetSlot
+      })
+    }).then(function(r) { return r.json(); });
+
+    if (res && res.ok) {
+      var count = res.shared_count || 0;
+      var title = targetSlot.charAt(0).toUpperCase() + targetSlot.slice(1);
+      if (typeof toast === 'function') {
+        toast('👨‍👩‍👧 Shared ' + title + ' (' + count + ' items) with household!');
+      }
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') {
+        toast('Could not share meal: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    }
+  } catch(err) {
+    console.error('Error sharing meal slot:', err);
+    if (typeof toast === 'function') toast('Network error sharing meal');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (prevHtml) btn.innerHTML = prevHtml;
+    }
+  }
+}
+
+window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+
+async function checkNourishSharedMeals() {
+  if (!isNourishEnabled()) return;
+  try {
+    var res = await fetch(API + '/nourish/household/shared-meals?date=' + encodeURIComponent(currentNourishDate)).then(function(r) { return r.json(); });
+    if (!res || !res.ok || !res.shared_meals || res.shared_meals.length === 0) return;
+
+    var unhandledMeal = null;
+    for (var i = 0; i < res.shared_meals.length; i++) {
+      var m = res.shared_meals[i];
+      var key = m.meal_slot + '_' + m.shared_by_user_id + '_' + m.log_date;
+      var isDismissed = (window._dismissedSharedMeals && window._dismissedSharedMeals[key]) || false;
+      if (!isDismissed) {
+        try {
+          if (sessionStorage.getItem('nourish_dismissed_' + key) === '1') {
+            isDismissed = true;
+            window._dismissedSharedMeals[key] = true;
+          }
+        } catch(e) {}
+      }
+      if (!isDismissed) {
+        unhandledMeal = m;
+        break;
+      }
+    }
+
+    if (unhandledMeal) {
+      openNourishSharedMealDrawer(unhandledMeal);
+    }
+  } catch(err) {
+    console.error('Error checking shared meals:', err);
+  }
+}
+
+function openNourishSharedMealDrawer(meal) {
+  window._currentSharedMeal = meal;
+  var drawer = document.getElementById('nourishSharedMealDrawer');
+  if (!drawer) return;
+
+  var sub = document.getElementById('nourishSharedDrawerSub');
+  if (sub) {
+    var who = meal.shared_by_name || 'A family member';
+    sub.textContent = who + ' shared ' + meal.meal_slot + ' with the household';
+  }
+
+  var itemsCont = document.getElementById('nourishSharedDrawerItems');
+  if (itemsCont) {
+    var items = meal.items || [];
+    var html = '';
+    var totalCal = 0;
+    var hasPending = false;
+    items.forEach(function(it) {
+      var fName = it.food_name || it.name || 'Item';
+      var portion = (it.serving_amount || it.quantity || 1) + ' ' + (it.serving_unit || it.unit || 'serving');
+      var isPending = it.ai_enrich_status === 'pending' || ((it.calories || 0) === 0 && !it.catalog_id);
+      if (isPending) hasPending = true;
+      var cal = it.calories || 0;
+      totalCal += cal;
+      var calText = isPending
+        ? '<span class="nourish-estimating-badge" style="font-size:10.5px;">✨ AI Estimating</span>'
+        : ('<div style="font-weight:600; color:#374151;">' + Math.round(cal) + ' kcal</div>');
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #f1f5f9; gap:8px;">' +
+        '<div><b>' + escapeHtml(fName) + '</b> <span style="color:var(--muted); font-size:11px;">(' + escapeHtml(portion) + ')</span></div>' +
+        calText +
+      '</div>';
+    });
+    var totalDisplay = hasPending
+      ? (totalCal > 0 ? (Math.round(totalCal) + ' kcal (+ AI estimating)') : '<span style="font-size:11.5px; color:#047857;">✨ AI Estimating · Check back in ~1 hr</span>')
+      : (Math.round(totalCal) + ' kcal');
+    html += '<div style="display:flex; justify-content:space-between; font-weight:700; padding-top:6px; color:#047857;">' +
+      '<span>Total:</span>' +
+      '<span>' + totalDisplay + '</span>' +
+    '</div>';
+    itemsCont.innerHTML = html;
+  }
+
+  var btnAdd = document.getElementById('nourishBtnAddSharedMeal');
+  if (btnAdd) {
+    btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+  }
+
+  drawer.style.display = 'flex';
+}
+
+function closeNourishSharedMealDrawer() {
+  var drawer = document.getElementById('nourishSharedMealDrawer');
+  if (drawer) drawer.style.display = 'none';
+}
+
+function dismissNourishSharedMeal() {
+  window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+  if (window._currentSharedMeal) {
+    var m = window._currentSharedMeal;
+    var key = m.meal_slot + '_' + m.shared_by_user_id + '_' + m.log_date;
+    window._dismissedSharedMeals[key] = true;
+    try {
+      sessionStorage.setItem('nourish_dismissed_' + key, '1');
+    } catch(e) {}
+  }
+  closeNourishSharedMealDrawer();
+}
+
+async function acceptNourishSharedMeal() {
+  window._dismissedSharedMeals = window._dismissedSharedMeals || {};
+  if (!window._currentSharedMeal) {
+    closeNourishSharedMealDrawer();
+    return;
+  }
+  var meal = window._currentSharedMeal;
+  var key = meal.meal_slot + '_' + meal.shared_by_user_id + '_' + meal.log_date;
+  window._dismissedSharedMeals[key] = true;
+  try {
+    sessionStorage.setItem('nourish_dismissed_' + key, '1');
+  } catch(e) {}
+
+  var items = meal.items || [];
+  if (items.length === 0) {
+    closeNourishSharedMealDrawer();
+    return;
+  }
+
+  var btnAdd = document.getElementById('nourishBtnAddSharedMeal');
+  if (btnAdd) {
+    btnAdd.disabled = true;
+    btnAdd.textContent = 'Adding...';
+  }
+
+  var payload = {
+    log_date: currentNourishDate,
+    meal_slot: meal.meal_slot,
+    is_shared_household: false,
+    items: items.map(function(it) {
+      var fName = it.food_name || it.name || 'Food item';
+      var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
+      var fUnit = it.unit || it.serving_unit || 'g';
+      return {
+        food_name: fName,
+        name: fName,
+        meal_slot: meal.meal_slot,
+        quantity: fQty,
+        serving_amount: fQty,
+        unit: fUnit,
+        serving_unit: fUnit,
+        catalog_id: it.catalog_id || null,
+        calories: it.calories,
+        protein_g: it.protein_g,
+        carbs_g: it.carbs_g,
+        fat_g: it.fat_g,
+        fiber_g: it.fiber_g,
+        calories_per_100g: it.calories_per_100g || 0,
+        protein_per_100g: it.protein_per_100g || 0,
+        carbs_per_100g: it.carbs_per_100g || 0,
+        fat_per_100g: it.fat_per_100g || 0,
+        fiber_per_100g: it.fiber_per_100g || 0,
+        serving_weight_g: it.serving_weight_g || 100,
+        serving_label: it.serving_label || '1 serving',
+        category: it.category || 'Prepared Foods',
+        is_shared_household: false
+      };
+    })
+  };
+
+  try {
+    var res = await fetch(API + '/nourish/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+
+    if (btnAdd) {
+      btnAdd.disabled = false;
+      btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+    }
+
+    if (res && res.ok) {
+      closeNourishSharedMealDrawer();
+      if (typeof toast === 'function') toast('✅ Added ' + meal.meal_slot + ' to your diary!');
+      loadNourishDay(currentNourishDate);
+    } else {
+      if (typeof toast === 'function') toast('Could not add shared meal: ' + (res && res.error ? res.error : 'Error'));
+    }
+  } catch(err) {
+    if (btnAdd) {
+      btnAdd.disabled = false;
+      btnAdd.textContent = '➕ Add to My ' + meal.meal_slot + ' (1 Tap)';
+    }
+    console.error('Error accepting shared meal:', err);
+    if (typeof toast === 'function') toast('Network error adding shared meal');
+  }
+}
+
+document.addEventListener('click', function(e) {
+  var dropdown = document.getElementById('nourishSearchDropdown');
+  var input = document.getElementById('nourishSearchInput');
+  if (dropdown && dropdown.style.display === 'block') {
+    if (e.target !== dropdown && !dropdown.contains(e.target) && e.target !== input) {
+      dropdown.style.display = 'none';
+    }
+  }
+});
+
+window.isNourishEnabled = isNourishEnabled;
+window.setNourishEnabled = setNourishEnabled;
+window.updateNourishEnabledView = updateNourishEnabledView;
+window.syncNourishEnabledFromServer = syncNourishEnabledFromServer;
+window.shareNourishMealSlot = shareNourishMealSlot;
+window.checkNourishSharedMeals = checkNourishSharedMeals;
+window.openNourishSharedMealDrawer = openNourishSharedMealDrawer;
+window.closeNourishSharedMealDrawer = closeNourishSharedMealDrawer;
+window.dismissNourishSharedMeal = dismissNourishSharedMeal;
+window.acceptNourishSharedMeal = acceptNourishSharedMeal;
+window.loadNourishDay = loadNourishDay;
+window.navigateNourishDate = navigateNourishDate;
+window.onNourishDateChange = onNourishDateChange;
+window.jumpNourishToToday = jumpNourishToToday;
+window.selectNourishSlot = selectNourishSlot;
+window.switchNourishEntryTab = switchNourishEntryTab;
+window.setNourishUnit = setNourishUnit;
+window.setNourishGramPill = setNourishGramPill;
+window.updateNourishGramPillActiveState = updateNourishGramPillActiveState;
+window.stepNourishAmount = stepNourishAmount;
+window.updateNourishPreview = updateNourishPreview;
+window.submitNourishLog = submitNourishLog;
+window.analyzeNourishPlate = analyzeNourishPlate;
+window.analyzeNourishPlateAI = analyzeNourishPlate;
+window.logAllAnalyzedNourishItems = logAllAnalyzedNourishItems;
+window.quickAddNourishWater = quickAddNourishWater;
+window.deleteNourishLog = deleteNourishLog;
+window.openNourishEditModal = openNourishEditModal;
+window.closeNourishEditModal = closeNourishEditModal;
+window.saveNourishEditLog = saveNourishEditLog;
+window.openNourishGoalsModal = openNourishGoalsModal;
+window.closeNourishGoalsModal = closeNourishGoalsModal;
+window.saveNourishGoals = saveNourishGoals;
+window.onNourishSearchInput = onNourishSearchInput;
+window.searchNourishCatalog = searchNourishCatalog;
+window.selectNourishCatalogItemByIndex = selectNourishCatalogItemByIndex;
+window.selectNourishCatalogItem = selectNourishCatalogItem;
+window.toggleNourishCoachLink = toggleNourishCoachLink;
+window.copyNourishCoachLink = copyNourishCoachLink;
+window.resetNourishCoachToken = resetNourishCoachToken;
+window.openNourishCoachDrawer = openNourishCoachDrawer;
+window.closeNourishCoachDrawer = closeNourishCoachDrawer;
+window.acknowledgeCoachFeedbackNote = acknowledgeCoachFeedbackNote;
+window.switchNourishSubView = switchNourishSubView;
+window.loadNourishTrends = loadNourishTrends;
+window.renderNourishTrends = renderNourishTrends;
+window.renderNourishTrendsChart = renderNourishTrendsChart;
 </script>
 </body>
 </html>
+
