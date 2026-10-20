@@ -154,6 +154,8 @@ def compute_scaled_macros(per_100g_dict, quantity, unit, serving_weight_g=100.0,
         norm_unit = "oz"
     elif raw_unit in ("ml", "milliliter", "milliliters"):
         norm_unit = "ml"
+    elif raw_unit in ("plate", "plates"):
+        norm_unit = "plate"
     elif raw_unit in ("serving", "servings", "piece", "pieces", "cup", "bowl", "slice"):
         norm_unit = "serving"
     else:
@@ -179,7 +181,7 @@ def compute_scaled_macros(per_100g_dict, quantity, unit, serving_weight_g=100.0,
         gram_weight = qty * OZ_TO_G
     elif norm_unit == "ml":
         gram_weight = qty * dens
-    elif norm_unit == "serving":
+    elif norm_unit in ("serving", "plate"):
         gram_weight = qty * srv_w
     else:
         gram_weight = qty
@@ -698,6 +700,139 @@ def search_public_nutrition_apis(query_str: str, timeout: float = 2.5):
     return results
 
 
+class PlateItemList(list):
+    """List of parsed meal clause items with an associated logical plate_name."""
+
+    def __init__(self, iterable=None, plate_name=""):
+        super().__init__(iterable or [])
+        self.plate_name = plate_name
+
+
+_PROTEIN_KEYWORDS = {
+    "chicken", "turkey", "beef", "steak", "pork", "salmon", "tuna", "shrimp",
+    "fish", "tilapia", "cod", "egg", "eggs", "tofu", "paneer", "lamb", "bacon",
+    "sausage", "ham", "tempeh", "lentil", "lentils", "dal"
+}
+_BASE_KEYWORDS = {
+    "rice", "quinoa", "pasta", "noodles", "spaghetti", "macaroni", "toast",
+    "bread", "salad", "greens", "potatoes", "potato", "sweet potato", "oats", "oatmeal"
+}
+_LOWERCASE_WORDS = {"a", "an", "the", "and", "with", "or", "in", "on", "at", "to", "for", "of", "de"}
+
+
+def _clean_title_word(w: str, is_first: bool = False, is_last: bool = False) -> str:
+    low = w.lower()
+    if low == "&":
+        return "&"
+    if low in _LOWERCASE_WORDS and not is_first and not is_last:
+        return low
+    if w.isupper() and len(w) <= 4:
+        return w
+    return w.capitalize()
+
+
+def _title_case_plate_name(text: str) -> str:
+    tokens = text.split()
+    if not tokens:
+        return ""
+    n = len(tokens)
+    return " ".join(_clean_title_word(tok, is_first=(i == 0), is_last=(i == n - 1)) for i, tok in enumerate(tokens))
+
+
+def _clean_ingredient_for_title(name: str) -> str:
+    s = str(name or "").strip()
+    s = re.sub(
+        r"^\s*\d+(?:\.\d+)?\s*(?:g|grams?|oz|ounces?|ml|milliliters?|cups?|bowls?|servings?|pieces?|slices?)?\s+(?:of\s+)?",
+        "",
+        s,
+        flags=re.IGNORECASE,
+    ).strip()
+    s = re.sub(r"^(?:cooked|steamed|dry|raw|uncooked)\s+", "", s, flags=re.IGNORECASE).strip()
+    return s.strip()
+
+
+def derive_plate_name(text_description: str, items: list = None) -> str:
+    """
+    Derives a clean, appetizing, concise logical plate name (max 4-6 words)
+    from a free-text meal description or parsed food items.
+    """
+    desc = (text_description or "").strip()
+    has_quantities = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:g|oz|ml|gram|ounce|milliliter)\b", desc, flags=re.IGNORECASE))
+    has_multi_lines = "\n" in desc or ";" in desc
+    clean_desc = re.sub(
+        r"^\s*\d+(?:\.\d+)?\s*(?:servings?|bowls?|plates?|cups?|slices?|pieces?)?\s+(?:of\s+)?",
+        "",
+        desc,
+        flags=re.IGNORECASE,
+    ).strip()
+    clean_desc = re.sub(r"\s+", " ", clean_desc)
+
+    words = clean_desc.split()
+    if not has_quantities and not has_multi_lines and 1 <= len(words) <= 6:
+        m = re.match(r"^(.+?)\s+with\s+(.+?)(?:\s+and\s+|\s+&\s+)(.+)$", clean_desc, flags=re.IGNORECASE)
+        if m:
+            p1 = _title_case_plate_name(_clean_ingredient_for_title(m.group(1)))
+            p2 = _title_case_plate_name(_clean_ingredient_for_title(m.group(2)))
+            p3 = _title_case_plate_name(_clean_ingredient_for_title(m.group(3)))
+            return f"{p1} with {p2} & {p3}"
+        if "," not in clean_desc:
+            return _title_case_plate_name(clean_desc)
+
+    food_names = []
+    if items:
+        for it in items:
+            fname = ""
+            if isinstance(it, dict):
+                fname = it.get("food_name") or it.get("name") or ""
+            elif isinstance(it, str):
+                fname = it
+            cleaned = _clean_ingredient_for_title(fname)
+            if cleaned and cleaned.lower() not in [x.lower() for x in food_names]:
+                food_names.append(cleaned)
+
+    if not food_names and desc:
+        parts = [p.strip() for p in re.split(r"(?:,|\band\b|\bwith\b|\bplus\b|\n|;)+", desc, flags=re.IGNORECASE) if p.strip()]
+        for p in parts:
+            cleaned = _clean_ingredient_for_title(p)
+            if cleaned and cleaned.lower() not in [x.lower() for x in food_names]:
+                food_names.append(cleaned)
+
+    if not food_names:
+        return _title_case_plate_name(desc[:40]) if desc else "Custom Plate"
+
+    titles = [_title_case_plate_name(fn) for fn in food_names]
+
+    if len(titles) == 1:
+        plate = titles[0]
+    elif len(titles) == 2:
+        first_low = titles[0].lower()
+        second_low = titles[1].lower()
+        is_first_protein = any(k in first_low for k in _PROTEIN_KEYWORDS)
+        is_second_protein = any(k in second_low for k in _PROTEIN_KEYWORDS)
+        is_first_base = any(k in first_low for k in _BASE_KEYWORDS)
+
+        if is_second_protein and is_first_base and not is_first_protein:
+            plate = f"{titles[1]} with {titles[0]}"
+        else:
+            plate = f"{titles[0]} with {titles[1]}"
+    elif len(titles) == 3:
+        plate = f"{titles[0]} with {titles[1]} & {titles[2]}"
+    else:
+        plate = f"{titles[0]} with {titles[1]} & {titles[2]}"
+
+    plate_words = plate.split()
+    if len(plate_words) > 6:
+        plate_words = plate_words[:6]
+        while plate_words and plate_words[-1].lower() in {"with", "and", "&", "of", "in", "to", "for", "on", "a", "an", "the"}:
+            plate_words.pop()
+        plate = " ".join(plate_words)
+
+    return plate
+
+
+_derive_plate_name = derive_plate_name
+
+
 def _parse_heuristic_meal_clauses(text_description: str):
     """Deterministic fallback parser for natural-language meal descriptions."""
     raw_parts = [
@@ -765,27 +900,48 @@ def _parse_heuristic_meal_clauses(text_description: str):
             "category": est.get("category", "Prepared Foods"),
             "ai_enrich_status": "pending" if is_pending else "complete",
         })
-    return items
+    plate_name = derive_plate_name(text_description, items)
+    return PlateItemList(items, plate_name=plate_name)
 
 
 def analyze_natural_language_meal(text_description: str):
     """
     Deconstructs a free-text meal description into individual food items with 4-unit scaling
-    and per-100g baselines, enforcing the COOKED vs RAW rule.
+    and per-100g baselines, enforcing the COOKED vs RAW rule, and derives a concise logical plate title.
     """
     desc = (text_description or "").strip()
     if not desc:
-        return {"items": [], "totals": {"calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "fiber_g": 0}}
+        return {
+            "plate_name": "",
+            "items": [],
+            "totals": {"calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "fiber_g": 0, "sugar_g": 0, "sodium_mg": 0},
+        }
 
     system_instruction = (
         "You are an expert nutritionist deconstructing a meal log into individual food items.\n"
         f"{COOKED_VS_RAW_RULE}\n"
-        "Return ONLY a JSON object with key 'items', where each item has:\n"
+        "Return ONLY a JSON object with keys:\n"
+        "1. 'plate_name': A clean, appetizing, concise title for this dish (e.g. 'Chicken Burrito Bowl', "
+        "'Greek Yogurt with Blueberries & Walnuts', 'Avocado Toast with Poached Eggs', 'Spaghetti Bolognese'). Max 4-6 words.\n"
+        "2. 'items': array of individual food items, where each item has:\n"
         "food_name, quantity (number), unit ('g', 'oz', 'ml', or 'serving'), "
         "calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, "
         "sugar_per_100g, sodium_mg_per_100g, serving_weight_g, serving_label, category."
     )
     parsed = _call_gemini_json(system_instruction, f"Deconstruct this meal:\n{desc}", temperature=0.2)
+
+    plate_name = ""
+    if isinstance(parsed, dict):
+        raw_plate = parsed.get("plate_name")
+        if raw_plate and isinstance(raw_plate, str):
+            plate_name = raw_plate.strip().strip('"\'')
+            p_words = plate_name.split()
+            if len(p_words) > 6:
+                p_words = p_words[:6]
+                while p_words and p_words[-1].lower() in {"with", "and", "&", "of", "in", "to", "for", "on", "a", "an", "the"}:
+                    p_words.pop()
+                plate_name = " ".join(p_words)
+
     items = []
     if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
         for entry in parsed["items"]:
@@ -824,7 +980,13 @@ def analyze_natural_language_meal(text_description: str):
             })
 
     if not items:
-        items = _parse_heuristic_meal_clauses(desc)
+        heuristic_res = _parse_heuristic_meal_clauses(desc)
+        items = list(heuristic_res)
+        if not plate_name:
+            plate_name = getattr(heuristic_res, "plate_name", "")
+
+    if not plate_name:
+        plate_name = derive_plate_name(desc, items)
 
     totals = {
         "calories": round(sum(i["calories"] for i in items), 2),
@@ -835,7 +997,7 @@ def analyze_natural_language_meal(text_description: str):
         "sugar_g": round(sum(i.get("sugar_g", 0.0) for i in items), 2),
         "sodium_mg": round(sum(i.get("sodium_mg", 0.0) for i in items), 2),
     }
-    return {"items": items, "totals": totals}
+    return {"plate_name": plate_name, "items": items, "totals": totals}
 
 
 def analyze_recipe_nutrition(name: str, servings: float, raw_ingredients_text: str):
