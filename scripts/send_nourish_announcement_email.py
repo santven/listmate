@@ -94,13 +94,13 @@ def generate_email_content(
         unsub_desc = "You received this email because your household holds a lifetime Premium membership on ListMate."
 
     elif tier == "trial":
-        subject = "🥗 New in ListMate: Nourish is Unlocked on Your Free Trial (+ Special Upgrade Offer)"
+        subject = "🥗 Unlocked on Your Trial: Meet Nourish + Keep ListMate Pro for $9.99/yr"
         badge_text = "✨ NEW FEATURE UNLOCKED • ACTIVE ON YOUR PRO TRIAL"
         hero_title = "Meet Nourish: Effortless Meal & Macro Tracking on Your Pro Trial"
         hero_subtitle = "Now unlocked on your household trial — track nutrition together without duplicate typing"
         greeting_line = f"Hi {first_name},"
         intro_p1 = f"We have exciting news for <strong>{hh_name}</strong>! We just launched our brand-new nutrition tracker, and it is <strong>fully unlocked on your active Pro Trial</strong> right now."
-        intro_p2 = "Meet <strong>ListMate Nourish</strong> — an intelligent food and macro tracker that lets you describe meals in conversational English, share home-cooked dinners with family members in 1 tap, and bridge leftovers from Still Good directly to your diary."
+        intro_p2 = "Meet <strong>ListMate Nourish</strong> — an intelligent food and macro tracker that replaces $80/year nutrition apps for your whole family. Describe meals in conversational English, share home-cooked dinners with family in 1 tap, and bridge leftovers from Still Good directly to your diary."
         cta_primary_html = f"""
           <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:20px;text-align:center;margin:24px 0 20px;">
             <div style="font-size:14px;font-weight:700;color:#854d0e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
@@ -158,7 +158,7 @@ def generate_email_content(
               Claim Your 15-Day Free Extension Pass
             </div>
             <p style="margin:0 0 16px;font-size:14px;color:#166534;line-height:1.5;max-width:440px;margin-left:auto;margin-right:auto;">
-              Click below to instantly activate 15 full days of ListMate Pro for your entire household. Explore Nourish, Still Good, and collaborative grocery lists on us!
+              Click below to instantly reactivate 15 full days of ListMate Pro across your entire household. Explore Nourish, Still Good, and collaborative grocery lists on us!
             </p>
             <div style="margin-bottom:12px;">
               <a href="{claim_ext_15d_url}" target="_blank" rel="noopener noreferrer" style="background:#16a34a;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(22,163,74,0.35);margin-right:8px;margin-bottom:8px;">
@@ -169,7 +169,7 @@ def generate_email_content(
               </a>
             </div>
             <div style="font-size:12px;color:#15803d;font-weight:500;">
-              ✓ No credit card needed &bull; Instant activation for all household members
+              ✓ No credit card needed &bull; Instant 1-tap activation for all household members
             </div>
           </div>
         """
