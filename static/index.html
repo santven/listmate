@@ -2006,6 +2006,15 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
       <div style="font-weight:700; font-size:16px; color:var(--text); margin-bottom:4px;">Edit Portion</div>
       <div id="nourishEditName" style="font-size:13.5px; color:#047857; font-weight:600; margin-bottom:14px;"></div>
       <div style="margin-bottom:12px;">
+        <label for="nourishEditMealSlot" style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Meal Slot</label>
+        <select id="nourishEditMealSlot" style="width:100%; padding:10px; font-size:15px; border:1px solid var(--border); border-radius:10px; margin-top:4px; background:#fff; outline:none;">
+          <option value="Breakfast">🌅 Breakfast</option>
+          <option value="Lunch">☀️ Lunch</option>
+          <option value="Dinner">🌙 Dinner</option>
+          <option value="Snack">🍎 Snack</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
         <label style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Serving Amount</label>
         <input type="number" id="nourishEditAmount" min="0.1" step="any" style="width:100%; padding:10px; font-size:16px; border:1px solid var(--border); border-radius:10px; margin-top:4px; outline:none;">
       </div>
@@ -12125,6 +12134,7 @@ function renderNourishDay(data) {
   var slots = { breakfast: [], lunch: [], dinner: [], snack: [] };
   logs.forEach(function(l) {
     var slot = (l.meal_slot || 'snack').toLowerCase();
+    if (slot === 'snacks') slot = 'snack';
     if (!slots[slot]) slots[slot] = [];
     slots[slot].push(l);
   });
@@ -12295,10 +12305,25 @@ function openNourishEditModal(logId) {
   var nameEl = document.getElementById('nourishEditName');
   var amtEl = document.getElementById('nourishEditAmount');
   var unitEl = document.getElementById('nourishEditUnit');
+  var slotEl = document.getElementById('nourishEditMealSlot');
   if (nameEl) nameEl.textContent = entry.food_name || entry.name || '';
   var qtyVal = (entry.quantity !== undefined && entry.quantity !== null) ? entry.quantity : entry.serving_amount;
   if (amtEl) amtEl.value = String(qtyVal !== undefined && qtyVal !== null ? qtyVal : 100);
   if (unitEl) unitEl.value = entry.unit || entry.serving_unit || 'g';
+  if (slotEl) {
+    var rawSlot = String(entry.meal_slot || 'Snack').trim().toLowerCase();
+    if (rawSlot === 'breakfast') slotEl.value = 'Breakfast';
+    else if (rawSlot === 'lunch') slotEl.value = 'Lunch';
+    else if (rawSlot === 'dinner') slotEl.value = 'Dinner';
+    else slotEl.value = 'Snack';
+    window._activeNourishEditPrevSlot = slotEl.value;
+  } else {
+    var rawSlot = String(entry.meal_slot || 'Snack').trim().toLowerCase();
+    if (rawSlot === 'breakfast') window._activeNourishEditPrevSlot = 'Breakfast';
+    else if (rawSlot === 'lunch') window._activeNourishEditPrevSlot = 'Lunch';
+    else if (rawSlot === 'dinner') window._activeNourishEditPrevSlot = 'Dinner';
+    else window._activeNourishEditPrevSlot = 'Snack';
+  }
   var modal = document.getElementById('nourishEditModal');
   if (modal) modal.classList.add('active');
 }
@@ -12307,6 +12332,7 @@ function closeNourishEditModal() {
   var modal = document.getElementById('nourishEditModal');
   if (modal) modal.classList.remove('active');
   window._activeNourishEditLogId = null;
+  window._activeNourishEditPrevSlot = null;
 }
 
 async function saveNourishEditLog() {
@@ -12314,8 +12340,10 @@ async function saveNourishEditLog() {
   if (!logId) return;
   var amtEl = document.getElementById('nourishEditAmount');
   var unitEl = document.getElementById('nourishEditUnit');
+  var slotEl = document.getElementById('nourishEditMealSlot');
   var amt = amtEl ? parseFloat(amtEl.value) || 0 : 0;
   var unit = unitEl ? unitEl.value : 'g';
+  var selectedSlot = slotEl ? slotEl.value : (window._activeNourishEditPrevSlot || 'Snack');
   if (amt <= 0) {
     if (typeof toast === 'function') toast('Please enter a valid amount');
     return;
@@ -12326,6 +12354,17 @@ async function saveNourishEditLog() {
     btn.disabled = true;
     btn.textContent = 'Saving...';
   }
+  var prevSlot = window._activeNourishEditPrevSlot;
+  if (!prevSlot && currentNourishData && currentNourishData.logs) {
+    var currEntry = currentNourishData.logs.find(function(l) { return l.id === logId; });
+    if (currEntry) {
+      var rawSlot = String(currEntry.meal_slot || 'Snack').trim().toLowerCase();
+      if (rawSlot === 'breakfast') prevSlot = 'Breakfast';
+      else if (rawSlot === 'lunch') prevSlot = 'Lunch';
+      else if (rawSlot === 'dinner') prevSlot = 'Dinner';
+      else prevSlot = 'Snack';
+    }
+  }
   try {
     var res = await fetch(API + '/nourish/logs/' + logId, {
       method: 'PUT',
@@ -12334,12 +12373,18 @@ async function saveNourishEditLog() {
         quantity: amt,
         serving_amount: amt,
         unit: unit,
-        serving_unit: unit
+        serving_unit: unit,
+        meal_slot: selectedSlot
       })
     }).then(function(r) { return r.json(); });
     if (res && res.ok) {
       closeNourishEditModal();
-      if (typeof toast === 'function') toast('Portion updated.');
+      var slotChanged = prevSlot && (String(prevSlot).trim().toLowerCase() !== String(selectedSlot).trim().toLowerCase());
+      if (slotChanged) {
+        if (typeof toast === 'function') toast('✅ Moved to ' + selectedSlot + '!');
+      } else {
+        if (typeof toast === 'function') toast('Portion updated.');
+      }
       loadNourishDay(currentNourishDate);
     } else {
       if (typeof toast === 'function') toast('Could not update portion');
