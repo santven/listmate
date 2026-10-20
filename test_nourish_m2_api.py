@@ -1003,6 +1003,20 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             # 200 ml * 1.05 g/ml = 210g -> 2.1 * 110 = 231 kcal
             self.assertAlmostEqual(rec_log["gram_weight"], 210.0)
             self.assertAlmostEqual(rec_log["calories"], 231.0)
+            self.assertEqual(rec_log["meal_slot"], "Lunch")
+
+            # 5. Move logged food item between meal slots (Issue #715: Lunch -> Breakfast)
+            rec_id = rec_log["id"]
+            resp_move = self.client.put(
+                f"/api/nourish/logs/{rec_id}",
+                json={"meal_slot": "Breakfast"},
+            )
+            self.assertEqual(resp_move.status_code, 200)
+            moved_log = resp_move.get_json()["log"]
+            self.assertEqual(moved_log["meal_slot"], "Breakfast")
+            self.assertEqual(moved_log["food_name"], "General Koottu")
+            self.assertAlmostEqual(moved_log["gram_weight"], 210.0)
+            self.assertAlmostEqual(moved_log["calories"], 231.0)
 
     def test_4_pending_ai_enrichment_and_hourly_cron_sweep(self):
         """
@@ -2141,6 +2155,74 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertEqual(yogurt_log["food_name"], "Greek Yogurt Bowl")
             self.assertEqual(yogurt_log["unit"], "serving")
             self.assertEqual(yogurt_log["notes"], "Greek yogurt, blueberries, walnuts, honey")
+
+    def test_25_move_logged_food_between_meal_slots(self):
+        """
+        Issue #715: Allow moving logged food items between meal slots in PUT /api/nourish/logs/<id>:
+        - Normalize meal_slot (strip whitespace, capitalize/title-case: breakfast -> Breakfast, lunch -> Lunch, dinner -> Dinner, snack/snacks -> Snack).
+        - Retain existing meal_slot if not provided.
+        - Update meal_slot in SQL and return in serialize_nourish_row.
+        """
+        with self._context_patches(user_id=10, household_id=1):
+            # 1. Log a food item in Lunch
+            post_res = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-20",
+                    "meal_slot": "Lunch",
+                    "food_name": "Chicken Salad",
+                    "quantity": 1,
+                    "unit": "serving",
+                    "gram_weight": 200.0,
+                    "calories": 350.0,
+                    "protein_g": 30.0,
+                    "carbs_g": 10.0,
+                    "fat_g": 15.0,
+                },
+            )
+            self.assertEqual(post_res.status_code, 200)
+            initial_log = post_res.get_json()["log"]
+            log_id = initial_log["id"]
+            self.assertEqual(initial_log["meal_slot"], "Lunch")
+
+            # 2. PUT with {"meal_slot": "Breakfast"} moves item from Lunch to Breakfast
+            put_res = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"meal_slot": "Breakfast"},
+            )
+            self.assertEqual(put_res.status_code, 200)
+            updated_log = put_res.get_json()["log"]
+            self.assertEqual(updated_log["meal_slot"], "Breakfast")
+            self.assertEqual(updated_log["food_name"], "Chicken Salad")
+            self.assertAlmostEqual(updated_log["calories"], 350.0)
+
+            # 3. Case normalization: lowercase 'dinner' -> 'Dinner'
+            put_dinner = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"meal_slot": "dinner"},
+            )
+            self.assertEqual(put_dinner.status_code, 200)
+            dinner_log = put_dinner.get_json()["log"]
+            self.assertEqual(dinner_log["meal_slot"], "Dinner")
+
+            # 4. Plural / alias normalization: 'snacks' -> 'Snack'
+            put_snack = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"meal_slot": "  snacks  "},
+            )
+            self.assertEqual(put_snack.status_code, 200)
+            snack_log = put_snack.get_json()["log"]
+            self.assertEqual(snack_log["meal_slot"], "Snack")
+
+            # 5. Omission of meal_slot retains current meal_slot ('Snack')
+            put_qty = self.client.put(
+                f"/api/nourish/logs/{log_id}",
+                json={"notes": "Added some lemon dressing"},
+            )
+            self.assertEqual(put_qty.status_code, 200)
+            retained_log = put_qty.get_json()["log"]
+            self.assertEqual(retained_log["meal_slot"], "Snack")
+            self.assertEqual(retained_log["notes"], "Added some lemon dressing")
 
 
 if __name__ == "__main__":

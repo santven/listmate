@@ -196,6 +196,13 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn("logAnalyzedPlateCombined", self.html)
         self.assertIn("🍽️ Plate / Dish Name", self.html)
 
+        # 14. Move Logged Food Between Meal Slots (Issue #715)
+        self.assertIn('id="nourishEditMealSlot"', self.html)
+        self.assertIn('<option value="Breakfast">🌅 Breakfast</option>', self.html)
+        self.assertIn('<option value="Lunch">☀️ Lunch</option>', self.html)
+        self.assertIn('<option value="Dinner">🌙 Dinner</option>', self.html)
+        self.assertIn('<option value="Snack">🍎 Snack</option>', self.html)
+
     def test_nourish_deep_link_and_push_handlers_present(self):
         # Query parameter deep link handling
         self.assertIn("screenParam === 'nourish' || actionParam === 'open_nourish'", self.html)
@@ -372,7 +379,7 @@ const elementIds = [
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
   'nourishDiarySection_dinner', 'nourishSlotSubtotal_dinner', 'nourishSlotItems_dinner',
   'nourishDiarySection_snack', 'nourishSlotSubtotal_snack', 'nourishSlotItems_snack',
-  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit', 'nourishBtnSaveEditLog',
+  'nourishEditModal', 'nourishEditName', 'nourishEditAmount', 'nourishEditUnit', 'nourishEditMealSlot', 'nourishBtnSaveEditLog',
   'nourishDisabledView', 'nourishActiveView', 'nourishPageToggle', 'nourishBtnStart',
   'nourishSearchShareHousehold', 'nourishDescribeShareHousehold',
   'nourishBtnShare_breakfast', 'nourishBtnShare_lunch', 'nourishBtnShare_dinner', 'nourishBtnShare_snack',
@@ -1093,6 +1100,106 @@ eval(fns);
   if (window._lastNourishAnalyzedItems !== null) {
     throw new Error('Expected _lastNourishAnalyzedItems cleared');
   }
+  await new Promise(r => setTimeout(r, 10));
+
+  // 28. Issue #715: Move logged food between meal slots in nourishEditModal
+  let toastMsg = null;
+  global.toast = (msg) => { toastMsg = msg; };
+
+  currentNourishData = {
+    ok: true,
+    totals: { calories: 275, protein: 15, carbs: 30, fat: 5, fiber: 4 },
+    goals: { calorie_target: 2000 },
+    biometrics: {},
+    logs: [
+      { id: 101, food_name: 'Greek Yogurt Bowl', meal_slot: 'Breakfast', quantity: 150, unit: 'g', calories: 180, protein_g: 15, carbs_g: 10, fat_g: 5 },
+      { id: 102, food_name: 'Apple', meal_slot: 'snacks', quantity: 1, unit: 'serving', calories: 95, protein_g: 0, carbs_g: 20, fat_g: 0 }
+    ]
+  };
+
+  global.fetch = (url, opts) => {
+    const callObj = {
+      url: url,
+      opts: opts,
+      body: opts && opts.body ? JSON.parse(opts.body) : null
+    };
+    allFetchCalls.push(callObj);
+    if (url.includes('/api/nourish/day')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve(currentNourishData)
+      });
+    }
+    return Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ ok: true })
+    });
+  };
+
+  // Test renderNourishDay gracefully mapping 'snacks' to 'snack'
+  renderNourishDay(currentNourishData);
+  if (!elements.nourishSlotItems_snack.innerHTML.includes('Apple')) {
+    throw new Error('Expected Apple with meal_slot "snacks" to be rendered in nourishSlotItems_snack');
+  }
+
+  // Open edit modal for Greek Yogurt Bowl (slot: Breakfast)
+  openNourishEditModal(101);
+  if (elements.nourishEditMealSlot.value !== 'Breakfast') {
+    throw new Error('Expected nourishEditMealSlot to be Breakfast, got: ' + elements.nourishEditMealSlot.value);
+  }
+  if (elements.nourishEditAmount.value !== '150') {
+    throw new Error('Expected nourishEditAmount to be 150, got: ' + elements.nourishEditAmount.value);
+  }
+  if (!elements.nourishEditModal.classList.contains('active')) {
+    throw new Error('Expected nourishEditModal to have active class');
+  }
+
+  // Change slot to Lunch and amount to 200g
+  elements.nourishEditMealSlot.value = 'Lunch';
+  elements.nourishEditAmount.value = '200';
+  allFetchCalls.length = 0;
+  await saveNourishEditLog();
+  await new Promise(r => setTimeout(r, 10));
+
+  const editCall = allFetchCalls.find(c => c.url.includes('/api/nourish/logs/101') && c.opts && c.opts.method === 'PUT');
+  if (!editCall) {
+    throw new Error('Expected PUT /api/nourish/logs/101');
+  }
+  if (editCall.body.meal_slot !== 'Lunch') {
+    throw new Error('Expected PUT body meal_slot to be "Lunch", got: ' + editCall.body.meal_slot);
+  }
+  if (editCall.body.quantity !== 200) {
+    throw new Error('Expected PUT body quantity to be 200, got: ' + editCall.body.quantity);
+  }
+  if (toastMsg !== '✅ Moved to Lunch!') {
+    throw new Error('Expected toast "✅ Moved to Lunch!", got: ' + toastMsg);
+  }
+  if (elements.nourishEditModal.classList.contains('active')) {
+    throw new Error('Expected nourishEditModal to be closed after saving');
+  }
+
+  // Test case-insensitivity: meal_slot 'snacks' -> 'Snack'
+  openNourishEditModal(102);
+  if (elements.nourishEditMealSlot.value !== 'Snack') {
+    throw new Error('Expected nourishEditMealSlot for "snacks" to be Snack, got: ' + elements.nourishEditMealSlot.value);
+  }
+
+  // Save without changing slot -> portion updated toast
+  toastMsg = null;
+  elements.nourishEditAmount.value = '2';
+  allFetchCalls.length = 0;
+  await saveNourishEditLog();
+
+  const editCall2 = allFetchCalls.find(c => c.url.includes('/api/nourish/logs/102') && c.opts && c.opts.method === 'PUT');
+  if (!editCall2) {
+    throw new Error('Expected PUT /api/nourish/logs/102');
+  }
+  if (editCall2.body.meal_slot !== 'Snack') {
+    throw new Error('Expected PUT body meal_slot to be "Snack", got: ' + editCall2.body.meal_slot);
+  }
+  if (toastMsg !== 'Portion updated.') {
+    throw new Error('Expected toast "Portion updated.", got: ' + toastMsg);
+  }
 })();
 """
         res = subprocess.run(
@@ -1117,6 +1224,16 @@ eval(fns);
         # Verify duplicate card tag was cleaned up
         self.assertNotIn('<div class="card">\n  <div class="card">', settings_html)
         self.assertNotIn('<div class="card">\n<div class="card">', settings_html)
+
+    def test_nourish_edit_modal_meal_slot_options(self):
+        """Issue #715: Verify meal slot dropdown in portion edit modal."""
+        self.assertIn('id="nourishEditMealSlot"', self.html)
+        self.assertIn('<option value="Breakfast">🌅 Breakfast</option>', self.html)
+        self.assertIn('<option value="Lunch">☀️ Lunch</option>', self.html)
+        self.assertIn('<option value="Dinner">🌙 Dinner</option>', self.html)
+        self.assertIn('<option value="Snack">🍎 Snack</option>', self.html)
+        self.assertIn("meal_slot: selectedSlot", self.html)
+        self.assertIn("✅ Moved to ", self.html)
 
 
 if __name__ == "__main__":
