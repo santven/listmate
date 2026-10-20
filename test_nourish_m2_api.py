@@ -1122,6 +1122,8 @@ class TestNourishM2APIAndCron(unittest.TestCase):
                 self.assertTrue(m_data["ok"])
                 self.assertEqual(len(m_data["items"]), 2)
                 self.assertGreater(m_data["totals"]["calories"], 400.0)
+                self.assertIn("plate_name", m_data)
+                self.assertEqual(m_data["plate_name"], "Chicken Breast with White Rice")
                 # Cooked rice should be ~130-135 kcal/100g, NOT raw 360 kcal/100g
                 rice_item = m_data["items"][0]
                 self.assertLess(rice_item["calories_per_100g"], 180.0)
@@ -1984,6 +1986,161 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertTrue(day_goals["coach_link_enabled"])
             self.assertEqual(day_goals["coach_display_alias"], "Venkat Runner")
             self.assertEqual(day_goals["coach_token"], goals["coach_token"])
+
+    def test_24_ai_logical_plate_naming_and_combined_plate_logging(self):
+        """
+        Issue #712: AI Logical Plate Naming in nourish_ai.py and app.py:
+        - analyze_natural_language_meal extracts plate_name from Gemini JSON.
+        - Falls back to deriving plate_name from items/description when missing or offline.
+        - _parse_heuristic_meal_clauses attaches derived plate_name.
+        - POST /api/nourish/analyze-meal returns plate_name alongside items, totals, remaining_today.
+        - POST /api/nourish/logs supports logging combined plate items with serving_unit 'plate'/'serving' and ingredients notes.
+        """
+        # 1. Direct nourish_ai.analyze_natural_language_meal with Gemini response containing plate_name
+        mock_gemini_response = {
+            "plate_name": "Chicken Burrito Bowl",
+            "items": [
+                {
+                    "food_name": "Grilled Chicken Breast",
+                    "quantity": 150,
+                    "unit": "g",
+                    "calories_per_100g": 165.0,
+                    "protein_per_100g": 31.0,
+                    "carbs_per_100g": 0.0,
+                    "fat_per_100g": 3.6,
+                    "fiber_per_100g": 0.0,
+                    "serving_weight_g": 150.0,
+                },
+                {
+                    "food_name": "Brown Rice",
+                    "quantity": 1,
+                    "unit": "cup",
+                    "calories_per_100g": 120.0,
+                    "protein_per_100g": 2.5,
+                    "carbs_per_100g": 25.0,
+                    "fat_per_100g": 1.0,
+                    "fiber_per_100g": 1.8,
+                    "serving_weight_g": 195.0,
+                },
+            ],
+        }
+        with patch("nourish_ai._call_gemini_json", return_value=mock_gemini_response):
+            res_gemini = nourish_ai.analyze_natural_language_meal("Chicken burrito bowl with brown rice")
+            self.assertEqual(res_gemini["plate_name"], "Chicken Burrito Bowl")
+            self.assertEqual(len(res_gemini["items"]), 2)
+            self.assertIn("totals", res_gemini)
+
+        # 2. Direct analyze_natural_language_meal when Gemini response is missing plate_name
+        mock_no_title = {
+            "items": [
+                {
+                    "food_name": "Avocado Toast",
+                    "quantity": 1,
+                    "unit": "serving",
+                    "calories_per_100g": 190.0,
+                    "protein_per_100g": 4.0,
+                    "carbs_per_100g": 18.0,
+                    "fat_per_100g": 12.0,
+                    "fiber_per_100g": 5.0,
+                    "serving_weight_g": 120.0,
+                },
+                {
+                    "food_name": "Poached Eggs",
+                    "quantity": 2,
+                    "unit": "serving",
+                    "calories_per_100g": 143.0,
+                    "protein_per_100g": 12.6,
+                    "carbs_per_100g": 0.8,
+                    "fat_per_100g": 9.5,
+                    "fiber_per_100g": 0.0,
+                    "serving_weight_g": 50.0,
+                },
+            ]
+        }
+        with patch("nourish_ai._call_gemini_json", return_value=mock_no_title):
+            res_derived = nourish_ai.analyze_natural_language_meal("Avocado toast with poached eggs")
+            self.assertEqual(res_derived["plate_name"], "Avocado Toast with Poached Eggs")
+
+        # 3. Direct heuristic fallback (_parse_heuristic_meal_clauses)
+        with patch("nourish_ai._call_gemini_json", return_value=None):
+            h_res = nourish_ai.analyze_natural_language_meal("Greek yogurt with blueberries and walnuts")
+            self.assertEqual(h_res["plate_name"], "Greek Yogurt with Blueberries & Walnuts")
+            self.assertGreater(len(h_res["items"]), 0)
+
+            # Heuristic clauses directly
+            clauses = nourish_ai._parse_heuristic_meal_clauses("200g cooked white rice and 150g chicken breast")
+            self.assertTrue(isinstance(clauses, list))
+            self.assertEqual(clauses.plate_name, "Chicken Breast with White Rice")
+
+            # Empty input
+            empty_res = nourish_ai.analyze_natural_language_meal("")
+            self.assertEqual(empty_res["plate_name"], "")
+            self.assertEqual(empty_res["items"], [])
+
+        # 4. POST /api/nourish/analyze-meal endpoint verification
+        with self._context_patches(user_id=10, household_id=1):
+            with patch("nourish_ai._call_gemini_json", return_value=mock_gemini_response):
+                resp = self.client.post("/api/nourish/analyze-meal", json={"text": "Chicken burrito bowl"})
+                self.assertEqual(resp.status_code, 200)
+                data = resp.get_json()
+                self.assertTrue(data["ok"])
+                self.assertEqual(data["plate_name"], "Chicken Burrito Bowl")
+                self.assertIn("items", data)
+                self.assertIn("totals", data)
+                self.assertIn("remaining_today", data)
+
+            # 5. POST /api/nourish/logs: logging combined plate items smoothly
+            # Case A: serving_unit 'plate', notes as ingredient string, explicit plate_name
+            resp_plate = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-20",
+                    "meal_slot": "Lunch",
+                    "plate_name": "Chicken Burrito Bowl",
+                    "serving_unit": "plate",
+                    "quantity": 1,
+                    "gram_weight": 350.0,
+                    "calories": 620.0,
+                    "protein_g": 48.0,
+                    "carbs_g": 65.0,
+                    "fat_g": 16.0,
+                    "fiber_g": 8.0,
+                    "notes": "Grilled chicken breast, brown rice, black beans, salsa, avocado",
+                },
+            )
+            self.assertEqual(resp_plate.status_code, 200)
+            plate_log = resp_plate.get_json()["log"]
+            self.assertEqual(plate_log["food_name"], "Chicken Burrito Bowl")
+            self.assertEqual(plate_log["unit"], "plate")
+            self.assertEqual(plate_log["calories"], 620.0)
+            self.assertEqual(plate_log["notes"], "Grilled chicken breast, brown rice, black beans, salsa, avocado")
+
+            # Case B: items array with serving_unit 'serving', notes as list of ingredients
+            resp_serving = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-20",
+                    "meal_slot": "Dinner",
+                    "items": [
+                        {
+                            "food_name": "Greek Yogurt Bowl",
+                            "serving_amount": 1,
+                            "serving_unit": "serving",
+                            "gram_weight": 250.0,
+                            "calories": 320.0,
+                            "protein_g": 22.0,
+                            "carbs_g": 36.0,
+                            "fat_g": 9.0,
+                            "notes": ["Greek yogurt", "blueberries", "walnuts", "honey"],
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(resp_serving.status_code, 200)
+            yogurt_log = resp_serving.get_json()["logs"][0]
+            self.assertEqual(yogurt_log["food_name"], "Greek Yogurt Bowl")
+            self.assertEqual(yogurt_log["unit"], "serving")
+            self.assertEqual(yogurt_log["notes"], "Greek yogurt, blueberries, walnuts, honey")
 
 
 if __name__ == "__main__":
