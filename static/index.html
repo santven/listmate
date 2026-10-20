@@ -1926,15 +1926,30 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
             <span style="font-size:11px; color:var(--muted);">/ <span id="nourishTrendsTargetCal">2000</span> kcal</span>
           </div>
           <div id="nourishTrendsCalSub" style="font-size:10.5px; font-weight:600; color:#059669; margin-top:2px;">On-track</div>
+          <div id="nourishTrendsCalDaysSub" style="font-size:9.5px; color:var(--muted); margin-top:2px;">based on 0 of 7 days logged</div>
         </div>
 
         <!-- Adherence % Chip -->
-        <div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-          <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Target Adherence</div>
+        <div style="background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.04); position:relative;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
+            <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">Target Adherence</div>
+            <button type="button" id="nourishTrendsAdhInfoBtn" onclick="toggleNourishAdhTooltip(event)" aria-label="Target adherence info" style="border:none; background:transparent; padding:0; cursor:pointer; color:#94a3b8; font-size:12px; line-height:1; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%;">ⓘ</button>
+          </div>
           <div style="display:flex; align-items:baseline; gap:4px; margin-top:2px;">
             <span id="nourishTrendsAdherence" style="font-size:18px; font-weight:800; color:#059669;">--%</span>
           </div>
-          <div style="font-size:10.5px; color:var(--muted); margin-top:2px;">within ±10% goal</div>
+          <div id="nourishTrendsAdhSub" style="font-size:10.5px; color:var(--muted); margin-top:2px;">within ±10% goal</div>
+
+          <!-- Adherence Info Tooltip Popover -->
+          <div id="nourishTrendsAdhTooltip" style="display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:100; width:260px; max-width:calc(100vw - 32px); background:#1e293b; color:#f8fafc; border-radius:10px; padding:10px 12px; font-size:11px; line-height:1.45; box-shadow:0 10px 25px -5px rgba(0,0,0,0.3); border:1px solid #334155; text-align:left;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+              <span style="font-weight:700; color:#38bdf8; font-size:11.5px;">🎯 Target Adherence</span>
+              <button type="button" onclick="closeNourishAdhTooltip(event)" aria-label="Close tooltip" style="border:none; background:transparent; color:#94a3b8; font-size:15px; cursor:pointer; padding:0 2px; line-height:1;">&times;</button>
+            </div>
+            <div style="color:#e2e8f0; font-size:10.5px; font-weight:400;">
+              Target Adherence is the percentage of logged days where your total calories were within ±10% of your daily goal (e.g. 1,800–2,200 kcal for a 2,000 kcal target). Unlogged days are excluded.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -12637,72 +12652,146 @@ async function loadNourishTrends(days) {
   }
 }
 
+function toggleNourishAdhTooltip(event) {
+  if (event) {
+    if (event.stopPropagation) event.stopPropagation();
+    if (event.preventDefault) event.preventDefault();
+  }
+  var tip = document.getElementById('nourishTrendsAdhTooltip');
+  if (!tip) return;
+  var isShowing = tip.style.display === 'block';
+  tip.style.display = isShowing ? 'none' : 'block';
+}
+
+function closeNourishAdhTooltip(event) {
+  if (event) {
+    if (event.stopPropagation) event.stopPropagation();
+    if (event.preventDefault) event.preventDefault();
+  }
+  var tip = document.getElementById('nourishTrendsAdhTooltip');
+  if (tip) tip.style.display = 'none';
+}
+
 function renderNourishTrends(data, days) {
-  var summary = data.summary || {};
-  var daily = data.daily || data.days_data || data.history || data.days || [];
-  var goals = (currentNourishData && currentNourishData.goals) || {};
+  var avgObj = (data && data.averages) || (data && data.summary) || {};
+  var adhObj = (data && data.adherence) || {};
+  var goals = (data && data.goals) || (currentNourishData && currentNourishData.goals) || {};
+  var daily = (data && (data.daily || data.days_data || data.history || data.days)) || [];
+  var totalDays = days || (data && data.days) || (daily.length > 0 ? daily.length : 7);
 
-  var targetCal = summary.target_calories || goals.calories_target || goals.calorie_target || 2000;
-  var targetP = summary.target_protein || goals.protein_target_g || 130;
-  var targetC = summary.target_carbs || goals.carbs_target_g || 200;
-  var targetF = summary.target_fat || goals.fat_target_g || 65;
-  var targetW = summary.target_water_ml || goals.water_target_ml || 2500;
+  var targetCal = Math.round(goals.calories_target || goals.calorie_target || avgObj.target_calories || 2000);
+  var targetP = Math.round(goals.protein_target_g || avgObj.target_protein || 130);
+  var targetC = Math.round(goals.carbs_target_g || avgObj.target_carbs || 200);
+  var targetF = Math.round(goals.fat_target_g || avgObj.target_fat || 65);
+  var targetW = Math.round(goals.water_target_ml || avgObj.target_water_ml || 2500);
 
-  var avgCal = summary.avg_calories;
-  var avgP = summary.avg_protein !== undefined ? summary.avg_protein : summary.avg_protein_g;
-  var avgC = summary.avg_carbs !== undefined ? summary.avg_carbs : summary.avg_carbs_g;
-  var avgF = summary.avg_fat !== undefined ? summary.avg_fat : summary.avg_fat_g;
-  var avgW = summary.avg_water_ml !== undefined ? summary.avg_water_ml : summary.avg_water;
-  var adhPct = summary.adherence_pct;
+  var avgCal = avgObj.calories !== undefined ? avgObj.calories : avgObj.avg_calories;
+  var avgP = avgObj.protein_g !== undefined ? avgObj.protein_g : (avgObj.avg_protein !== undefined ? avgObj.avg_protein : avgObj.avg_protein_g);
+  var avgC = avgObj.carbs_g !== undefined ? avgObj.carbs_g : (avgObj.avg_carbs !== undefined ? avgObj.avg_carbs : avgObj.avg_carbs_g);
+  var avgF = avgObj.fat_g !== undefined ? avgObj.fat_g : (avgObj.avg_fat !== undefined ? avgObj.avg_fat : avgObj.avg_fat_g);
+  var avgW = avgObj.water_ml !== undefined ? avgObj.water_ml : (avgObj.avg_water_ml !== undefined ? avgObj.avg_water_ml : avgObj.avg_water);
+  var daysLogged = avgObj.days_logged !== undefined ? avgObj.days_logged : (adhObj.days_logged !== undefined ? adhObj.days_logged : undefined);
+
+  var adhPct = adhObj.calories_adherence_pct !== undefined ? adhObj.calories_adherence_pct : (adhObj.adherence_pct !== undefined ? adhObj.adherence_pct : avgObj.adherence_pct);
+  var hitCount = adhObj.calories_hit_count !== undefined ? adhObj.calories_hit_count : (adhObj.hit_count !== undefined ? adhObj.hit_count : undefined);
 
   if (daily.length > 0 && (avgCal === undefined || isNaN(avgCal))) {
-    var sumCal = 0, sumP = 0, sumC = 0, sumF = 0, sumW = 0, onTrackCount = 0;
-    daily.forEach(function(d) {
-      var c = d.calories || 0;
-      sumCal += c;
-      sumP += (d.protein_g || d.protein || 0);
-      sumC += (d.carbs_g || d.carbs || 0);
-      sumF += (d.fat_g || d.fat || 0);
-      sumW += (d.water_ml || d.water || 0);
-      if (Math.abs(c - targetCal) <= targetCal * 0.15) onTrackCount++;
+    var loggedDays = daily.filter(function(d) {
+      return (d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0);
     });
-    avgCal = Math.round(sumCal / daily.length);
-    avgP = Math.round(sumP / daily.length);
-    avgC = Math.round(sumC / daily.length);
-    avgF = Math.round(sumF / daily.length);
-    avgW = Math.round(sumW / daily.length);
-    adhPct = Math.round((onTrackCount / daily.length) * 100);
+    daysLogged = loggedDays.length;
+    if (loggedDays.length > 0) {
+      var sumCal = 0, sumP = 0, sumC = 0, sumF = 0, sumW = 0, onTrackCount = 0;
+      loggedDays.forEach(function(d) {
+        var c = d.calories || 0;
+        sumCal += c;
+        sumP += (d.protein_g || d.protein || 0);
+        sumC += (d.carbs_g || d.carbs || 0);
+        sumF += (d.fat_g || d.fat || 0);
+        sumW += (d.water_ml || d.water || 0);
+        if (Math.abs(c - targetCal) <= targetCal * 0.1) onTrackCount++;
+      });
+      avgCal = Math.round(sumCal / loggedDays.length);
+      avgP = Math.round(sumP / loggedDays.length);
+      avgC = Math.round(sumC / loggedDays.length);
+      avgF = Math.round(sumF / loggedDays.length);
+      avgW = Math.round(sumW / loggedDays.length);
+      hitCount = onTrackCount;
+      adhPct = Math.round((onTrackCount / loggedDays.length) * 100);
+    } else {
+      avgCal = 0;
+      avgP = 0;
+      avgC = 0;
+      avgF = 0;
+      avgW = 0;
+      hitCount = 0;
+      adhPct = null;
+    }
   }
 
-  avgCal = Math.round(avgCal || 0);
-  avgP = Math.round(avgP || 0);
-  avgC = Math.round(avgC || 0);
-  avgF = Math.round(avgF || 0);
-  avgW = Math.round(avgW || 0);
-  adhPct = (adhPct !== undefined && !isNaN(adhPct)) ? Math.round(adhPct) : 100;
+  if (daysLogged === undefined) {
+    if (daily && daily.length > 0) {
+      var ld = daily.filter(function(d) {
+        return (d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0);
+      });
+      daysLogged = ld.length;
+    } else {
+      daysLogged = 0;
+    }
+  }
+
+  if (hitCount === undefined) {
+    if (daysLogged > 0 && adhPct !== undefined && adhPct !== null && !isNaN(adhPct)) {
+      hitCount = Math.round((adhPct / 100) * daysLogged);
+    } else {
+      hitCount = 0;
+    }
+  }
 
   var elAvgCal = document.getElementById('nourishTrendsAvgCal');
   var elTargetCal = document.getElementById('nourishTrendsTargetCal');
   var elCalSub = document.getElementById('nourishTrendsCalSub');
+  var elCalDaysSub = document.getElementById('nourishTrendsCalDaysSub');
   var elAdh = document.getElementById('nourishTrendsAdherence');
+  var elAdhSub = document.getElementById('nourishTrendsAdhSub');
 
-  if (elAvgCal) elAvgCal.textContent = avgCal.toLocaleString();
   if (elTargetCal) elTargetCal.textContent = targetCal.toLocaleString();
-  if (elAdh) elAdh.textContent = adhPct + '%';
 
-  if (elCalSub) {
-    if (avgCal === 0) {
-      elCalSub.textContent = 'No logs yet';
+  if (elCalDaysSub) {
+    elCalDaysSub.textContent = 'based on ' + daysLogged + ' of ' + totalDays + ' days logged';
+  }
+
+  if (daysLogged === 0) {
+    if (elAvgCal) elAvgCal.textContent = '0';
+    if (elAdh) elAdh.textContent = '--%';
+    if (elCalSub) {
+      elCalSub.textContent = 'No logs in this period';
       elCalSub.style.color = '#94a3b8';
-    } else if (Math.abs(avgCal - targetCal) <= targetCal * 0.1) {
-      elCalSub.textContent = '🎯 Target matched';
-      elCalSub.style.color = '#059669';
-    } else if (avgCal > targetCal) {
-      elCalSub.textContent = '+' + (avgCal - targetCal) + ' kcal over';
-      elCalSub.style.color = '#d97706';
-    } else {
-      elCalSub.textContent = (targetCal - avgCal) + ' kcal under';
-      elCalSub.style.color = '#0284c7';
+    }
+    if (elAdhSub) {
+      elAdhSub.textContent = '0 days logged';
+    }
+  } else {
+    var roundedAvgCal = Math.round(avgCal || 0);
+    if (elAvgCal) elAvgCal.textContent = roundedAvgCal.toLocaleString();
+    if (elAdh) {
+      elAdh.textContent = (adhPct !== undefined && adhPct !== null && !isNaN(adhPct)) ? Math.round(adhPct) + '%' : '--%';
+    }
+    if (elAdhSub) {
+      elAdhSub.textContent = hitCount + ' of ' + daysLogged + ' days on-track';
+    }
+    if (elCalSub) {
+      var diff = roundedAvgCal - targetCal;
+      if (Math.abs(diff) <= targetCal * 0.1) {
+        elCalSub.textContent = '🎯 Target matched';
+        elCalSub.style.color = '#059669';
+      } else if (diff > 0) {
+        elCalSub.textContent = '+' + diff + ' kcal over';
+        elCalSub.style.color = '#d97706';
+      } else {
+        elCalSub.textContent = Math.abs(diff) + ' kcal under';
+        elCalSub.style.color = '#0284c7';
+      }
     }
   }
 
@@ -12715,16 +12804,16 @@ function renderNourishTrends(data, days) {
   var elAvgW = document.getElementById('nourishTrendsAvgWater');
   var elTargetW = document.getElementById('nourishTrendsTargetWater');
 
-  if (elAvgP) elAvgP.textContent = String(avgP);
+  if (elAvgP) elAvgP.textContent = String(daysLogged === 0 ? 0 : Math.round(avgP || 0));
   if (elTargetP) elTargetP.textContent = String(targetP);
-  if (elAvgC) elAvgC.textContent = String(avgC);
+  if (elAvgC) elAvgC.textContent = String(daysLogged === 0 ? 0 : Math.round(avgC || 0));
   if (elTargetC) elTargetC.textContent = String(targetC);
-  if (elAvgF) elAvgF.textContent = String(avgF);
+  if (elAvgF) elAvgF.textContent = String(daysLogged === 0 ? 0 : Math.round(avgF || 0));
   if (elTargetF) elTargetF.textContent = String(targetF);
-  if (elAvgW) elAvgW.textContent = String(avgW);
+  if (elAvgW) elAvgW.textContent = String(daysLogged === 0 ? 0 : Math.round(avgW || 0));
   if (elTargetW) elTargetW.textContent = (targetW >= 1000) ? ((targetW / 1000).toFixed(1) + 'k') : String(targetW);
 
-  renderNourishTrendsChart(daily, targetCal, days);
+  renderNourishTrendsChart(daily, targetCal, totalDays);
 }
 
 function renderNourishTrendsChart(daily, targetCal, days) {
@@ -13130,6 +13219,14 @@ document.addEventListener('click', function(e) {
       dropdown.style.display = 'none';
     }
   }
+
+  var tip = document.getElementById('nourishTrendsAdhTooltip');
+  if (tip && tip.style.display !== 'none') {
+    var btn = document.getElementById('nourishTrendsAdhInfoBtn');
+    if (e.target !== tip && !tip.contains(e.target) && (!btn || (e.target !== btn && !btn.contains(e.target)))) {
+      tip.style.display = 'none';
+    }
+  }
 });
 
 window.isNourishEnabled = isNourishEnabled;
@@ -13179,6 +13276,8 @@ window.switchNourishSubView = switchNourishSubView;
 window.loadNourishTrends = loadNourishTrends;
 window.renderNourishTrends = renderNourishTrends;
 window.renderNourishTrendsChart = renderNourishTrendsChart;
+window.toggleNourishAdhTooltip = toggleNourishAdhTooltip;
+window.closeNourishAdhTooltip = closeNourishAdhTooltip;
 </script>
 </body>
 </html>

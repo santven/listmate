@@ -169,6 +169,11 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishTrendsAvgFat"', self.html)
         self.assertIn('id="nourishTrendsAvgWater"', self.html)
         self.assertIn('id="nourishTrendsChartContainer"', self.html)
+        self.assertIn('id="nourishTrendsCalDaysSub"', self.html)
+        self.assertIn('id="nourishTrendsAdhSub"', self.html)
+        self.assertIn('id="nourishTrendsAdhInfoBtn"', self.html)
+        self.assertIn('id="nourishTrendsAdhTooltip"', self.html)
+        self.assertIn("Target Adherence is the percentage of logged days where your total calories were within ±10% of your daily goal", self.html)
 
         # 12. VitalPath Coach Link & Feedback Drawer (Issue #694)
         self.assertIn('id="nourishCoachFeedbackCard"', self.html)
@@ -279,6 +284,8 @@ const fns = [
   'loadNourishTrends',
   'renderNourishTrends',
   'renderNourishTrendsChart',
+  'toggleNourishAdhTooltip',
+  'closeNourishAdhTooltip',
   'toggleNourishCoachLink',
   'copyNourishCoachLink',
   'resetNourishCoachToken',
@@ -359,6 +366,7 @@ const elementIds = [
   'nourishTrendsAvgFat', 'nourishTrendsTargetFat',
   'nourishTrendsAvgWater', 'nourishTrendsTargetWater',
   'nourishTrendsChartContainer',
+  'nourishTrendsCalDaysSub', 'nourishTrendsAdhSub', 'nourishTrendsAdhInfoBtn', 'nourishTrendsAdhTooltip',
   'nourishCoachFeedbackCard', 'nourishCoachCardAuthor', 'nourishCoachCardRole', 'nourishCoachCardDate', 'nourishCoachCardMessage',
   'nourishCoachLinkSection', 'nourishBtnCoachQuickLink',
   'nourishCoachLinkToggle', 'nourishCoachLinkDetails', 'nourishCoachAliasInput', 'nourishCoachShareUrl', 'nourishBtnCopyCoachLink', 'nourishBtnResetCoachToken',
@@ -408,7 +416,11 @@ eval(fns);
 
 (async () => {
   // 1. Date label formatting
-  const todayLabel = formatNourishDisplayDate('2026-10-19');
+  const todayD = new Date();
+  const tm = String(todayD.getMonth() + 1).padStart(2, '0');
+  const td = String(todayD.getDate()).padStart(2, '0');
+  const todayIso = `${todayD.getFullYear()}-${tm}-${td}`;
+  const todayLabel = formatNourishDisplayDate(todayIso);
   if (!todayLabel.includes('Today')) throw new Error('Expected Today in display date, got: ' + todayLabel);
 
   // 2. Slot selection
@@ -793,6 +805,83 @@ eval(fns);
   }
   if (!elements.nourishTrendsChartContainer.innerHTML.includes('Target 2000')) {
     throw new Error('Expected target dashed reference line in chart');
+  }
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 7 of 7 days logged') {
+    throw new Error('Expected "based on 7 of 7 days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  }
+  if (elements.nourishTrendsAdhSub.textContent !== '6 of 7 days on-track') {
+    throw new Error('Expected "6 of 7 days on-track", got: ' + elements.nourishTrendsAdhSub.textContent);
+  }
+
+  // Issue #706: Test analytics payload with averages & adherence format
+  renderNourishTrends({
+    averages: { calories: 1850, protein_g: 110, carbs_g: 190, fat_g: 55, water_ml: 2200, days_logged: 4 },
+    adherence: { calories_adherence_pct: 75, calories_hit_count: 3, days_logged: 4 },
+    goals: { calories_target: 2000, protein_target_g: 130, carbs_target_g: 200, fat_target_g: 65, water_target_ml: 2500 },
+    daily: []
+  }, 7);
+  if (!elements.nourishTrendsAvgCal.textContent.includes('1,850') && elements.nourishTrendsAvgCal.textContent !== '1850') {
+    throw new Error('Expected avg calories 1850');
+  }
+  if (elements.nourishTrendsAdherence.textContent !== '75%') {
+    throw new Error('Expected adherence 75%');
+  }
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 4 of 7 days logged') {
+    throw new Error('Expected "based on 4 of 7 days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  }
+  if (elements.nourishTrendsAdhSub.textContent !== '3 of 4 days on-track') {
+    throw new Error('Expected "3 of 4 days on-track", got: ' + elements.nourishTrendsAdhSub.textContent);
+  }
+
+  // Issue #706: Zero days logged
+  renderNourishTrends({
+    averages: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0, days_logged: 0 },
+    adherence: { calories_adherence_pct: 0, calories_hit_count: 0, days_logged: 0 },
+    goals: { calories_target: 2000 },
+    daily: []
+  }, 7);
+  if (elements.nourishTrendsAvgCal.textContent !== '0') {
+    throw new Error('Expected avg calories 0 for zero days logged');
+  }
+  if (elements.nourishTrendsAdherence.textContent !== '--%') {
+    throw new Error('Expected adherence --% for zero days logged');
+  }
+  if (elements.nourishTrendsCalSub.textContent !== 'No logs in this period') {
+    throw new Error('Expected subline "No logs in this period"');
+  }
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 0 of 7 days logged') {
+    throw new Error('Expected "based on 0 of 7 days logged"');
+  }
+  if (elements.nourishTrendsAdhSub.textContent !== '0 days logged') {
+    throw new Error('Expected "0 days logged"');
+  }
+
+  // Issue #706: Fallback client computation with unlogged days
+  renderNourishTrends({
+    daily: [
+      { date: '2026-10-14', calories: 2000, logged_meals_count: 2 },
+      { date: '2026-10-15', calories: 0, logged_meals_count: 0 },
+      { date: '2026-10-16', calories: 2100, logged_meals_count: 3 },
+      { date: '2026-10-17', calories: 0, logged_meals_count: 0 }
+    ],
+    goals: { calories_target: 2000 }
+  }, 4);
+  // (2000 + 2100) / 2 logged days = 2050 (NOT / 4 = 1025!)
+  if (!elements.nourishTrendsAvgCal.textContent.includes('2,050') && elements.nourishTrendsAvgCal.textContent !== '2050') {
+    throw new Error('Expected avg 2050 from 2 logged days, got: ' + elements.nourishTrendsAvgCal.textContent);
+  }
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 2 of 4 days logged') {
+    throw new Error('Expected based on 2 of 4 days logged, got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  }
+
+  // Issue #706: Tooltip toggle and close
+  toggleNourishAdhTooltip();
+  if (elements.nourishTrendsAdhTooltip.style.display !== 'block') {
+    throw new Error('Expected tooltip display block on toggle');
+  }
+  closeNourishAdhTooltip();
+  if (elements.nourishTrendsAdhTooltip.style.display !== 'none') {
+    throw new Error('Expected tooltip display none on close');
   }
 
   // 24. Issue #694: VitalPath Coach Link section in Goals modal
