@@ -173,7 +173,7 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('id="nourishTrendsAdhSub"', self.html)
         self.assertIn('id="nourishTrendsAdhInfoBtn"', self.html)
         self.assertIn('id="nourishTrendsAdhTooltip"', self.html)
-        self.assertIn("Target Adherence is the percentage of logged days where your total calories were within ±10% of your daily goal", self.html)
+        self.assertIn("Target Adherence is the percentage of completed logged days where your total calories were within -20% to +10% of your daily goal", self.html)
 
         # 12. VitalPath Coach Link & Feedback Drawer (Issue #694)
         self.assertIn('id="nourishCoachFeedbackCard"', self.html)
@@ -761,7 +761,7 @@ eval(fns);
     return Promise.resolve({
       json: () => Promise.resolve({
         ok: true,
-        summary: {
+        averages: {
           avg_calories: 1950,
           target_calories: 2000,
           avg_protein: 125,
@@ -772,7 +772,14 @@ eval(fns);
           target_fat: 65,
           avg_water_ml: 2600,
           target_water_ml: 2500,
-          adherence_pct: 88
+          days_logged: 6,
+          completed_days: 6
+        },
+        adherence: {
+          calories_adherence_pct: 88,
+          calories_hit_count: 5,
+          days_logged: 6,
+          total_days: 6
         },
         daily: [
           { date: '2026-10-13', label: '10/13', calories: 1900 },
@@ -806,17 +813,17 @@ eval(fns);
   if (!elements.nourishTrendsChartContainer.innerHTML.includes('Target 2000')) {
     throw new Error('Expected target dashed reference line in chart');
   }
-  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 7 of 7 days logged') {
-    throw new Error('Expected "based on 7 of 7 days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 6 of 6 completed days logged') {
+    throw new Error('Expected "based on 6 of 6 completed days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
   }
-  if (elements.nourishTrendsAdhSub.textContent !== '6 of 7 days on-track') {
-    throw new Error('Expected "6 of 7 days on-track", got: ' + elements.nourishTrendsAdhSub.textContent);
+  if (elements.nourishTrendsAdhSub.textContent !== '5 of 6 days on-track') {
+    throw new Error('Expected "5 of 6 days on-track", got: ' + elements.nourishTrendsAdhSub.textContent);
   }
 
-  // Issue #706: Test analytics payload with averages & adherence format
+  // Issue #706 / #709: Test analytics payload with averages & adherence format
   renderNourishTrends({
-    averages: { calories: 1850, protein_g: 110, carbs_g: 190, fat_g: 55, water_ml: 2200, days_logged: 4 },
-    adherence: { calories_adherence_pct: 75, calories_hit_count: 3, days_logged: 4 },
+    averages: { calories: 1850, protein_g: 110, carbs_g: 190, fat_g: 55, water_ml: 2200, days_logged: 4, completed_days: 6 },
+    adherence: { calories_adherence_pct: 75, calories_hit_count: 3, days_logged: 4, total_days: 6 },
     goals: { calories_target: 2000, protein_target_g: 130, carbs_target_g: 200, fat_target_g: 65, water_target_ml: 2500 },
     daily: []
   }, 7);
@@ -826,17 +833,17 @@ eval(fns);
   if (elements.nourishTrendsAdherence.textContent !== '75%') {
     throw new Error('Expected adherence 75%');
   }
-  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 4 of 7 days logged') {
-    throw new Error('Expected "based on 4 of 7 days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 4 of 6 completed days logged') {
+    throw new Error('Expected "based on 4 of 6 completed days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
   }
   if (elements.nourishTrendsAdhSub.textContent !== '3 of 4 days on-track') {
     throw new Error('Expected "3 of 4 days on-track", got: ' + elements.nourishTrendsAdhSub.textContent);
   }
 
-  // Issue #706: Zero days logged
+  // Issue #706 / #709: Zero days logged
   renderNourishTrends({
-    averages: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0, days_logged: 0 },
-    adherence: { calories_adherence_pct: 0, calories_hit_count: 0, days_logged: 0 },
+    averages: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, water_ml: 0, days_logged: 0, completed_days: 6 },
+    adherence: { calories_adherence_pct: 0, calories_hit_count: 0, days_logged: 0, total_days: 6 },
     goals: { calories_target: 2000 },
     daily: []
   }, 7);
@@ -849,29 +856,34 @@ eval(fns);
   if (elements.nourishTrendsCalSub.textContent !== 'No logs in this period') {
     throw new Error('Expected subline "No logs in this period"');
   }
-  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 0 of 7 days logged') {
-    throw new Error('Expected "based on 0 of 7 days logged"');
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 0 of 6 completed days logged') {
+    throw new Error('Expected "based on 0 of 6 completed days logged", got: ' + elements.nourishTrendsCalDaysSub.textContent);
   }
   if (elements.nourishTrendsAdhSub.textContent !== '0 days logged') {
     throw new Error('Expected "0 days logged"');
   }
 
-  // Issue #706: Fallback client computation with unlogged days
+  // Issue #706 / #709: Fallback client computation with unlogged days and excluding today
+  const todayIsoStr = new Date().toISOString().slice(0, 10);
   renderNourishTrends({
     daily: [
       { date: '2026-10-14', calories: 2000, logged_meals_count: 2 },
       { date: '2026-10-15', calories: 0, logged_meals_count: 0 },
-      { date: '2026-10-16', calories: 2100, logged_meals_count: 3 },
-      { date: '2026-10-17', calories: 0, logged_meals_count: 0 }
+      { date: '2026-10-16', calories: 1700, logged_meals_count: 3 }, // 1700 is within [-20%, +10%] of 2000
+      { date: '2026-10-17', calories: 0, logged_meals_count: 0 },
+      { date: todayIsoStr, calories: 500, logged_meals_count: 1 } // today excluded!
     ],
     goals: { calories_target: 2000 }
-  }, 4);
-  // (2000 + 2100) / 2 logged days = 2050 (NOT / 4 = 1025!)
-  if (!elements.nourishTrendsAvgCal.textContent.includes('2,050') && elements.nourishTrendsAvgCal.textContent !== '2050') {
-    throw new Error('Expected avg 2050 from 2 logged days, got: ' + elements.nourishTrendsAvgCal.textContent);
+  }, 5);
+  // (2000 + 1700) / 2 logged completed days = 1850. Completed days: 4.
+  if (!elements.nourishTrendsAvgCal.textContent.includes('1,850') && elements.nourishTrendsAvgCal.textContent !== '1850') {
+    throw new Error('Expected avg 1850 from 2 logged completed days, got: ' + elements.nourishTrendsAvgCal.textContent);
   }
-  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 2 of 4 days logged') {
-    throw new Error('Expected based on 2 of 4 days logged, got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  if (elements.nourishTrendsCalDaysSub.textContent !== 'based on 2 of 4 completed days logged') {
+    throw new Error('Expected based on 2 of 4 completed days logged, got: ' + elements.nourishTrendsCalDaysSub.textContent);
+  }
+  if (elements.nourishTrendsAdherence.textContent !== '100%') {
+    throw new Error('Expected adherence 100%, got: ' + elements.nourishTrendsAdherence.textContent);
   }
 
   // Issue #706: Tooltip toggle and close

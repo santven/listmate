@@ -1788,11 +1788,16 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertEqual(today_entry["water_ml"], 1800)
             self.assertEqual(today_entry["weight_kg"], 75.5)
 
-            # Averages
+            # Averages (Issue #709: today excluded from completed averages & adherence)
             avg = data["averages"]
-            self.assertEqual(avg["days_logged"], 2)
-            self.assertEqual(avg["calories"], 500.0)  # (400 + 600) / 2
-            self.assertEqual(avg["protein_g"], 35.0)  # (25 + 45) / 2
+            self.assertEqual(avg["days_logged"], 1)
+            self.assertEqual(avg["completed_days"], 6)
+            self.assertEqual(avg["calories"], 600.0)  # yesterday only (today excluded from completed averages)
+            self.assertEqual(avg["protein_g"], 45.0)  # yesterday only
+
+            adh = data["adherence"]
+            self.assertEqual(adh["days_logged"], 1)
+            self.assertEqual(adh["total_days"], 6)
 
             # Macro split
             split = data["macro_split"]
