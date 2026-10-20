@@ -2,11 +2,12 @@
 """
 scripts/send_nourish_announcement_email.py
 
-One-time email campaign to all households announcing the new ListMate Nourish feature:
-1. Premium & Active Households: Excitement VIP feature update with visual guide on where to find it.
-2. Trial Households: Excitement feature update + unlocked on trial + call-to-action button to upgrade.
-3. Active (Free) Households: Excitement feature update + anti-MFP comparison + button to try and upgrade.
-4. Expired Households: Excitement feature update + 15-day free trial extension pass + button to upgrade.
+One-time email campaign to all households announcing the new ListMate Nourish feature,
+segmented into 4 distinct cohorts:
+1. Premium: subscription_status = 'premium' and is_premium = True (Lifetime/Founding VIP members)
+2. Trial:   subscription_status = 'trial' (Active Pro Trial households)
+3. Paid:    subscription_status = 'active' and is_premium = True (Active recurring paying subscribers)
+4. Expired: subscription_status = 'expired' and is_premium = False (Expired trial households with 15-day pass)
 
 Shared components in all tiers:
 - Visual guide showing the top-left Suite Switcher (🛒 ListMate | 🍲 Still Good | 🥗 Nourish)
@@ -14,7 +15,7 @@ Shared components in all tiers:
 - Update the App to Latest Version section with iOS & Android store buttons
 - Share with Friends & Family button
 - Preview all 4 templates (--preview) and save to static/preview_nourish_*.html
-- Test send to a single email (--test-email user@example.com --tier premium_active|trial|active|expired)
+- Test send to a single email (--test-email user@example.com --tier premium|trial|paid|expired)
 - Dry-run (--dry-run) to inspect audience counts
 - Live dispatch (--send) with idempotency logging in `email_events` and suppression enforcement
 """
@@ -45,7 +46,7 @@ PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.pvkslabs.lis
 
 
 def generate_email_content(
-    tier: str = "premium_active",
+    tier: str = "premium",
     user_name: str = "",
     household_name: str = "",
     user_id: int = 0,
@@ -53,11 +54,11 @@ def generate_email_content(
 ) -> tuple:
     """
     Generates (subject, plain_text, html_body) for the specified household tier.
-    Tiers:
-      - 'premium_active': Paid/lifetime subscribers (feature excitement + included in membership)
-      - 'trial': Households currently in free Pro trial (feature excitement + upgrade button)
-      - 'active': Free active households (feature excitement + anti-MFP pitch + upgrade offer)
-      - 'expired': Expired trial households (feature excitement + 15-day trial extension offer)
+    Cohorts:
+      - 'premium': subscription_status = 'premium' and is_premium = True (Lifetime/Founding VIP)
+      - 'trial':   subscription_status = 'trial' (Active Pro trial)
+      - 'paid':    subscription_status = 'active' and is_premium = True (Active paying subscriber)
+      - 'expired': subscription_status = 'expired' and is_premium = False (Expired trial + 15-day pass)
     """
     safe_name = (user_name or "").strip()
     first_name = safe_name.split()[0] if safe_name else "Friend"
@@ -70,25 +71,25 @@ def generate_email_content(
     claim_ext_15d_url = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&tier=15d&source=email_nourish')}"
 
     # Tier-specific copy, subject, badges, and CTA blocks
-    if tier == "premium_active":
-        subject = "🥗 Introducing Nourish: Ad-Free Food & Macro Tracking (Included in ListMate Pro!)"
-        badge_text = "⭐ VIP FEATURE UPDATE • INCLUDED IN YOUR MEMBERSHIP"
-        hero_title = "Meet Nourish: Nutrition Tracking Built for Real Families"
-        hero_subtitle = "Describe meals in plain English, 1-tap share family dinners & zero paywalls"
+    if tier == "premium":
+        subject = "🥗 Introducing Nourish: Included with Your Lifetime Premium Membership"
+        badge_text = "⭐ VIP LIFETIME MEMBER UPDATE • 100% INCLUDED"
+        hero_title = "Meet Nourish: Included with Your Lifetime Membership"
+        hero_subtitle = "No recurring fees, zero ad clutter & zero paywalls — thank you for being a founding member!"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"As a valued premium member of ListMate for <strong>{hh_name}</strong>, you get first access to everything we build to make kitchen, food, and grocery management seamless."
-        intro_p2 = "We are thrilled to unveil our newest major suite: <strong>ListMate Nourish</strong> — a clean, collaborative nutrition tracker. Unlike standalone fitness apps that charge $80 to $130 per person each year and lock basic gram goals behind paywalls, Nourish is <strong>completely included in your household membership</strong> with zero ads and zero extra fees."
+        intro_p1 = f"As a valued lifetime founding member of ListMate for <strong>{hh_name}</strong>, you helped bring our vision to life. That is why every new suite we build is automatically included in your membership forever — with zero recurring subscriptions or hidden upgrade fees."
+        intro_p2 = "Today, we are proud to introduce <strong>ListMate Nourish</strong>: an intelligent food and macro tracker built specifically for households. While standalone apps like MyFitnessPal charge $80 to $130 per person every year and lock basic gram targets behind paywalls, Nourish is <strong>completely unlocked in your lifetime membership</strong> with zero ads and zero extra charges."
         cta_primary_html = f"""
           <div style="text-align:center;margin:28px 0 20px;">
             <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(16,185,129,0.35);">
               Open Nourish in ListMate ➔
             </a>
             <div style="margin-top:8px;font-size:12px;color:#64748b;">
-              Tap to open directly in the ListMate app
+              Tap to open directly in your ListMate app
             </div>
           </div>
         """
-        unsub_desc = "You received this email because your household has an active Premium membership on ListMate."
+        unsub_desc = "You received this email because your household holds a lifetime Premium membership on ListMate."
 
     elif tier == "trial":
         subject = "🥗 New in ListMate: Nourish is Unlocked on Your Free Trial (+ Special Upgrade Offer)"
@@ -118,33 +119,25 @@ def generate_email_content(
         """
         unsub_desc = "You received this email because your household is currently enjoying a ListMate Pro Trial."
 
-    elif tier == "active":
-        subject = "🥗 Introducing Nourish: Smart Macro & Food Tracking Built for Real Households"
-        badge_text = "✨ BRAND NEW SUITE • NOW LIVE IN LISTMATE"
-        hero_title = "Track Nutrition Together — Zero Ads, Zero $80 Paywalls"
-        hero_subtitle = "Fresh from the ListMate kitchen — effortless food, calorie & macro tracking"
+    elif tier == "paid":
+        subject = "🥗 Meet Nourish: Included with Your Active ListMate Subscription"
+        badge_text = "⭐ ACTIVE SUBSCRIBER UPDATE • INCLUDED IN YOUR PLAN"
+        hero_title = "Meet Nourish: Included with Your Active ListMate Subscription"
+        hero_subtitle = "Track nutrition together — zero ads, zero duplicate entry & zero extra charges"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"As an active member of ListMate for <strong>{hh_name}</strong>, you know how much easier grocery shopping is when everyone stays in sync."
-        intro_p2 = "Today, we're taking the next step: introducing <strong>ListMate Nourish</strong>. When one person cooks dinner, your whole family can log their portion in a single tap. No duplicate searching, no frustrating 5% macro sliders, and no paying $80/year for ad-cluttered calorie apps."
+        intro_p1 = f"Thank you for being an active subscriber of ListMate Pro for <strong>{hh_name}</strong>! Your support enables us to keep building tools that make kitchen, food, and grocery management simpler."
+        intro_p2 = "We are thrilled to include our newest suite, <strong>ListMate Nourish</strong>, in your active subscription at <strong>no extra charge</strong>. While standalone fitness apps like MyFitnessPal charge $79.99 to $129 per person every single year, your existing ListMate Pro subscription covers nutrition tracking for your entire household under one simple plan."
         cta_primary_html = f"""
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;text-align:center;margin:24px 0 20px;">
-            <div style="font-size:14px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
-              🥗 Ready to Use in Your App Right Now
-            </div>
-            <p style="margin:0 0 16px;font-size:14px;color:#15803d;line-height:1.5;">
-              Open the app to start logging meals, exploring Describe Plate AI, and tracking daily hydration.
-            </p>
-            <div style="display:inline-block;">
-              <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:13px 26px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;box-shadow:0 3px 10px rgba(16,185,129,0.3);margin-right:8px;margin-bottom:6px;">
-                Try Nourish Today ➔
-              </a>
-              <a href="{upgrade_url}" target="_blank" rel="noopener noreferrer" style="background:#ffffff;color:#1e293b;border:1px solid #cbd5e1;padding:12px 20px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;margin-bottom:6px;">
-                Upgrade for $9.99/yr
-              </a>
+          <div style="text-align:center;margin:28px 0 20px;">
+            <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+              Open Nourish in ListMate ➔
+            </a>
+            <div style="margin-top:8px;font-size:12px;color:#64748b;">
+              Tap to open directly in the ListMate app
             </div>
           </div>
         """
-        unsub_desc = "You received this email because you have an active account on ListMate."
+        unsub_desc = "You received this email because your household has an active subscription on ListMate."
 
     else:  # 'expired'
         subject = "🎁 Welcome Back to ListMate: Meet Nourish (+ 15 Days Free on Us!)"
@@ -235,16 +228,6 @@ Keep Nourish and all premium features for $9.99/year or $1.99/month:
 
 Open Nourish:
 {app_url}
-
-"""
-    elif tier == "active":
-        plain_text += f"""==================================================
-🚀 OPEN NOURISH IN LISTMATE
-==================================================
-{app_url}
-
-Upgrade your household to Pro ($9.99/yr):
-{upgrade_url}
 
 """
     else:
@@ -516,11 +499,11 @@ ListMate ({BASE_URL})
 
 def query_households_by_tier() -> dict:
     """
-    Queries all registered households and their users, classifying them into:
-      - 'premium_active': Active paid/lifetime premium members
-      - 'trial': Currently active trial households
-      - 'active': Free active households (not in trial, active users)
-      - 'expired': Expired trial, canceled, or inactive households
+    Queries all registered households and their users, strictly classifying them into:
+      1. Premium: subscription_status = 'premium' and is_premium = True (Lifetime/Founding VIP)
+      2. Trial:   subscription_status = 'trial' (Active Pro Trial)
+      3. Paid:    subscription_status = 'active' and is_premium = True (Active recurring subscribers)
+      4. Expired: subscription_status = 'expired' and is_premium = False (Expired trial households)
     """
     try:
         import db_pg
@@ -547,49 +530,31 @@ def query_households_by_tier() -> dict:
             {"household_id": 1, "household_name": "Miller Household", "is_premium": True, "subscription_status": "premium", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 1, "user_name": "Jordan Miller", "email": "member@example.com"},
             {"household_id": 2, "household_name": "Taylor Household", "is_premium": True, "subscription_status": "active", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 2, "user_name": "Alex Taylor", "email": "alex.taylor@example.com"},
             {"household_id": 3, "household_name": "Rivera Household", "is_premium": False, "subscription_status": "trial", "trial_ends_at": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat(), "subscription_ends_at": None, "user_id": 3, "user_name": "Maria Rivera", "email": "maria.rivera@example.com"},
-            {"household_id": 4, "household_name": "Patel Household", "is_premium": False, "subscription_status": "free", "trial_ends_at": None, "subscription_ends_at": None, "user_id": 4, "user_name": "Aarav Patel", "email": "aarav.patel@example.com"},
-            {"household_id": 5, "household_name": "Chen Household", "is_premium": False, "subscription_status": "expired", "trial_ends_at": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).isoformat(), "subscription_ends_at": None, "user_id": 5, "user_name": "David Chen", "email": "david.chen@example.com"},
+            {"household_id": 4, "household_name": "Chen Household", "is_premium": False, "subscription_status": "expired", "trial_ends_at": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).isoformat(), "subscription_ends_at": None, "user_id": 4, "user_name": "David Chen", "email": "david.chen@example.com"},
         ]
 
     segmented = {
-        "premium_active": [],
+        "premium": [],
         "trial": [],
-        "active": [],
+        "paid": [],
         "expired": [],
     }
 
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
-
     for r in rows:
-        sub_status = (r.get("subscription_status") or "free").strip().lower()
+        sub_status = (r.get("subscription_status") or "").strip().lower()
         is_prem = bool(r.get("is_premium"))
-        trial_ends_at = r.get("trial_ends_at")
 
-        is_trial_valid = False
-        if sub_status == "trial" and trial_ends_at:
-            try:
-                t_end = trial_ends_at
-                if isinstance(t_end, str):
-                    if "T" in t_end:
-                        t_end = datetime.datetime.fromisoformat(t_end.replace("Z", "+00:00"))
-                    else:
-                        t_end = datetime.datetime.strptime(t_end, "%Y-%m-%d %H:%M:%S")
-                if not getattr(t_end, "tzinfo", None):
-                    t_end = t_end.replace(tzinfo=datetime.timezone.utc)
-                if t_end > now_utc:
-                    is_trial_valid = True
-            except Exception:
-                pass
-
-        if sub_status in ["premium", "active"]:
-            segmented["premium_active"].append(r)
-        elif is_prem and sub_status not in ["expired", "trial", "canceled", "free"]:
-            segmented["premium_active"].append(r)
-        elif is_trial_valid:
+        # 1. Premium - subscription status = premium and is_premium = true
+        if sub_status == "premium" and is_prem:
+            segmented["premium"].append(r)
+        # 2. Trial - subscription status = trial
+        elif sub_status == "trial":
             segmented["trial"].append(r)
-        elif sub_status in ["free", "standard"]:
-            segmented["active"].append(r)
-        else:
+        # 3. Paid - subscription status = active and is_premium = true
+        elif sub_status == "active" and is_prem:
+            segmented["paid"].append(r)
+        # 4. Expired - subscription status = expired and is_premium = false
+        elif sub_status == "expired" and not is_prem:
             segmented["expired"].append(r)
 
     return segmented
@@ -703,10 +668,10 @@ def send_campaign_email(
 
 def main():
     parser = argparse.ArgumentParser(description="Send Nourish announcement emails to all households.")
-    parser.add_argument("--preview", action="store_true", help="Generate and save HTML previews for all 4 tiers.")
-    parser.add_argument("--dry-run", action="store_true", help="Inspect and count recipients per tier without sending.")
+    parser.add_argument("--preview", action="store_true", help="Generate and save HTML previews for all 4 cohorts.")
+    parser.add_argument("--dry-run", action="store_true", help="Inspect and count recipients per cohort without sending.")
     parser.add_argument("--test-email", type=str, help="Send a test email to the given address.")
-    parser.add_argument("--tier", type=str, choices=["premium_active", "trial", "active", "expired"], default="premium_active", help="Target tier for test email (default: premium_active).")
+    parser.add_argument("--tier", type=str, choices=["premium", "trial", "paid", "expired"], default="premium", help="Target cohort for test email: premium, trial, paid, or expired (default: premium).")
     parser.add_argument("--send", action="store_true", help="Dispatch real emails to all eligible households.")
     parser.add_argument("--force", action="store_true", help="Bypass idempotency checks.")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of emails to dispatch.")
@@ -716,7 +681,7 @@ def main():
     # 1. Preview mode
     if args.preview:
         out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
-        tiers = ["premium_active", "trial", "active", "expired"]
+        tiers = ["premium", "trial", "paid", "expired"]
         for t in tiers:
             _, _, html = generate_email_content(
                 tier=t,
@@ -747,23 +712,24 @@ def main():
             force=True,
         )
         if ok:
-            print(f"[Success] Test email delivered to {args.test_email}.")
+            print(f"[Success] Test email ({args.tier}) delivered to {args.test_email}.")
         else:
             print(f"[Failed] Could not deliver test email to {args.test_email}.")
         return
 
     # 3. Dry-run or Send mode
     segmented = query_households_by_tier()
-    print("=" * 60)
+    print("=" * 65)
     print("📊 NOURISH ANNOUNCEMENT CAMPAIGN AUDIENCE")
-    print("=" * 60)
-    print(f"1. Premium & Active Households: {len(segmented['premium_active'])} recipient(s)")
-    print(f"2. Trial Households:           {len(segmented['trial'])} recipient(s)")
-    print(f"3. Active (Free) Households:    {len(segmented['active'])} recipient(s)")
-    print(f"4. Expired Households:         {len(segmented['expired'])} recipient(s)")
+    print("=" * 65)
+    print(f"1. Premium (status='premium', is_premium=True): {len(segmented['premium'])} recipient(s)")
+    print(f"2. Trial   (status='trial'):                    {len(segmented['trial'])} recipient(s)")
+    print(f"3. Paid    (status='active', is_premium=True):  {len(segmented['paid'])} recipient(s)")
+    print(f"4. Expired (status='expired', is_premium=False): {len(segmented['expired'])} recipient(s)")
     total_all = sum(len(v) for v in segmented.values())
-    print(f"Total Households / Users:       {total_all} recipient(s)")
-    print("=" * 60)
+    print("-" * 65)
+    print(f"Total Eligible Recipients:                      {total_all} recipient(s)")
+    print("=" * 65)
 
     if not args.send and not args.dry_run:
         print("Please specify --dry-run, --preview, --test-email, or --send.")
@@ -773,7 +739,7 @@ def main():
     sent_count = 0
 
     for tier_name, audience in segmented.items():
-        print(f"\n[*] Processing Tier: {tier_name.upper()} ({len(audience)} users)...")
+        print(f"\n[*] Processing Cohort: {tier_name.upper()} ({len(audience)} users)...")
         for u in audience:
             if args.limit > 0 and sent_count >= args.limit:
                 print(f"[*] Hit limit of {args.limit} emails.")
