@@ -3778,6 +3778,23 @@ def _serialize_nourish_row(row):
     return out
 
 
+def _normalize_nourish_meal_slot(slot_str, default="Breakfast"):
+    """Normalizes meal slots: strips whitespace, maps snack/snacks -> Snack, and title-cases."""
+    s = str(slot_str or "").strip()
+    if not s:
+        return default
+    low = s.lower()
+    if low in ("breakfast", "b"):
+        return "Breakfast"
+    elif low in ("lunch", "l"):
+        return "Lunch"
+    elif low in ("dinner", "d"):
+        return "Dinner"
+    elif low in ("snack", "snacks", "s"):
+        return "Snack"
+    return s[:24].title()
+
+
 def _resolve_nourish_context(db):
     """
     Resolves authenticated user_id (`uid`) and household_id (`hhid`) for Nourish endpoints.
@@ -3994,7 +4011,7 @@ def nourish_create_logs_endpoint():
             if not item_date:
                 return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
-            meal_slot = str(entry.get("meal_slot") or data.get("meal_slot") or "Breakfast").strip()[:24] or "Breakfast"
+            meal_slot = _normalize_nourish_meal_slot(entry.get("meal_slot") or data.get("meal_slot"), default="Breakfast")
             unit = str(entry.get("unit") or entry.get("serving_unit") or "g").strip().lower()
             default_qty = 1.0 if unit in ("serving", "servings", "piece", "pieces", "cup", "bowl", "slice", "plate", "plates") else 100.0
             raw_qty = entry.get("quantity") if entry.get("quantity") is not None else entry.get("serving_amount")
@@ -4307,7 +4324,11 @@ def nourish_modify_log_endpoint(log_id):
 
         data = request.get_json(silent=True) or {}
         new_food_name = str(data.get("food_name") or data.get("plate_name") or existing.get("food_name") or "").strip()
-        new_meal_slot = str(data.get("meal_slot") or existing.get("meal_slot") or "Breakfast").strip()[:24]
+
+        if "meal_slot" in data and data.get("meal_slot") is not None and str(data.get("meal_slot")).strip():
+            new_meal_slot = _normalize_nourish_meal_slot(data.get("meal_slot"), default=existing.get("meal_slot") or "Breakfast")
+        else:
+            new_meal_slot = existing.get("meal_slot") or "Breakfast"
 
         if "notes" in data or "ingredients" in data:
             raw_notes = data.get("notes") if "notes" in data else data.get("ingredients")
@@ -4334,7 +4355,29 @@ def nourish_modify_log_endpoint(log_id):
             and "calories" not in data
         )
 
-        if "calories" in data and not qty_or_unit_changed:
+        macro_changed = (
+            "quantity" in data
+            or "serving_amount" in data
+            or "unit" in data
+            or "serving_unit" in data
+            or "calories" in data
+        )
+
+        if not macro_changed:
+            scaled = {
+                "quantity": float(existing.get("quantity") or 100.0),
+                "unit": str(existing.get("unit") or "g"),
+                "gram_weight": float(existing.get("gram_weight") or 100.0),
+                "calories": float(existing.get("calories") or 0.0),
+                "protein_g": float(existing.get("protein_g") or 0.0),
+                "carbs_g": float(existing.get("carbs_g") or 0.0),
+                "fat_g": float(existing.get("fat_g") or 0.0),
+                "fiber_g": float(existing.get("fiber_g") or 0.0),
+                "sugar_g": float(existing.get("sugar_g") or 0.0),
+                "sodium_mg": float(existing.get("sodium_mg") or 0.0),
+            }
+            new_status = existing.get("ai_enrich_status") or "complete"
+        elif "calories" in data and not qty_or_unit_changed:
             unit_info = compute_scaled_macros({}, new_quantity, new_unit)
             scaled = {
                 "quantity": unit_info["quantity"],
