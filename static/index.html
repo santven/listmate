@@ -1938,7 +1938,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
           <div style="display:flex; align-items:baseline; gap:4px; margin-top:2px;">
             <span id="nourishTrendsAdherence" style="font-size:18px; font-weight:800; color:#059669;">--%</span>
           </div>
-          <div id="nourishTrendsAdhSub" style="font-size:10.5px; color:var(--muted); margin-top:2px;">within ±10% goal</div>
+          <div id="nourishTrendsAdhSub" style="font-size:10.5px; color:var(--muted); margin-top:2px;">within -20% to +10% goal</div>
 
           <!-- Adherence Info Tooltip Popover -->
           <div id="nourishTrendsAdhTooltip" style="display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:100; width:260px; max-width:calc(100vw - 32px); background:#1e293b; color:#f8fafc; border-radius:10px; padding:10px 12px; font-size:11px; line-height:1.45; box-shadow:0 10px 25px -5px rgba(0,0,0,0.3); border:1px solid #334155; text-align:left;">
@@ -1947,7 +1947,7 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
               <button type="button" onclick="closeNourishAdhTooltip(event)" aria-label="Close tooltip" style="border:none; background:transparent; color:#94a3b8; font-size:15px; cursor:pointer; padding:0 2px; line-height:1;">&times;</button>
             </div>
             <div style="color:#e2e8f0; font-size:10.5px; font-weight:400;">
-              Target Adherence is the percentage of logged days where your total calories were within ±10% of your daily goal (e.g. 1,800–2,200 kcal for a 2,000 kcal target). Unlogged days are excluded.
+              Target Adherence is the percentage of completed logged days where your total calories were within -20% to +10% of your daily goal (e.g. 1,600–2,200 kcal for a 2,000 kcal target). Today is excluded because it is still being logged. Unlogged days are also excluded.
             </div>
           </div>
         </div>
@@ -12694,10 +12694,12 @@ function renderNourishTrends(data, days) {
 
   var adhPct = adhObj.calories_adherence_pct !== undefined ? adhObj.calories_adherence_pct : (adhObj.adherence_pct !== undefined ? adhObj.adherence_pct : avgObj.adherence_pct);
   var hitCount = adhObj.calories_hit_count !== undefined ? adhObj.calories_hit_count : (adhObj.hit_count !== undefined ? adhObj.hit_count : undefined);
+  var completedDays = avgObj.completed_days !== undefined ? avgObj.completed_days : (adhObj.total_days !== undefined ? adhObj.total_days : Math.max(1, totalDays - 1));
 
   if (daily.length > 0 && (avgCal === undefined || isNaN(avgCal))) {
+    var todayStr = new Date().toISOString().slice(0, 10);
     var loggedDays = daily.filter(function(d) {
-      return (d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0);
+      return d.date !== todayStr && ((d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0));
     });
     daysLogged = loggedDays.length;
     if (loggedDays.length > 0) {
@@ -12709,7 +12711,7 @@ function renderNourishTrends(data, days) {
         sumC += (d.carbs_g || d.carbs || 0);
         sumF += (d.fat_g || d.fat || 0);
         sumW += (d.water_ml || d.water || 0);
-        if (Math.abs(c - targetCal) <= targetCal * 0.1) onTrackCount++;
+        if (c >= targetCal * 0.80 && c <= targetCal * 1.10) onTrackCount++;
       });
       avgCal = Math.round(sumCal / loggedDays.length);
       avgP = Math.round(sumP / loggedDays.length);
@@ -12731,8 +12733,9 @@ function renderNourishTrends(data, days) {
 
   if (daysLogged === undefined) {
     if (daily && daily.length > 0) {
+      var todayStr = new Date().toISOString().slice(0, 10);
       var ld = daily.filter(function(d) {
-        return (d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0);
+        return d.date !== todayStr && ((d.logged_meals_count > 0) || (d.calories > 0) || (d.water_ml > 0));
       });
       daysLogged = ld.length;
     } else {
@@ -12758,7 +12761,7 @@ function renderNourishTrends(data, days) {
   if (elTargetCal) elTargetCal.textContent = targetCal.toLocaleString();
 
   if (elCalDaysSub) {
-    elCalDaysSub.textContent = 'based on ' + daysLogged + ' of ' + totalDays + ' days logged';
+    elCalDaysSub.textContent = 'based on ' + daysLogged + ' of ' + completedDays + ' completed days logged';
   }
 
   if (daysLogged === 0) {

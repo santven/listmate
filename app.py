@@ -5345,8 +5345,12 @@ def api_nourish_analytics():
         daily_list = [daily_map[k] for k in sorted(daily_map.keys())]
 
         # 5. Averages & Adherence
-        logged_days = [d for d in daily_list if d["logged_meals_count"] > 0 or d["water_ml"] > 0]
+        today_iso = datetime.date.today().isoformat()
+        # Exclude today from completed averages & adherence calculations because today is still being logged
+        completed_days_list = [d for d in daily_list if d["date"] != today_iso]
+        logged_days = [d for d in completed_days_list if d["logged_meals_count"] > 0 or d["water_ml"] > 0]
         num_logged = len(logged_days)
+        completed_total_days = len(completed_days_list)
 
         if num_logged > 0:
             avg_calories = round(sum(d["calories"] for d in logged_days) / num_logged, 1)
@@ -5358,9 +5362,9 @@ def api_nourish_analytics():
         else:
             avg_calories = avg_protein = avg_carbs = avg_fat = avg_fiber = avg_water = 0.0
 
-        total_p_kcal = sum(d["protein_g"] * 4.0 for d in daily_list)
-        total_c_kcal = sum(d["carbs_g"] * 4.0 for d in daily_list)
-        total_f_kcal = sum(d["fat_g"] * 9.0 for d in daily_list)
+        total_p_kcal = sum(d["protein_g"] * 4.0 for d in completed_days_list)
+        total_c_kcal = sum(d["carbs_g"] * 4.0 for d in completed_days_list)
+        total_f_kcal = sum(d["fat_g"] * 9.0 for d in completed_days_list)
         total_macro_kcal = total_p_kcal + total_c_kcal + total_f_kcal
 
         if total_macro_kcal > 0:
@@ -5376,13 +5380,14 @@ def api_nourish_analytics():
         p_target = float(goals.get("protein_target_g") or 130)
         w_target = float(goals.get("water_target_ml") or 2500)
 
-        days_meeting_cal = sum(1 for d in logged_days if 0.85 * cal_target <= d["calories"] <= 1.15 * cal_target)
-        days_meeting_p = sum(1 for d in logged_days if d["protein_g"] >= 0.85 * p_target)
-        days_meeting_w = sum(1 for d in logged_days if d["water_ml"] >= 0.85 * w_target)
+        # Target adherence: -20% to +10% range (0.80 * cal_target <= calories <= 1.10 * cal_target)
+        days_meeting_cal = sum(1 for d in logged_days if 0.80 * cal_target <= d["calories"] <= 1.10 * cal_target)
+        days_meeting_p = sum(1 for d in logged_days if d["protein_g"] >= 0.80 * p_target)
+        days_meeting_w = sum(1 for d in logged_days if d["water_ml"] >= 0.80 * w_target)
 
         adherence = {
             "days_logged": num_logged,
-            "total_days": days,
+            "total_days": completed_total_days,
             "calories_hit_count": days_meeting_cal,
             "calories_adherence_pct": round((days_meeting_cal / num_logged * 100.0), 1) if num_logged > 0 else 0.0,
             "protein_hit_count": days_meeting_p,
@@ -5405,6 +5410,7 @@ def api_nourish_analytics():
                 "fiber_g": avg_fiber,
                 "water_ml": int(avg_water),
                 "days_logged": num_logged,
+                "completed_days": completed_total_days,
             },
             "macro_split": macro_split,
             "goals": goals,
