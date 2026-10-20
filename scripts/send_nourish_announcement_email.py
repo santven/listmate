@@ -542,6 +542,8 @@ def query_households_by_tier() -> dict:
       4. Expired: subscription_status = 'expired' and is_premium = False (Expired trial households)
     """
     try:
+        if not os.environ.get("DATABASE_URL") and not os.environ.get("PROD_DATABASE_URL") and not os.environ.get("STAGE_DB_URL"):
+            raise ValueError("No DATABASE_URL found in environment")
         import db_pg
         query = """
             SELECT 
@@ -553,10 +555,13 @@ def query_households_by_tier() -> dict:
                 h.subscription_ends_at,
                 u.id AS user_id,
                 u.name AS user_name,
-                u.email
+                u.email,
+                COALESCE(ahm.marketing_opt_in, TRUE) AS marketing_opt_in
             FROM auth_households h
             JOIN auth_users u ON u.household_id = h.id
+            LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
             WHERE u.email IS NOT NULL AND TRIM(u.email) != ''
+              AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
             ORDER BY h.id ASC, u.id ASC;
         """
         rows = db_pg.execute_query(query) or []
@@ -598,6 +603,8 @@ def query_households_by_tier() -> dict:
 
 def has_already_received(user_id: int, clean_email: str) -> bool:
     """Checks email_events to prevent sending duplicate campaign emails."""
+    if not os.environ.get("DATABASE_URL") and not os.environ.get("PROD_DATABASE_URL") and not os.environ.get("STAGE_DB_URL"):
+        return False
     try:
         import db_pg
         rows = db_pg.execute_query(
@@ -623,13 +630,19 @@ def send_campaign_email(
     dry_run: bool = True,
     api_key: str = "",
     force: bool = False,
+    marketing_opt_in: bool = True,
 ) -> bool:
     """Dispatches a single Nourish announcement email."""
     clean_email = (to_email or "").strip().lower()
     if not clean_email or "@" not in clean_email:
         return False
 
-    if is_email_suppressed_db(clean_email):
+    if not marketing_opt_in:
+        print(f"[Opted Out] Skipping {clean_email} (marketing_opt_in is False in household settings)")
+        return False
+
+    has_db = bool(os.environ.get("DATABASE_URL") or os.environ.get("PROD_DATABASE_URL") or os.environ.get("STAGE_DB_URL"))
+    if has_db and is_email_suppressed_db(clean_email):
         print(f"[Suppressed] Skipping {clean_email} (in email_suppressions)")
         return False
 
@@ -792,6 +805,7 @@ def main():
                 dry_run=dry_run,
                 api_key=args.api_key,
                 force=args.force,
+                marketing_opt_in=bool(u.get("marketing_opt_in", True)),
             )
             sent_count += 1
 
