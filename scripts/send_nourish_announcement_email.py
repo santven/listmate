@@ -70,7 +70,7 @@ def generate_email_content(
     share_url = f"{BASE_URL}/open?url={quote('/?action=share&source=email_nourish')}"
     upgrade_url = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_nourish')}"
     claim_ext_15d_url = f"{BASE_URL}/open?url={quote('/settings?action=claim-extension&tier=15d&source=email_nourish')}"
-    switcher_img_url = "app_switcher_guide.png" if is_preview else f"{BASE_URL}/static/app_switcher_guide.png"
+    switcher_img_url = "https://raw.githubusercontent.com/santven/listmate/staging/docs/Screenshot_20261019-192821.png"
 
     # Tier-specific copy, subject, badges, and CTA blocks
     if tier == "premium":
@@ -327,10 +327,10 @@ ListMate ({BASE_URL})
 
                 <!-- Authentic App Switcher Screenshot Frame -->
                 <div style="text-align:center;margin-bottom:18px;">
-                  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:390px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:14px;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,0.08);">
+                  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:320px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:14px;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,0.08);">
                     <tr>
                       <td style="padding:0;background:#2e7d32;line-height:0;text-align:center;">
-                        <img src="{switcher_img_url}" alt="ListMate Household Suite Switcher: Tap top-left to select Nourish" width="390" style="display:block;width:100%;max-width:390px;height:auto;border:0;outline:none;text-decoration:none;" />
+                        <img src="{switcher_img_url}" alt="ListMate Household Suite Switcher: Tap top-left to select Nourish" width="320" style="display:block;width:100%;max-width:320px;height:auto;border:0;outline:none;text-decoration:none;" />
                       </td>
                     </tr>
                     <tr>
