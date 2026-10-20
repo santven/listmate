@@ -74,13 +74,13 @@ def generate_email_content(
 
     # Tier-specific copy, subject, badges, and CTA blocks
     if tier == "premium":
-        subject = "🥗 Introducing Nourish: Included with Your Lifetime Premium Membership"
+        subject = "🥗 The 3-in-1 Kitchen Loop is Complete: Meet Nourish (VIP Lifetime Member)"
         badge_text = "⭐ VIP LIFETIME MEMBER UPDATE • 100% INCLUDED"
-        hero_title = "Meet Nourish: Included with Your Lifetime Membership"
-        hero_subtitle = "No recurring fees, zero ad clutter & zero paywalls — thank you for being a founding member!"
+        hero_title = "The 3-in-1 Kitchen Loop is Complete: Meet Nourish"
+        hero_subtitle = "Grocery Lists + Still Good + Nourish — 100% unlocked in your Lifetime Membership forever"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"As a valued lifetime founding member of ListMate for <strong>{hh_name}</strong>, you helped bring our vision to life. That is why every new suite we build is automatically included in your membership forever — with zero recurring subscriptions or hidden upgrade fees."
-        intro_p2 = "Today, we are proud to introduce <strong>ListMate Nourish</strong>: an intelligent food and macro tracker built specifically for households. While standalone apps like MyFitnessPal charge $80 to $130 per person every year and lock basic gram targets behind paywalls, Nourish is <strong>completely unlocked in your lifetime membership</strong> with zero ads and zero extra charges."
+        intro_p1 = f"As a valued lifetime founding member of ListMate for <strong>{hh_name}</strong>, you helped bring our vision of a unified kitchen app to life. Today, that vision is fully realized with the launch of our third and final pillar: <strong>ListMate Nourish</strong>."
+        intro_p2 = "While other companies would spin this off into a separate $50/year app or create an 'Elite' tier, the entire 3-in-1 suite—<strong>Grocery Lists, Still Good (food waste prevention), and Nourish (macro tracking)</strong>—is <strong>completely unlocked in your lifetime membership forever</strong> with zero recurring fees and zero paywalls."
         cta_primary_html = f"""
           <div style="text-align:center;margin:28px 0 20px;">
             <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(16,185,129,0.35);">
@@ -94,17 +94,17 @@ def generate_email_content(
         unsub_desc = "You received this email because your household holds a lifetime Premium membership on ListMate."
 
     elif tier == "trial":
-        subject = "🥗 Unlocked on Your Trial: Meet Nourish + Keep ListMate Pro for $9.99/yr"
+        subject = "🥗 Meet the 3-in-1 Kitchen App: Buy, Save & Nourish (Keep Pro for $9.99/yr)"
         badge_text = "✨ NEW FEATURE UNLOCKED • ACTIVE ON YOUR PRO TRIAL"
-        hero_title = "Meet Nourish: Effortless Meal & Macro Tracking on Your Pro Trial"
-        hero_subtitle = "Now unlocked on your household trial — track nutrition together without duplicate typing"
+        hero_title = "Meet ListMate Nourish: The 3-in-1 Household Kitchen Loop"
+        hero_subtitle = "Shared Grocery Lists + Fridge Freshness + Nutrition — all unlocked on your Pro Trial"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"We have exciting news for <strong>{hh_name}</strong>! We just launched our brand-new nutrition tracker, and it is <strong>fully unlocked on your active Pro Trial</strong> right now."
-        intro_p2 = "Meet <strong>ListMate Nourish</strong> — an intelligent food and macro tracker that replaces $80/year nutrition apps for your whole family. Describe meals in conversational English, share home-cooked dinners with family in 1 tap, and bridge leftovers from Still Good directly to your diary."
+        intro_p1 = f"We have exciting news for <strong>{hh_name}</strong>! ListMate is now a complete 3-in-1 household food suite, and our brand-new nutrition tracker is <strong>fully unlocked on your active Pro Trial</strong> right now."
+        intro_p2 = "Until now, families had to juggle three separate apps: one for grocery lists, one to prevent fridge waste, and $80/year apps like MyFitnessPal for macros. ListMate connects the entire lifecycle under one roof—and lets your whole household keep all three for just <strong>$9.99/year</strong> total."
         cta_primary_html = f"""
           <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:20px;text-align:center;margin:24px 0 20px;">
             <div style="font-size:14px;font-weight:700;color:#854d0e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
-              🌟 Keep Nourish, Still Good & All Pro Features Forever
+              🌟 Keep All 3 Apps for Just $9.99/Year Total
             </div>
             <p style="margin:0 0 16px;font-size:14px;color:#713f12;line-height:1.5;">
               While apps like MyFitnessPal charge $79.99/year <em>per person</em>, upgrade your entire household to ListMate Pro for just <strong>$9.99/year</strong> (less than $1/month) or $1.99/month for all members combined.
@@ -122,13 +122,13 @@ def generate_email_content(
         unsub_desc = "You received this email because your household is currently enjoying a ListMate Pro Trial."
 
     elif tier == "paid":
-        subject = "🥗 Meet Nourish: Included with Your Active ListMate Subscription"
+        subject = "🥗 Your Subscription Just Tripled in Value: Introducing ListMate Nourish"
         badge_text = "⭐ ACTIVE SUBSCRIBER UPDATE • INCLUDED IN YOUR PLAN"
-        hero_title = "Meet Nourish: Included with Your Active ListMate Subscription"
-        hero_subtitle = "Track nutrition together — zero ads, zero duplicate entry & zero extra charges"
+        hero_title = "Your ListMate Subscription Just Tripled in Value"
+        hero_subtitle = "Introducing Nourish: The complete 3-in-1 kitchen operating system for your household"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"Thank you for being an active subscriber of ListMate Pro for <strong>{hh_name}</strong>! Your support enables us to keep building tools that make kitchen, food, and grocery management simpler."
-        intro_p2 = "We are thrilled to include our newest suite, <strong>ListMate Nourish</strong>, in your active subscription at <strong>no extra charge</strong>. While standalone fitness apps like MyFitnessPal charge $79.99 to $129 per person every single year, your existing ListMate Pro subscription covers nutrition tracking for your entire household under one simple plan."
+        intro_p1 = f"Thank you for being an active subscriber of ListMate Pro for <strong>{hh_name}</strong>! Your support enables us to keep expanding what ListMate can do for your family."
+        intro_p2 = "We are thrilled to include our newest suite, <strong>ListMate Nourish</strong>, in your active subscription at <strong>no extra charge</strong>. Your existing $9.99/year subscription now covers the complete 3-in-1 food loop for your whole household: <strong>Grocery Lists + Still Good Leftovers + Nourish Macro Tracking</strong>."
         cta_primary_html = f"""
           <div style="text-align:center;margin:28px 0 20px;">
             <a href="{app_url}" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;display:inline-block;box-shadow:0 4px 12px rgba(16,185,129,0.35);">
@@ -142,13 +142,13 @@ def generate_email_content(
         unsub_desc = "You received this email because your household has an active subscription on ListMate."
 
     else:  # 'expired'
-        subject = "🎁 Welcome Back to ListMate: Meet Nourish (+ 15 Days Free on Us!)"
+        subject = "🎁 ListMate is Now a 3-in-1 Household App (+ 15 Days Free on Us!)"
         badge_text = "🎁 SPECIAL WELCOME BACK GIFT • 15-DAY FREE PASS"
-        hero_title = "We Built Something Special: Meet Nourish (+ 15 Days Free!)"
-        hero_subtitle = "A brand-new way to track nutrition together — come back and try it on us"
+        hero_title = "We Built Something Special: The 3-in-1 Kitchen Suite (+ 15 Days Free!)"
+        hero_subtitle = "Buy Smarter, Stop Food Waste & Track Nutrition — come back and explore it on us"
         greeting_line = f"Hi {first_name},"
-        intro_p1 = f"It has been a little while since your free trial ended for <strong>{hh_name}</strong>, but our team has been working around the clock building features to simplify family mealtime."
-        intro_p2 = "Today, we are thrilled to introduce <strong>ListMate Nourish</strong>: our brand-new nutrition and macro tracker. Because we would love to welcome you back, we are offering your household a complimentary <strong>15-Day Free Trial Extension Pass</strong> — zero commitment, no credit card required!"
+        intro_p1 = f"It has been a little while since your trial ended for <strong>{hh_name}</strong>. You might remember ListMate as a grocery list app—but our team has expanded it into a <strong>complete 3-in-1 kitchen operating system</strong>."
+        intro_p2 = "Today, we are thrilled to introduce <strong>ListMate Nourish</strong>, completing the loop between shopping, leftovers, and nutrition. Because we would love to welcome you back, we are offering your household a complimentary <strong>15-Day Free Trial Extension Pass</strong> to experience all 3 apps—zero commitment, no credit card required!"
         cta_primary_html = f"""
           <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:22px;text-align:center;margin:24px 0 20px;">
             <div style="display:inline-block;background:#22c55e;color:#ffffff;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;border-radius:12px;margin-bottom:8px;">
@@ -187,6 +187,17 @@ def generate_email_content(
 {intro_p1}
 
 {intro_p2}
+
+==================================================
+🔄 THE COMPLETE 3-IN-1 HOUSEHOLD FOOD LOOP
+==================================================
+Until now, households had to juggle three separate apps for grocery runs, fridge leftovers, and health tracking. ListMate connects them all into one harmonious daily loop:
+
+🛒 1. Buy Smarter Together (ListMate): Real-time shared grocery lists organized by store aisle. Anyone in the house adds milk; whoever is at the store checks it off live.
+🍲 2. Stop Food Waste & Save Money (Still Good): Track perishables, fridge leftovers, and freezer meals with smart shelf-life predictions. Never let groceries spoil unnoticed.
+🍎 3. Eat Mindfully Without Duplicate Typing (Nourish): Describe meals naturally with AI, share family dinners in 1 tap, and log fridge leftovers straight from Still Good.
+
+💡 The Household Magic: Finished Sunday's leftovers? Tap "Enjoyed" in Still Good to instantly log your lunch macros in Nourish, and add depleted staples back to your grocery list in seconds!
 
 ==================================================
 🥗 WHAT IS "LISTMATE NOURISH"?
@@ -350,6 +361,62 @@ ListMate ({BASE_URL})
                   </div>
                   <div>
                     <strong style="color:#0f172a;">2. Main Menu Drawer:</strong> You can also tap the ☰ menu icon at any time and choose <strong>🍎 Nourish (Food Log)</strong>.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Complete Household Lifecycle: 3-in-1 Suite Section -->
+              <div style="background:linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);border:2px solid #e2e8f0;border-radius:16px;padding:22px 20px;margin-bottom:30px;">
+                <div style="text-align:center;margin-bottom:18px;">
+                  <span style="display:inline-block;background:#0f172a;color:#38bdf8;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:8px;">
+                    🔄 THE COMPLETE 3-IN-1 HOUSEHOLD FOOD LOOP
+                  </span>
+                  <h2 style="margin:4px 0 6px;font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-0.4px;">
+                    One App. Three Superpowers. Zero Food Stress.
+                  </h2>
+                  <p style="margin:0;font-size:13.5px;color:#64748b;line-height:1.5;">
+                    Most families juggle 3 separate apps for shopping, fridge waste, and nutrition. ListMate connects the complete lifecycle under one roof:
+                  </p>
+                </div>
+
+                <!-- 3 Pillars Table / Responsive Cards -->
+                <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:16px;">
+                  <tr>
+                    <td style="padding:14px;background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:12px;margin-bottom:10px;display:block;box-shadow:0 2px 6px rgba(0,0,0,0.03);">
+                      <div style="font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:4px;">
+                        🛒 1. Buy Smarter Together <span style="font-size:12px;font-weight:600;color:#64748b;background:#eff6ff;padding:2px 8px;border-radius:999px;margin-left:4px;">ListMate Lists</span>
+                      </div>
+                      <div style="font-size:13px;color:#475569;line-height:1.5;">
+                        Real-time shared grocery lists organized by store aisle. Anyone in the household adds milk; whoever is at the store checks it off live. Never buy duplicates again.
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px;background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #059669;border-radius:12px;margin-bottom:10px;display:block;box-shadow:0 2px 6px rgba(0,0,0,0.03);">
+                      <div style="font-size:15px;font-weight:700;color:#065f46;margin-bottom:4px;">
+                        🍲 2. Stop Food Waste &amp; Save Money <span style="font-size:12px;font-weight:600;color:#64748b;background:#ecfdf5;padding:2px 8px;border-radius:999px;margin-left:4px;">Still Good</span>
+                      </div>
+                      <div style="font-size:13px;color:#475569;line-height:1.5;">
+                        Track perishables, fridge leftovers, and freezer meals with intelligent shelf-life countdowns. Save an estimated $1,200/year per household by eating food before it spoils.
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px;background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #10b981;border-radius:12px;display:block;box-shadow:0 2px 6px rgba(0,0,0,0.03);">
+                      <div style="font-size:15px;font-weight:700;color:#047857;margin-bottom:4px;">
+                        🍎 3. Eat Mindfully Without Duplicate Typing <span style="font-size:12px;font-weight:700;color:#ffffff;background:#10b981;padding:2px 8px;border-radius:999px;margin-left:4px;">Nourish NEW</span>
+                      </div>
+                      <div style="font-size:13px;color:#475569;line-height:1.5;">
+                        Describe meals naturally in plain English, share family dinners with a single tap, and log fridge leftovers directly without tedious barcode scanning or manual entry.
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- The Household Magic Banner -->
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;text-align:left;">
+                  <div style="font-size:13px;color:#1e40af;line-height:1.5;">
+                    💡 <strong>The Magic Loop:</strong> Finished Sunday's leftovers? Tap <em>"Enjoyed"</em> in Still Good to instantly log your lunch macros in Nourish, and add depleted staples back to your grocery list in 2 seconds!
                   </div>
                 </div>
               </div>
