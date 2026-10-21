@@ -11965,7 +11965,7 @@ async function logAllAnalyzedNourishItems() {
       var fName = it.food_name || it.name || 'Food item';
       var fQty = (it.quantity !== undefined && it.quantity !== null) ? it.quantity : ((it.serving_amount !== undefined && it.serving_amount !== null) ? it.serving_amount : 100);
       var fUnit = it.unit || it.serving_unit || 'g';
-      return {
+      var itemPayload = {
         food_name: fName,
         name: fName,
         meal_slot: currentNourishSlot,
