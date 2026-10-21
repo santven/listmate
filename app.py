@@ -3826,10 +3826,34 @@ def _resolve_nourish_context(db):
     return int(uid), int(hhid), None
 
 
-def _parse_nourish_date(raw_date):
+def _get_user_timezone(db, uid, default="America/New_York"):
+    if not uid:
+        return default
+    try:
+        cur = db.execute("SELECT timezone FROM auth_users WHERE id = ?", (uid,))
+        row = cur.fetchone() if cur else None
+        if row and row.get("timezone"):
+            return str(row["timezone"]).strip()
+    except Exception:
+        pass
+    return default
+
+
+def _get_user_today(db, uid):
+    tz_str = _get_user_timezone(db, uid)
+    try:
+        from zoneinfo import ZoneInfo
+        import datetime as _dt
+        return _dt.datetime.now(ZoneInfo(tz_str)).date().isoformat()
+    except Exception:
+        import datetime as _dt
+        return _dt.date.today().isoformat()
+
+
+def _parse_nourish_date(raw_date, default_date=None):
     import datetime as _dt
     if not raw_date:
-        return _dt.date.today().isoformat()
+        return default_date or _dt.date.today().isoformat()
     s = str(raw_date).strip()[:10]
     try:
         return _dt.date.fromisoformat(s).isoformat()
@@ -3865,7 +3889,8 @@ def nourish_day_endpoint():
         if err_resp is not None:
             return err_resp
 
-        log_date_str = _parse_nourish_date(request.args.get("date"))
+        user_today = _get_user_today(db, uid)
+        log_date_str = _parse_nourish_date(request.args.get("date"), default_date=user_today)
         if not log_date_str:
             return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
 
@@ -3967,8 +3992,8 @@ def nourish_day_endpoint():
             ai_limit = 8
 
         usage_cur = db.execute(
-            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
-            (uid,),
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = ?::date",
+            (uid, user_today),
         )
         usage_row = usage_cur.fetchone() if usage_cur else None
         ai_used = int(usage_row.get("request_count") or 0) if usage_row else 0
@@ -4013,7 +4038,8 @@ def nourish_create_logs_endpoint():
         from seed_nourish import normalize_food_name
 
         data = request.get_json(silent=True) or {}
-        default_date = _parse_nourish_date(data.get("log_date"))
+        user_today = _get_user_today(db, uid)
+        default_date = _parse_nourish_date(data.get("log_date"), default_date=user_today)
         if not default_date:
             return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4029,7 +4055,7 @@ def nourish_create_logs_endpoint():
             if not food_name:
                 return jsonify({"ok": False, "error": "food_name is required"}), 400
 
-            item_date = _parse_nourish_date(entry.get("log_date") or default_date)
+            item_date = _parse_nourish_date(entry.get("log_date") or default_date, default_date=user_today)
             if not item_date:
                 return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4548,7 +4574,8 @@ def nourish_biometrics_endpoint():
             return err_resp
 
         data = request.get_json(silent=True) or {}
-        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"))
+        user_today = _get_user_today(db, uid)
+        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"), default_date=user_today)
         if not log_date_str:
             return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4890,10 +4917,11 @@ def nourish_analyze_meal_endpoint():
         except (ValueError, TypeError):
             limit = 8
 
+        user_today = _get_user_today(db, uid)
         # Check user's daily usage count for today
         usage_cur = db.execute(
-            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
-            (uid,),
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = ?::date",
+            (uid, user_today),
         )
         usage_row = usage_cur.fetchone() if usage_cur else None
         curr_count = int(usage_row.get("request_count") or 0) if usage_row else 0
@@ -4920,12 +4948,12 @@ def nourish_analyze_meal_endpoint():
         inc_cur = db.execute(
             """
             INSERT INTO nourish_ai_usage (user_id, usage_date, request_count, updated_at)
-            VALUES (?, CURRENT_DATE, 1, NOW())
+            VALUES (?, ?::date, 1, NOW())
             ON CONFLICT (user_id, usage_date)
             DO UPDATE SET request_count = nourish_ai_usage.request_count + 1, updated_at = NOW()
             RETURNING request_count
             """,
-            (uid,),
+            (uid, user_today),
         )
         inc_row = inc_cur.fetchone() if inc_cur else None
         new_count = int(inc_row.get("request_count") or (curr_count + 1)) if inc_row else (curr_count + 1)
@@ -5751,7 +5779,8 @@ def api_nourish_coach_create_note(token):
 
         author_name = str(data.get("author_name") or "Coach").strip()[:64] or "Coach"
         raw_date = data.get("log_date")
-        log_date_str = _parse_nourish_date(raw_date) if raw_date else datetime.date.today().isoformat()
+        client_today = _get_user_today(db, client_uid)
+        log_date_str = _parse_nourish_date(raw_date, default_date=client_today)
 
         ins_cur = db.execute(
             """
@@ -8061,6 +8090,136 @@ def delete_list_item(item_id):
 
         db.commit()
         return jsonify({"ok": True, "catalog_pruned": catalog_pruned, "store_id": store_id, "name": name})
+    finally:
+        db.close()
+
+
+@app.route("/api/list/stale-items")
+@require_user
+def get_stale_list_items():
+    db = get_db()
+    hh = _hh()
+    try:
+        # Fetch items unpurchased and added 14 or more days ago
+        items = db.execute('''
+            SELECT 
+                li.id, 
+                li.name, 
+                li.category, 
+                li.quantity, 
+                li.store_id, 
+                COALESCE(s.name, 'General List') as store_name,
+                li.added_at,
+                ROUND(EXTRACT(EPOCH FROM (NOW() - li.added_at)) / 86400.0) as days_ago
+            FROM list_items li
+            LEFT JOIN stores s ON s.id = li.store_id AND s.household_id = ?
+            WHERE li.household_id = ?
+              AND li.purchased = FALSE
+              AND li.added_at <= NOW() - INTERVAL '14 days'
+            ORDER BY COALESCE(s.name, 'General List') ASC, li.added_at ASC
+        ''', (hh, hh)).fetchall()
+        
+        results = []
+        for it in items:
+            results.append({
+                "id": it["id"],
+                "name": it["name"],
+                "category": it["category"] or "Other",
+                "quantity": it["quantity"] or "",
+                "store_id": it["store_id"],
+                "store_name": it["store_name"],
+                "added_at": it["added_at"].isoformat() if hasattr(it["added_at"], "isoformat") else str(it["added_at"]),
+                "days_ago": int(it["days_ago"]) if it["days_ago"] is not None else 14
+            })
+        return jsonify({"ok": True, "items": results, "count": len(results)})
+    finally:
+        db.close()
+
+
+@app.route("/api/list/triage-stale", methods=["POST"])
+@require_user
+def triage_stale_items():
+    data = request.get_json(silent=True) or {}
+    retain_ids = data.get("retain_item_ids") or []
+    clear_ids = data.get("clear_item_ids") or []
+    clear_action = (data.get("clear_action") or "purchased").strip().lower()
+    
+    clean_retain_ids = [int(i) for i in retain_ids if str(i).isdigit() and int(i) > 0]
+    clean_clear_ids = [int(i) for i in clear_ids if str(i).isdigit() and int(i) > 0]
+    
+    db = get_db()
+    hh = _hh()
+    uid = authmod.get_user_id()
+    display_name = get_display_name()
+    
+    retained_count = 0
+    cleared_count = 0
+    
+    try:
+        # 1. Retained items: refresh added_at to NOW() so they stay active and reset dormancy counter
+        if clean_retain_ids:
+            placeholders = ",".join("?" for _ in clean_retain_ids)
+            db.execute(
+                f"UPDATE list_items SET added_at = NOW() WHERE id IN ({placeholders}) AND household_id = ?",
+                tuple(clean_retain_ids) + (hh,)
+            )
+            retained_count = len(clean_retain_ids)
+            
+        # 2. Cleared items: mark purchased (default) or delete
+        if clean_clear_ids:
+            placeholders = ",".join("?" for _ in clean_clear_ids)
+            if clear_action == "delete":
+                db.execute(
+                    f"DELETE FROM list_items WHERE id IN ({placeholders}) AND household_id = ?",
+                    tuple(clean_clear_ids) + (hh,)
+                )
+                cleared_count = len(clean_clear_ids)
+            else:
+                cleared_rows = db.execute(
+                    f"SELECT id, name, category, store_id FROM list_items WHERE id IN ({placeholders}) AND household_id = ?",
+                    tuple(clean_clear_ids) + (hh,)
+                ).fetchall()
+                
+                if cleared_rows:
+                    db.execute(
+                        f"UPDATE list_items SET purchased = TRUE, purchased_by = ?, purchased_by_user_id = ?, purchased_at = NOW() WHERE id IN ({placeholders}) AND household_id = ?",
+                        (display_name, uid) + tuple(clean_clear_ids) + (hh,)
+                    )
+                    
+                    today = __import__('datetime').date.today().isoformat()
+                    stores_visited = set()
+                    for r in cleared_rows:
+                        db.execute('''
+                            INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                            VALUES (?, ?, ?, 1, NOW())
+                            ON CONFLICT (household_id, name)
+                            DO UPDATE SET total_purchases = item_purchase_stats.total_purchases + 1, last_purchased = NOW()
+                        ''', (hh, r["name"], r["category"] or ""))
+                        if r.get("store_id"):
+                            stores_visited.add(r["store_id"])
+                        
+                    for sid in stores_visited:
+                        if sid:
+                            sv = db.execute(
+                                "SELECT id FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+                                (sid, hh, today)
+                            ).fetchone()
+                            if sv:
+                                db.execute("UPDATE store_visits SET items_count = items_count + 1 WHERE id = ?", (sv["id"],))
+                            else:
+                                db.execute(
+                                    "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+                                    (sid, hh, today)
+                                )
+                    cleared_count = len(cleared_rows)
+                    
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "retained_count": retained_count,
+            "cleared_count": cleared_count,
+            "clear_action": clear_action
+        })
     finally:
         db.close()
 

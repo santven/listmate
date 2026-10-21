@@ -596,6 +596,13 @@ class InMemoryNourishDB:
             self.rowcount = 1
             return self
 
+        if "SELECT timezone FROM auth_users WHERE id = ?" in norm:
+            uid = int(params[0])
+            user_data = self.users.get(uid, {"timezone": "America/New_York"})
+            self._result_rows = [{"timezone": user_data.get("timezone", "America/New_York")}]
+            self.rowcount = 1
+            return self
+
         if "UPDATE auth_users SET nourish_enabled = ? WHERE id = ?" in norm:
             en = bool(params[0])
             uid = int(params[1])
@@ -2377,6 +2384,22 @@ class TestNourishM2APIAndCron(unittest.TestCase):
                 self.assertEqual(limit_body["ai_usage"]["used"], 8)
                 self.assertEqual(limit_body["ai_usage"]["limit"], 8)
                 self.assertEqual(limit_body["ai_usage"]["remaining"], 0)
+
+
+            # 8. Test user timezone date resolution (Issue #723)
+            from app import _get_user_timezone, _get_user_today, _parse_nourish_date
+            self.fake_db.users[16] = {"id": 16, "name": "Kannamma Santhanam", "timezone": "Asia/Calcutta", "nourish_enabled": True}
+            user_tz = _get_user_timezone(self.fake_db, 16)
+            self.assertEqual(user_tz, "Asia/Calcutta")
+
+            from zoneinfo import ZoneInfo
+            expected_today = datetime.datetime.now(ZoneInfo("Asia/Calcutta")).date().isoformat()
+            user_today = _get_user_today(self.fake_db, 16)
+            self.assertEqual(user_today, expected_today)
+
+            # Test default_date propagation
+            parsed = _parse_nourish_date(None, default_date=user_today)
+            self.assertEqual(parsed, expected_today)
 
 
 if __name__ == "__main__":

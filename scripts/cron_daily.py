@@ -182,7 +182,15 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
             elif 'reengagement' in events:
                 campaign_names.append('reengagement')
                 print(f"[{email}] Sending specific re-engagement notice.")
-                sent_rem = send_reengagement_notice(email, user_name, user_id, household_id)
+                reengage_ev = events['reengagement'] if isinstance(events['reengagement'], dict) else {}
+                sent_rem = send_reengagement_notice(
+                    email, 
+                    user_name, 
+                    user_id, 
+                    household_id,
+                    store_name=reengage_ev.get('store_name', ''),
+                    items=reengage_ev.get('items', [])
+                )
                 sent = sent or sent_rem
             elif 'trial_lapsed_day2' in events:
                 campaign_names.append('trial_lapsed_day2')
@@ -944,11 +952,37 @@ def run_cron(dry_run=False, mock_now=None):
     households_reengagement = _run(query_reengagement)
     print(f"  -> Found {len(households_reengagement)} household(s) eligible for re-engagement notice.")
     for hh in households_reengagement:
+        hhid = hh.get("household_id")
+        preview_data = {}
+        if hhid:
+            try:
+                store_res = _run("""
+                    SELECT 
+                        COALESCE(s.name, 'General List') as store_name,
+                        ARRAY_AGG(li.name ORDER BY li.added_at ASC) as item_names
+                    FROM list_items li
+                    LEFT JOIN stores s ON s.id = li.store_id AND s.household_id = %s
+                    WHERE li.household_id = %s
+                      AND li.purchased = FALSE
+                      AND li.added_at <= NOW() - INTERVAL '14 days'
+                    GROUP BY s.name
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 1
+                """, (hhid, hhid))
+                if store_res:
+                    s_row = store_res[0]
+                    preview_data = {
+                        "store_name": s_row.get("store_name") or "General List",
+                        "items": [str(x) for x in (s_row.get("item_names") or [])][:3]
+                    }
+            except Exception as pe:
+                print(f"  [Warning] Failed to fetch preview items for reengagement HH #{hhid}: {pe}")
+
         add_user_event(
             hh.get("email"),
             hh.get("user_name"),
             'reengagement',
-            True,
+            preview_data or True,
             hh.get("user_id"),
             hh.get("household_id"),
         )
