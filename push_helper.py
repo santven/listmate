@@ -2386,3 +2386,223 @@ def check_nourish_afternoon_hydration_pushes(target_hour: int = 15, dry_run: boo
         "results": results
     }
 
+
+def check_dormant_list_triage_pushes(target_hour: int = 10, dry_run: bool = False, force_send: bool = False) -> dict:
+    """
+    Timezone-aware Saturday 10:00 AM push notification for dormant households.
+    Eligible:
+    - User whose local time is Saturday 10:00 AM (EXTRACT(DOW) = 6 and EXTRACT(HOUR) = 10).
+    - Household has at least 1 unpurchased list item.
+    - Household has not added or updated any list item in the past 14 days (MAX(added_at) <= NOW() - INTERVAL '14 days').
+    - User has active push permissions.
+    - 30-day deduplication window in push_notifications_log.
+    """
+    now_utc_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    print(f"[{now_utc_str}] Checking dormant list triage push reminders (target_hour={target_hour}, dry_run={dry_run}, force_send={force_send})...")
+
+    hour_clause = ""
+    cadence_clause = ""
+    params = []
+
+    if not force_send:
+        # Check Saturday (DOW = 6) and target_hour (default 10)
+        hour_clause = """
+            AND EXTRACT(DOW FROM (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))) = 6
+            AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))) = %s
+        """
+        params.append(target_hour)
+        cadence_clause = """
+            AND NOT EXISTS (
+                SELECT 1 FROM push_notifications_log pnl
+                WHERE pnl.target_type = 'user'
+                  AND pnl.target_id = u.id
+                  AND pnl.custom_data->>'campaign' = 'dormant_list_triage_saturday_10am'
+                  AND pnl.created_at >= NOW() - INTERVAL '30 days'
+            )
+        """
+
+    candidate_query = f"""
+        SELECT 
+            u.id AS user_id,
+            u.name AS user_name,
+            u.email AS user_email,
+            COALESCE(u.timezone, 'America/Chicago') AS user_timezone,
+            EXTRACT(DOW FROM (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))) AS current_local_dow,
+            EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(u.timezone, 'America/Chicago'))) AS current_local_hour,
+            h.id AS household_id,
+            h.name AS household_name
+        FROM auth_users u
+        JOIN auth_household_members hm ON hm.user_id = u.id
+        JOIN auth_households h ON h.id = hm.household_id
+        WHERE COALESCE(h.lifecycle_status, 'active') NOT IN ('sunsetted', 'sunset_pending')
+          {hour_clause}
+          AND EXISTS (
+              SELECT 1 FROM push_subscriptions ps
+              WHERE ps.user_id = u.id
+                AND ps.is_active = TRUE
+                AND ps.permission_status = 'granted'
+          )
+          AND EXISTS (
+              SELECT 1 FROM list_items l
+              WHERE l.household_id = h.id
+                AND l.purchased = FALSE
+          )
+          AND (
+              SELECT MAX(l2.added_at) FROM list_items l2
+              WHERE l2.household_id = h.id
+          ) <= NOW() - INTERVAL '14 days'
+          {cadence_clause}
+        ORDER BY h.id ASC, u.id ASC
+    """
+
+    try:
+        candidates = _run(candidate_query, params if params else None)
+    except Exception as e:
+        print(f"[check_dormant_list_triage_pushes] Query error: {e}", flush=True)
+        return {"ok": False, "error": str(e), "dispatched": 0, "candidates": 0}
+
+    print(f"  -> Found {len(candidates)} candidate user(s) for dormant list triage pushes.")
+    results = []
+    dispatched_count = 0
+    dispatched_uids = set()
+    hh_preview_cache = {}
+
+    for cand in candidates:
+        uid = cand.get("user_id")
+        hhid = cand.get("household_id")
+        if not uid or int(uid) == 0 or not hhid or int(hhid) == 0:
+            continue
+        uid = int(uid)
+        hhid = int(hhid)
+        if uid in dispatched_uids:
+            continue
+
+        if hhid not in hh_preview_cache:
+            try:
+                # Get the store with the most pending stale items, plus top 3 item names
+                store_res = _run("""
+                    SELECT 
+                        COALESCE(s.name, 'General List') as store_name,
+                        s.id as store_id,
+                        COUNT(*) as items_count,
+                        ARRAY_AGG(li.name ORDER BY li.added_at ASC) as item_names
+                    FROM list_items li
+                    LEFT JOIN stores s ON s.id = li.store_id AND s.household_id = %s
+                    WHERE li.household_id = %s
+                      AND li.purchased = FALSE
+                      AND li.added_at <= NOW() - INTERVAL '14 days'
+                    GROUP BY s.name, s.id
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 1
+                """, (hhid, hhid))
+                if store_res:
+                    row = store_res[0]
+                    hh_preview_cache[hhid] = {
+                        "store_name": row.get("store_name") or "General List",
+                        "store_id": row.get("store_id") or 0,
+                        "count": int(row.get("items_count") or 0),
+                        "items": [str(x) for x in (row.get("item_names") or [])][:3]
+                    }
+                else:
+                    hh_preview_cache[hhid] = None
+            except Exception as pe:
+                print(f"  [Warning] Failed to fetch items preview for HH #{hhid}: {pe}")
+                hh_preview_cache[hhid] = None
+
+        preview = hh_preview_cache.get(hhid)
+        if not preview or preview.get("count", 0) == 0:
+            continue
+
+        store_name = preview["store_name"]
+        count = preview["count"]
+        items = preview["items"]
+        item_names_str = ", ".join(items[:2])
+        if count > 2:
+            item_names_str += "..."
+
+        if store_name and store_name != "General List":
+            title = f"🛒 Still need items at {store_name}?"
+            body = f"You have {count} item{'s' if count != 1 else ''} waiting from 2+ weeks ago ({item_names_str}). Tap to keep what you need or clean up your list."
+        else:
+            title = "🛒 Clean up your grocery list"
+            body = f"You have {count} item{'s' if count != 1 else ''} waiting on your list from 2+ weeks ago ({item_names_str}). Tap to keep what you need."
+
+        deep_link_url = "/?action=triage_stale&source=push_dormant_triage_10am"
+        push_data = {
+            "action": "triage_stale",
+            "campaign": "dormant_list_triage_saturday_10am",
+            "source": "push_dormant_triage_10am",
+            "url": deep_link_url,
+            "household_id": str(hhid),
+            "store_name": store_name,
+            "stale_items_count": str(count),
+        }
+
+        if dry_run:
+            print(f"  [DRY RUN] Would dispatch 'dormant_list_triage_saturday_10am' to User #{uid}: '{title}' / '{body}'")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "dormant_list_triage_saturday_10am",
+                "title": title,
+                "body": body,
+                "data": push_data,
+                "status": "dry_run"
+            })
+            continue
+
+        try:
+            res = send_push_to_user(
+                user_id=uid,
+                title=title,
+                body=body,
+                data=push_data
+            )
+            sent_cnt = res.get("sent", 0)
+            mock_mode = res.get("mock", False)
+            print(f"  [Dispatch] Sent 'dormant_list_triage_saturday_10am' push to User #{uid} (sent={sent_cnt}, mock={mock_mode}, res={res})")
+
+            if sent_cnt == 0 and not res.get("error"):
+                authmod.log_push_dispatch(
+                    target_type="user",
+                    target_id=uid,
+                    title=title,
+                    body=body,
+                    url=deep_link_url,
+                    custom_data=push_data,
+                    tokens_count=0,
+                    sent_count=0,
+                    failed_count=0,
+                    errors=["no_active_tokens"],
+                    is_mock=True
+                )
+
+            dispatched_count += 1
+            dispatched_uids.add(uid)
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "dormant_list_triage_saturday_10am",
+                "title": title,
+                "body": body,
+                "status": "sent" if (sent_cnt > 0 or mock_mode) else "skipped_no_tokens",
+                "result": res
+            })
+        except Exception as dispatch_err:
+            print(f"  [Error] Failed to send 'dormant_list_triage_saturday_10am' to User #{uid}: {dispatch_err}")
+            results.append({
+                "user_id": uid,
+                "household_id": hhid,
+                "campaign": "dormant_list_triage_saturday_10am",
+                "status": "error",
+                "error": str(dispatch_err)
+            })
+
+    return {
+        "ok": True,
+        "candidates": len(candidates),
+        "dispatched": dispatched_count,
+        "results": results
+    }
+
+

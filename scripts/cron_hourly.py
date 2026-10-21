@@ -35,6 +35,7 @@ from push_helper import (
     check_post_shopping_smart_stash_pushes,
     check_nourish_evening_diary_pushes,
     check_nourish_afternoon_hydration_pushes,
+    check_dormant_list_triage_pushes,
 )
 
 
@@ -165,6 +166,15 @@ def run_hourly_pipeline(dry_run: bool = False, force_send: bool = False, target_
         "Nourish Afternoon Hydration Push Reminder (3:00 PM local)",
         check_nourish_afternoon_hydration_pushes,
         target_hour=15,
+        dry_run=dry_run,
+        force_send=force_send
+    )
+
+    # Task 10: Dormant List Triage Push Reminder (Saturday 10:00 AM local time)
+    pipeline_results["dormant_list_triage_pushes"] = safe_execute_task(
+        "Dormant List Triage Push Reminder (Saturday 10:00 AM local)",
+        check_dormant_list_triage_pushes,
+        target_hour=10,
         dry_run=dry_run,
         force_send=force_send
     )
