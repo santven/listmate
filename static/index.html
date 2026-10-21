@@ -1818,6 +1818,14 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
         <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">
           Type whatever you ate in plain English (e.g. <i>"2 dosas with 1 cup sambar and coconut chutney"</i>). AI will deconstruct the plate and scale portions.
         </div>
+        <div id="nourishAiLimitBadge" style="display:inline-flex; align-items:center; gap:6px; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px; margin-bottom:10px;">
+          <span>⚡</span>
+          <span id="nourishAiRemainingText">8 of 8 AI analyses remaining today</span>
+        </div>
+        <div id="nourishAiLimitReachedBanner" style="display:none; background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:12px; margin-bottom:12px; color:#92400e; font-size:12.5px;">
+          <b>⚠️ Daily AI Plate Limit Reached (8/8 used)</b><br>
+          You have used all 8 AI plate analyses for today. You can still search or type foods manually in <b>Search Catalog</b>, and our hourly engine will enrich them in the background.
+        </div>
         <textarea id="nourishDescribeInput" rows="3" placeholder="Describe your meal..." style="width:100%; padding:12px 14px; font-size:14px; border:1.5px solid var(--border); border-radius:12px; outline:none; background:#fff; font-family:inherit; resize:vertical;"></textarea>
         <button type="button" id="nourishBtnAnalyzePlate" onclick="analyzeNourishPlate()" style="width:100%; margin-top:10px; background:linear-gradient(135deg, #4d7c0f, #16a34a); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:14px; cursor:pointer;">
           ✨ Analyze Plate
@@ -11716,12 +11724,12 @@ async function analyzeNourishPlate() {
     var is429 = resp.status === 429;
     var res = await resp.json().catch(function() { return {}; });
 
-    if (btn) btn.disabled = false;
     if (loading) loading.style.display = 'none';
 
     if (is429 || (res && (res.limit_reached || res.error_code === 'limit_reached' || res.status === 429))) {
       var limitMsg = (res && res.error) ? res.error : 'Daily AI plate analysis limit reached. You can still search and log foods manually!';
       if (typeof toast === 'function') toast('⚠️ ' + limitMsg);
+      updateNourishAiLimitUI({ limit: (res && res.daily_limit) || 8, remaining: 0, used: (res && res.daily_limit) || 8 });
       if (container) {
         container.innerHTML = '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:12px; margin-top:10px; color:#92400e; font-size:12.5px;">' +
           '<b>⚠️ Daily AI Plate Limit Reached</b><br>' +
@@ -11732,9 +11740,17 @@ async function analyzeNourishPlate() {
       return;
     }
 
+    if (btn) btn.disabled = false;
+
     if (res && res.ok && Array.isArray(res.items) && res.items.length > 0) {
       window._lastNourishAnalyzedItems = res.items;
       window._lastNourishAnalyzedPlateName = res.plate_name || 'My Plate';
+      window._lastNourishAnalyzedBrand = res.brand || (res.items.find(function(it) { return it.brand; }) || {}).brand || null;
+      var rem = (res.remaining_today !== undefined && res.remaining_today !== null) ? res.remaining_today : (res.ai_usage && res.ai_usage.remaining);
+      var lim = (res.daily_limit !== undefined && res.daily_limit !== null) ? res.daily_limit : ((res.ai_usage && res.ai_usage.limit) || 8);
+      if (rem !== undefined && rem !== null) {
+        updateNourishAiLimitUI({ limit: lim, remaining: rem, used: lim - rem });
+      }
       var plateName = window._lastNourishAnalyzedPlateName;
       var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
       var html = '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:10px;">' +
@@ -11865,29 +11881,35 @@ async function logAnalyzedPlateCombined() {
 
   var notesText = 'Ingredients: ' + ingredientStrings.join(', ');
 
+  var plateItem = {
+    food_name: plateName,
+    name: plateName,
+    meal_slot: currentNourishSlot,
+    quantity: 1,
+    serving_amount: 1,
+    unit: 'serving',
+    serving_unit: 'serving',
+    calories: totalCal,
+    protein_g: totalProtein,
+    carbs_g: totalCarbs,
+    fat_g: totalFat,
+    fiber_g: totalFiber,
+    serving_weight_g: totalWeight,
+    serving_label: '1 plate',
+    category: 'Prepared Foods',
+    notes: notesText,
+    is_shared_household: isShared
+  };
+  var brandVal = window._lastNourishAnalyzedBrand || (items.find(function(it) { return it.brand; }) || {}).brand;
+  if (brandVal) {
+    plateItem.brand = brandVal;
+  }
+
   var payload = {
     log_date: currentNourishDate,
     meal_slot: currentNourishSlot,
     is_shared_household: isShared,
-    items: [{
-      food_name: plateName,
-      name: plateName,
-      meal_slot: currentNourishSlot,
-      quantity: 1,
-      serving_amount: 1,
-      unit: 'serving',
-      serving_unit: 'serving',
-      calories: totalCal,
-      protein_g: totalProtein,
-      carbs_g: totalCarbs,
-      fat_g: totalFat,
-      fiber_g: totalFiber,
-      serving_weight_g: totalWeight,
-      serving_label: '1 plate',
-      category: 'Prepared Foods',
-      notes: notesText,
-      is_shared_household: isShared
-    }]
+    items: [plateItem]
   };
 
   try {
@@ -11904,6 +11926,7 @@ async function logAnalyzedPlateCombined() {
       if (container) container.innerHTML = '';
       window._lastNourishAnalyzedItems = null;
       window._lastNourishAnalyzedPlateName = null;
+      window._lastNourishAnalyzedBrand = null;
       var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
       if (typeof toast === 'function') toast('✅ Logged ' + plateName + ' to ' + slotTitle + '!');
       loadNourishDay(currentNourishDate);
@@ -11966,6 +11989,10 @@ async function logAllAnalyzedNourishItems() {
         category: it.category || 'Prepared Foods',
         is_shared_household: isShared
       };
+      if (it.brand) {
+        itemPayload.brand = it.brand;
+      }
+      return itemPayload;
     })
   };
   try {
@@ -11981,6 +12008,7 @@ async function logAllAnalyzedNourishItems() {
       if (container) container.innerHTML = '';
       window._lastNourishAnalyzedItems = null;
       window._lastNourishAnalyzedPlateName = null;
+      window._lastNourishAnalyzedBrand = null;
       var slotTitle = currentNourishSlot.charAt(0).toUpperCase() + currentNourishSlot.slice(1);
       if (typeof toast === 'function') toast('✅ Logged all plate items to ' + slotTitle + '!');
       loadNourishDay(currentNourishDate);
@@ -12060,8 +12088,50 @@ async function loadNourishDay(dateStr) {
   }
 }
 
+function updateNourishAiLimitUI(aiUsage) {
+  if (!aiUsage) return;
+  var limit = (aiUsage.limit !== undefined && aiUsage.limit !== null) ? aiUsage.limit : 8;
+  var remaining = (aiUsage.remaining !== undefined && aiUsage.remaining !== null) ? aiUsage.remaining : limit;
+
+  var txtEl = document.getElementById('nourishAiRemainingText');
+  var badgeEl = document.getElementById('nourishAiLimitBadge');
+  var bannerEl = document.getElementById('nourishAiLimitReachedBanner');
+  var btnEl = document.getElementById('nourishBtnAnalyzePlate');
+
+  if (txtEl) {
+    txtEl.textContent = remaining + ' of ' + limit + ' AI analyses remaining today';
+  }
+
+  if (remaining === 0) {
+    if (bannerEl) bannerEl.style.display = 'block';
+    if (badgeEl) {
+      badgeEl.style.background = '#fef3c7';
+      badgeEl.style.borderColor = '#fde68a';
+      badgeEl.style.color = '#92400e';
+    }
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '⚠️ Daily Limit Reached (' + limit + '/' + limit + ')';
+    }
+  } else {
+    if (bannerEl) bannerEl.style.display = 'none';
+    if (badgeEl) {
+      badgeEl.style.background = '#f0fdf4';
+      badgeEl.style.borderColor = '#bbf7d0';
+      badgeEl.style.color = '#166534';
+    }
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = '✨ Analyze Plate';
+    }
+  }
+}
+
 function renderNourishDay(data) {
   if (!data) return;
+  if (data.ai_usage) {
+    updateNourishAiLimitUI(data.ai_usage);
+  }
   var totals = data.totals || {};
   var goals = data.goals || {};
   var biometrics = data.biometrics || {};
@@ -13453,6 +13523,7 @@ window.renderNourishTrends = renderNourishTrends;
 window.renderNourishTrendsChart = renderNourishTrendsChart;
 window.toggleNourishAdhTooltip = toggleNourishAdhTooltip;
 window.closeNourishAdhTooltip = closeNourishAdhTooltip;
+window.updateNourishAiLimitUI = updateNourishAiLimitUI;
 </script>
 </body>
 </html>
