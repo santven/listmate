@@ -8065,6 +8065,136 @@ def delete_list_item(item_id):
         db.close()
 
 
+@app.route("/api/list/stale-items")
+@require_user
+def get_stale_list_items():
+    db = get_db()
+    hh = _hh()
+    try:
+        # Fetch items unpurchased and added 14 or more days ago
+        items = db.execute('''
+            SELECT 
+                li.id, 
+                li.name, 
+                li.category, 
+                li.quantity, 
+                li.store_id, 
+                COALESCE(s.name, 'General List') as store_name,
+                li.added_at,
+                ROUND(EXTRACT(EPOCH FROM (NOW() - li.added_at)) / 86400.0) as days_ago
+            FROM list_items li
+            LEFT JOIN stores s ON s.id = li.store_id AND s.household_id = ?
+            WHERE li.household_id = ?
+              AND li.purchased = FALSE
+              AND li.added_at <= NOW() - INTERVAL '14 days'
+            ORDER BY COALESCE(s.name, 'General List') ASC, li.added_at ASC
+        ''', (hh, hh)).fetchall()
+        
+        results = []
+        for it in items:
+            results.append({
+                "id": it["id"],
+                "name": it["name"],
+                "category": it["category"] or "Other",
+                "quantity": it["quantity"] or "",
+                "store_id": it["store_id"],
+                "store_name": it["store_name"],
+                "added_at": it["added_at"].isoformat() if hasattr(it["added_at"], "isoformat") else str(it["added_at"]),
+                "days_ago": int(it["days_ago"]) if it["days_ago"] is not None else 14
+            })
+        return jsonify({"ok": True, "items": results, "count": len(results)})
+    finally:
+        db.close()
+
+
+@app.route("/api/list/triage-stale", methods=["POST"])
+@require_user
+def triage_stale_items():
+    data = request.get_json(silent=True) or {}
+    retain_ids = data.get("retain_item_ids") or []
+    clear_ids = data.get("clear_item_ids") or []
+    clear_action = (data.get("clear_action") or "purchased").strip().lower()
+    
+    clean_retain_ids = [int(i) for i in retain_ids if str(i).isdigit() and int(i) > 0]
+    clean_clear_ids = [int(i) for i in clear_ids if str(i).isdigit() and int(i) > 0]
+    
+    db = get_db()
+    hh = _hh()
+    uid = authmod.get_user_id()
+    display_name = get_display_name()
+    
+    retained_count = 0
+    cleared_count = 0
+    
+    try:
+        # 1. Retained items: refresh added_at to NOW() so they stay active and reset dormancy counter
+        if clean_retain_ids:
+            placeholders = ",".join("?" for _ in clean_retain_ids)
+            db.execute(
+                f"UPDATE list_items SET added_at = NOW() WHERE id IN ({placeholders}) AND household_id = ?",
+                tuple(clean_retain_ids) + (hh,)
+            )
+            retained_count = len(clean_retain_ids)
+            
+        # 2. Cleared items: mark purchased (default) or delete
+        if clean_clear_ids:
+            placeholders = ",".join("?" for _ in clean_clear_ids)
+            if clear_action == "delete":
+                db.execute(
+                    f"DELETE FROM list_items WHERE id IN ({placeholders}) AND household_id = ?",
+                    tuple(clean_clear_ids) + (hh,)
+                )
+                cleared_count = len(clean_clear_ids)
+            else:
+                cleared_rows = db.execute(
+                    f"SELECT id, name, category, store_id FROM list_items WHERE id IN ({placeholders}) AND household_id = ?",
+                    tuple(clean_clear_ids) + (hh,)
+                ).fetchall()
+                
+                if cleared_rows:
+                    db.execute(
+                        f"UPDATE list_items SET purchased = TRUE, purchased_by = ?, purchased_by_user_id = ?, purchased_at = NOW() WHERE id IN ({placeholders}) AND household_id = ?",
+                        (display_name, uid) + tuple(clean_clear_ids) + (hh,)
+                    )
+                    
+                    today = __import__('datetime').date.today().isoformat()
+                    stores_visited = set()
+                    for r in cleared_rows:
+                        db.execute('''
+                            INSERT INTO item_purchase_stats (household_id, name, category, total_purchases, last_purchased)
+                            VALUES (?, ?, ?, 1, NOW())
+                            ON CONFLICT (household_id, name)
+                            DO UPDATE SET total_purchases = item_purchase_stats.total_purchases + 1, last_purchased = NOW()
+                        ''', (hh, r["name"], r["category"] or ""))
+                        if r.get("store_id"):
+                            stores_visited.add(r["store_id"])
+                        
+                    for sid in stores_visited:
+                        if sid:
+                            sv = db.execute(
+                                "SELECT id FROM store_visits WHERE store_id = ? AND household_id = ? AND visit_date = ?",
+                                (sid, hh, today)
+                            ).fetchone()
+                            if sv:
+                                db.execute("UPDATE store_visits SET items_count = items_count + 1 WHERE id = ?", (sv["id"],))
+                            else:
+                                db.execute(
+                                    "INSERT INTO store_visits (store_id, household_id, visit_date, items_count) VALUES (?, ?, ?, 1)",
+                                    (sid, hh, today)
+                                )
+                    cleared_count = len(cleared_rows)
+                    
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "retained_count": retained_count,
+            "cleared_count": cleared_count,
+            "clear_action": clear_action
+        })
+    finally:
+        db.close()
+
+
 @app.route("/api/list/<int:item_id>/move", methods=["PUT"])
 @require_user
 def move_list_item(item_id):

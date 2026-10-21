@@ -1048,18 +1048,47 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0, hous
     return _send_via_api(api_key, payload)
 
 
-def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0) -> bool:
-    """Send Day 14 re-engagement notice to dormant users."""
+def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, household_id: int = 0, store_name: str = "", items: list = None) -> bool:
+    """Send Day 14 re-engagement notice to dormant users with optional stale item previews."""
     api_key = os.environ.get("SENDGRID_API_KEY", "")
     if not api_key:
         print("WARNING: SENDGRID_API_KEY not set — skipping email")
         return False
 
     campaign = "reengagement"
-    app_link = f"{BASE_URL}/open?url={quote('/?source=email_reengagement')}"
+    app_link = f"{BASE_URL}/open?url={quote('/?action=triage_stale&source=email_reengagement')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reengagement')}"
 
     unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you are a registered user of ListMate.")
+    
+    clean_items = [str(it).strip() for it in (items or []) if str(it).strip()]
+    if clean_items and store_name and store_name != "General List":
+        subject = f"Still need items at {store_name}? Streamline your list 🛒"
+    elif clean_items:
+        subject = "Still need items on your grocery list? 🛒"
+    else:
+        subject = "It's been a while! Streamline your next grocery trip 🛒"
+
+    # Format text preview
+    items_txt = ""
+    if clean_items:
+        store_hdr = f"waiting at {store_name}" if store_name and store_name != "General List" else "waiting on your list"
+        items_txt = f"\nYou still have items {store_hdr}:\n" + "\n".join(f"  • {name}" for name in clean_items[:3]) + "\n"
+
+    # Format HTML preview
+    items_html = ""
+    if clean_items:
+        store_hdr = f"waiting at {store_name}" if store_name and store_name != "General List" else "waiting on your list"
+        list_items_html = "".join(f"<li style='margin-bottom:4px;color:#334155;'><strong>{name}</strong></li>" for name in clean_items[:3])
+        items_html = (
+            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;margin:20px 0;">'
+            f'<div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:8px;">🛒 Still {store_hdr}:</div>'
+            f'<ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.5;">{list_items_html}</ul>'
+            f'</div>'
+        )
+
+    btn_label = "Review & Clean Your List" if clean_items else "Plan Your Next Trip"
+
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -1077,16 +1106,17 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
             "household_id": str(household_id) if household_id else "",
             "campaign": campaign,
         },
-        "subject": "It's been a while! Streamline your next grocery trip 🛒",
+        "subject": subject,
         "content": [
             {
                 "type": "text/plain",
                 "value": (
                     f"Hi {user_name},\n\n"
-                    f"It's been a couple of weeks since your last update on ListMate. We wanted to remind you that your shared grocery lists are waiting for you!\n\n"
+                    f"It's been a couple of weeks since your last update on ListMate. We wanted to remind you that your shared grocery lists are waiting for you!\n"
+                    f"{items_txt}\n"
                     f"Sharing a live, store-organized grocery list with your household is one of the easiest ways to smooth out shopping trips and cut down on impulse buys—saving you both time and money.\n\n"
-                    f"Check out our latest features, including instant store-based aisle organization, to make your next trip seamless.\n\n"
-                    f"Plan your next trip: {app_link}\n"
+                    f"Check out our latest features, including instant aisle organization, to make your next trip seamless.\n\n"
+                    f"{btn_label}: {app_link}\n"
                     f"Invite household members: {add_member_link}\n\n"
                     f"— The ListMate Team" + unsub_txt
                 ),
@@ -1098,9 +1128,10 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
                     f'<h2 style="color:#2c5a2c;margin-top:0;">🛒 It\'s been a while!</h2>'
                     f'<p style="font-size:16px;color:#333;">Hi {user_name},</p>'
                     f'<p style="font-size:15px;color:#333;line-height:1.5;">It\'s been a couple of weeks since your last update on ListMate. We wanted to remind you that your shared grocery lists are waiting for you!</p>'
+                    f'{items_html}'
                     f'<p style="font-size:15px;color:#333;line-height:1.5;">Sharing a live, store-organized grocery list with your household is one of the easiest ways to smooth out shopping trips and cut down on impulse buys—<strong>saving you both time and money</strong>.</p>'
                     f'<div style="margin:24px 0 16px;">'
-                    f'<a href="{app_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">Plan Your Next Trip</a>'
+                    f'<a href="{app_link}" style="display:inline-block;background:#5ebe7e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold;margin-right:10px;margin-bottom:8px;">{btn_label}</a>'
                     f'<a href="{add_member_link}" style="display:inline-block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:8px;">👥 Invite Members</a>'
                     f'</div>'
                     f'</div>' + unsub_html
