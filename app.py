@@ -3826,10 +3826,34 @@ def _resolve_nourish_context(db):
     return int(uid), int(hhid), None
 
 
-def _parse_nourish_date(raw_date):
+def _get_user_timezone(db, uid, default="America/New_York"):
+    if not uid:
+        return default
+    try:
+        cur = db.execute("SELECT timezone FROM auth_users WHERE id = ?", (uid,))
+        row = cur.fetchone() if cur else None
+        if row and row.get("timezone"):
+            return str(row["timezone"]).strip()
+    except Exception:
+        pass
+    return default
+
+
+def _get_user_today(db, uid):
+    tz_str = _get_user_timezone(db, uid)
+    try:
+        from zoneinfo import ZoneInfo
+        import datetime as _dt
+        return _dt.datetime.now(ZoneInfo(tz_str)).date().isoformat()
+    except Exception:
+        import datetime as _dt
+        return _dt.date.today().isoformat()
+
+
+def _parse_nourish_date(raw_date, default_date=None):
     import datetime as _dt
     if not raw_date:
-        return _dt.date.today().isoformat()
+        return default_date or _dt.date.today().isoformat()
     s = str(raw_date).strip()[:10]
     try:
         return _dt.date.fromisoformat(s).isoformat()
@@ -3865,7 +3889,8 @@ def nourish_day_endpoint():
         if err_resp is not None:
             return err_resp
 
-        log_date_str = _parse_nourish_date(request.args.get("date"))
+        user_today = _get_user_today(db, uid)
+        log_date_str = _parse_nourish_date(request.args.get("date"), default_date=user_today)
         if not log_date_str:
             return jsonify({"ok": False, "error": "Invalid date format. Expected YYYY-MM-DD."}), 400
 
@@ -3967,8 +3992,8 @@ def nourish_day_endpoint():
             ai_limit = 8
 
         usage_cur = db.execute(
-            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
-            (uid,),
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = ?::date",
+            (uid, user_today),
         )
         usage_row = usage_cur.fetchone() if usage_cur else None
         ai_used = int(usage_row.get("request_count") or 0) if usage_row else 0
@@ -4013,7 +4038,8 @@ def nourish_create_logs_endpoint():
         from seed_nourish import normalize_food_name
 
         data = request.get_json(silent=True) or {}
-        default_date = _parse_nourish_date(data.get("log_date"))
+        user_today = _get_user_today(db, uid)
+        default_date = _parse_nourish_date(data.get("log_date"), default_date=user_today)
         if not default_date:
             return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4029,7 +4055,7 @@ def nourish_create_logs_endpoint():
             if not food_name:
                 return jsonify({"ok": False, "error": "food_name is required"}), 400
 
-            item_date = _parse_nourish_date(entry.get("log_date") or default_date)
+            item_date = _parse_nourish_date(entry.get("log_date") or default_date, default_date=user_today)
             if not item_date:
                 return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4548,7 +4574,8 @@ def nourish_biometrics_endpoint():
             return err_resp
 
         data = request.get_json(silent=True) or {}
-        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"))
+        user_today = _get_user_today(db, uid)
+        log_date_str = _parse_nourish_date(data.get("log_date") or data.get("date"), default_date=user_today)
         if not log_date_str:
             return jsonify({"ok": False, "error": "Invalid log_date format. Expected YYYY-MM-DD."}), 400
 
@@ -4890,10 +4917,11 @@ def nourish_analyze_meal_endpoint():
         except (ValueError, TypeError):
             limit = 8
 
+        user_today = _get_user_today(db, uid)
         # Check user's daily usage count for today
         usage_cur = db.execute(
-            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
-            (uid,),
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = ?::date",
+            (uid, user_today),
         )
         usage_row = usage_cur.fetchone() if usage_cur else None
         curr_count = int(usage_row.get("request_count") or 0) if usage_row else 0
@@ -4920,12 +4948,12 @@ def nourish_analyze_meal_endpoint():
         inc_cur = db.execute(
             """
             INSERT INTO nourish_ai_usage (user_id, usage_date, request_count, updated_at)
-            VALUES (?, CURRENT_DATE, 1, NOW())
+            VALUES (?, ?::date, 1, NOW())
             ON CONFLICT (user_id, usage_date)
             DO UPDATE SET request_count = nourish_ai_usage.request_count + 1, updated_at = NOW()
             RETURNING request_count
             """,
-            (uid,),
+            (uid, user_today),
         )
         inc_row = inc_cur.fetchone() if inc_cur else None
         new_count = int(inc_row.get("request_count") or (curr_count + 1)) if inc_row else (curr_count + 1)
@@ -5751,7 +5779,8 @@ def api_nourish_coach_create_note(token):
 
         author_name = str(data.get("author_name") or "Coach").strip()[:64] or "Coach"
         raw_date = data.get("log_date")
-        log_date_str = _parse_nourish_date(raw_date) if raw_date else datetime.date.today().isoformat()
+        client_today = _get_user_today(db, client_uid)
+        log_date_str = _parse_nourish_date(raw_date, default_date=client_today)
 
         ins_cur = db.execute(
             """
