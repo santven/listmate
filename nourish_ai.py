@@ -31,6 +31,17 @@ COOKED_VS_RAW_RULE = (
     "Never apply raw dry-grain calorie densities (~350-370 kcal/100g) to cooked grains/legumes (~110-140 kcal/100g)."
 )
 
+BRANDED_PRODUCTS_RULE = (
+    "CRITICAL BRANDED PRODUCT LABEL RULE:\n"
+    "When a commercial brand name or packaged product is mentioned (e.g. Fairlife, Premier Protein, "
+    "Chobani, Dave's Killer Bread, Quest, Oikos Pro):\n"
+    "1) EXACT LABEL MATCHING: Do NOT use generic commodity food data (e.g. do not treat Fairlife Nutrition Plan as generic chocolate milk). "
+    "Retrieve and match the manufacturer's official Nutrition Facts label for that exact product.\n"
+    "2) PACKAGE SERVING SIZE: Set serving_weight_g and serving_label to the official single-serve container/package "
+    "(e.g. 1 bottle / 340ml = 150 kcal, 30g protein, 4g carbs, 2.5g fat, 2g sugar).\n"
+    "3) BRAND EXTRACTION: Populate the 'brand' attribute with the identified brand name."
+)
+
 
 def _discover_gemini_key():
     for var in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"]:
@@ -238,6 +249,29 @@ def _heuristic_food_nutrition(food_name: str) -> dict:
         if c_norm and (c_norm in norm or norm in c_norm):
             return dict(item)
 
+    # Branded product reference entries
+    if "fairlife" in norm:
+        return {
+            "name": "Fairlife Nutrition Plan Chocolate",
+            "normalized_name": "fairlife nutrition plan chocolate",
+            "brand": "Fairlife",
+            "category": "Beverages & Shakes",
+            "source": "curated",
+            "is_public": True,
+            "calories_per_100g": 44.12,
+            "protein_per_100g": 8.82,
+            "carbs_per_100g": 1.18,
+            "fat_per_100g": 0.74,
+            "fiber_per_100g": 0.29,
+            "sugar_per_100g": 0.59,
+            "sodium_mg_per_100g": 67.65,
+            "serving_weight_g": 340.0,
+            "serving_label": "1 bottle (340ml)",
+            "is_liquid": True,
+            "prep_state": "as_is",
+            "ai_verified": True,
+        }
+
     # 2. Keyword-based cooked/prepared heuristics
     if any(k in norm for k in ["chicken", "turkey", "poultry", "tikka"]):
         return {
@@ -435,10 +469,11 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
         system_instruction = (
             "You are a clinical nutritionist and culinary food scientist.\n"
             f"{COOKED_VS_RAW_RULE}\n"
+            f"{BRANDED_PRODUCTS_RULE}\n"
             "For each food item in the input array, estimate accurate nutrition values per 100 grams "
             "and a typical single serving weight in grams.\n"
             "Return ONLY a valid JSON array of objects with these exact keys:\n"
-            "normalized_name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, "
+            "normalized_name, brand, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, "
             "fiber_per_100g, sugar_per_100g, sodium_mg_per_100g, serving_weight_g, serving_label, category."
         )
 
@@ -498,6 +533,7 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
             srv_w = max(1.0, float(raw_est.get("serving_weight_g", 100.0) or 100.0))
             srv_label = str(raw_est.get("serving_label") or f"1 serving ({int(round(srv_w))}g)").strip()
             category = str(raw_est.get("category") or "Prepared Foods").strip()[:80]
+            extracted_brand = str(raw_est.get("brand") or "").strip()[:80]
             is_liquid = bool(raw_est.get("is_liquid", False))
             prep_state = "raw" if re.search(r"\b(raw|dry|uncooked)\b", norm) else str(raw_est.get("prep_state") or "cooked")[:20]
 
@@ -512,6 +548,7 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
                 "serving_weight_g": round(srv_w, 2),
                 "serving_label": srv_label,
                 "category": category,
+                "brand": extracted_brand,
                 "is_liquid": is_liquid,
                 "prep_state": prep_state,
             }
@@ -525,13 +562,14 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
                     fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
                     serving_label, serving_weight_g, is_liquid, prep_state, ai_verified
                 ) VALUES (
-                    ?, ?, '', ?, 'ai_enriched', TRUE,
+                    ?, ?, ?, ?, 'ai_enriched', TRUE,
                     ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?, ?, TRUE
                 )
                 ON CONFLICT (normalized_name) WHERE is_public = TRUE
                 DO UPDATE SET
+                    brand = CASE WHEN EXCLUDED.brand <> '' THEN EXCLUDED.brand ELSE nourish_food_catalog.brand END,
                     calories_per_100g = EXCLUDED.calories_per_100g,
                     protein_per_100g = EXCLUDED.protein_per_100g,
                     carbs_per_100g = EXCLUDED.carbs_per_100g,
@@ -548,6 +586,7 @@ def enrich_pending_nourish_logs_batch(db=None, dry_run=False, limit=50):
                 (
                     display_name,
                     norm,
+                    extracted_brand,
                     category,
                     normalized_est["calories_per_100g"],
                     normalized_est["protein_per_100g"],
@@ -878,6 +917,7 @@ def _parse_heuristic_meal_clauses(text_description: str):
         items.append({
             "food_name": food_name[:120],
             "name": food_name[:120],
+            "brand": str(est.get("brand") or "").strip()[:80],
             "quantity": scaled["quantity"],
             "serving_amount": scaled["quantity"],
             "unit": scaled["unit"],
@@ -920,11 +960,12 @@ def analyze_natural_language_meal(text_description: str):
     system_instruction = (
         "You are an expert nutritionist deconstructing a meal log into individual food items.\n"
         f"{COOKED_VS_RAW_RULE}\n"
+        f"{BRANDED_PRODUCTS_RULE}\n"
         "Return ONLY a JSON object with keys:\n"
         "1. 'plate_name': A clean, appetizing, concise title for this dish (e.g. 'Chicken Burrito Bowl', "
         "'Greek Yogurt with Blueberries & Walnuts', 'Avocado Toast with Poached Eggs', 'Spaghetti Bolognese'). Max 4-6 words.\n"
         "2. 'items': array of individual food items, where each item has:\n"
-        "food_name, quantity (number), unit ('g', 'oz', 'ml', or 'serving'), "
+        "food_name, brand, quantity (number), unit ('g', 'oz', 'ml', or 'serving'), "
         "calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, "
         "sugar_per_100g, sodium_mg_per_100g, serving_weight_g, serving_label, category."
     )
@@ -957,6 +998,7 @@ def analyze_natural_language_meal(text_description: str):
             items.append({
                 "food_name": str(entry["food_name"]).strip(),
                 "name": str(entry["food_name"]).strip(),
+                "brand": str(entry.get("brand") or "").strip()[:80],
                 "quantity": scaled["quantity"],
                 "serving_amount": scaled["quantity"],
                 "unit": scaled["unit"],
