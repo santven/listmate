@@ -3954,8 +3954,26 @@ def nourish_day_endpoint():
             )
             unread_row = unread_cur.fetchone() if unread_cur else None
             unread_coach_note = _serialize_nourish_row(unread_row) if unread_row else None
-        except Exception as note_err:
-            print(f"[NOURISH NOTICE] Coach notes query notice: {note_err}")
+        except Exception:
+            pass
+
+        # 7. AI usage limit & remaining count for today (Issue #718)
+        try:
+            ai_limit = int(os.environ.get("NOURISH_AI_DAILY_LIMIT", "8"))
+        except (ValueError, TypeError):
+            ai_limit = 8
+
+        usage_cur = db.execute(
+            "SELECT request_count FROM nourish_ai_usage WHERE user_id = ? AND usage_date = CURRENT_DATE",
+            (uid,),
+        )
+        usage_row = usage_cur.fetchone() if usage_cur else None
+        ai_used = int(usage_row.get("request_count") or 0) if usage_row else 0
+        ai_usage = {
+            "used": ai_used,
+            "limit": ai_limit,
+            "remaining": max(0, ai_limit - ai_used),
+        }
 
         return jsonify({
             "ok": True,
@@ -3970,6 +3988,7 @@ def nourish_day_endpoint():
             "pending_ai_count": pending_ai_count,
             "coach_notes": coach_notes,
             "unread_coach_note": unread_coach_note,
+            "ai_usage": ai_usage,
         })
     except Exception as exc:
         print(f"[NOURISH ERROR] GET /api/nourish/day failed: {exc}")
@@ -4170,6 +4189,8 @@ def nourish_create_logs_endpoint():
                         fat_100 = float(entry.get("fat_per_100g") or 0.0)
                         fib_100 = float(entry.get("fiber_per_100g") or 0.0)
 
+                    brand = str(entry.get("brand") or "").strip()[:80]
+
                     chk_cur = db.execute(
                         "SELECT id FROM nourish_food_catalog WHERE household_id = ? AND normalized_name = ?",
                         (hhid, norm_name),
@@ -4178,8 +4199,8 @@ def nourish_create_logs_endpoint():
                     if chk_row:
                         catalog_id = int(chk_row["id"])
                         db.execute(
-                            "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW() WHERE id = ?",
-                            (catalog_id,),
+                            "UPDATE nourish_food_catalog SET usage_count = COALESCE(usage_count, 0) + 1, brand = CASE WHEN (brand IS NULL OR brand = '') THEN ? ELSE brand END, updated_at = NOW() WHERE id = ?",
+                            (brand, catalog_id),
                         )
                     else:
                         ins_cat_cur = db.execute(
@@ -4191,7 +4212,7 @@ def nourish_create_logs_endpoint():
                                 fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
                                 serving_label, serving_weight_g, is_liquid, prep_state, ai_verified, usage_count
                             ) VALUES (
-                                ?, ?, '', ?, 'household', FALSE,
+                                ?, ?, ?, ?, 'household', FALSE,
                                 ?, ?,
                                 ?, ?, ?, ?,
                                 ?, ?, ?,
@@ -4202,6 +4223,7 @@ def nourish_create_logs_endpoint():
                             (
                                 food_name,
                                 norm_name,
+                                brand,
                                 str(entry.get("category") or "Prepared Foods")[:80],
                                 uid,
                                 hhid,
@@ -4861,9 +4883,9 @@ def nourish_analyze_meal_endpoint():
             return jsonify({"ok": False, "error": "Meal description text is required"}), 400
 
         try:
-            limit = int(os.environ.get("NOURISH_AI_DAILY_LIMIT", "10"))
+            limit = int(os.environ.get("NOURISH_AI_DAILY_LIMIT", "8"))
         except (ValueError, TypeError):
-            limit = 10
+            limit = 8
 
         # Check user's daily usage count for today
         usage_cur = db.execute(
@@ -4879,6 +4901,12 @@ def nourish_analyze_meal_endpoint():
                 "error": f"Daily AI evaluation limit reached ({limit}/day). You can still log foods manually and AI will enrich them in the background.",
                 "limit_reached": True,
                 "daily_limit": limit,
+                "remaining_today": 0,
+                "ai_usage": {
+                    "used": curr_count,
+                    "limit": limit,
+                    "remaining": 0,
+                },
             }), 429
 
         from nourish_ai import analyze_natural_language_meal
@@ -4905,6 +4933,12 @@ def nourish_analyze_meal_endpoint():
             "ok": True,
             "plate_name": analysis.get("plate_name", ""),
             "remaining_today": remaining_today,
+            "daily_limit": limit,
+            "ai_usage": {
+                "used": new_count,
+                "limit": limit,
+                "remaining": remaining_today,
+            },
             **analysis,
         })
     except Exception as exc:

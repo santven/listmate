@@ -329,9 +329,12 @@ class InMemoryNourishDB:
 
         # 11. Catalog usage_count increment
         if "UPDATE nourish_food_catalog SET usage_count" in norm:
-            cid = int(params[0])
+            cid = int(params[-1])
             if cid in self.catalog:
                 self.catalog[cid]["usage_count"] = int(self.catalog[cid].get("usage_count") or 0) + 1
+                if len(params) > 1 and params[0]:
+                    if not self.catalog[cid].get("brand"):
+                        self.catalog[cid]["brand"] = str(params[0])
                 self.rowcount = 1
             return self
 
@@ -344,47 +347,63 @@ class InMemoryNourishDB:
             )
             if "ai_enriched" in norm:
                 # From enrich_pending_nourish_logs_batch
+                if len(params) >= 15:
+                    brand_val = str(params[2] or "")
+                    cat_val = params[3]
+                    offset = 1
+                else:
+                    brand_val = ""
+                    cat_val = params[2]
+                    offset = 0
                 payload = {
                     "name": params[0],
                     "normalized_name": params[1],
-                    "brand": "",
-                    "category": params[2],
+                    "brand": brand_val,
+                    "category": cat_val,
                     "source": "ai_enriched",
                     "is_public": True,
                     "household_id": None,
-                    "calories_per_100g": float(params[3]),
-                    "protein_per_100g": float(params[4]),
-                    "carbs_per_100g": float(params[5]),
-                    "fat_per_100g": float(params[6]),
-                    "fiber_per_100g": float(params[7]),
-                    "sugar_per_100g": float(params[8]),
-                    "sodium_mg_per_100g": float(params[9]),
-                    "serving_label": params[10],
-                    "serving_weight_g": float(params[11]),
-                    "is_liquid": bool(params[12]),
-                    "prep_state": params[13],
+                    "calories_per_100g": float(params[3 + offset]),
+                    "protein_per_100g": float(params[4 + offset]),
+                    "carbs_per_100g": float(params[5 + offset]),
+                    "fat_per_100g": float(params[6 + offset]),
+                    "fiber_per_100g": float(params[7 + offset]),
+                    "sugar_per_100g": float(params[8 + offset]),
+                    "sodium_mg_per_100g": float(params[9 + offset]),
+                    "serving_label": params[10 + offset],
+                    "serving_weight_g": float(params[11 + offset]),
+                    "is_liquid": bool(params[12 + offset]),
+                    "prep_state": params[13 + offset],
                     "ai_verified": True,
                 }
             elif "'household'" in norm:
                 # From api_nourish_logs and api_nourish_share_meal
+                if len(params) >= 15:
+                    brand_val = str(params[2] or "")
+                    cat_val = str(params[3])
+                    offset = 1
+                else:
+                    brand_val = ""
+                    cat_val = str(params[2])
+                    offset = 0
                 payload = {
                     "name": params[0],
                     "normalized_name": params[1],
-                    "brand": "",
-                    "category": str(params[2]),
+                    "brand": brand_val,
+                    "category": cat_val,
                     "source": "household",
                     "is_public": False,
-                    "created_by_user_id": int(params[3]),
-                    "household_id": int(params[4]),
-                    "calories_per_100g": float(params[5]),
-                    "protein_per_100g": float(params[6]),
-                    "carbs_per_100g": float(params[7]),
-                    "fat_per_100g": float(params[8]),
-                    "fiber_per_100g": float(params[9]),
-                    "sugar_per_100g": float(params[10]),
-                    "sodium_mg_per_100g": float(params[11]),
-                    "serving_label": params[12],
-                    "serving_weight_g": float(params[13]),
+                    "created_by_user_id": int(params[3 + offset]),
+                    "household_id": int(params[4 + offset]),
+                    "calories_per_100g": float(params[5 + offset]),
+                    "protein_per_100g": float(params[6 + offset]),
+                    "carbs_per_100g": float(params[7 + offset]),
+                    "fat_per_100g": float(params[8 + offset]),
+                    "fiber_per_100g": float(params[9 + offset]),
+                    "sugar_per_100g": float(params[10 + offset]),
+                    "sodium_mg_per_100g": float(params[11 + offset]),
+                    "serving_label": params[12 + offset],
+                    "serving_weight_g": float(params[13 + offset]),
                     "is_liquid": False,
                     "prep_state": "as_is",
                     "ai_verified": True,
@@ -2224,7 +2243,143 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertEqual(retained_log["meal_slot"], "Snack")
             self.assertEqual(retained_log["notes"], "Added some lemon dressing")
 
+    def test_26_branded_product_label_grounding_and_ai_usage_limit(self):
+        """
+        Issue #718: Branded Product Label AI Grounding & Describe Plate 8/Day Usage Limit.
+        - BRANDED_PRODUCTS_RULE constant defined in nourish_ai.py with EXACT LABEL MATCHING,
+          PACKAGE SERVING SIZE, and BRAND EXTRACTION.
+        - Fairlife nutrition plan chocolate heuristic lookup returns 150 kcal / 30g protein for 340ml bottle, brand='Fairlife'.
+        - analyze_natural_language_meal extracts 'brand' attribute.
+        - Default daily limit is 8 (when NOURISH_AI_DAILY_LIMIT not overridden).
+        - GET /api/nourish/day returns ai_usage: {"used": ..., "limit": 8, "remaining": ...}.
+        - POST /api/nourish/analyze-meal returns daily_limit: 8 and ai_usage block.
+        - POST /api/nourish/logs persists brand in household catalog upsert.
+        """
+        import nourish_ai
+
+        # 1. Verify BRANDED_PRODUCTS_RULE
+        self.assertTrue(hasattr(nourish_ai, "BRANDED_PRODUCTS_RULE"))
+        rule = nourish_ai.BRANDED_PRODUCTS_RULE
+        self.assertIn("EXACT LABEL MATCHING", rule)
+        self.assertIn("PACKAGE SERVING SIZE", rule)
+        self.assertIn("BRAND EXTRACTION", rule)
+        self.assertIn("Fairlife", rule)
+
+        # 2. Heuristic food lookup for Fairlife Nutrition Plan Chocolate
+        fl_info = nourish_ai._heuristic_food_nutrition("fairlife nutrition plan chocolate")
+        self.assertEqual(fl_info.get("brand"), "Fairlife")
+        self.assertEqual(fl_info.get("serving_weight_g"), 340.0)
+        self.assertIn("bottle", fl_info.get("serving_label", "").lower())
+        cal = round(fl_info["calories_per_100g"] * (fl_info["serving_weight_g"] / 100.0), 1)
+        prot = round(fl_info["protein_per_100g"] * (fl_info["serving_weight_g"] / 100.0), 1)
+        self.assertEqual(round(cal), 150)
+        self.assertEqual(round(prot), 30)
+
+        # 3. analyze_natural_language_meal heuristic parsing returns brand
+        heuristic_res = nourish_ai._parse_heuristic_meal_clauses("1 bottle Fairlife Nutrition Plan Chocolate")
+        self.assertTrue(len(heuristic_res) >= 1)
+        self.assertEqual(heuristic_res[0].get("brand"), "Fairlife")
+
+        # 4. GET /api/nourish/day returns ai_usage with limit 8
+        with self._context_patches(user_id=10, household_id=1):
+            day_res = self.client.get("/api/nourish/day?date=2026-10-20")
+            self.assertEqual(day_res.status_code, 200)
+            day_data = day_res.get_json()
+            self.assertIn("ai_usage", day_data)
+            self.assertEqual(day_data["ai_usage"]["limit"], 8)
+            self.assertEqual(day_data["ai_usage"]["used"], 0)
+            self.assertEqual(day_data["ai_usage"]["remaining"], 8)
+
+            # 5. POST /api/nourish/analyze-meal returns daily_limit 8 and ai_usage
+            mock_analysis = {
+                "plate_name": "Post-Workout Shake",
+                "items": [
+                    {
+                        "food_name": "Fairlife Nutrition Plan Chocolate",
+                        "brand": "Fairlife",
+                        "quantity": 1,
+                        "unit": "serving",
+                        "gram_weight": 340.0,
+                        "calories": 150.0,
+                        "protein_g": 30.0,
+                        "carbs_g": 4.0,
+                        "fat_g": 2.5,
+                        "fiber_g": 1.0,
+                        "sugar_g": 2.0,
+                        "sodium_mg": 230.0,
+                        "serving_label": "1 bottle (340ml)",
+                        "serving_weight_g": 340.0,
+                        "category": "Beverages & Shakes",
+                    }
+                ],
+            }
+            with patch("nourish_ai.analyze_natural_language_meal", return_value=mock_analysis):
+                res = self.client.post("/api/nourish/analyze-meal", json={"text": "1 bottle Fairlife Chocolate"})
+                self.assertEqual(res.status_code, 200)
+                body = res.get_json()
+                self.assertTrue(body["ok"])
+                self.assertEqual(body["daily_limit"], 8)
+                self.assertEqual(body["remaining_today"], 7)
+                self.assertIn("ai_usage", body)
+                self.assertEqual(body["ai_usage"]["used"], 1)
+                self.assertEqual(body["ai_usage"]["limit"], 8)
+                self.assertEqual(body["ai_usage"]["remaining"], 7)
+                self.assertEqual(body["items"][0].get("brand"), "Fairlife")
+
+            # Verify GET /api/nourish/day reflects the new usage
+            day_res2 = self.client.get("/api/nourish/day?date=2026-10-20")
+            self.assertEqual(day_res2.status_code, 200)
+            day_data2 = day_res2.get_json()
+            self.assertEqual(day_data2["ai_usage"]["used"], 1)
+            self.assertEqual(day_data2["ai_usage"]["remaining"], 7)
+
+            # 6. POST /api/nourish/logs preserves brand in catalog upsert
+            log_res = self.client.post(
+                "/api/nourish/logs",
+                json={
+                    "log_date": "2026-10-20",
+                    "meal_slot": "Snack",
+                    "food_name": "Fairlife Nutrition Plan Chocolate",
+                    "brand": "Fairlife",
+                    "quantity": 1,
+                    "unit": "serving",
+                    "gram_weight": 340.0,
+                    "calories": 150.0,
+                    "protein_g": 30.0,
+                    "carbs_g": 4.0,
+                    "fat_g": 2.5,
+                    "fiber_g": 1.0,
+                    "sugar_g": 2.0,
+                    "sodium_mg": 230.0,
+                    "category": "Beverages & Shakes",
+                },
+            )
+            self.assertEqual(log_res.status_code, 200)
+            log_body = log_res.get_json()
+            cat_id = log_body["log"]["catalog_id"]
+            self.assertIsNotNone(cat_id)
+            cat_entry = self.fake_db.catalog[cat_id]
+            self.assertEqual(cat_entry.get("brand"), "Fairlife")
+
+            # 7. Test reaching the 8/day limit returns 429 with correct ai_usage
+            # Simulate usage count = 8
+            today_str = datetime.date.today().isoformat()
+            self.fake_db.ai_usage[(10, today_str)] = 8
+
+            with patch("nourish_ai.analyze_natural_language_meal", return_value=mock_analysis):
+                limit_res = self.client.post("/api/nourish/analyze-meal", json={"text": "1 bottle Fairlife Chocolate"})
+                self.assertEqual(limit_res.status_code, 429)
+                limit_body = limit_res.get_json()
+                self.assertFalse(limit_body["ok"])
+                self.assertTrue(limit_body["limit_reached"])
+                self.assertEqual(limit_body["daily_limit"], 8)
+                self.assertEqual(limit_body["remaining_today"], 0)
+                self.assertEqual(limit_body["ai_usage"]["used"], 8)
+                self.assertEqual(limit_body["ai_usage"]["limit"], 8)
+                self.assertEqual(limit_body["ai_usage"]["remaining"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
