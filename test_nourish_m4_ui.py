@@ -203,6 +203,13 @@ class TestNourishM4UI(unittest.TestCase):
         self.assertIn('<option value="Dinner">🌙 Dinner</option>', self.html)
         self.assertIn('<option value="Snack">🍎 Snack</option>', self.html)
 
+        # 15. Describe Plate Daily Limit Indicator (Issue #718)
+        self.assertIn('id="nourishAiLimitBadge"', self.html)
+        self.assertIn('id="nourishAiRemainingText"', self.html)
+        self.assertIn('id="nourishAiLimitReachedBanner"', self.html)
+        self.assertIn("8 of 8 AI analyses remaining today", self.html)
+        self.assertIn("Daily AI Plate Limit Reached (8/8 used)", self.html)
+
     def test_nourish_deep_link_and_push_handlers_present(self):
         # Query parameter deep link handling
         self.assertIn("screenParam === 'nourish' || actionParam === 'open_nourish'", self.html)
@@ -270,6 +277,7 @@ const fns = [
   'quickAddNourishWater',
   'loadNourishDay',
   'renderNourishDay',
+  'updateNourishAiLimitUI',
   'renderNourishSlotSection',
   'deleteNourishLog',
   'openNourishEditModal',
@@ -374,6 +382,7 @@ const elementIds = [
   'nourishBtnStepMinus', 'nourishBtnStepPlus',
   'nourishPreviewBar', 'nourishBtnLog',
   'nourishDescribeInput', 'nourishBtnAnalyzePlate', 'nourishAnalyzeLoading', 'nourishParsedItems', 'nourishBtnLogAllPlate', 'nourishBtnLogPlateCombined', 'nourishPlateNameInput',
+  'nourishAiLimitBadge', 'nourishAiRemainingText', 'nourishAiLimitReachedBanner',
   'nourishDiaryContainer',
   'nourishDiarySection_breakfast', 'nourishSlotSubtotal_breakfast', 'nourishSlotItems_breakfast',
   'nourishDiarySection_lunch', 'nourishSlotSubtotal_lunch', 'nourishSlotItems_lunch',
@@ -1200,6 +1209,109 @@ eval(fns);
   if (toastMsg !== 'Portion updated.') {
     throw new Error('Expected toast "Portion updated.", got: ' + toastMsg);
   }
+
+  // 29. Issue #718: Describe Plate Daily Limit Indicator (8/Day) & Brand parameter
+  // Test renderNourishDay with remaining > 0
+  renderNourishDay({
+    totals: { calories: 0 },
+    goals: { calorie_target: 2000 },
+    logs: [],
+    ai_usage: { limit: 8, used: 3, remaining: 5 }
+  });
+  if (elements.nourishAiRemainingText.textContent !== '5 of 8 AI analyses remaining today') {
+    throw new Error('Expected 5 of 8 AI analyses remaining today, got: ' + elements.nourishAiRemainingText.textContent);
+  }
+  if (elements.nourishAiLimitReachedBanner.style.display !== 'none') {
+    throw new Error('Expected limit banner to be hidden when remaining > 0');
+  }
+  if (elements.nourishAiLimitBadge.style.background !== '#f0fdf4') {
+    throw new Error('Expected badge background #f0fdf4, got: ' + elements.nourishAiLimitBadge.style.background);
+  }
+  if (elements.nourishBtnAnalyzePlate.disabled !== false) {
+    throw new Error('Expected analyze button enabled when remaining > 0');
+  }
+
+  // Test renderNourishDay with remaining === 0
+  renderNourishDay({
+    totals: { calories: 0 },
+    goals: { calorie_target: 2000 },
+    logs: [],
+    ai_usage: { limit: 8, used: 8, remaining: 0 }
+  });
+  if (elements.nourishAiRemainingText.textContent !== '0 of 8 AI analyses remaining today') {
+    throw new Error('Expected 0 of 8 AI analyses remaining today, got: ' + elements.nourishAiRemainingText.textContent);
+  }
+  if (elements.nourishAiLimitReachedBanner.style.display !== 'block') {
+    throw new Error('Expected limit banner visible when remaining === 0');
+  }
+  if (elements.nourishAiLimitBadge.style.background !== '#fef3c7') {
+    throw new Error('Expected badge background #fef3c7, got: ' + elements.nourishAiLimitBadge.style.background);
+  }
+  if (elements.nourishBtnAnalyzePlate.disabled !== true) {
+    throw new Error('Expected analyze button disabled when remaining === 0');
+  }
+  if (!elements.nourishBtnAnalyzePlate.textContent.includes('Daily Limit Reached')) {
+    throw new Error('Expected analyze button text to indicate Daily Limit Reached');
+  }
+
+  // Test analyzeNourishPlate() 429 response reactive behavior
+  global.fetch = () => Promise.resolve({
+    status: 429,
+    json: () => Promise.resolve({ ok: false, error: 'Daily limit reached', limit_reached: true, daily_limit: 8 })
+  });
+  elements.nourishDescribeInput.value = 'Chana masala';
+  elements.nourishBtnAnalyzePlate.disabled = false;
+  await analyzeNourishPlate();
+  if (elements.nourishAiLimitReachedBanner.style.display !== 'block') {
+    throw new Error('Expected banner visible on 429 plate analysis');
+  }
+  if (elements.nourishAiRemainingText.textContent !== '0 of 8 AI analyses remaining today') {
+    throw new Error('Expected 0 of 8 text on 429, got: ' + elements.nourishAiRemainingText.textContent);
+  }
+
+  // Test analyzeNourishPlate() success with brand and remaining_today update
+  allFetchCalls.length = 0;
+  global.fetch = (url, opts) => {
+    const callObj = {
+      url: url,
+      opts: opts,
+      body: opts && opts.body ? JSON.parse(opts.body) : null
+    };
+    allFetchCalls.push(callObj);
+    if (url.includes('/api/nourish/analyze-meal')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({
+          ok: true,
+          plate_name: 'Protein Shake',
+          brand: 'Optimum Nutrition',
+          remaining_today: 4,
+          daily_limit: 8,
+          items: [
+            { food_name: 'Gold Standard Whey', brand: 'Optimum Nutrition', quantity: 1, unit: 'serving', calories: 120, protein_g: 24, carbs_g: 3, fat_g: 1, fiber_g: 0 }
+          ]
+        })
+      });
+    }
+    return Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ ok: true })
+    });
+  };
+  elements.nourishDescribeInput.value = '1 scoop whey protein';
+  elements.nourishBtnAnalyzePlate.disabled = false;
+  await analyzeNourishPlate();
+  if (elements.nourishAiRemainingText.textContent !== '4 of 8 AI analyses remaining today') {
+    throw new Error('Expected 4 of 8 text after analysis, got: ' + elements.nourishAiRemainingText.textContent);
+  }
+
+  // Log combined plate - verify brand passed in payload
+  allFetchCalls.length = 0;
+  await logAnalyzedPlateCombined();
+  const brandCombinedCall = allFetchCalls.find(c => c.url.includes('/api/nourish/logs') && c.body && c.body.items);
+  if (!brandCombinedCall || !brandCombinedCall.body.items[0] || brandCombinedCall.body.items[0].brand !== 'Optimum Nutrition') {
+    throw new Error('Expected combined plate item to include brand: "Optimum Nutrition"');
+  }
 })();
 """
         res = subprocess.run(
@@ -1234,6 +1346,16 @@ eval(fns);
         self.assertIn('<option value="Snack">🍎 Snack</option>', self.html)
         self.assertIn("meal_slot: selectedSlot", self.html)
         self.assertIn("✅ Moved to ", self.html)
+
+    def test_nourish_describe_ai_limit_elements_and_states(self):
+        """Issue #718: Verify Describe Plate daily limit indicator elements and logic."""
+        self.assertIn('id="nourishAiLimitBadge"', self.html)
+        self.assertIn('id="nourishAiRemainingText"', self.html)
+        self.assertIn('id="nourishAiLimitReachedBanner"', self.html)
+        self.assertIn("8 of 8 AI analyses remaining today", self.html)
+        self.assertIn("Daily AI Plate Limit Reached (8/8 used)", self.html)
+        self.assertIn("updateNourishAiLimitUI", self.html)
+        self.assertIn("window.updateNourishAiLimitUI = updateNourishAiLimitUI;", self.html)
 
 
 if __name__ == "__main__":
