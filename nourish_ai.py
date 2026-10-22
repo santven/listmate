@@ -82,8 +82,10 @@ def _get_gemini_models():
     return models
 
 
-def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 5):
-    """Calls Gemini using the Lite model fallback cascade and parses JSON response."""
+def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 5, attempt_timeouts: list = None):
+    """Calls Gemini using the Lite model fallback cascade and parses JSON response.
+    Supports multi-attempt progressive timeout escalation on-the-fly (e.g. 10s -> +15s -> +20s = 45s total).
+    """
     key = _discover_gemini_key()
     if not key:
         print("[NOURISH AI] Notice: No GEMINI_API_KEY found in environment or .env files. Skipping AI call.")
@@ -91,6 +93,9 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
 
     import time
     models_to_try = _get_gemini_models()
+    if not models_to_try:
+        models_to_try = ["gemini-3.1-flash-lite"]
+
     body = {
         "contents": [
             {
@@ -105,17 +110,13 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
         },
     }
 
-    start_time = time.time()
-    total_budget = min(float(timeout), 6.0)
+    # Progressive timeout escalation: Attempt 1 = 10s, Attempt 2 = 15s (cumulative 25s), Attempt 3 = 20s (cumulative 45s)
+    if attempt_timeouts is None:
+        attempt_timeouts = [10.0, 15.0, 20.0]
 
-    for model_name in models_to_try:
-        elapsed = time.time() - start_time
-        remaining = total_budget - elapsed
-        if remaining <= 0.8:
-            print(f"[NOURISH AI] Time budget exhausted ({elapsed:.2f}s). Skipping remaining models and falling back to heuristics.")
-            break
-
-        req_timeout = min(3.0, remaining)
+    for attempt_idx, req_timeout in enumerate(attempt_timeouts, 1):
+        model_name = models_to_try[(attempt_idx - 1) % len(models_to_try)]
+        attempt_start = time.time()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         req = urllib.request.Request(
             url,
@@ -141,11 +142,17 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
                             lines = lines[:-1]
                         text = "\n".join(lines).strip()
                     parsed = json.loads(text)
-                    print(f"[NOURISH AI] Model {model_name} succeeded in {time.time() - start_time:.2f}s.")
+                    print(f"[NOURISH AI] Attempt {attempt_idx} ({req_timeout}s) succeeded with model {model_name} in {time.time() - attempt_start:.2f}s.")
                     return parsed
         except Exception as exc:
-            print(f"[NOURISH AI ERROR] Call to {model_name} failed ({type(exc).__name__}): {exc}")
+            duration = time.time() - attempt_start
+            if attempt_idx < len(attempt_timeouts):
+                next_timeout = attempt_timeouts[attempt_idx]
+                print(f"[NOURISH AI RETRY] Attempt {attempt_idx} ({req_timeout}s, model: {model_name}) failed after {duration:.2f}s ({type(exc).__name__}: {exc}). Retrying Attempt {attempt_idx + 1} with {next_timeout}s timeout on-the-fly...")
+            else:
+                print(f"[NOURISH AI] All {len(attempt_timeouts)} attempts exhausted ({sum(attempt_timeouts):.0f}s total budget). Final error on {model_name}: {exc}")
             continue
+
     return None
 
 
@@ -971,10 +978,18 @@ def analyze_natural_language_meal(text_description: str):
     )
     parsed = None
     try:
-        parsed = _call_gemini_json(system_instruction, f"Deconstruct this meal:\n{desc}", temperature=0.2, timeout=5)
+        parsed = _call_gemini_json(
+            system_instruction,
+            f"Deconstruct this meal:\n{desc}",
+            temperature=0.2,
+            attempt_timeouts=[10.0, 15.0, 20.0],
+        )
     except Exception as exc:
         print(f"[NOURISH AI] Gemini call raised exception: {exc}. Falling back to heuristics.")
         parsed = None
+
+    gemini_succeeded = bool(isinstance(parsed, dict) and isinstance(parsed.get("items"), list) and parsed["items"])
+    timed_out = (parsed is None)
 
     plate_name = ""
     if isinstance(parsed, dict):
@@ -1044,7 +1059,13 @@ def analyze_natural_language_meal(text_description: str):
         "sugar_g": round(sum(i.get("sugar_g", 0.0) for i in items), 2),
         "sodium_mg": round(sum(i.get("sodium_mg", 0.0) for i in items), 2),
     }
-    return {"plate_name": plate_name, "items": items, "totals": totals}
+    return {
+        "plate_name": plate_name,
+        "items": items,
+        "totals": totals,
+        "gemini_succeeded": gemini_succeeded,
+        "timed_out": timed_out,
+    }
 
 
 def analyze_recipe_nutrition(name: str, servings: float, raw_ingredients_text: str):

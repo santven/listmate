@@ -4940,6 +4940,13 @@ def nourish_analyze_meal_endpoint():
                 },
             }), 429
 
+        meal_slot = str(data.get("meal_slot") or "").strip().lower()
+        if meal_slot not in ("breakfast", "lunch", "dinner", "snack"):
+            meal_slot = "dinner"
+        raw_date = data.get("log_date")
+        log_date_str = _parse_nourish_date(raw_date, default_date=user_today)
+        is_shared = bool(data.get("is_shared_household") or data.get("share_with_household") or False)
+
         from nourish_ai import analyze_natural_language_meal, _parse_heuristic_meal_clauses, derive_plate_name
 
         try:
@@ -4958,7 +4965,73 @@ def nourish_analyze_meal_endpoint():
                 "sugar_g": round(sum(i.get("sugar_g", 0.0) for i in items), 2),
                 "sodium_mg": round(sum(i.get("sodium_mg", 0.0) for i in items), 2),
             }
-            analysis = {"plate_name": plate_name, "items": items, "totals": totals}
+            analysis = {
+                "plate_name": plate_name,
+                "items": items,
+                "totals": totals,
+                "gemini_succeeded": False,
+                "timed_out": True,
+            }
+
+        # Check if all 3 AI attempts (10s + 15s + 20s = 45s) timed out or failed.
+        # If timed out, auto-log meal into DB for the selected meal slot & date with ai_enrich_status='pending'
+        # so the hourly cron can enrich it, and notify the user.
+        auto_logged = False
+        auto_log_id = None
+        user_message = None
+
+        if analysis.get("timed_out") or not analysis.get("gemini_succeeded"):
+            plate_name = (analysis.get("plate_name") or derive_plate_name(text, []) or "Meal Log").strip()
+            notes_text = f"Original description: {text}"[:500]
+
+            ins_cur = db.execute(
+                """
+                INSERT INTO nourish_food_logs (
+                    user_id, household_id, log_date, meal_slot, food_name,
+                    catalog_id, nourish_recipe_id, still_good_item_id,
+                    quantity, unit, gram_weight,
+                    calories, protein_g, carbs_g, fat_g, fiber_g, sugar_g, sodium_mg,
+                    ai_enrich_status, notes, is_shared_household
+                ) VALUES (
+                    ?, ?, ?::date, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?
+                )
+                RETURNING id, log_date, meal_slot, food_name, ai_enrich_status
+                """,
+                (
+                    uid,
+                    hhid,
+                    log_date_str,
+                    meal_slot,
+                    plate_name[:120],
+                    None,
+                    None,
+                    None,
+                    1.0,
+                    "serving",
+                    100.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    "pending",
+                    notes_text,
+                    is_shared,
+                ),
+            )
+            logged_row = ins_cur.fetchone() if ins_cur else None
+            auto_logged = True
+            auto_log_id = logged_row.get("id") if logged_row else None
+            user_message = (
+                "The AI model took longer to return nutrition. We've saved your meal to your diary, "
+                "and our AI will complete the nutritional breakdown within the hour."
+            )
 
         # Record / increment count in nourish_ai_usage
         inc_cur = db.execute(
@@ -4976,7 +5049,7 @@ def nourish_analyze_meal_endpoint():
         db.commit()
 
         remaining_today = max(0, limit - new_count)
-        return jsonify({
+        resp_payload = {
             "ok": True,
             "plate_name": analysis.get("plate_name", ""),
             "remaining_today": remaining_today,
@@ -4987,7 +5060,16 @@ def nourish_analyze_meal_endpoint():
                 "remaining": remaining_today,
             },
             **analysis,
-        })
+            "auto_logged": auto_logged,
+            "meal_slot": meal_slot,
+            "log_date": str(log_date_str),
+        }
+        if auto_logged:
+            resp_payload["message"] = user_message
+            if auto_log_id:
+                resp_payload["logged_item_id"] = auto_log_id
+
+        return jsonify(resp_payload)
     except Exception as exc:
         try: db.rollback()
         except Exception: pass

@@ -12051,10 +12051,17 @@ async function analyzeNourishPlate() {
   if (container) container.innerHTML = '';
 
   try {
+    var shareCb = document.getElementById('nourishDescribeShareHousehold');
+    var isShared = shareCb ? shareCb.checked : false;
     var resp = await fetch(API + '/nourish/analyze-meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({
+        text: text,
+        meal_slot: currentNourishSlot,
+        log_date: currentNourishDate,
+        is_shared_household: isShared
+      })
     });
     var is429 = resp.status === 429;
     var res = await resp.json().catch(function() { return {}; });
@@ -12076,6 +12083,23 @@ async function analyzeNourishPlate() {
     }
 
     if (btn) btn.disabled = false;
+
+    if (res && res.ok && res.auto_logged) {
+      var slotTitle = (res.meal_slot || currentNourishSlot).charAt(0).toUpperCase() + (res.meal_slot || currentNourishSlot).slice(1);
+      var msg = res.message || 'The AI model took longer to return nutrition. We’ve saved your meal, and our AI will complete the breakdown within the hour.';
+      if (typeof toast === 'function') toast('⏳ Saved to ' + slotTitle + '! AI refining within the hour.');
+      var descInput = document.getElementById('nourishDescribeInput');
+      if (descInput) descInput.value = '';
+      if (container) {
+        container.innerHTML = '<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px; margin-top:10px; color:#1e40af; font-size:13px; line-height:1.45;">' +
+          '<div style="font-weight:700; margin-bottom:4px;">⏳ Meal Saved to ' + escapeHtml(slotTitle) + '!</div>' +
+          escapeHtml(msg) + '<br><br>' +
+          '<i>Your meal is safely logged to your diary with <b>✨ AI Estimating</b>. Check back in ~1 hr!</i>' +
+        '</div>';
+      }
+      loadNourishDay(currentNourishDate);
+      return;
+    }
 
     if (res && res.ok && Array.isArray(res.items) && res.items.length > 0) {
       window._lastNourishAnalyzedItems = res.items;

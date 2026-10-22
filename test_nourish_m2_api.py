@@ -2409,8 +2409,95 @@ class TestNourishM2APIAndCron(unittest.TestCase):
                     self.assertTrue(data["totals"]["calories"] > 0)
                     self.assertIn("Dosas", data["plate_name"])
 
+    def test_27_adaptive_timeout_progressive_escalation_and_db_autolog(self):
+        """
+        Verify adaptive timeout escalation (Attempt 1: 10s, Attempt 2: 15s, Attempt 3: 20s = 45s total).
+        If all 3 attempts fail/timeout, auto-log meal in DB for selected meal_slot & date with 'pending',
+        and let the hourly cron enrich it in the background.
+        """
+        import io
+        import socket
+        import nourish_ai
+
+        # 1. Test progressive retry on-the-fly in _call_gemini_json
+        call_count = 0
+        def fake_urlopen_retry(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise socket.timeout("Attempt 1 timed out (10s)")
+            # Attempt 2 succeeds
+            mock_body = json.dumps({
+                "candidates": [{
+                    "content": {
+                        "parts": [{"text": json.dumps({"plate_name": "Chicken Burrito Bowl", "items": [{"food_name": "Chicken", "calories_per_100g": 165.0, "quantity": 1, "unit": "serving"}]})}]
+                    }
+                }]
+            }).encode("utf-8")
+            resp_obj = io.BytesIO(mock_body)
+            resp_obj.read = lambda: mock_body
+            return resp_obj
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen_retry):
+            with patch("nourish_ai._discover_gemini_key", return_value="fake-gemini-key"):
+                res = nourish_ai._call_gemini_json("sys", "prompt", attempt_timeouts=[0.01, 0.02, 0.03])
+                self.assertIsNotNone(res)
+                self.assertEqual(call_count, 2)
+                self.assertEqual(res.get("plate_name"), "Chicken Burrito Bowl")
+
+        # 2. Test full timeout across all 3 attempts returns None
+        all_timeout_count = 0
+        def fake_urlopen_all_timeout(req, timeout=None):
+            nonlocal all_timeout_count
+            all_timeout_count += 1
+            raise socket.timeout("Socket timed out")
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen_all_timeout):
+            with patch("nourish_ai._discover_gemini_key", return_value="fake-gemini-key"):
+                res_none = nourish_ai._call_gemini_json("sys", "prompt", attempt_timeouts=[0.01, 0.02, 0.03])
+                self.assertIsNone(res_none)
+                self.assertEqual(all_timeout_count, 3)
+
+        # 3. Test POST /api/nourish/analyze-meal auto-logs to DB when all 3 attempts time out
+        with self._context_patches(user_id=10, household_id=1):
+            with patch("nourish_ai._call_gemini_json", return_value=None):
+                resp = self.client.post("/api/nourish/analyze-meal", json={
+                    "text": "Chicken burrito bowl with brown rice, black beans, and salsa",
+                    "meal_slot": "lunch",
+                    "log_date": "2026-10-22",
+                    "is_shared_household": False
+                })
+                self.assertEqual(resp.status_code, 200)
+                data = resp.get_json()
+                self.assertTrue(data.get("ok"))
+                self.assertTrue(data.get("auto_logged"))
+                self.assertTrue(data.get("timed_out"))
+                self.assertEqual(data.get("meal_slot"), "lunch")
+                self.assertEqual(data.get("log_date"), "2026-10-22")
+                self.assertIn("AI model took longer to return nutrition", data.get("message", ""))
+                self.assertIn("within the hour", data.get("message", ""))
+
+                # Verify entry was auto-logged in fake_db
+                logged_item_id = data.get("logged_item_id")
+                self.assertIsNotNone(logged_item_id)
+                db_row = self.fake_db.logs.get(logged_item_id)
+                self.assertIsNotNone(db_row)
+                self.assertEqual(db_row.get("meal_slot"), "lunch")
+                self.assertEqual(db_row.get("log_date"), "2026-10-22")
+                self.assertEqual(db_row.get("ai_enrich_status"), "pending")
+                self.assertIn("Chicken Burrito Bowl", db_row.get("food_name"))
+
+                # 4. Verify hourly cron batch enrichment enriches this auto-logged item
+                enrich_res = nourish_ai.enrich_pending_nourish_logs_batch(db=self.fake_db)
+                self.assertTrue(enrich_res.get("ok"))
+                self.assertGreater(enrich_res.get("enriched"), 0)
+                # Now the row should be complete!
+                self.assertEqual(db_row.get("ai_enrich_status"), "complete")
+                self.assertGreater(db_row.get("calories"), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
