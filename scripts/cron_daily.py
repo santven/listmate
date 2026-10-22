@@ -513,7 +513,7 @@ def run_cron(dry_run=False, mock_now=None):
     # --- 1. Expirations (Transactional: Sent to all expiring households with untracked status) ---
     print("Fetching Expirations...")
     query_expirations = """
-    SELECT DISTINCT ON (h.id) 
+    SELECT 
         h.id as household_id, 
         h.name as household_name, 
         u.id as user_id, 
@@ -527,12 +527,8 @@ def run_cron(dry_run=False, mock_now=None):
         h.trial_ext_15d_claimed_at,
         h.trial_ext_7d_claimed_at
     FROM auth_households h
-    JOIN auth_users u ON u.id = COALESCE(
-        h.owner_id, 
-        (SELECT ahm2.user_id FROM auth_household_members ahm2 WHERE ahm2.household_id = h.id ORDER BY (CASE WHEN ahm2.role = 'owner' THEN 0 ELSE 1 END), ahm2.joined_at ASC LIMIT 1), 
-        (SELECT u2.id FROM auth_users u2 WHERE u2.household_id = h.id ORDER BY u2.id ASC LIMIT 1)
-    )
-    LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
+    JOIN auth_household_members ahm ON ahm.household_id = h.id
+    JOIN auth_users u ON u.id = ahm.user_id
     WHERE 
         NOT EXISTS (
             SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
@@ -542,6 +538,7 @@ def run_cron(dry_run=False, mock_now=None):
                 (DATE(h.trial_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
                     SELECT 1 FROM email_events ee 
                     WHERE ee.household_id = h.id 
+                      AND LOWER(ee.email) = LOWER(u.email)
                       AND ee.campaign = 'trial_exp_3days' 
                       AND ee.event_type = 'sent'
                       AND ee.created_at >= NOW() - INTERVAL '14 days'
@@ -550,6 +547,7 @@ def run_cron(dry_run=False, mock_now=None):
                 (DATE(h.trial_ends_at) = CURRENT_DATE AND NOT EXISTS (
                     SELECT 1 FROM email_events ee 
                     WHERE ee.household_id = h.id 
+                      AND LOWER(ee.email) = LOWER(u.email)
                       AND ee.campaign = 'trial_exp_today' 
                       AND ee.event_type = 'sent'
                       AND ee.created_at >= NOW() - INTERVAL '14 days'
@@ -560,6 +558,7 @@ def run_cron(dry_run=False, mock_now=None):
                 (DATE(h.subscription_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
                     SELECT 1 FROM email_events ee 
                     WHERE ee.household_id = h.id 
+                      AND LOWER(ee.email) = LOWER(u.email)
                       AND ee.campaign = 'sub_exp_3days' 
                       AND ee.event_type = 'sent'
                       AND ee.created_at >= NOW() - INTERVAL '14 days'
@@ -568,6 +567,7 @@ def run_cron(dry_run=False, mock_now=None):
                 (DATE(h.subscription_ends_at) = CURRENT_DATE AND NOT EXISTS (
                     SELECT 1 FROM email_events ee 
                     WHERE ee.household_id = h.id 
+                      AND LOWER(ee.email) = LOWER(u.email)
                       AND ee.campaign = 'sub_exp_today' 
                       AND ee.event_type = 'sent'
                       AND ee.created_at >= NOW() - INTERVAL '14 days'
