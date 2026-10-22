@@ -4940,9 +4940,25 @@ def nourish_analyze_meal_endpoint():
                 },
             }), 429
 
-        from nourish_ai import analyze_natural_language_meal
+        from nourish_ai import analyze_natural_language_meal, _parse_heuristic_meal_clauses, derive_plate_name
 
-        analysis = analyze_natural_language_meal(text)
+        try:
+            analysis = analyze_natural_language_meal(text)
+        except Exception as err:
+            print(f"[/api/nourish/analyze-meal] Error in analyze_natural_language_meal: {err}. Using heuristic fallback.")
+            heuristic_res = _parse_heuristic_meal_clauses(text)
+            items = list(heuristic_res)
+            plate_name = getattr(heuristic_res, "plate_name", "") or derive_plate_name(text, items)
+            totals = {
+                "calories": round(sum(i["calories"] for i in items), 2),
+                "protein_g": round(sum(i["protein_g"] for i in items), 2),
+                "carbs_g": round(sum(i["carbs_g"] for i in items), 2),
+                "fat_g": round(sum(i["fat_g"] for i in items), 2),
+                "fiber_g": round(sum(i["fiber_g"] for i in items), 2),
+                "sugar_g": round(sum(i.get("sugar_g", 0.0) for i in items), 2),
+                "sodium_mg": round(sum(i.get("sodium_mg", 0.0) for i in items), 2),
+            }
+            analysis = {"plate_name": plate_name, "items": items, "totals": totals}
 
         # Record / increment count in nourish_ai_usage
         inc_cur = db.execute(

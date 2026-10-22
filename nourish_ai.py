@@ -67,7 +67,7 @@ def _get_gemini_models():
     """Returns the Gemini Lite fallback cascade with resilient production fallbacks."""
     raw_models = os.environ.get(
         "GEMINI_MODEL_NAME",
-        "gemini-2.5-flash-lite,gemini-2.0-flash,gemini-flash-latest,gemini-1.5-flash",
+        "gemini-3.8-flash,gemini-3-flash-preview,gemini-3.1-flash-lite-preview,gemini-flash-latest,gemini-2.0-flash",
     )
     models_to_try = []
     for m in raw_models.split(","):
@@ -78,19 +78,18 @@ def _get_gemini_models():
             models_to_try.append(clean_m)
 
     for fallback in [
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
+        "gemini-3.8-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-flash-latest",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-2.0-flash",
     ]:
         if fallback not in models_to_try:
             models_to_try.append(fallback)
     return models_to_try
 
 
-def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 30):
+def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 5):
     """Calls Gemini using the Lite model fallback cascade and parses JSON response."""
     key = _discover_gemini_key()
     if not key:
@@ -113,7 +112,17 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
         },
     }
 
+    start_time = time.time()
+    total_budget = min(float(timeout), 6.0)
+
     for model_name in models_to_try:
+        elapsed = time.time() - start_time
+        remaining = total_budget - elapsed
+        if remaining <= 0.8:
+            print(f"[NOURISH AI] Time budget exhausted ({elapsed:.2f}s). Skipping remaining models and falling back to heuristics.")
+            break
+
+        req_timeout = min(3.0, remaining)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         req = urllib.request.Request(
             url,
@@ -125,7 +134,7 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
             },
         )
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.urlopen(req, timeout=req_timeout) as resp:
                 raw = resp.read().decode("utf-8")
                 data = json.loads(raw)
                 candidates = data.get("candidates", [])
@@ -139,12 +148,10 @@ def _call_gemini_json(system_instruction: str, prompt: str, temperature: float =
                             lines = lines[:-1]
                         text = "\n".join(lines).strip()
                     parsed = json.loads(text)
-                    print(f"[NOURISH AI] Model {model_name} succeeded.")
+                    print(f"[NOURISH AI] Model {model_name} succeeded in {time.time() - start_time:.2f}s.")
                     return parsed
         except Exception as exc:
-            print(f"[NOURISH AI ERROR] Call to {model_name} failed: {exc}")
-            if "503" in str(exc):
-                time.sleep(0.5)
+            print(f"[NOURISH AI ERROR] Call to {model_name} failed ({type(exc).__name__}): {exc}")
             continue
     return None
 
@@ -969,7 +976,12 @@ def analyze_natural_language_meal(text_description: str):
         "calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, "
         "sugar_per_100g, sodium_mg_per_100g, serving_weight_g, serving_label, category."
     )
-    parsed = _call_gemini_json(system_instruction, f"Deconstruct this meal:\n{desc}", temperature=0.2)
+    parsed = None
+    try:
+        parsed = _call_gemini_json(system_instruction, f"Deconstruct this meal:\n{desc}", temperature=0.2, timeout=5)
+    except Exception as exc:
+        print(f"[NOURISH AI] Gemini call raised exception: {exc}. Falling back to heuristics.")
+        parsed = None
 
     plate_name = ""
     if isinstance(parsed, dict):

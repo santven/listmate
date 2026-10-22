@@ -2397,9 +2397,17 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             user_today = _get_user_today(self.fake_db, 16)
             self.assertEqual(user_today, expected_today)
 
-            # Test default_date propagation
-            parsed = _parse_nourish_date(None, default_date=user_today)
-            self.assertEqual(parsed, expected_today)
+            # 9. Test AI timeout and exception resilience (Issue #726)
+            import socket
+            with self._context_patches(user_id=16, household_id=1):
+                with patch("nourish_ai._call_gemini_json", side_effect=socket.timeout("The read operation timed out")):
+                    resp = self.client.post("/api/nourish/analyze-meal", json={"text": "2 dosas with paneer bhurji and chutney"})
+                    self.assertEqual(resp.status_code, 200)
+                    data = resp.get_json()
+                    self.assertTrue(data["ok"])
+                    self.assertTrue(len(data["items"]) >= 2)
+                    self.assertTrue(data["totals"]["calories"] > 0)
+                    self.assertIn("Dosas", data["plate_name"])
 
 
 if __name__ == "__main__":

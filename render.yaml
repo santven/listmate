@@ -3,7 +3,7 @@ services:
     name: listmate-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     repo: https://github.com/santven/listmate
     branch: main
     envVars:
