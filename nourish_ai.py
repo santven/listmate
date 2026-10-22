@@ -64,29 +64,22 @@ def _discover_gemini_key():
 
 
 def _get_gemini_models():
-    """Returns the Gemini Lite fallback cascade with resilient production fallbacks."""
+    """
+    Returns ONLY flash-lite Gemini models as strictly specified by GEMINI_MODEL_NAME.
+    Never uses full flash, flash-preview, or pro models.
+    """
     raw_models = os.environ.get(
         "GEMINI_MODEL_NAME",
-        "gemini-3.8-flash,gemini-3-flash-preview,gemini-3.1-flash-lite-preview,gemini-flash-latest,gemini-2.0-flash",
+        "gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-2.5-flash-lite,gemini-2.0-flash-lite",
     )
-    models_to_try = []
+    models = []
     for m in raw_models.split(","):
         clean_m = m.strip().strip("'").strip('"')
         if clean_m.startswith("models/"):
             clean_m = clean_m[len("models/"):]
-        if clean_m and clean_m not in models_to_try:
-            models_to_try.append(clean_m)
-
-    for fallback in [
-        "gemini-3.8-flash",
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
-    ]:
-        if fallback not in models_to_try:
-            models_to_try.append(fallback)
-    return models_to_try
+        if clean_m and clean_m not in models:
+            models.append(clean_m)
+    return models
 
 
 def _call_gemini_json(system_instruction: str, prompt: str, temperature: float = 0.2, timeout: int = 5):
