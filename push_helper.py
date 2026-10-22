@@ -689,6 +689,7 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
                       WHERE pnl.target_type = 'user' 
                         AND pnl.target_id = u.id 
                         AND pnl.custom_data->>'campaign' = 'trial_72h'
+                        AND pnl.created_at >= NOW() - INTERVAL '14 days'
                   )
               )
               OR
@@ -702,6 +703,7 @@ def check_trial_expiration_pushes(target_hour=8, dry_run=False, force_send=False
                       WHERE pnl.target_type = 'user' 
                         AND pnl.target_id = u.id 
                         AND pnl.custom_data->>'campaign' = 'trial_24h'
+                        AND pnl.created_at >= NOW() - INTERVAL '14 days'
                   )
               )
           )

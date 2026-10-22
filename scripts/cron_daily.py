@@ -540,21 +540,37 @@ def run_cron(dry_run=False, mock_now=None):
         AND (
             (h.subscription_status = 'trial' AND (
                 (DATE(h.trial_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
-                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_exp_3days' AND ee.event_type = 'sent'
+                    SELECT 1 FROM email_events ee 
+                    WHERE ee.household_id = h.id 
+                      AND ee.campaign = 'trial_exp_3days' 
+                      AND ee.event_type = 'sent'
+                      AND ee.created_at >= NOW() - INTERVAL '14 days'
                 ))
                 OR
                 (DATE(h.trial_ends_at) = CURRENT_DATE AND NOT EXISTS (
-                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'trial_exp_today' AND ee.event_type = 'sent'
+                    SELECT 1 FROM email_events ee 
+                    WHERE ee.household_id = h.id 
+                      AND ee.campaign = 'trial_exp_today' 
+                      AND ee.event_type = 'sent'
+                      AND ee.created_at >= NOW() - INTERVAL '14 days'
                 ))
             ))
             OR
             (h.subscription_status IN ('premium', 'active') AND h.subscription_ends_at IS NOT NULL AND (
                 (DATE(h.subscription_ends_at) = CURRENT_DATE + INTERVAL '3 days' AND NOT EXISTS (
-                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'sub_exp_3days' AND ee.event_type = 'sent'
+                    SELECT 1 FROM email_events ee 
+                    WHERE ee.household_id = h.id 
+                      AND ee.campaign = 'sub_exp_3days' 
+                      AND ee.event_type = 'sent'
+                      AND ee.created_at >= NOW() - INTERVAL '14 days'
                 ))
                 OR
                 (DATE(h.subscription_ends_at) = CURRENT_DATE AND NOT EXISTS (
-                    SELECT 1 FROM email_events ee WHERE ee.household_id = h.id AND ee.campaign = 'sub_exp_today' AND ee.event_type = 'sent'
+                    SELECT 1 FROM email_events ee 
+                    WHERE ee.household_id = h.id 
+                      AND ee.campaign = 'sub_exp_today' 
+                      AND ee.event_type = 'sent'
+                      AND ee.created_at >= NOW() - INTERVAL '14 days'
                 ))
             ))
         )
