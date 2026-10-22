@@ -611,21 +611,73 @@
     </div>
   </div>
 
-  <!-- Marketing Emails -->
+  <!-- Email Notifications & Preferences -->
   <div class="card">
-    <h2>📧 Marketing Emails</h2>
-    <p class="note" style="margin-bottom:12px;">Receive occasional product updates, helpful tips, and smart grocery reminders.</p>
-    <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
-      <div style="flex:1; padding-right:12px;">
-        <div style="font-weight:600; font-size:14px; color:#1f2937;">Send tips, reminders, and updates</div>
-        <div id="marketingStatusText" style="font-size:12px; color:#6b7280; margin-top:2px;">Subscribed to tips, reminders, and updates.</div>
+    <h2>📧 Email Preferences</h2>
+    <p class="note" style="margin-bottom:14px;">Choose exactly which emails you receive from ListMate. Changes apply across your household profile.</p>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <!-- Household Activity -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+        <div style="flex:1; padding-right:12px;">
+          <div style="font-weight:600; font-size:14px; color:#1f2937;">🛒 Household Activity</div>
+          <div style="font-size:12px; color:#6b7280; margin-top:2px;">Shopping trip completions, household invites, and partner alerts.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="emailPref_household_activity" onchange="saveEmailPreference('household_activity')">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
-      <label class="toggle-switch">
-        <input type="checkbox" id="marketingOptInSetting" onchange="saveMarketingOptIn()">
-        <span class="toggle-slider"></span>
-      </label>
+
+      <!-- Shopping & Store Plans -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+        <div style="flex:1; padding-right:12px;">
+          <div style="font-weight:600; font-size:14px; color:#1f2937;">📋 Shopping & Store Plans</div>
+          <div style="font-size:12px; color:#6b7280; margin-top:2px;">Reminders when an unplanned store accumulates grocery items.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="emailPref_shopping_reminders" onchange="saveEmailPreference('shopping_reminders')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Account & Subscription -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+        <div style="flex:1; padding-right:12px;">
+          <div style="font-weight:600; font-size:14px; color:#1f2937;">💳 Account & Subscription</div>
+          <div style="font-size:12px; color:#6b7280; margin-top:2px;">Trial expiration countdowns, renewal notices, and extension passes.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="emailPref_billing_account" onchange="saveEmailPreference('billing_account')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Product Updates -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+        <div style="flex:1; padding-right:12px;">
+          <div style="font-weight:600; font-size:14px; color:#1f2937;">🚀 Product & Feature Updates</div>
+          <div style="font-size:12px; color:#6b7280; margin-top:2px;">New feature launches (Still Good, Nourish), app updates, and resolved feedback.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="emailPref_product_updates" onchange="saveEmailPreference('product_updates')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Tips & Coaching -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#f9fafb; padding:12px 14px; border-radius:10px; border:1px solid #e5e7eb;">
+        <div style="flex:1; padding-right:12px;">
+          <div style="font-weight:600; font-size:14px; color:#1f2937;">💡 Tips & Household Coaching</div>
+          <div style="font-size:12px; color:#6b7280; margin-top:2px;">Smart setup suggestions, periodic check-ins, and dormant item reminders.</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="emailPref_tips_reengagement" onchange="saveEmailPreference('tips_reengagement')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
     </div>
-    <div class="success" id="marketingSuccess" style="margin-top:8px;"></div>
+    <div class="success" id="emailPrefSuccess" style="margin-top:10px; display:none;">✓ Email preferences updated.</div>
   </div>
 
   <!-- Danger Zone: Account Deletion -->
@@ -712,16 +764,8 @@ var householdData = null;
     }
   }
 
-  // Load household data
-  const marketingCb = document.getElementById('marketingOptInSetting');
-  const marketingStatus = document.getElementById('marketingStatusText');
-  if (marketingCb && window.currentCfg && window.currentCfg.user_info) {
-    const isOptedIn = window.currentCfg.user_info.marketing_opt_in !== false;
-    marketingCb.checked = isOptedIn;
-    if (marketingStatus) {
-      marketingStatus.textContent = isOptedIn ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
-    }
-  }
+  // Load email preferences
+  loadEmailPreferences();
 
   if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
     window.Capacitor.Plugins.App.addListener('appUrlOpen', function(data) {
@@ -1009,42 +1053,65 @@ function checkUrlActions() {
 }
 
 
-async function saveMarketingOptIn() {
-  const cb = document.getElementById('marketingOptInSetting');
-  const msg = document.getElementById('marketingSuccess');
-  const statusText = document.getElementById('marketingStatusText');
-  if (!cb) return;
-  msg.style.display = 'none';
-  if (statusText) {
-    statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
-  }
+const EMAIL_PREF_KEYS = [
+  'household_activity',
+  'shopping_reminders',
+  'billing_account',
+  'product_updates',
+  'tips_reengagement'
+];
+
+async function loadEmailPreferences() {
   try {
-    const res = await fetch('/api/auth/marketing', {
+    const res = await fetch('/api/user/email-preferences');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.ok && data.preferences) {
+      const p = data.preferences;
+      EMAIL_PREF_KEYS.forEach(k => {
+        const el = document.getElementById('emailPref_' + k);
+        if (el) {
+          el.checked = (p[k] !== false && !p.unsubscribed_all);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('Could not load email preferences:', err);
+  }
+}
+
+async function saveEmailPreference(catKey) {
+  const succMsg = document.getElementById('emailPrefSuccess');
+  if (succMsg) succMsg.style.display = 'none';
+
+  const payload = {};
+  EMAIL_PREF_KEYS.forEach(k => {
+    const el = document.getElementById('emailPref_' + k);
+    if (el) payload[k] = el.checked;
+  });
+  payload.unsubscribed_all = false;
+
+  try {
+    const res = await fetch('/api/user/email-preferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketing_opt_in: cb.checked })
+      body: JSON.stringify({ preferences: payload })
     });
     if (res.ok) {
-      msg.textContent = 'Settings saved.';
-      msg.style.display = 'block';
-      setTimeout(() => msg.style.display = 'none', 3000);
-      if (window.currentCfg && window.currentCfg.user_info) {
-          window.currentCfg.user_info.marketing_opt_in = cb.checked;
+      if (succMsg) {
+        succMsg.style.display = 'block';
+        setTimeout(() => { succMsg.style.display = 'none'; }, 3000);
       }
     } else {
-      const data = await res.json();
-      alert(data.error || 'Failed to save settings');
-      cb.checked = !cb.checked;
-      if (statusText) {
-        statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
-      }
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Failed to save email preferences.');
+      const el = document.getElementById('emailPref_' + catKey);
+      if (el) el.checked = !el.checked;
     }
-  } catch(e) {
-    alert('Network error');
-    cb.checked = !cb.checked;
-    if (statusText) {
-      statusText.textContent = cb.checked ? 'Subscribed to tips, reminders, and updates.' : 'Marketing emails paused.';
-    }
+  } catch (err) {
+    alert('Network error updating email preferences.');
+    const el = document.getElementById('emailPref_' + catKey);
+    if (el) el.checked = !el.checked;
   }
 }
 
