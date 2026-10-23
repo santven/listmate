@@ -589,6 +589,14 @@ class InMemoryNourishDB:
             self.rowcount = 1
             return self
 
+        # 17b. Total logs count query for GET /api/nourish/user/nourish-enabled
+        if "COUNT(*)" in norm and "nourish_food_logs" in norm and "user_id = ?" in norm:
+            uid = int(params[0])
+            total = sum(1 for r in self.logs.values() if int(r.get("user_id", 0)) == uid)
+            self._result_rows = [{"total": total, "count": total}]
+            self.rowcount = 1
+            return self
+
         if "SELECT name FROM auth_users WHERE id = ?" in norm:
             uid = int(params[0])
             user_data = self.users.get(uid, {"name": f"User {uid}"})
@@ -1228,20 +1236,26 @@ class TestNourishM2APIAndCron(unittest.TestCase):
 
     def test_11_user_nourish_enabled_and_household_sharing(self):
         """Tests per-user nourish enable/disable toggle, opt-in meal sharing, auto-cataloging, and shared-meals drawer endpoint."""
-        # 1. Default nourish_enabled is False
+        # 1. Default nourish_enabled is False, has_logged_meals is False, total_logs is 0
         with self._context_patches(user_id=10, household_id=1):
             res = self.client.get("/api/user/nourish-enabled")
             self.assertEqual(res.status_code, 200)
-            self.assertFalse(res.get_json()["enabled"])
+            data1 = res.get_json()
+            self.assertFalse(data1["enabled"])
+            self.assertFalse(data1["has_logged_meals"])
+            self.assertEqual(data1["total_logs"], 0)
 
             # 2. Toggle nourish_enabled to True for User 10
             post_res = self.client.post("/api/user/nourish-enabled", json={"enabled": True})
             self.assertEqual(post_res.status_code, 200)
             self.assertTrue(post_res.get_json()["enabled"])
 
-            # Verify GET now returns True
+            # Verify GET now returns True, still no meals logged
             res2 = self.client.get("/api/user/nourish-enabled")
-            self.assertTrue(res2.get_json()["enabled"])
+            data2 = res2.get_json()
+            self.assertTrue(data2["enabled"])
+            self.assertFalse(data2["has_logged_meals"])
+            self.assertEqual(data2["total_logs"], 0)
 
             # 3. User 10 logs a shared meal (Dinner: 3 Dosa + Paneer Burji)
             log_res = self.client.post(
@@ -1279,8 +1293,23 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             self.assertEqual(log_res.status_code, 200)
             self.assertTrue(log_res.get_json()["ok"])
 
-        # 4. User 11 (in same household 1) has Nourish DISABLED -> shared meals endpoint returns empty
+            # Verify GET /api/nourish/user/nourish-enabled now reflects logged meals
+            res3 = self.client.get("/api/nourish/user/nourish-enabled")
+            self.assertEqual(res3.status_code, 200)
+            data3 = res3.get_json()
+            self.assertTrue(data3["enabled"])
+            self.assertTrue(data3["has_logged_meals"])
+            self.assertEqual(data3["total_logs"], 2)
+
+        # 4. User 11 (in same household 1) has Nourish DISABLED and has NOT logged meals
         with self._context_patches(user_id=11, household_id=1):
+            res_u11 = self.client.get("/api/user/nourish-enabled")
+            self.assertEqual(res_u11.status_code, 200)
+            data_u11 = res_u11.get_json()
+            self.assertFalse(data_u11["enabled"])
+            self.assertFalse(data_u11["has_logged_meals"])
+            self.assertEqual(data_u11["total_logs"], 0)
+
             shared_res_dis = self.client.get("/api/nourish/household/shared-meals?date=2026-10-19")
             self.assertEqual(shared_res_dis.status_code, 200)
             # Must return empty list so bottom drawer NEVER shows for users who disabled Nourish
@@ -1469,6 +1498,36 @@ class TestNourishM2APIAndCron(unittest.TestCase):
             res3 = self.client.post("/api/nourish/user/nourish-enabled", json={"enabled": 0})
             self.assertEqual(res3.status_code, 200)
             self.assertFalse(res3.get_json()["enabled"])
+
+            # Test GET /api/nourish/user/nourish-enabled returns has_logged_meals and total_logs
+            get_res = self.client.get("/api/nourish/user/nourish-enabled")
+            self.assertEqual(get_res.status_code, 200)
+            data = get_res.get_json()
+            self.assertIn("has_logged_meals", data)
+            self.assertIn("total_logs", data)
+            self.assertIsInstance(data["has_logged_meals"], bool)
+            self.assertIsInstance(data["total_logs"], int)
+
+    def test_15b_user_nourish_enabled_safe_error_handling(self):
+        """Verify GET /api/nourish/user/nourish-enabled returns has_logged_meals=False, total_logs=0 if count query fails."""
+        with self._context_patches(user_id=10, household_id=1):
+            original_execute = self.fake_db.execute
+
+            def failing_execute(sql, params=None):
+                if "COUNT(*)" in sql and "nourish_food_logs" in sql:
+                    raise Exception("Table nourish_food_logs does not exist (simulated)")
+                return original_execute(sql, params)
+
+            self.fake_db.execute = failing_execute
+            try:
+                res = self.client.get("/api/nourish/user/nourish-enabled")
+                self.assertEqual(res.status_code, 200)
+                data = res.get_json()
+                self.assertTrue(data["ok"])
+                self.assertFalse(data["has_logged_meals"])
+                self.assertEqual(data["total_logs"], 0)
+            finally:
+                self.fake_db.execute = original_execute
 
     def test_16_modify_food_log_scoping_by_household_id(self):
         """Issue #681: Cannot PUT or DELETE a log belonging to another household even if user_id matches."""
