@@ -168,6 +168,7 @@ global.window = global;
 global.window.scrollTo = () => {};
 global.window.innerHeight = 800;
 global.window.innerWidth = 400;
+global.currentNourishDate = '2026-10-22';
 let confettiCalls = [];
 global.window.confetti = Object.assign(
   function(opts) { confettiCalls.push(opts); },
