@@ -311,8 +311,15 @@ global.document = {
     return null;
   },
   querySelectorAll() { return []; },
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(evt, fn) {
+    documentListeners[evt] = documentListeners[evt] || [];
+    documentListeners[evt].push(fn);
+  },
+  removeEventListener(evt, fn) {
+    if (documentListeners[evt]) {
+      documentListeners[evt] = documentListeners[evt].filter(f => f !== fn);
+    }
+  },
   body: {
     classList: {
       add() {},
@@ -323,8 +330,16 @@ global.document = {
   },
   get activeElement() { return activeEl; },
   set activeElement(el) { activeEl = el; },
-  hidden: false
+  hidden: false,
+  readyState: 'complete'
 };
+
+const documentListeners = {};
+function dispatchDocumentEvent(evt) {
+  if (documentListeners[evt]) {
+    documentListeners[evt].slice().forEach(fn => fn());
+  }
+}
 
 const windowListeners = {};
 global.window.addEventListener = (evt, fn) => {
@@ -545,8 +560,60 @@ eval(engineMatch[0]);
   if (!enabledToggled) {
     throw new Error('Test 9 Failed: Accept MUST enable Nourish');
   }
-  if (global.currentScreen !== 'nourish') {
-    throw new Error('Test 9 Failed: Accept MUST navigate to nourish screen, got: ' + global.currentScreen);
+  // ── TEST 10: Existing account with listmate_cfg is treated as eligible returning user even on Session 1 ──
+  global._nourishEnabled = false;
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem('listmate_session_count', '1');
+  sessionStorage.setItem('listmate_session_counted', '1');
+  localStorage.setItem('listmate_cfg', JSON.stringify({ user: 'existing@example.com', household_id: 42 }));
+  serverEnabled = false;
+  serverTotalLogs = 0;
+  serverHasLoggedMeals = false;
+  global.currentScreen = 'home';
+  document.activeElement = null;
+
+  initNourishDiscoveryIdleTrigger();
+  fastForward5s();
+  await new Promise(r => setImmediate(r));
+
+  if (!elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 10 Failed: Existing account with listmate_cfg MUST be treated as eligible returning user even on session 1');
+  }
+
+  // ── TEST 11: Returning to tab (visibilitychange) resumes idle countdown ──
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem('listmate_session_count', '2');
+  sessionStorage.setItem('listmate_session_counted', '1');
+  serverEnabled = false;
+  serverTotalLogs = 0;
+  serverHasLoggedMeals = false;
+
+  initNourishDiscoveryIdleTrigger();
+
+  // Tab hidden: idle countdown cancelled / blocked
+  document.hidden = true;
+  dispatchDocumentEvent('visibilitychange');
+  fastForward5s();
+  await new Promise(r => setImmediate(r));
+
+  if (elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 11 Failed: Drawer MUST NOT open while document.hidden is true');
+  }
+
+  // Returning to tab: document.hidden = false -> resumes countdown
+  document.hidden = false;
+  dispatchDocumentEvent('visibilitychange');
+  fastForward5s();
+  await new Promise(r => setImmediate(r));
+
+  if (!elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 11 Failed: Returning to tab (visibilitychange) MUST resume idle countdown and open drawer');
   }
 
   console.log('ALL_FRONTEND_DISCOVERY_TESTS_PASSED');
@@ -691,6 +758,61 @@ eval(landingMatch[0]);
             f"Default landing screen test failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}",
         )
         self.assertIn("ALL_LANDING_SCREEN_TESTS_PASSED", res.stdout)
+
+    def test_idle_trigger_autoruns_on_dom_load(self):
+        """Verify initNourishDiscoveryIdleTrigger auto-runs upon script/DOM load."""
+        self.assertIn("initNourishDiscoveryIdleTrigger()", self.html)
+        self.assertIn("DOMContentLoaded", self.html)
+
+        node_test = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+
+const autoRunMatch = html.match(/if\s*\(document\.readyState\s*===\s*'loading'\)[\s\S]*?initNourishDiscoveryIdleTrigger\(\);\s*\}\s*<\/script>/);
+if (!autoRunMatch) {
+  throw new Error('Auto-run block for initNourishDiscoveryIdleTrigger not found in static/index.html');
+}
+
+let triggerCalled = 0;
+global.initNourishDiscoveryIdleTrigger = () => { triggerCalled++; };
+
+// Case A: document.readyState === 'loading'
+let domListener = null;
+global.document = {
+  readyState: 'loading',
+  addEventListener(evt, fn) {
+    if (evt === 'DOMContentLoaded') domListener = fn;
+  }
+};
+eval(autoRunMatch[0].replace('</script>', ''));
+if (!domListener) {
+  throw new Error('Expected DOMContentLoaded listener registered when readyState === "loading"');
+}
+domListener();
+if (triggerCalled !== 1) {
+  throw new Error('Expected initNourishDiscoveryIdleTrigger called on DOMContentLoaded, got calls: ' + triggerCalled);
+}
+
+// Case B: document.readyState === 'complete' (already loaded)
+global.document.readyState = 'complete';
+eval(autoRunMatch[0].replace('</script>', ''));
+if (triggerCalled !== 2) {
+  throw new Error('Expected initNourishDiscoveryIdleTrigger called immediately when readyState !== "loading", got calls: ' + triggerCalled);
+}
+
+console.log('AUTO_RUN_TESTS_PASSED');
+"""
+        res = subprocess.run(
+            ["node", "-e", node_test, INDEX_HTML_PATH],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            res.returncode,
+            0,
+            f"Idle trigger auto-run test failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}",
+        )
+        self.assertIn("AUTO_RUN_TESTS_PASSED", res.stdout)
 
 
 if __name__ == "__main__":
