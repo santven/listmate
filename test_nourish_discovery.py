@@ -612,8 +612,48 @@ eval(engineMatch[0]);
   fastForward5s();
   await new Promise(r => setImmediate(r));
 
-  if (!elements.nourishDiscoveryDrawer.classList.contains('active')) {
-    throw new Error('Test 11 Failed: Returning to tab (visibilitychange) MUST resume idle countdown and open drawer');
+  // ── TEST 12: Daily Inspiration drawer open (#dailyInspirationOverlay.show) blocks Nourish Discovery Drawer ──
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem('listmate_session_count', '2');
+  sessionStorage.setItem('listmate_session_counted', '1');
+  
+  // Simulate active inspiration drawer in DOM
+  const inspirationOverlay = { id: 'dailyInspirationOverlay', classList: { contains: (c) => c === 'show' } };
+  const origQuerySelector = document.querySelector;
+  document.querySelector = (sel) => {
+    if (sel.includes('dailyInspirationOverlay')) return inspirationOverlay;
+    return origQuerySelector ? origQuerySelector(sel) : null;
+  };
+
+  initNourishDiscoveryIdleTrigger();
+  fastForward5s();
+  await new Promise(r => setImmediate(r));
+
+  if (elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 12 Failed: Nourish Discovery Drawer MUST NOT open while Daily Inspiration drawer is open');
+  }
+
+  // Restore querySelector
+  document.querySelector = origQuerySelector;
+
+  // ── TEST 13: Daily Inspiration shown in this session blocks Nourish Discovery Drawer (Anti-Stacking) ──
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem('listmate_session_count', '2');
+  sessionStorage.setItem('listmate_session_counted', '1');
+  sessionStorage.setItem('daily_inspiration_shown_this_session', '1');
+
+  initNourishDiscoveryIdleTrigger();
+  fastForward5s();
+  await new Promise(r => setImmediate(r));
+
+  if (elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 13 Failed: Nourish Discovery Drawer MUST NOT open if Daily Inspiration was already shown this session');
   }
 
   console.log('ALL_FRONTEND_DISCOVERY_TESTS_PASSED');
