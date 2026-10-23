@@ -1642,7 +1642,12 @@ def register_auth_routes(app):
 
     @app.route("/api/auth/config")
     def auth_config():
-        resp = {"client_id": GOOGLE_CLIENT_ID, "revenuecat_public_key": REVENUECAT_PUBLIC_KEY, "revenuecat_apple_key": REVENUECAT_APPLE_KEY}
+        resp = {
+            "client_id": GOOGLE_CLIENT_ID,
+            "revenuecat_public_key": REVENUECAT_PUBLIC_KEY,
+            "revenuecat_apple_key": REVENUECAT_APPLE_KEY,
+            "gtm_container_id": os.environ.get("GTM_CONTAINER_ID", "").strip()
+        }
         country = request.headers.get('CF-IPCountry') or request.headers.get('X-Appengine-Country') or request.headers.get('X-Country') or 'US'
         eu_countries = {'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'}
         resp["geo"] = {"country": country, "is_eu": country in eu_countries}

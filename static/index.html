@@ -2860,6 +2860,62 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
 </div>
 
 <script>
+const titleMap = {
+  home: 'Grocery List',
+  stillGood: 'Still Good',
+  nourish: 'Nourish',
+  recipes: 'Recipe Planner',
+  analytics: 'Analytics',
+  globalVisits: 'Store Visits',
+  visitDetail: 'Visit Details'
+};
+const SCREEN_TITLES = titleMap;
+
+function initGTM(containerId) {
+  try {
+    if (!containerId || containerId === 'GTM_CONTAINER_ID_PLACEHOLDER' || window._gtmLoaded) return;
+    window._gtmLoaded = true;
+    window._gtmContainerId = containerId;
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      'gtm.start': new Date().getTime(),
+      event: 'gtm.js'
+    });
+    var f = document.getElementsByTagName('script')[0];
+    var j = document.createElement('script');
+    j.async = true;
+    j.src = 'https://www.googletagmanager.com/gtm.js?id=' + encodeURIComponent(containerId);
+    if (f && f.parentNode) {
+      f.parentNode.insertBefore(j, f);
+    } else {
+      (document.head || document.body).appendChild(j);
+    }
+  } catch (e) {
+    console.warn('[GTM] Init error:', e);
+  }
+}
+
+function trackScreenView(screenName) {
+  try {
+    const name = screenName || (window.currentScreen || 'home');
+    const title = titleMap[name] || name;
+    const path = name === 'home' ? '/' : '/' + name;
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'virtual_page_view',
+      page_path: path,
+      page_title: 'ListMate · ' + title,
+      screen_name: name,
+      authenticated: true
+    });
+  } catch (e) {
+    console.warn('[GTM] Screen tracking error:', e);
+  }
+}
+window.initGTM = initGTM;
+window.initGtm = initGTM;
+window.trackScreenView = trackScreenView;
+
 function toggleBurger(force) {
   const menu = document.getElementById("burgerMenu");
   const overlay = document.getElementById("burgerOverlay");
@@ -3253,6 +3309,16 @@ async function checkAuth() {
       headers: cfgHeaders
     })).json(); 
     window.currentCfg = cfg;
+    try {
+      if (cfg && cfg.gtm_container_id && typeof initGTM === 'function') {
+        initGTM(cfg.gtm_container_id);
+      }
+      if (typeof trackScreenView === 'function') {
+        trackScreenView(window.currentScreen || (typeof currentScreen !== 'undefined' ? currentScreen : 'home'));
+      }
+    } catch (e) {
+      console.warn('[GTM] Config tracking error:', e);
+    }
     if (typeof canAccessStillGood === 'function' && canAccessStillGood()) {
       var pModal = document.getElementById('premiumModal');
       var pTitle = document.getElementById('premiumModalTitle');
@@ -4552,6 +4618,11 @@ window.addEventListener('scroll', updateFabVisibility);
 function showScreen(name){
   currentScreen = name;
   window.currentScreen = name;
+  try {
+    if (typeof trackScreenView === 'function') {
+      trackScreenView(name);
+    }
+  } catch (e) {}
   if (typeof closeBurger === 'function') closeBurger();
   else if (typeof toggleBurger === 'function') toggleBurger(false);
   if (typeof closeAppSwitcherMenu === 'function') closeAppSwitcherMenu();

@@ -318,8 +318,10 @@ def login_page():
             window.location.replace('/login');
             </script></body></html>'''
             
-    html = open(os.path.join(os.path.dirname(__file__), "static", "login.html")).read()
+    with open(os.path.join(os.path.dirname(__file__), "static", "login.html")) as f:
+        html = f.read()
     html = html.replace("CLIENT_ID_PLACEHOLDER", CLIENT_ID)
+    html = html.replace("GTM_CONTAINER_ID_PLACEHOLDER", os.environ.get("GTM_CONTAINER_ID", "").strip())
     return html.replace("APPLE_CLIENT_ID_PLACEHOLDER", APPLE_CLIENT_ID)
 
 @app.route("/auth/callback")
