@@ -863,6 +863,9 @@
     });
 
     recordSeen();
+    try {
+      sessionStorage.setItem('daily_inspiration_shown_this_session', '1');
+    } catch(e) {}
   }
 
   function closeDrawer() {

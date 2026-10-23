@@ -14245,9 +14245,16 @@ function initNourishDiscoveryIdleTrigger(force) {
     var screen = window.currentScreen || (typeof currentScreen !== 'undefined' ? currentScreen : 'home');
     if (screen !== 'home') return true;
 
-    // 2. If any modal or drawer is active => ABORT
-    var activeModalOrDrawer = document.querySelector('.modal.active, .drawer.active, #bottomDrawer.active, #shareDrawer.active, .modal-overlay.active, .app-switcher-menu.show, #burgerMenu.show');
+    // 2. If any modal or drawer is active => ABORT (including Daily Inspiration drawer)
+    var activeModalOrDrawer = document.querySelector('.modal.active, .drawer.active, #bottomDrawer.active, #shareDrawer.active, .modal-overlay.active, .app-switcher-menu.show, #burgerMenu.show, #dailyInspirationOverlay.show, .daily-inspiration-overlay.show, #dailyInspirationDrawer');
     if (activeModalOrDrawer) return true;
+
+    // 2b. Prevent drawer stacking: If Daily Inspiration was already presented in this session, do not prompt Nourish in the same session
+    try {
+      if (sessionStorage.getItem('daily_inspiration_shown_this_session') === '1') {
+        return true;
+      }
+    } catch(e) {}
 
     // 3. If user is typing (INPUT, TEXTAREA, isContentEditable) => ABORT
     var activeEl = document.activeElement;
