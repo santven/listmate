@@ -448,6 +448,25 @@
     <div class="success" id="nourishSettingSuccess" style="margin-top:8px;"></div>
   </div>
 
+  <!-- Default Landing Screen -->
+  <div class="card" id="defaultLandingSettingsCard">
+    <h2>🏠 Default Landing Screen</h2>
+    <p class="note" style="margin-bottom:12px;">Choose which screen opens automatically when you launch ListMate.</p>
+    <div style="background:#f9fafb; padding:14px; border-radius:10px; border:1px solid #e5e7eb;">
+      <label for="defaultLandingSelect" style="display:block; font-weight:600; font-size:13.5px; color:#1f2937; margin-bottom:8px;">Launch Screen</label>
+      <select id="defaultLandingSelect" onchange="onDefaultLandingChange(this.value)" style="width:100%; padding:10px 12px; font-size:14px; font-weight:500; border:1.5px solid var(--border, #d1d5db); border-radius:10px; background:#fff; color:#111827; outline:none; cursor:pointer;">
+        <option value="last_screen">Last screen used (Default)</option>
+        <option value="home">Grocery Lists</option>
+        <option value="stillGood">Still Good (Fridge &amp; Pantry)</option>
+        <option value="nourish" id="defaultLandingNourishOption">Nourish (Nutrition Tracker)</option>
+      </select>
+      <div id="defaultLandingHelpText" style="font-size:12px; color:#6b7280; margin-top:8px; line-height:1.4;">
+        Always opens the screen you were using when you last closed the app.
+      </div>
+    </div>
+    <div class="success" id="defaultLandingSuccess" style="margin-top:8px; display:none;"></div>
+  </div>
+
   <!-- Share ListMate -->
   <div class="card">
     <h2>🎁 Share ListMate</h2>
@@ -748,6 +767,7 @@ var householdData = null;
   initDiscoveryTipsUI();
   initInspirationUI();
   initNourishUI();
+  initDefaultLandingUI();
 
   Promise.all([loadHousehold(), loadPremium(), loadDietary(), loadLocation(), checkPurchaseReturn()]).then(() => {
     checkUrlActions();
@@ -826,11 +846,13 @@ async function initNourishUI() {
           ? 'Nourish is active. Daily meal and macro tracking enabled.'
           : 'Nourish is currently disabled. Food diary and family meal popups are hidden.';
       }
+      updateDefaultLandingNourishOption(isEnabled);
     }
   } catch(e) {
     console.error('Failed to load nourish setting from server:', e);
     const localVal = localStorage.getItem('nourish_enabled') === 'true';
     toggle.checked = localVal;
+    updateDefaultLandingNourishOption(localVal);
   }
 }
 
@@ -853,6 +875,8 @@ function toggleNourishSetting(checked) {
     setTimeout(() => { success.style.display = 'none'; }, 3000);
   }
 
+  updateDefaultLandingNourishOption(checked);
+
   fetch('/api/user/nourish-enabled', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -861,6 +885,78 @@ function toggleNourishSetting(checked) {
   }).catch(function(e) {
     console.error('Failed to save nourish setting to server:', e);
   });
+}
+
+function updateDefaultLandingHelpText(val) {
+  const el = document.getElementById('defaultLandingHelpText');
+  if (!el) return;
+  const helpTexts = {
+    'last_screen': 'Always opens the screen you were using when you last closed the app.',
+    'home': 'Always opens your grocery lists on app launch.',
+    'stillGood': 'Always opens Still Good (Fridge & Pantry) on app launch.',
+    'nourish': 'Always opens Nourish (Daily Nutrition) on app launch.'
+  };
+  el.textContent = helpTexts[val] || helpTexts['last_screen'];
+}
+
+function onDefaultLandingChange(val) {
+  try {
+    localStorage.setItem('listmate_default_landing_screen', val);
+  } catch(e) {}
+  updateDefaultLandingHelpText(val);
+
+  const success = document.getElementById('defaultLandingSuccess');
+  if (success) {
+    success.textContent = 'Default landing screen updated.';
+    success.style.display = 'block';
+    setTimeout(() => { success.style.display = 'none'; }, 3000);
+  }
+  if (typeof toast === 'function') {
+    toast('Default landing screen updated.');
+  }
+}
+
+function updateDefaultLandingNourishOption(isNourishEnabled) {
+  const nourishOpt = document.getElementById('defaultLandingNourishOption');
+  const select = document.getElementById('defaultLandingSelect');
+  if (!nourishOpt || !select) return;
+
+  if (!isNourishEnabled) {
+    nourishOpt.disabled = true;
+    nourishOpt.textContent = 'Nourish (Disabled)';
+    if (select.value === 'nourish') {
+      select.value = 'last_screen';
+      try {
+        localStorage.setItem('listmate_default_landing_screen', 'last_screen');
+      } catch(e) {}
+      updateDefaultLandingHelpText('last_screen');
+      const success = document.getElementById('defaultLandingSuccess');
+      if (success) {
+        success.textContent = 'Nourish is disabled. Default landing reset to last screen used.';
+        success.style.display = 'block';
+        setTimeout(() => { success.style.display = 'none'; }, 3500);
+      }
+    }
+  } else {
+    nourishOpt.disabled = false;
+    nourishOpt.textContent = 'Nourish (Nutrition Tracker)';
+  }
+}
+
+function initDefaultLandingUI() {
+  const select = document.getElementById('defaultLandingSelect');
+  if (!select) return;
+
+  let saved = 'last_screen';
+  try {
+    saved = localStorage.getItem('listmate_default_landing_screen') || 'last_screen';
+  } catch(e) {}
+
+  select.value = saved;
+  updateDefaultLandingHelpText(saved);
+
+  const isNourishOn = localStorage.getItem('nourish_enabled') === 'true';
+  updateDefaultLandingNourishOption(isNourishOn);
 }
 
 function initDiscoveryTipsUI() {

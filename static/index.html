@@ -3267,15 +3267,22 @@ function applyLastScreenLandingDefault() {
     const urlParams = new URLSearchParams(window.location.search);
     const hasExplicitParam = urlParams.has('screen') || urlParams.has('modal') || urlParams.has('action');
     if (!hasExplicitParam) {
-      let lastScreen = 'home';
+      let targetScreen = 'home';
       try {
-        lastScreen = localStorage.getItem('listmate_last_screen') || 'home';
+        const defaultLandingSetting = localStorage.getItem('listmate_default_landing_screen') || 'last_screen';
+        if (defaultLandingSetting === 'last_screen') {
+          targetScreen = localStorage.getItem('listmate_last_screen') || 'home';
+        } else if (['home', 'stillGood', 'nourish'].includes(defaultLandingSetting)) {
+          targetScreen = defaultLandingSetting;
+        } else {
+          targetScreen = localStorage.getItem('listmate_last_screen') || 'home';
+        }
       } catch(e) {}
-      if (lastScreen === 'nourish' && typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
-        lastScreen = 'home';
+      if (targetScreen === 'nourish' && typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
+        targetScreen = 'home';
       }
-      if (lastScreen && lastScreen !== 'home' && typeof showScreen === 'function') {
-        showScreen(lastScreen);
+      if (targetScreen && targetScreen !== 'home' && typeof showScreen === 'function') {
+        showScreen(targetScreen);
       }
     }
   } catch(e) {
