@@ -920,6 +920,9 @@
 
   function evaluateAndTrigger(userInfo, forceDelay) {
     try {
+      if (typeof window.shouldDailyInspirationYieldToNourish === 'function' && window.shouldDailyInspirationYieldToNourish()) {
+        return;
+      }
       if (!userInfo) return;
 
       if (userInfo.daily_inspiration_enabled !== undefined) {
@@ -940,6 +943,10 @@
       // If NULL, empty, or prior date -> pop open automatically on home screen
       var delay = typeof forceDelay === 'number' ? forceDelay : 500;
       setTimeout(function() {
+        if (typeof window.shouldDailyInspirationYieldToNourish === 'function' && window.shouldDailyInspirationYieldToNourish()) {
+          return;
+        }
+
         // Only show if user is currently on the home screen
         if (!isCurrentlyOnHomeScreen()) {
           return;
@@ -949,6 +956,9 @@
         var activeModal = document.querySelector('#feedbackModal.active, #cleanupModal.active, #actionConfirmModal.active, #paywallModal.active, #resolvedFeedbackModal.active');
         if (activeModal) {
           setTimeout(function() {
+            if (typeof window.shouldDailyInspirationYieldToNourish === 'function' && window.shouldDailyInspirationYieldToNourish()) {
+              return;
+            }
             var stillActive = document.querySelector('#feedbackModal.active, #cleanupModal.active, #actionConfirmModal.active, #paywallModal.active, #resolvedFeedbackModal.active');
             if (!stillActive && isCurrentlyOnHomeScreen()) {
               openDrawer(false);
@@ -964,6 +974,9 @@
 
   function initCadence(forceDelay, serverUserInfo) {
     try {
+      if (typeof window.shouldDailyInspirationYieldToNourish === 'function' && window.shouldDailyInspirationYieldToNourish()) {
+        return;
+      }
       if (!isCurrentlyOnHomeScreen()) {
         return;
       }

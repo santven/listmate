@@ -420,7 +420,7 @@ if (!engineMatch) {
 eval(engineMatch[0]);
 
 (async () => {
-  // ── TEST 1: Suppressed on Session 1 ──
+  // ── TEST 1: Eligible on Session 1 (Session 1 restriction removed for Priority Inversion) ──
   localStorage.clear();
   sessionStorage.clear();
   localStorage.setItem('listmate_session_count', '1');
@@ -435,9 +435,11 @@ eval(engineMatch[0]);
   fastForward5s();
   await new Promise(r => setImmediate(r));
 
-  if (elements.nourishDiscoveryDrawer.classList.contains('active')) {
-    throw new Error('Test 1 Failed: Drawer MUST NOT open on Session 1');
+  if (!elements.nourishDiscoveryDrawer.classList.contains('active')) {
+    throw new Error('Test 1 Failed: Drawer MUST open on Session 1 when idle');
   }
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
 
   // ── TEST 2: Suppressed if nourish_enabled == true ──
   localStorage.clear();
@@ -655,6 +657,88 @@ eval(engineMatch[0]);
   if (elements.nourishDiscoveryDrawer.classList.contains('active')) {
     throw new Error('Test 13 Failed: Nourish Discovery Drawer MUST NOT open if Daily Inspiration was already shown this session');
   }
+
+  // ── TEST 14: isNourishDiscoveryPending eligibility checks ──
+  localStorage.clear();
+  sessionStorage.clear();
+  global._nourishEnabled = false;
+  global._nourishHasLoggedMeals = false;
+  global._nourishServerEligible = true;
+
+  if (!isNourishDiscoveryPending()) {
+    throw new Error('Test 14a Failed: Fresh session without Nourish enabled MUST have pending Nourish Discovery');
+  }
+
+  // Pending is false when Nourish is enabled
+  global._nourishEnabled = true;
+  if (isNourishDiscoveryPending()) {
+    throw new Error('Test 14b Failed: Pending MUST be false when Nourish is enabled');
+  }
+  global._nourishEnabled = false;
+
+  // Pending is false when dismissed within 14 days
+  localStorage.setItem('nourish_discovery_dismissed_at', String(Date.now() - (2 * 86400000)));
+  if (isNourishDiscoveryPending()) {
+    throw new Error('Test 14c Failed: Pending MUST be false when dismissed recently');
+  }
+  localStorage.removeItem('nourish_discovery_dismissed_at');
+
+  // Pending is false when user has logged meals
+  global._nourishHasLoggedMeals = true;
+  if (isNourishDiscoveryPending()) {
+    throw new Error('Test 14d Failed: Pending MUST be false when user already logged meals');
+  }
+  global._nourishHasLoggedMeals = false;
+
+  // Pending is false when already shown this session
+  sessionStorage.setItem('nourish_discovery_shown_this_session', '1');
+  if (isNourishDiscoveryPending()) {
+    throw new Error('Test 14e Failed: Pending MUST be false when already shown this session');
+  }
+  sessionStorage.clear();
+
+  // ── TEST 15: shouldDailyInspirationYieldToNourish priority inversion rules ──
+  // Fresh visit with pending Nourish: Daily Inspiration MUST yield
+  localStorage.clear();
+  sessionStorage.clear();
+  global._nourishEnabled = false;
+  global._nourishHasLoggedMeals = false;
+  global._nourishServerEligible = true;
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+  elements.nourishDiscoveryBackdrop.classList.remove('active');
+
+  if (!shouldDailyInspirationYieldToNourish()) {
+    throw new Error('Test 15a Failed: Daily Inspiration MUST yield when Nourish Discovery is pending');
+  }
+
+  // When drawer is actively open: MUST yield
+  elements.nourishDiscoveryDrawer.classList.add('active');
+  if (!shouldDailyInspirationYieldToNourish()) {
+    throw new Error('Test 15b Failed: Daily Inspiration MUST yield while Nourish Discovery drawer is open');
+  }
+  elements.nourishDiscoveryDrawer.classList.remove('active');
+
+  // When Nourish was shown this session (even after user dismisses): MUST yield for this visit
+  sessionStorage.setItem('nourish_discovery_shown_this_session', '1');
+  dismissNourishDiscoveryDrawer(); // sets dismissed_at
+  if (!shouldDailyInspirationYieldToNourish()) {
+    throw new Error('Test 15c Failed: Daily Inspiration MUST yield for entire session after Nourish shown');
+  }
+
+  // ── TEST 16: Next visit unlocking: Next visit (fresh session), Daily Inspiration does NOT yield ──
+  sessionStorage.clear(); // new session on next visit!
+  // Case A: User previously dismissed Nourish (dismissed_at is set < 14 days)
+  if (shouldDailyInspirationYieldToNourish()) {
+    throw new Error('Test 16a Failed: On next visit after dismissal, Daily Inspiration MUST NOT yield');
+  }
+
+  // Case B: User previously accepted Nourish (nourish_enabled is true)
+  localStorage.clear();
+  global._nourishEnabled = true;
+  if (shouldDailyInspirationYieldToNourish()) {
+    throw new Error('Test 16b Failed: On next visit after accepting Nourish, Daily Inspiration MUST NOT yield');
+  }
+  global._nourishEnabled = false;
 
   console.log('ALL_FRONTEND_DISCOVERY_TESTS_PASSED');
 })();
