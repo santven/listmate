@@ -366,6 +366,390 @@ class TestEmailPreferences(unittest.TestCase):
         # Expiration notice should have been delivered
         mock_send_sub.assert_called_once()
 
+    # ─────────────────────────────────────────────────────────────
+    # 9. SendGrid Webhook Granular Routing & Deliverability Tests
+    # ─────────────────────────────────────────────────────────────
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.suppress_email")
+    @patch("shared.auth.unsubscribe_category")
+    @patch("shared.auth.unsubscribe_all")
+    def test_sendgrid_webhook_hard_suppression(self, mock_unsub_all, mock_unsub_cat, mock_suppress, mock_one, mock_run):
+        """Bounce, dropped, and spamreport events should call suppress_email and NOT call unsubscribe."""
+        payload = [
+            {"email": "bounce@example.com", "event": "bounce", "reason": "550 5.1.1 User unknown", "sg_event_id": "sg_ev_bounce_1"},
+            {"email": "dropped@example.com", "event": "dropped", "reason": "Bounced Address", "sg_event_id": "sg_ev_drop_1"},
+            {"email": "spam@example.com", "event": "spamreport", "sg_event_id": "sg_ev_spam_1"}
+        ]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mock_suppress.call_count, 3)
+        mock_suppress.assert_any_call(
+            email="bounce@example.com",
+            reason="bounce",
+            sg_event_id="sg_ev_bounce_1",
+            details="550 5.1.1 User unknown"
+        )
+        mock_suppress.assert_any_call(
+            email="dropped@example.com",
+            reason="dropped",
+            sg_event_id="sg_ev_drop_1",
+            details="Bounced Address"
+        )
+        mock_suppress.assert_any_call(
+            email="spam@example.com",
+            reason="spamreport",
+            sg_event_id="sg_ev_spam_1",
+            details=""
+        )
+        mock_unsub_cat.assert_not_called()
+        mock_unsub_all.assert_not_called()
+
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.suppress_email")
+    @patch("shared.auth.unsubscribe_category")
+    @patch("shared.auth.unsubscribe_all")
+    def test_sendgrid_webhook_unsubscribe_granular_category(self, mock_unsub_all, mock_unsub_cat, mock_suppress, mock_one, mock_run):
+        """Unsubscribe event with explicit category (product_updates) calls unsubscribe_category, NOT suppress_email."""
+        payload = [{
+            "email": "user@example.com",
+            "event": "unsubscribe",
+            "category": "product_updates",
+            "sg_event_id": "sg_ev_unsub_1"
+        }]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        mock_suppress.assert_not_called()
+        mock_unsub_cat.assert_called_once_with(email="user@example.com", category="product_updates", user_id=0)
+        mock_unsub_all.assert_not_called()
+
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.suppress_email")
+    @patch("shared.auth.unsubscribe_category")
+    @patch("shared.auth.unsubscribe_all")
+    def test_sendgrid_webhook_unsubscribe_campaign_mapping(self, mock_unsub_all, mock_unsub_cat, mock_suppress, mock_one, mock_run):
+        # Unsubscribe event with campaign 'store_plan' mapped to 'shopping_reminders'
+        payload = [{
+            "email": "user@example.com",
+            "event": "unsubscribe",
+            "campaign": "store_plan",
+            "sg_event_id": "sg_ev_unsub_2"
+        }]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        mock_suppress.assert_not_called()
+        mock_unsub_cat.assert_called_once_with(email="user@example.com", category="shopping_reminders", user_id=0)
+        mock_unsub_all.assert_not_called()
+
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.suppress_email")
+    @patch("shared.auth.unsubscribe_category")
+    @patch("shared.auth.unsubscribe_all")
+    def test_sendgrid_webhook_global_unsubscribe_fallback(self, mock_unsub_all, mock_unsub_cat, mock_suppress, mock_one, mock_run):
+        # Global unsubscribe event with no category or campaign calls unsubscribe_all, NOT suppress_email
+        payload = [{
+            "email": "user@example.com",
+            "event": "unsubscribe",
+            "sg_event_id": "sg_ev_unsub_3"
+        }]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        mock_suppress.assert_not_called()
+        mock_unsub_cat.assert_not_called()
+        mock_unsub_all.assert_called_once_with(email="user@example.com", user_id=0)
+
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.suppress_email")
+    @patch("shared.auth.unsubscribe_category")
+    @patch("shared.auth.unsubscribe_all")
+    def test_sendgrid_webhook_group_unsubscribe(self, mock_unsub_all, mock_unsub_cat, mock_suppress, mock_one, mock_run):
+        # group_unsubscribe calls unsubscribe_all, NOT suppress_email
+        payload = [{
+            "email": "user@example.com",
+            "event": "group_unsubscribe",
+            "sg_event_id": "sg_ev_group_unsub_1"
+        }]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        mock_suppress.assert_not_called()
+        mock_unsub_cat.assert_not_called()
+        mock_unsub_all.assert_called_once_with(email="user@example.com", user_id=0)
+
+    @patch("shared.auth._run")
+    @patch("shared.auth._one", return_value=None)
+    @patch("shared.auth.resubscribe_all")
+    @patch("shared.auth.unsuppress_email")
+    def test_sendgrid_webhook_group_resubscribe(self, mock_unsuppress, mock_resub_all, mock_one, mock_run):
+        payload = [{
+            "email": "user@example.com",
+            "event": "group_resubscribe",
+            "sg_event_id": "sg_ev_resub_1"
+        }]
+        resp = self.client.post("/api/webhooks/sendgrid", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        mock_resub_all.assert_called_once_with(email="user@example.com", user_id=0)
+        mock_unsuppress.assert_called_once_with(email="user@example.com")
+
+    # ─────────────────────────────────────────────────────────────
+    # 10. Deliverability Observability & Preference Stats Tests
+    # ─────────────────────────────────────────────────────────────
+    @patch("shared.auth._run")
+    def test_get_email_preference_stats(self, mock_run):
+        # Mock database rows for preferences and suppressions
+        def mock_run_side_effect(sql, params=None):
+            if "FROM email_preferences" in sql:
+                return [
+                    {"email": "u1@test.com", "household_activity": True, "shopping_reminders": True, "billing_account": True, "product_updates": True, "tips_reengagement": True, "unsubscribed_all": False},
+                    {"email": "u2@test.com", "household_activity": True, "shopping_reminders": False, "billing_account": True, "product_updates": True, "tips_reengagement": False, "unsubscribed_all": False},
+                    {"email": "u3@test.com", "household_activity": False, "shopping_reminders": False, "billing_account": False, "product_updates": False, "tips_reengagement": False, "unsubscribed_all": True},
+                ]
+            if "FROM email_suppressions" in sql:
+                return [
+                    {"reason": "bounce", "cnt": 5},
+                    {"reason": "spamreport", "cnt": 2},
+                    {"reason": "dropped", "cnt": 1},
+                ]
+            return []
+        mock_run.side_effect = mock_run_side_effect
+
+        stats = auth.get_email_preference_stats()
+        self.assertEqual(stats["total_preferences"], 3)
+        self.assertEqual(stats["unsubscribed_all"], 1)
+        # Opt-outs: u2 opted out of shopping_reminders & tips; u3 unsubscribed_all
+        self.assertEqual(stats["opt_outs"]["shopping_reminders"], 2)
+        self.assertEqual(stats["opt_outs"]["tips_reengagement"], 2)
+        self.assertEqual(stats["opt_outs"]["household_activity"], 1)
+        self.assertEqual(stats["opt_outs"]["billing_account"], 1)
+        self.assertEqual(stats["opt_outs"]["product_updates"], 1)
+        self.assertEqual(stats["suppression_breakdown"]["bounce"], 5)
+        self.assertEqual(stats["suppression_breakdown"]["spamreport"], 2)
+        self.assertEqual(stats["suppression_breakdown"]["dropped"], 1)
+        self.assertEqual(stats["total_suppressed"], 8)
+
+    @patch("shared.auth.get_email_preference_stats")
+    def test_admin_email_preferences_stats_endpoint(self, mock_stats):
+        mock_stats.return_value = {
+            "total_preferences": 10,
+            "unsubscribed_all": 2,
+            "opt_outs": {"shopping_reminders": 3},
+            "total_suppressed": 4
+        }
+
+        # 1. Unauthorized request
+        resp_unauth = self.client.get("/api/admin/email-preferences/stats")
+        self.assertIn(resp_unauth.status_code, (401, 403))
+
+        # 2. Authorized request with ADMIN_SECRET in Authorization header
+        with patch.dict(os.environ, {"ADMIN_SECRET": "secret_adm_token_123"}):
+            resp_auth = self.client.get(
+                "/api/admin/email-preferences/stats",
+                headers={"Authorization": "Bearer secret_adm_token_123"}
+            )
+            self.assertEqual(resp_auth.status_code, 200)
+            data = resp_auth.get_json()
+            self.assertTrue(data.get("ok"))
+            self.assertEqual(data["stats"]["total_preferences"], 10)
+
+    @patch("shared.auth.is_logged_in", return_value=False)
+    def test_admin_email_preferences_stats_unauthorized(self, mock_logged_in):
+        """Test unauthorized access to /api/admin/email-preferences/stats returns 401 or 403."""
+        # 1. No credentials -> 401
+        resp = self.client.get("/api/admin/email-preferences/stats")
+        self.assertEqual(resp.status_code, 401)
+
+        # 2. Invalid bearer token -> 401
+        headers = {"Authorization": "Bearer bad-token-xyz"}
+        resp = self.client.get("/api/admin/email-preferences/stats", headers=headers)
+        self.assertEqual(resp.status_code, 401)
+
+        # 3. Logged-in non-admin user -> 403
+        with self.client.session_transaction() as sess:
+            sess["listmate_session"] = {"user_id": 99, "email": "normaluser@example.com"}
+        with patch("shared.auth.is_logged_in", return_value=True), \
+             patch("app.is_logged_in", return_value=True), \
+             patch("shared.auth.get_email", return_value="normaluser@example.com"), \
+             patch("app.get_email", return_value="normaluser@example.com"), \
+             patch("shared.auth.get_user_id", return_value=99), \
+             patch("app.get_user_id", return_value=99):
+            resp = self.client.get("/api/admin/email-preferences/stats")
+            self.assertEqual(resp.status_code, 403)
+
+    # ─────────────────────────────────────────────────────────────
+    # 11. Multi-Member Household Isolation Verification Tests
+    # ─────────────────────────────────────────────────────────────
+    def test_multi_member_household_preference_isolation(self):
+        """Simulate a household with Member 1 (user1@example.com) and Member 2 (user2@example.com);
+        verify Member 1 unsubscribing does not touch Member 2 and can_send_email_category behaves correctly."""
+        user1_email = "user1@example.com"
+        user2_email = "user2@example.com"
+
+        store = {}
+
+        def fake_one(query, params=()):
+            q = query.strip()
+            if "FROM email_preferences" in q and "LOWER(email) = %s" in q:
+                em = params[0].lower()
+                row = store.get(em)
+                return dict(row) if row else None
+            if "FROM email_suppressions" in q:
+                return None
+            return None
+
+        def fake_run(query, params=()):
+            q = query.strip()
+            if "INSERT INTO email_preferences" in q:
+                em = params[0].lower()
+                store[em] = {
+                    "email": em, "user_id": params[1],
+                    "household_activity": params[2], "shopping_reminders": params[3],
+                    "billing_account": params[4], "product_updates": params[5],
+                    "tips_reengagement": params[6], "unsubscribed_all": params[7]
+                }
+            return None
+
+        with patch("shared.auth._one", side_effect=fake_one), \
+             patch("shared.auth._run", side_effect=fake_run), \
+             patch("shared.auth.is_email_suppressed", return_value=False):
+
+            # Initial state: Member 1 and Member 2 both allowed by default
+            self.assertTrue(auth.can_send_email_category(user1_email, "shopping_reminders"))
+            self.assertTrue(auth.can_send_email_category(user2_email, "shopping_reminders"))
+
+            # Member 1 unsubscribes from shopping_reminders
+            auth.unsubscribe_category(user1_email, "shopping_reminders", user_id=101)
+
+            # Member 1's shopping_reminders is False; other categories remain True
+            self.assertFalse(auth.can_send_email_category(user1_email, "shopping_reminders"))
+            self.assertTrue(auth.can_send_email_category(user1_email, "household_activity"))
+            self.assertTrue(auth.can_send_email_category(user1_email, "billing_account"))
+
+            # Member 2's shopping_reminders is completely untouched and default True
+            self.assertTrue(auth.can_send_email_category(user2_email, "shopping_reminders"))
+            self.assertTrue(auth.can_send_email_category(user2_email, "household_activity"))
+            self.assertTrue(auth.can_send_email_category(user2_email, "billing_account"))
+
+            m2_prefs = auth.get_email_preferences(user2_email)
+            self.assertTrue(m2_prefs["shopping_reminders"])
+            self.assertTrue(m2_prefs["household_activity"])
+            self.assertFalse(m2_prefs["unsubscribed_all"])
+
+    # ─────────────────────────────────────────────────────────────
+    # 12. Destructive & Edge-Case Tests (Phase 3)
+    # ─────────────────────────────────────────────────────────────
+    def test_destructive_webhook_malformed_json(self):
+        """Send malformed JSON payload to SendGrid webhook; verify graceful 400 rejection (never 500)."""
+        malformed_raw = '{"email": "broken@example.com", "event": "bounce", incomplete...'
+        resp = self.client.post("/api/webhooks/sendgrid", data=malformed_raw, content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    @patch("shared.auth.update_email_preferences")
+    @patch("shared.auth.unsubscribe_email_category")
+    def test_destructive_tampered_hmac_tokens_across_routes(self, mock_unsub, mock_update):
+        """Verify that tampered HMAC tokens are consistently rejected across all unsubscribe and preference endpoints."""
+        valid_token = auth.generate_email_token("victim@example.com", "billing_account", 50)
+        parts = valid_token.split(".")
+        tampered_sig_token = parts[0] + ".corrupted_signature_12345"
+
+        # 1. GET /email/unsubscribe with tampered token -> 400
+        resp_unsub = self.client.get(f"/email/unsubscribe?token={tampered_sig_token}&cat=billing_account")
+        self.assertEqual(resp_unsub.status_code, 400)
+        self.assertIn(b"Link Expired or Invalid", resp_unsub.data)
+
+        # 2. GET /email/resubscribe with tampered token -> 400
+        resp_resub = self.client.get(f"/email/resubscribe?token={tampered_sig_token}&cat=billing_account")
+        self.assertEqual(resp_resub.status_code, 400)
+        self.assertIn(b"Link Expired or Invalid", resp_resub.data)
+
+        # 3. GET /email/preferences with tampered token -> 400
+        resp_pref = self.client.get(f"/email/preferences?token={tampered_sig_token}")
+        self.assertEqual(resp_pref.status_code, 400)
+        self.assertIn(b"Link Expired or Invalid", resp_pref.data)
+
+        # 4. POST /api/email/preferences with tampered token -> 400
+        resp_api = self.client.post("/api/email/preferences", json={
+            "token": tampered_sig_token,
+            "preferences": {"billing_account": False}
+        })
+        self.assertEqual(resp_api.status_code, 400)
+        self.assertIn("Invalid or expired token", json.loads(resp_api.data).get("error", ""))
+
+        # 5. POST /api/email/list-unsubscribe with tampered token -> 400
+        resp_rfc = self.client.post(f"/api/email/list-unsubscribe?token={tampered_sig_token}&cat=billing_account")
+        self.assertEqual(resp_rfc.status_code, 400)
+
+        # Ensure NO database updates or unsubscriptions were executed
+        mock_unsub.assert_not_called()
+        mock_update.assert_not_called()
+
+    def test_destructive_mixed_case_emails(self):
+        """Verify case insensitivity across tokens, suppressions, preferences, and delivery gating."""
+        mixed_email = "User.Name+Test@Example.COM"
+        lower_email = "user.name+test@example.com"
+
+        # 1. Token generation with mixed case normalizes payload email to lowercase
+        token = auth.generate_email_token(mixed_email, "product_updates", 77)
+        payload = auth.verify_email_token(token)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["email"], lower_email)
+
+        # 2. Preference retrieval normalizes email
+        store = {}
+        def fake_one(query, params=()):
+            q = query.strip()
+            if "FROM email_preferences" in q:
+                em = params[0].lower()
+                return store.get(em)
+            if "FROM email_suppressions" in q:
+                em = params[0].lower()
+                return {"id": 1, "email": em} if em in store.get("__suppressions__", set()) else None
+            return None
+
+        def fake_run(query, params=()):
+            q = query.strip()
+            if "INSERT INTO email_preferences" in q:
+                em = params[0].lower()
+                store[em] = {
+                    "email": em, "user_id": params[1],
+                    "household_activity": params[2], "shopping_reminders": params[3],
+                    "billing_account": params[4], "product_updates": params[5],
+                    "tips_reengagement": params[6], "unsubscribed_all": params[7]
+                }
+            elif "INSERT INTO email_suppressions" in q:
+                em = params[0].lower()
+                if "__suppressions__" not in store:
+                    store["__suppressions__"] = set()
+                store["__suppressions__"].add(em)
+            return None
+
+        with patch("shared.auth._one", side_effect=fake_one), \
+             patch("shared.auth._run", side_effect=fake_run):
+
+            # Unsubscribe using uppercase / mixed case email
+            auth.unsubscribe_category("USER.NAME+TEST@EXAMPLE.COM", "shopping_reminders")
+
+            # Check gating with alternate mixed case representations
+            self.assertFalse(auth.can_send_email_category("user.name+test@example.com", "shopping_reminders"))
+            self.assertFalse(auth.can_send_email_category("User.Name+Test@Example.COM", "shopping_reminders"))
+            self.assertFalse(auth.can_send_email_category("uSeR.nAmE+tEsT@eXaMpLe.cOm", "shopping_reminders"))
+
+            # Allowed categories remain allowed across all cases
+            self.assertTrue(auth.can_send_email_category("USER.NAME+TEST@EXAMPLE.COM", "household_activity"))
+            self.assertTrue(auth.can_send_email_category("user.name+test@example.com", "household_activity"))
+
+            # Suppress using mixed case email
+            auth.suppress_email("Bounced.User@Domain.COM", reason="bounce")
+            self.assertTrue(auth.is_email_suppressed("bounced.user@domain.com"))
+            self.assertTrue(auth.is_email_suppressed("BOUNCED.USER@DOMAIN.COM"))
+            self.assertTrue(auth.is_email_suppressed("Bounced.User@Domain.COM"))
+            self.assertFalse(auth.can_send_email_category("Bounced.User@Domain.COM", "household_activity"))
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1425,16 +1425,39 @@ def sendgrid_webhook():
         if not signature or not timestamp or not _verify_sendgrid_signature(raw_body, signature, timestamp, verification_key):
             print("[SendGrid Webhook] Signature verification failed or missing signature/timestamp headers.")
             return jsonify({"error": "Invalid webhook signature"}), 401
+        try:
+            import time
+            ts_int = int(timestamp)
+            if abs(time.time() - ts_int) > 300:
+                print(f"[SendGrid Webhook] Rejected: Timestamp outside 300s window (skew: {abs(time.time() - ts_int)}s)")
+                return jsonify({"error": "Webhook timestamp expired"}), 401
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid webhook timestamp"}), 401
     else:
         # 2. Secret Token / Bearer fallback (if configured)
         expected_token = os.environ.get("SENDGRID_WEBHOOK_SECRET")
         if expected_token:
             auth_header = request.headers.get("Authorization", "")
             token_param = request.args.get("token", "")
-            if auth_header not in [expected_token, f"Bearer {expected_token}"] and token_param != expected_token:
+            import hmac
+            is_valid = (
+                hmac.compare_digest(auth_header, expected_token) or
+                hmac.compare_digest(auth_header, f"Bearer {expected_token}") or
+                hmac.compare_digest(token_param, expected_token)
+            )
+            if not is_valid:
                 return jsonify({"error": "Unauthorized"}), 401
 
-    events = request.get_json(silent=True)
+    raw_data = request.get_data()
+    if raw_data:
+        try:
+            import json as _json
+            events = _json.loads(raw_data.decode("utf-8", errors="replace"))
+        except Exception:
+            return jsonify({"error": "Malformed JSON payload"}), 400
+    else:
+        events = []
+
     if not events:
         return jsonify({"ok": True, "processed": 0})
 
@@ -1557,7 +1580,7 @@ def sendgrid_webhook():
 
         # Automated suppression and opt-out handling
         ev_type_lower = (event_type or "").strip().lower()
-        if ev_type_lower in ("bounce", "dropped", "spamreport", "unsubscribe", "group_unsubscribe"):
+        if ev_type_lower in ("bounce", "dropped", "spamreport"):
             try:
                 authmod.suppress_email(
                     email=email,
@@ -1568,12 +1591,60 @@ def sendgrid_webhook():
                 print(f"[SendGrid Webhook] Suppressed {email} due to event '{ev_type_lower}'")
             except Exception as se:
                 print(f"[SendGrid Webhook] Error suppressing {email}: {se}")
+        elif ev_type_lower in ("unsubscribe", "group_unsubscribe"):
+            valid_categories = {
+                "shopping_reminders",
+                "tips_reengagement",
+                "product_updates",
+                "billing_account",
+                "promotional_offers",
+                "household_activity",
+            }
+            # Extract category from ev.get("category") or ev.get("campaign")
+            raw_cat = ev.get("category")
+            cat_name = None
+            if isinstance(raw_cat, list) and raw_cat:
+                cat_name = str(raw_cat[0]).strip().lower()
+            elif isinstance(raw_cat, str) and raw_cat.strip():
+                cat_name = raw_cat.strip().lower()
+
+            if not cat_name:
+                camp = ev.get("campaign") or campaign
+                if camp:
+                    cat_name = str(camp).strip().lower()
+
+            resolved_cat = None
+            if cat_name:
+                if cat_name in valid_categories:
+                    resolved_cat = cat_name
+                else:
+                    try:
+                        import email_helper
+                        mapped = email_helper.resolve_category_for_campaign(cat_name)
+                        if mapped in valid_categories:
+                            resolved_cat = mapped
+                    except Exception:
+                        pass
+
+            if resolved_cat and resolved_cat in valid_categories:
+                try:
+                    authmod.unsubscribe_category(email=email, category=resolved_cat, user_id=user_id or 0)
+                    print(f"[SendGrid Webhook] Unsubscribed {email} from category '{resolved_cat}' ({ev_type_lower})")
+                except Exception as ce:
+                    print(f"[SendGrid Webhook] Error unsubscribing {email} from category '{resolved_cat}': {ce}")
+            else:
+                try:
+                    authmod.unsubscribe_all(email=email, user_id=user_id or 0)
+                    print(f"[SendGrid Webhook] Global unsubscribe for {email} ({ev_type_lower})")
+                except Exception as ae:
+                    print(f"[SendGrid Webhook] Error unsubscribing all for {email}: {ae}")
         elif ev_type_lower == "group_resubscribe":
             try:
+                authmod.resubscribe_all(email=email, user_id=user_id or 0)
                 authmod.unsuppress_email(email=email)
-                print(f"[SendGrid Webhook] Unsuppressed {email} due to 'group_resubscribe'")
+                print(f"[SendGrid Webhook] Resubscribed {email} to all categories due to 'group_resubscribe'")
             except Exception as ue:
-                print(f"[SendGrid Webhook] Error unsuppressing {email}: {ue}")
+                print(f"[SendGrid Webhook] Error resubscribing {email}: {ue}")
 
         # Update household email engagement metrics
         if household_id:
@@ -9615,6 +9686,32 @@ def api_admin_push_test():
         return jsonify({"ok": True, "result": res})
     except Exception as e:
         print(f"[/api/admin/push/test error]: {e}", flush=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/email-preferences/stats", methods=["GET"])
+def admin_email_preferences_stats():
+    """Admin observability endpoint for email preference counts and suppression breakdown."""
+    auth_header = request.headers.get("Authorization", "").strip()
+    admin_token = os.environ.get("ADMIN_SECRET") or os.environ.get("ADMIN_API_KEY") or os.environ.get("ADMIN_TOKEN")
+
+    token_authorized = False
+    if admin_token and auth_header:
+        token_to_check = auth_header[7:].strip() if auth_header.startswith("Bearer ") else auth_header
+        import hmac
+        if hmac.compare_digest(token_to_check, admin_token):
+            token_authorized = True
+
+    if not token_authorized and not is_admin_user():
+        if not authmod.is_logged_in() and not is_logged_in():
+            return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": "Forbidden: Admin access only"}), 403
+
+    try:
+        stats = authmod.get_email_preference_stats()
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as e:
+        print(f"[/api/admin/email-preferences/stats error]: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 

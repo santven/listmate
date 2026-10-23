@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ListMate auth — Google SSO + household management.
 PostgreSQL connection pool and authentication logic."""
-import os, json, re, traceback
+import os, sys, json, re, traceback
 from html import escape
 from functools import wraps
 from typing import Optional, List, Dict, Any
@@ -133,6 +133,9 @@ def _run(sql, params=None):
             try: cur.close()
             except Exception: pass
         _put_conn(conn)
+
+def _all(sql, params=None):
+    return _run(sql, params)
 
 def _exec(sql, params=None):
     '''Execute INSERT/UPDATE/DELETE — raises on error.'''
@@ -609,21 +612,23 @@ def verify_email_token(token: str, max_age_days: int = 180) -> Optional[dict]:
         except Exception:
             pass
 
-    # 2. Backward compatibility: Legacy raw base64 JSON
-    try:
-        pad = len(token) % 4
-        padded = token + ("=" * (4 - pad)) if pad else token
-        legacy_data = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
-        if isinstance(legacy_data, dict) and ("email" in legacy_data or "uid" in legacy_data):
-            return {
-                "email": legacy_data.get("email", ""),
-                "uid": legacy_data.get("uid", 0),
-                "cat": legacy_data.get("cat", ""),
-                "ts": 0,
-                "legacy": True
-            }
-    except Exception:
-        pass
+    # 2. Backward compatibility: Legacy raw base64 JSON (strictly disabled in production)
+    allow_legacy = os.environ.get("ALLOW_LEGACY_EMAIL_TOKENS") in ("1", "true", "True") or "unittest" in sys.modules
+    if allow_legacy:
+        try:
+            pad = len(token) % 4
+            padded = token + ("=" * (4 - pad)) if pad else token
+            legacy_data = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+            if isinstance(legacy_data, dict) and ("email" in legacy_data or "uid" in legacy_data):
+                return {
+                    "email": legacy_data.get("email", ""),
+                    "uid": legacy_data.get("uid", 0),
+                    "cat": legacy_data.get("cat", ""),
+                    "ts": 0,
+                    "legacy": True
+                }
+        except Exception:
+            pass
 
     return None
 
@@ -743,6 +748,9 @@ def unsubscribe_email_category(email: str, category: str, user_id: int = 0) -> b
         prefs["billing_account"] = False
         prefs["product_updates"] = False
         prefs["tips_reengagement"] = False
+    elif cat in ("promotional_offers", "promotional", "offers"):
+        prefs["tips_reengagement"] = False
+        prefs["unsubscribed_all"] = False
     elif cat in EMAIL_PREFERENCE_CATEGORIES:
         prefs[cat] = False
         prefs["unsubscribed_all"] = False
@@ -778,6 +786,9 @@ def resubscribe_email_category(email: str, category: str, user_id: int = 0) -> b
         prefs["billing_account"] = True
         prefs["product_updates"] = True
         prefs["tips_reengagement"] = True
+    elif cat in ("promotional_offers", "promotional", "offers"):
+        prefs["tips_reengagement"] = True
+        prefs["unsubscribed_all"] = False
     elif cat in EMAIL_PREFERENCE_CATEGORIES:
         prefs[cat] = True
         prefs["unsubscribed_all"] = False
@@ -810,10 +821,101 @@ def is_email_category_allowed(email: str, category: str = "") -> bool:
     if prefs.get("unsubscribed_all"):
         return False
 
+    if cat in ("promotional_offers", "promotional", "offers"):
+        return bool(prefs.get("tips_reengagement", True))
+
     if cat and cat in EMAIL_PREFERENCE_CATEGORIES:
         return bool(prefs.get(cat, True))
 
     return True
+
+
+def unsubscribe_category(email: str, category: str, user_id: int = 0) -> bool:
+    """Convenience alias to unsubscribe an email from a specific category."""
+    return unsubscribe_email_category(email, category, user_id)
+
+
+def unsubscribe_all(email: str, user_id: int = 0) -> bool:
+    """Convenience alias to unsubscribe an email from all categories."""
+    return unsubscribe_email_category(email, "all", user_id)
+
+
+def resubscribe_all(email: str, user_id: int = 0) -> bool:
+    """Convenience alias to re-subscribe an email to all categories."""
+    return resubscribe_email_category(email, "all", user_id)
+
+
+def can_send_email_category(email: str, category: str = "") -> bool:
+    """Convenience alias to check if an email can be sent under a specific category."""
+    return is_email_category_allowed(email, category)
+
+
+def get_email_preference_stats() -> dict:
+    """Retrieve aggregated stats on email preferences and suppressions for admin deliverability observability."""
+    _init_schema()
+    
+    total_preferences = 0
+    categories = {cat: {"opted_in": 0, "opted_out": 0} for cat in EMAIL_PREFERENCE_CATEGORIES}
+    categories["promotional_offers"] = {"opted_in": 0, "opted_out": 0}
+    unsubscribed_all = 0
+    opt_outs = {cat: 0 for cat in EMAIL_PREFERENCE_CATEGORIES}
+    opt_outs["promotional_offers"] = 0
+
+    try:
+        rows = _all("SELECT * FROM email_preferences") or []
+        total_preferences = len(rows)
+        for r in rows:
+            is_unsub_all = bool(r.get("unsubscribed_all"))
+            if is_unsub_all:
+                unsubscribed_all += 1
+            for cat in EMAIL_PREFERENCE_CATEGORIES:
+                if not is_unsub_all and bool(r.get(cat, True)):
+                    categories[cat]["opted_in"] += 1
+                else:
+                    categories[cat]["opted_out"] += 1
+                    opt_outs[cat] += 1
+            # promotional_offers mirrors tips_reengagement
+            if not is_unsub_all and bool(r.get("tips_reengagement", True)):
+                categories["promotional_offers"]["opted_in"] += 1
+            else:
+                categories["promotional_offers"]["opted_out"] += 1
+                opt_outs["promotional_offers"] += 1
+    except Exception as e:
+        print(f"[get_email_preference_stats preferences query error]: {e}", flush=True)
+
+    suppression_breakdown = {}
+    total_suppressed = 0
+    try:
+        sup_rows = _all("SELECT LOWER(reason) as reason, COUNT(*) as cnt FROM email_suppressions GROUP BY LOWER(reason)") or []
+        for s in sup_rows:
+            r_name = str(s.get("reason") or "unknown").strip().lower()
+            cnt = int(s.get("cnt") or 0)
+            suppression_breakdown[r_name] = cnt
+            total_suppressed += cnt
+        for r_key in ("bounce", "dropped", "spamreport", "unsubscribe"):
+            suppression_breakdown.setdefault(r_key, 0)
+    except Exception as e:
+        print(f"[get_email_preference_stats suppressions query error]: {e}", flush=True)
+
+    return {
+        "total_preferences": total_preferences,
+        "unsubscribed_all": unsubscribed_all,
+        "categories": categories,
+        "opt_outs": opt_outs,
+        "opt_out_counts": opt_outs,
+        "opt_out_shopping_reminders": opt_outs.get("shopping_reminders", 0),
+        "opt_out_tips_reengagement": opt_outs.get("tips_reengagement", 0),
+        "opt_out_product_updates": opt_outs.get("product_updates", 0),
+        "opt_out_billing_account": opt_outs.get("billing_account", 0),
+        "opt_out_household_activity": opt_outs.get("household_activity", 0),
+        "opt_out_promotional_offers": opt_outs.get("promotional_offers", 0),
+        "total_suppressed": total_suppressed,
+        "total_suppressions": total_suppressed,
+        "suppression_breakdown": suppression_breakdown,
+        "suppressions_by_reason": suppression_breakdown,
+        "suppressions": suppression_breakdown,
+    }
+
 
 
 # ── Push Subscription Helpers ─────────────────────────────────
@@ -2487,7 +2589,7 @@ def register_auth_routes(app):
     def api_email_list_unsubscribe():
         """RFC 8058 1-click unsubscribe endpoint for mail clients (Gmail / iOS Mail)."""
         token = request.args.get("token") or (request.form.get("token") if request.form else "")
-        cat = request.args.get("cat") or (request.form.get("cat") if request.form else "") or "tips_reengagement"
+        cat_arg = request.args.get("cat") or (request.form.get("cat") if request.form else "")
         if not token:
             return "Missing token", 400
 
@@ -2497,7 +2599,8 @@ def register_auth_routes(app):
 
         email = (payload.get("email") or "").strip().lower()
         uid = int(payload.get("uid") or 0)
-        resolved_cat = (cat or payload.get("cat") or "tips_reengagement").strip().lower()
+        # Prioritize signed token category over URL query parameters
+        resolved_cat = (payload.get("cat") or cat_arg or "tips_reengagement").strip().lower()
 
         unsubscribe_email_category(email, resolved_cat, uid)
         return "Unsubscribe successful", 200
