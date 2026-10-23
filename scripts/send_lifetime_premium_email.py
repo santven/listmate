@@ -104,6 +104,7 @@ def generate_email_content(
     user_id: int = 0,
     household_id: int = 0,
     stats: dict = None,
+    to_email: str = "",
 ) -> tuple:
     """Generates (subject, plain_text, html_body) for the personalized lifetime premium email."""
     if not stats:
@@ -130,6 +131,8 @@ def generate_email_content(
         user_id,
         "founding member updates",
         "You received this email because your household is a Lifetime Premium Member on ListMate.",
+        email=to_email,
+        category="product_updates",
     )
 
     plain_text = f"""Hi {first_name},
@@ -471,6 +474,14 @@ def get_premium_users() -> list:
       AND LOWER(TRIM(h.subscription_status)) = 'premium'
       AND u.email IS NOT NULL
           AND TRIM(u.email) != ''
+      AND NOT EXISTS (
+          SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM email_preferences ep 
+          WHERE (LOWER(ep.email) = LOWER(u.email) OR ep.user_id = u.id)
+            AND (ep.product_updates = FALSE OR ep.unsubscribed_all = TRUE)
+      )
         ORDER BY h.id, u.id
     """
     rows = db_pg.execute_query(query)
@@ -496,12 +507,21 @@ def send_lifetime_email(
         print(f"[Suppressed] Skipping {clean_email}: In email_suppressions")
         return False
 
+    try:
+        from shared.auth import is_email_category_allowed
+        if not is_email_category_allowed(clean_email, "product_updates"):
+            print(f"[Opted Out] Skipping {clean_email}: Opted out of product_updates in email_preferences")
+            return False
+    except Exception:
+        pass
+
     subject, plain_text, html_body = generate_email_content(
         user_name=user_name,
         household_name=household_name,
         user_id=user_id,
         household_id=household_id,
         stats=stats,
+        to_email=clean_email,
     )
 
     if dry_run:

@@ -1,6 +1,18 @@
 import os
+os.environ["DATABASE_URL"] = os.environ.get("DATABASE_URL", "postgresql://dummy:5432/test")
+import sys
 import unittest
 from unittest.mock import patch, MagicMock
+
+for mod in ["google", "google.oauth2", "google.auth", "google.auth.transport", "google.auth.exceptions", "psycopg2", "psycopg2.extras", "psycopg2.pool", "requests"]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+
+if "flask_limiter" not in sys.modules:
+    mock_limiter = MagicMock()
+    mock_limiter.Limiter.return_value.limit.return_value = lambda f: f
+    sys.modules["flask_limiter"] = mock_limiter
+    sys.modules["flask_limiter.util"] = MagicMock()
 
 import scripts.cron_daily as cron_daily
 import app as flask_app
@@ -25,7 +37,7 @@ class TestTrialPushNotifications(unittest.TestCase):
         self.assertIn("uninterrupted household sync", body_24)
 
     @patch("scripts.cron_daily._init_schema")
-    @patch("scripts.cron_daily._run")
+    @patch("push_helper._run")
     @patch("push_helper.send_push_to_user")
     def test_check_trial_expiration_pushes_dispatch(self, mock_send_push, mock_run, mock_init_schema):
         """Verify eligible trial candidates are evaluated and dispatched with deep link."""
@@ -76,7 +88,7 @@ class TestTrialPushNotifications(unittest.TestCase):
         self.assertEqual(second_call.kwargs["data"]["campaign"], "trial_24h")
 
     @patch("scripts.cron_daily._init_schema")
-    @patch("scripts.cron_daily._run")
+    @patch("push_helper._run")
     @patch("push_helper.send_push_to_user")
     def test_live_subscription_check_suppresses_upgraded_users(self, mock_send_push, mock_run, mock_init_schema):
         """Acceptance Criteria 2: Directly verify is_premium = FALSE in PostgreSQL immediately before dispatch."""
@@ -98,7 +110,7 @@ class TestTrialPushNotifications(unittest.TestCase):
         mock_send_push.assert_not_called()
 
     @patch("scripts.cron_daily._init_schema")
-    @patch("scripts.cron_daily._run")
+    @patch("push_helper._run")
     def test_dry_run_mode(self, mock_run, mock_init_schema):
         """Verify dry run mode outputs planned dispatches without modifying data."""
         mock_run.side_effect = [
@@ -119,7 +131,7 @@ class TestTrialPushNotifications(unittest.TestCase):
 
     def test_hourly_push_webhook_auth_missing_secret(self):
         """Webhook should return 500 or 401 if INTERNAL_CRON_SECRET is not configured or matched."""
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://mock:5432/mock"}, clear=True):
             resp = self.client.post("/api/internal/cron/hourly-push")
             self.assertEqual(resp.status_code, 500)
             data = resp.get_json()

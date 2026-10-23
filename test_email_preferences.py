@@ -336,11 +336,12 @@ class TestEmailPreferences(unittest.TestCase):
     # ─────────────────────────────────────────────────────────────
     # 8. Cron Daily Event Pruning Tests
     # ─────────────────────────────────────────────────────────────
-    @patch("shared.auth.is_email_suppressed")
+    @patch("scripts.cron_daily._run")
+    @patch("scripts.cron_daily.is_email_suppressed", return_value=False)
     @patch("shared.auth.is_email_category_allowed")
-    @patch("email_helper.send_subscription_notice")
+    @patch("scripts.cron_daily.send_subscription_notice")
     @patch("email_helper.send_store_plan_reminder_email")
-    def test_cron_daily_prunes_opted_out_category(self, mock_send_plan, mock_send_sub, mock_allowed, mock_supp):
+    def test_cron_daily_prunes_opted_out_category(self, mock_send_plan, mock_send_sub, mock_allowed, mock_supp, mock_run):
         from scripts.cron_daily import process_email_events
 
         mock_supp.return_value = False
