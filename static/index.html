@@ -2297,6 +2297,66 @@ body.is-premium .toast, body.has-no-ads .toast { bottom: 30px; }
     </div>
   </div>
 
+  <!-- Nourish Discovery Bottom Drawer (#nourishDiscoveryDrawer) -->
+  <div id="nourishDiscoveryBackdrop" class="modal-overlay" style="display:none; align-items:flex-end; justify-content:center; padding:0; z-index:11200;" onclick="if(event.target===this)dismissNourishDiscoveryDrawer();">
+    <div id="nourishDiscoveryDrawer" class="drawer modal-sheet" style="background:#fff; width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:22px 20px calc(24px + env(safe-area-inset-bottom, 0px)); box-shadow:0 -10px 40px rgba(0,0,0,0.22); animation:slideUp .25s cubic-bezier(0.16, 1, 0.3, 1); position:relative;" onclick="event.stopPropagation();">
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🥗</span>
+          <div>
+            <div style="font-weight:800; font-size:16.5px; color:#065f46; letter-spacing:-0.2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span>ListMate Nourish</span>
+              <span style="font-size:12px; font-weight:700; background:#d1fae5; color:#047857; padding:2px 8px; border-radius:999px;">✨ Included in Your Plan</span>
+            </div>
+            <div style="font-size:13px; color:#4b5563; margin-top:3px; line-height:1.35;">
+              All-in-one AI nutrition &amp; meal tracking without extra fees
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="dismissNourishDiscoveryDrawer()" style="background:none; border:none; font-size:20px; color:#9ca3af; cursor:pointer; padding:2px 6px; margin-top:-2px;" aria-label="Close">✕</button>
+      </div>
+
+      <!-- Value Bullets -->
+      <div style="display:flex; flex-direction:column; gap:12px; margin:16px 0 20px;">
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <span style="font-size:18px; line-height:1.2; flex-shrink:0;">💬</span>
+          <div style="font-size:13px; line-height:1.4; color:#374151;">
+            <strong style="color:#111827;">Describe Plate with AI</strong>: Describe meals in plain words for instant calories, macros &amp; hydration.
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <span style="font-size:18px; line-height:1.2; flex-shrink:0;">🎯</span>
+          <div style="font-size:13px; line-height:1.4; color:#374151;">
+            <strong style="color:#111827;">Daily Goals</strong>: Track calories, protein, carbs &amp; water built for your lifestyle.
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <span style="font-size:18px; line-height:1.2; flex-shrink:0;">👨‍👩‍👧</span>
+          <div style="font-size:13px; line-height:1.4; color:#374151;">
+            <strong style="color:#111827;">Household Sharing</strong>: 1-tap sharing of home-cooked family meals.
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <span style="font-size:18px; line-height:1.2; flex-shrink:0;">💡</span>
+          <div style="font-size:13px; line-height:1.4; color:#374151;">
+            <strong style="color:#111827;">No Extra Subscriptions</strong>: Skip expensive separate apps like MyFitnessPal and other nutrition trackers — 100% included in your ListMate membership.
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button type="button" id="btnNourishDiscoveryExplore" onclick="acceptNourishDiscoveryDrawer()" style="width:100%; background:linear-gradient(135deg, #10b981, #059669); color:#fff; border:none; border-radius:14px; padding:13px 16px; font-size:15px; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; gap:8px;">
+          <span>🚀</span> Explore Nourish (Turn On)
+        </button>
+        <button type="button" id="btnNourishDiscoveryDismiss" onclick="dismissNourishDiscoveryDrawer()" style="width:100%; background:transparent; color:#6b7280; border:none; border-radius:12px; padding:9px 16px; font-size:13.5px; font-weight:600; cursor:pointer;">
+          Maybe Later
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="recipes-screen" id="screenRecipes" style="display:none; padding-bottom:30px;">
     <!-- Tabs Header -->
     <div style="display:flex; gap:8px; margin-bottom:16px;">
@@ -3202,6 +3262,28 @@ try {
   }
 } catch (e) {}
 
+function applyLastScreenLandingDefault() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasExplicitParam = urlParams.has('screen') || urlParams.has('modal') || urlParams.has('action');
+    if (!hasExplicitParam) {
+      let lastScreen = 'home';
+      try {
+        lastScreen = localStorage.getItem('listmate_last_screen') || 'home';
+      } catch(e) {}
+      if (lastScreen === 'nourish' && typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
+        lastScreen = 'home';
+      }
+      if (lastScreen && lastScreen !== 'home' && typeof showScreen === 'function') {
+        showScreen(lastScreen);
+      }
+    }
+  } catch(e) {
+    console.warn('Error applying default landing screen:', e);
+  }
+}
+window.applyLastScreenLandingDefault = applyLastScreenLandingDefault;
+
 async function checkAuth() {
   window.authConfigPromise = (async function() {
   if (!navigator.onLine) {
@@ -3273,6 +3355,12 @@ async function checkAuth() {
     }
 
     updateOfflineStatusUI();
+    applyLastScreenLandingDefault();
+    try {
+      if (typeof initNourishDiscoveryIdleTrigger === 'function') {
+        initNourishDiscoveryIdleTrigger();
+      }
+    } catch(e) {}
     return true;
   }
 
@@ -3437,6 +3525,12 @@ async function checkAuth() {
     if (window.dailyInspirationEngine && typeof window.dailyInspirationEngine.initCadence === 'function') {
       window.dailyInspirationEngine.initCadence(600, cfg ? cfg.user_info : null);
     }
+    applyLastScreenLandingDefault();
+    try {
+      if (typeof initNourishDiscoveryIdleTrigger === 'function') {
+        initNourishDiscoveryIdleTrigger();
+      }
+    } catch(e) {}
     return true;
   } catch(e) { 
     let cfg = null;
@@ -3454,6 +3548,12 @@ async function checkAuth() {
       }
     }
     updateOfflineStatusUI();
+    applyLastScreenLandingDefault();
+    try {
+      if (typeof initNourishDiscoveryIdleTrigger === 'function') {
+        initNourishDiscoveryIdleTrigger();
+      }
+    } catch(ex) {}
     return true; 
   }
   })();
@@ -4618,6 +4718,17 @@ window.addEventListener('scroll', updateFabVisibility);
 function showScreen(name){
   currentScreen = name;
   window.currentScreen = name;
+  const trackedScreens = ['home', 'stillGood', 'nourish', 'recipes', 'analytics'];
+  if (trackedScreens.indexOf(name) !== -1) {
+    try {
+      localStorage.setItem('listmate_last_screen', name);
+    } catch(e) {}
+  }
+  if (name !== 'home' && typeof window._cancelNourishDiscoveryTimer === 'function') {
+    window._cancelNourishDiscoveryTimer();
+  } else if (name === 'home' && typeof window._scheduleNourishDiscoveryTimer === 'function') {
+    window._scheduleNourishDiscoveryTimer();
+  }
   try {
     if (typeof trackScreenView === 'function') {
       trackScreenView(name);
@@ -13969,6 +14080,224 @@ window.renderNourishTrendsChart = renderNourishTrendsChart;
 window.toggleNourishAdhTooltip = toggleNourishAdhTooltip;
 window.closeNourishAdhTooltip = closeNourishAdhTooltip;
 window.updateNourishAiLimitUI = updateNourishAiLimitUI;
+
+// ── Nourish Discovery Bottom Drawer & Idle Trigger Engine ──────────
+function openNourishDiscoveryDrawer() {
+  var backdrop = document.getElementById('nourishDiscoveryBackdrop');
+  var drawer = document.getElementById('nourishDiscoveryDrawer');
+  if (!backdrop || !drawer) return;
+  backdrop.style.display = 'flex';
+  backdrop.classList.add('active');
+  drawer.classList.add('active');
+  document.body.classList.add('has-modal-open');
+}
+
+function closeNourishDiscoveryDrawer() {
+  var backdrop = document.getElementById('nourishDiscoveryBackdrop');
+  var drawer = document.getElementById('nourishDiscoveryDrawer');
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    backdrop.style.display = 'none';
+  }
+  if (drawer) {
+    drawer.classList.remove('active');
+  }
+  document.body.classList.remove('has-modal-open');
+}
+
+async function acceptNourishDiscoveryDrawer() {
+  closeNourishDiscoveryDrawer();
+  try {
+    localStorage.setItem('listmate_last_screen', 'nourish');
+  } catch(e) {}
+  if (typeof setNourishEnabled === 'function') {
+    await setNourishEnabled(true);
+  }
+  if (typeof showScreen === 'function') {
+    showScreen('nourish');
+  }
+}
+
+function dismissNourishDiscoveryDrawer() {
+  try {
+    localStorage.setItem('nourish_discovery_dismissed_at', Date.now().toString());
+  } catch(e) {}
+  closeNourishDiscoveryDrawer();
+}
+
+function initNourishDiscoveryIdleTrigger() {
+  // 1. Session Count Guard:
+  // Increment session counter in sessionStorage / localStorage (listmate_session_count).
+  // If session_count < 2, NEVER show on Session 1.
+  try {
+    if (!sessionStorage.getItem('listmate_session_counted')) {
+      sessionStorage.setItem('listmate_session_counted', '1');
+      var prevCount = parseInt(localStorage.getItem('listmate_session_count') || '0', 10);
+      var newCount = prevCount + 1;
+      localStorage.setItem('listmate_session_count', newCount.toString());
+    }
+  } catch(e) {}
+
+  var sessionCount = 0;
+  try {
+    sessionCount = parseInt(localStorage.getItem('listmate_session_count') || '0', 10);
+  } catch(e) {}
+
+  if (sessionCount < 2) {
+    // Strict Guard: NEVER show on Session 1
+    return;
+  }
+
+  // 2. Pre-check sync eligibility guards
+  if (typeof isNourishEnabled === 'function' && isNourishEnabled()) {
+    return;
+  }
+
+  try {
+    var dismissedAt = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
+    if (dismissedAt > 0 && (Date.now() - dismissedAt < 14 * 86400000)) {
+      return;
+    }
+    if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') {
+      return;
+    }
+  } catch(e) {}
+
+  var idleTimer = null;
+  var isCheckingEligibility = false;
+  var isEligible = null;
+
+  async function checkServerEligibility() {
+    if (isEligible !== null) return isEligible;
+    if (isCheckingEligibility) return false;
+    isCheckingEligibility = true;
+    try {
+      var res = await fetch(API + '/user/nourish-enabled').then(function(r) { return r.json(); });
+      if (res && res.ok) {
+        if (res.enabled === true) {
+          window._nourishEnabled = true;
+          try { localStorage.setItem('nourish_enabled', 'true'); } catch(e){}
+          isEligible = false;
+          return false;
+        }
+        var totalLogs = res.total_logs || 0;
+        var hasLogged = (res.has_logged_meals === true) || (totalLogs > 0);
+        if (hasLogged) {
+          isEligible = false;
+          return false;
+        }
+        isEligible = true;
+        return true;
+      }
+    } catch(err) {
+      console.warn('[Nourish Discovery] Server check error:', err);
+      return false;
+    } finally {
+      isCheckingEligibility = false;
+    }
+    return false;
+  }
+
+  function cancelIdleTimer() {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  }
+
+  function isBlocked() {
+    // 1. Must be on Home screen
+    var screen = window.currentScreen || (typeof currentScreen !== 'undefined' ? currentScreen : 'home');
+    if (screen !== 'home') return true;
+
+    // 2. If any modal or drawer is active => ABORT
+    var activeModalOrDrawer = document.querySelector('.modal.active, .drawer.active, #bottomDrawer.active, #shareDrawer.active, .modal-overlay.active, .app-switcher-menu.show, #burgerMenu.show');
+    if (activeModalOrDrawer) return true;
+
+    // 3. If user is typing (INPUT, TEXTAREA, isContentEditable) => ABORT
+    var activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+      return true;
+    }
+
+    // 4. Must not be in background or hidden tab
+    if (document.hidden) return true;
+
+    // 5. List must be loaded
+    if (typeof stores === 'undefined' || !Array.isArray(stores)) return true;
+
+    return false;
+  }
+
+  async function onIdleTimeout() {
+    cancelIdleTimer();
+
+    // Check all blocking conditions
+    if (isBlocked()) {
+      return;
+    }
+
+    // Check sync guards
+    if (typeof isNourishEnabled === 'function' && isNourishEnabled()) return;
+    try {
+      var dismissed = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
+      if (dismissed > 0 && (Date.now() - dismissed < 14 * 86400000)) return;
+      if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') return;
+    } catch(e) {}
+
+    // Check server eligibility: has_logged_meals === false (total_logs === 0)
+    var eligible = await checkServerEligibility();
+    if (!eligible) return;
+
+    // Re-verify no blocking modal popped up during async check
+    if (isBlocked()) return;
+
+    // Slide up drawer
+    try {
+      sessionStorage.setItem('nourish_discovery_shown_this_session', '1');
+    } catch(e) {}
+    openNourishDiscoveryDrawer();
+    removeActivityListeners();
+  }
+
+  function scheduleIdleCountdown() {
+    cancelIdleTimer();
+    if (isBlocked()) return;
+    idleTimer = setTimeout(onIdleTimeout, 5000);
+  }
+
+  function onUserActivity() {
+    cancelIdleTimer();
+    if (!isBlocked()) {
+      scheduleIdleCountdown();
+    }
+  }
+
+  var activityEvents = ['keydown', 'input', 'touchstart', 'scroll', 'wheel', 'click'];
+  function addActivityListeners() {
+    activityEvents.forEach(function(evt) {
+      window.addEventListener(evt, onUserActivity, { passive: true });
+    });
+  }
+
+  function removeActivityListeners() {
+    activityEvents.forEach(function(evt) {
+      window.removeEventListener(evt, onUserActivity);
+    });
+  }
+
+  window._cancelNourishDiscoveryTimer = cancelIdleTimer;
+  window._scheduleNourishDiscoveryTimer = scheduleIdleCountdown;
+
+  addActivityListeners();
+  scheduleIdleCountdown();
+}
+
+window.openNourishDiscoveryDrawer = openNourishDiscoveryDrawer;
+window.closeNourishDiscoveryDrawer = closeNourishDiscoveryDrawer;
+window.acceptNourishDiscoveryDrawer = acceptNourishDiscoveryDrawer;
+window.dismissNourishDiscoveryDrawer = dismissNourishDiscoveryDrawer;
+window.initNourishDiscoveryIdleTrigger = initNourishDiscoveryIdleTrigger;
 </script>
 </body>
 </html>

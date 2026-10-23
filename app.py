@@ -5191,7 +5191,32 @@ def api_user_nourish_enabled():
             cur = db.execute("SELECT nourish_enabled FROM auth_users WHERE id = ?", (uid,))
             row = cur.fetchone() if cur else None
             enabled = bool(row and row.get("nourish_enabled"))
-            return jsonify({"ok": True, "enabled": enabled})
+
+            has_logged_meals = False
+            total_logs = 0
+            try:
+                cnt_cur = db.execute("SELECT COUNT(*) AS total FROM nourish_food_logs WHERE user_id = ?", (uid,))
+                cnt_row = cnt_cur.fetchone() if cnt_cur else None
+                if cnt_row:
+                    if isinstance(cnt_row, dict):
+                        total_logs = int(cnt_row.get("total") or cnt_row.get("count") or 0)
+                    elif isinstance(cnt_row, (list, tuple)) and len(cnt_row) > 0:
+                        total_logs = int(cnt_row[0] or 0)
+                    else:
+                        total_logs = int(getattr(cnt_row, "total", 0) or 0)
+                    has_logged_meals = total_logs > 0
+            except Exception:
+                try: db.rollback()
+                except Exception: pass
+                has_logged_meals = False
+                total_logs = 0
+
+            return jsonify({
+                "ok": True,
+                "enabled": enabled,
+                "has_logged_meals": has_logged_meals,
+                "total_logs": total_logs
+            })
     except Exception as exc:
         try: db.rollback()
         except Exception: pass
