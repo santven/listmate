@@ -2,6 +2,7 @@
 """ListMate auth — Google SSO + household management.
 PostgreSQL connection pool and authentication logic."""
 import os, json, re, traceback
+from html import escape
 from functools import wraps
 from typing import Optional, List, Dict, Any
 try:
@@ -282,6 +283,21 @@ def _init_schema():
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )""",
         """CREATE INDEX IF NOT EXISTS idx_email_suppressions_email ON email_suppressions(LOWER(email))""",
+        """CREATE TABLE IF NOT EXISTS email_preferences (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            user_id INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+            household_activity BOOLEAN NOT NULL DEFAULT TRUE,
+            shopping_reminders BOOLEAN NOT NULL DEFAULT TRUE,
+            billing_account BOOLEAN NOT NULL DEFAULT TRUE,
+            product_updates BOOLEAN NOT NULL DEFAULT TRUE,
+            tips_reengagement BOOLEAN NOT NULL DEFAULT TRUE,
+            unsubscribed_all BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_email_preferences_email ON email_preferences(LOWER(email))""",
+        """CREATE INDEX IF NOT EXISTS idx_email_preferences_user_id ON email_preferences(user_id)""",
         """CREATE TABLE IF NOT EXISTS push_subscriptions (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -492,6 +508,312 @@ def unsuppress_email(email: str) -> bool:
     except Exception as e:
         print(f"[unsuppress_email error] {clean}: {e}", flush=True)
         return False
+
+
+# ── Email Cryptographic Token & Granular Preference Engine ──────
+
+EMAIL_PREFERENCE_CATEGORIES = [
+    "household_activity",
+    "shopping_reminders",
+    "billing_account",
+    "product_updates",
+    "tips_reengagement",
+]
+
+EMAIL_CATEGORIES_METADATA = {
+    "household_activity": {
+        "id": "household_activity",
+        "title": "Household Activity",
+        "badge": "🛒 Household",
+        "description": "Alerts when members finish shopping trips or send household invites.",
+        "default": True,
+    },
+    "shopping_reminders": {
+        "id": "shopping_reminders",
+        "title": "Shopping & Store Plans",
+        "badge": "📋 Shopping Plans",
+        "description": "Helpful reminders when an unplanned store accumulates items.",
+        "default": True,
+    },
+    "billing_account": {
+        "id": "billing_account",
+        "title": "Account & Subscription",
+        "badge": "💳 Account & Billing",
+        "description": "Trial expiration countdowns, renewal notices, and extension passes.",
+        "default": True,
+    },
+    "product_updates": {
+        "id": "product_updates",
+        "title": "Product & Feature Updates",
+        "badge": "🚀 New Features",
+        "description": "Major announcements (Still Good, Nourish), app updates, and resolved feedback.",
+        "default": True,
+    },
+    "tips_reengagement": {
+        "id": "tips_reengagement",
+        "title": "Tips & Household Coaching",
+        "badge": "💡 Tips & Coaching",
+        "description": "Smart setup suggestions, periodic check-ins, and dormant item reminders.",
+        "default": True,
+    },
+}
+
+def get_email_token_secret() -> bytes:
+    key = os.environ.get("EMAIL_TOKEN_SECRET") or os.environ.get("SECRET_KEY") or "listmate-email-pref-key-2026"
+    return key.encode("utf-8")
+
+def generate_email_token(email: str, category: str = "", user_id: int = 0) -> str:
+    """Generate an HMAC-SHA256 signed, URL-safe token for email preference & unsubscribe actions."""
+    import hmac, hashlib, base64, json, time
+    payload = {
+        "email": (email or "").strip().lower(),
+        "uid": int(user_id or 0),
+        "cat": str(category or "").strip().lower(),
+        "ts": int(time.time()),
+    }
+    payload_json = json.dumps(payload, separators=(',', ':')).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("utf-8").rstrip("=")
+    sig = hmac.new(get_email_token_secret(), payload_b64.encode("utf-8"), hashlib.sha256).digest()
+    sig_b64 = base64.urlsafe_b64encode(sig).decode("utf-8").rstrip("=")
+    return f"{payload_b64}.{sig_b64}"
+
+def verify_email_token(token: str, max_age_days: int = 180) -> Optional[dict]:
+    """Verify an HMAC-SHA256 signed token. Falls back gracefully to legacy base64 format for old emails."""
+    if not token or not isinstance(token, str):
+        return None
+    token = token.strip()
+    import hmac, hashlib, base64, json, time
+
+    # 1. Try HMAC-signed format: <payload_b64>.<sig_b64>
+    if "." in token:
+        try:
+            parts = token.split(".")
+            if len(parts) == 2:
+                payload_b64, sig_b64 = parts
+                pad = len(payload_b64) % 4
+                payload_b64_padded = payload_b64 + ("=" * (4 - pad)) if pad else payload_b64
+                pad_sig = len(sig_b64) % 4
+                sig_b64_padded = sig_b64 + ("=" * (4 - pad_sig)) if pad_sig else sig_b64
+
+                expected_sig = hmac.new(get_email_token_secret(), payload_b64.encode("utf-8"), hashlib.sha256).digest()
+                actual_sig = base64.urlsafe_b64decode(sig_b64_padded.encode("utf-8"))
+
+                if hmac.compare_digest(expected_sig, actual_sig):
+                    payload = json.loads(base64.urlsafe_b64decode(payload_b64_padded.encode("utf-8")).decode("utf-8"))
+                    ts = payload.get("ts", 0)
+                    if ts and max_age_days > 0:
+                        age_seconds = time.time() - ts
+                        if age_seconds > max_age_days * 86400:
+                            return None
+                    return payload
+        except Exception:
+            pass
+
+    # 2. Backward compatibility: Legacy raw base64 JSON
+    try:
+        pad = len(token) % 4
+        padded = token + ("=" * (4 - pad)) if pad else token
+        legacy_data = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+        if isinstance(legacy_data, dict) and ("email" in legacy_data or "uid" in legacy_data):
+            return {
+                "email": legacy_data.get("email", ""),
+                "uid": legacy_data.get("uid", 0),
+                "cat": legacy_data.get("cat", ""),
+                "ts": 0,
+                "legacy": True
+            }
+    except Exception:
+        pass
+
+    return None
+
+def get_email_preferences(email: str = "", user_id: int = 0) -> dict:
+    """Retrieve granular email preferences for an email address or user ID."""
+    clean = str(email or "").strip().lower()
+    uid = int(user_id or 0)
+    try:
+        _init_schema()
+        if not clean and uid:
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+            if u_row and u_row.get("email"):
+                clean = u_row["email"].strip().lower()
+
+        if clean:
+            row = _one("SELECT * FROM email_preferences WHERE LOWER(email) = %s LIMIT 1", (clean,))
+            if row:
+                return {
+                    "email": row["email"],
+                    "user_id": row.get("user_id") or uid,
+                    "household_activity": bool(row["household_activity"]),
+                    "shopping_reminders": bool(row["shopping_reminders"]),
+                    "billing_account": bool(row["billing_account"]),
+                    "product_updates": bool(row["product_updates"]),
+                    "tips_reengagement": bool(row["tips_reengagement"]),
+                    "unsubscribed_all": bool(row["unsubscribed_all"]),
+                    "updated_at": str(row.get("updated_at") or "")
+                }
+    except Exception as e:
+        print(f"[get_email_preferences error] {clean or uid}: {e}", flush=True)
+
+    # Defaults: all active, unsubscribed_all False
+    return {
+        "email": clean,
+        "user_id": uid,
+        "household_activity": True,
+        "shopping_reminders": True,
+        "billing_account": True,
+        "product_updates": True,
+        "tips_reengagement": True,
+        "unsubscribed_all": False,
+        "updated_at": None
+    }
+
+def update_email_preferences(email: str, preferences: dict, user_id: int = 0) -> dict:
+    """Save or update granular email preferences."""
+    clean = str(email or "").strip().lower()
+    uid = int(user_id or 0)
+    if not clean and uid:
+        u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+        if u_row and u_row.get("email"):
+            clean = u_row["email"].strip().lower()
+    if not clean:
+        raise ValueError("Email is required to update preferences")
+
+    _init_schema()
+    cur = get_email_preferences(clean, uid)
+    
+    ha = bool(preferences.get("household_activity", cur["household_activity"]))
+    sr = bool(preferences.get("shopping_reminders", cur["shopping_reminders"]))
+    ba = bool(preferences.get("billing_account", cur["billing_account"]))
+    pu = bool(preferences.get("product_updates", cur["product_updates"]))
+    tr = bool(preferences.get("tips_reengagement", cur["tips_reengagement"]))
+    unsub_all = bool(preferences.get("unsubscribed_all", False))
+
+    if unsub_all:
+        ha = sr = ba = pu = tr = False
+
+    _run("""
+        INSERT INTO email_preferences (
+            email, user_id, household_activity, shopping_reminders, billing_account,
+            product_updates, tips_reengagement, unsubscribed_all, updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (email) DO UPDATE SET
+            user_id = COALESCE(EXCLUDED.user_id, email_preferences.user_id),
+            household_activity = EXCLUDED.household_activity,
+            shopping_reminders = EXCLUDED.shopping_reminders,
+            billing_account = EXCLUDED.billing_account,
+            product_updates = EXCLUDED.product_updates,
+            tips_reengagement = EXCLUDED.tips_reengagement,
+            unsubscribed_all = EXCLUDED.unsubscribed_all,
+            updated_at = NOW()
+    """, (clean, uid or None, ha, sr, ba, pu, tr, unsub_all))
+
+    # Compatibility: update marketing_opt_in in auth_household_members
+    marketing_allowed = bool(not unsub_all and (pu or tr))
+    _run("""
+        UPDATE auth_household_members
+        SET marketing_opt_in = %s
+        WHERE user_id IN (SELECT id FROM auth_users WHERE LOWER(email) = %s)
+    """, (marketing_allowed, clean))
+
+    # If the user re-enabled marketing/reminders, remove any historical 'unsubscribe' in email_suppressions
+    if not unsub_all and (ha or sr or ba or pu or tr):
+        _run("DELETE FROM email_suppressions WHERE LOWER(email) = %s AND reason = 'unsubscribe'", (clean,))
+
+    return get_email_preferences(clean, uid)
+
+def unsubscribe_email_category(email: str, category: str, user_id: int = 0) -> bool:
+    """Unsubscribe an email address from a single category or all categories."""
+    clean = str(email or "").strip().lower()
+    uid = int(user_id or 0)
+    if not clean and uid:
+        u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+        if u_row and u_row.get("email"):
+            clean = u_row["email"].strip().lower()
+    if not clean:
+        return False
+
+    cat = str(category or "").strip().lower()
+    prefs = get_email_preferences(clean, uid)
+    if cat in ("all", "unsubscribed_all"):
+        prefs["unsubscribed_all"] = True
+        prefs["household_activity"] = False
+        prefs["shopping_reminders"] = False
+        prefs["billing_account"] = False
+        prefs["product_updates"] = False
+        prefs["tips_reengagement"] = False
+    elif cat in EMAIL_PREFERENCE_CATEGORIES:
+        prefs[cat] = False
+        prefs["unsubscribed_all"] = False
+    else:
+        # Default fallback: treat as tips_reengagement
+        prefs["tips_reengagement"] = False
+
+    update_email_preferences(clean, prefs, uid)
+
+    # Log to email_events
+    try:
+        _run("""
+            INSERT INTO email_events (email, event_type, campaign, user_id, event_timestamp, created_at)
+            VALUES (%s, 'unsubscribe', %s, %s, NOW(), NOW())
+        """, (clean, f"unsub_{cat}", uid or None))
+    except Exception:
+        pass
+
+    return True
+
+def resubscribe_email_category(email: str, category: str, user_id: int = 0) -> bool:
+    """Re-subscribe an email address to a specific category or undo an unsubscribe."""
+    clean = str(email or "").strip().lower()
+    uid = int(user_id or 0)
+    if not clean:
+        return False
+    cat = str(category or "").strip().lower()
+    prefs = get_email_preferences(clean, uid)
+    if cat in ("all", "unsubscribed_all"):
+        prefs["unsubscribed_all"] = False
+        prefs["household_activity"] = True
+        prefs["shopping_reminders"] = True
+        prefs["billing_account"] = True
+        prefs["product_updates"] = True
+        prefs["tips_reengagement"] = True
+    elif cat in EMAIL_PREFERENCE_CATEGORIES:
+        prefs[cat] = True
+        prefs["unsubscribed_all"] = False
+    update_email_preferences(clean, prefs, uid)
+    return True
+
+def is_email_category_allowed(email: str, category: str = "") -> bool:
+    """Check if an email address is allowed to receive an email in the given category.
+    Performs defense-in-depth:
+    1. Checks email_suppressions (hard bounces, spam reports).
+    2. Checks email_preferences (category opt-outs, unsubscribed_all).
+    """
+    if not email:
+        return False
+    clean = str(email).strip().lower()
+    if not clean:
+        return False
+
+    # 1. Hard suppression check (bounces, spam reports, manual suppressions)
+    if is_email_suppressed(clean):
+        return False
+
+    # Transactional invites bypass category opt-outs unless hard-suppressed
+    cat = str(category or "").strip().lower()
+    if cat in ("invite", "app_invite", "transactional"):
+        return True
+
+    # 2. Granular category check
+    prefs = get_email_preferences(clean)
+    if prefs.get("unsubscribed_all"):
+        return False
+
+    if cat and cat in EMAIL_PREFERENCE_CATEGORIES:
+        return bool(prefs.get(cat, True))
+
+    return True
 
 
 # ── Push Subscription Helpers ─────────────────────────────────
@@ -1814,44 +2136,396 @@ def register_auth_routes(app):
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout(): _clear(); return jsonify({"ok": True})
 
+    # ── Email Preference & Granular Unsubscribe Routes ─────────────
+
+    def _render_invalid_token_page():
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ListMate • Link Expired</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh; box-sizing: border-box; }
+                .card { background: #ffffff; max-width: 440px; width: 100%; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px 24px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+                .icon { font-size: 40px; margin-bottom: 16px; }
+                h2 { color: #0f172a; margin: 0 0 10px 0; font-size: 20px; font-weight: 700; }
+                p { color: #64748b; font-size: 14px; line-height: 1.5; margin: 0 0 24px 0; }
+                .btn { display: inline-block; background: #10b981; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">⏳</div>
+                <h2>Link Expired or Invalid</h2>
+                <p>This email link is no longer valid or has expired. You can update your notifications anytime directly in your ListMate app Settings.</p>
+                <a href="/" class="btn">Open ListMate</a>
+            </div>
+        </body>
+        </html>
+        """, 400
+
     @app.route("/api/unsubscribe", methods=["GET"])
-    def auth_unsubscribe():
+    @app.route("/email/unsubscribe", methods=["GET"])
+    def email_unsubscribe_page():
         from flask import request
         token = request.args.get("token")
         if not token:
-            return "Missing token", 400
-        try:
-            import base64, json
-            data = json.loads(base64.urlsafe_b64decode(token.encode()).decode())
-            uid = data.get("uid")
-            email = data.get("email")
-            if not uid and not email:
-                return "Invalid token", 400
-            
-            _init_schema()
-            if email:
-                suppress_email(email, reason="unsubscribe")
-            elif uid:
-                user_row = _one("SELECT email FROM auth_users WHERE id = ?", (uid,))
-                if user_row and user_row.get("email"):
-                    suppress_email(user_row["email"], reason="unsubscribe")
-            
-            if uid:
-                _run("UPDATE auth_household_members SET marketing_opt_in = FALSE WHERE user_id = ?", (uid,))
-            
-            return """
-            <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; } .success { color: #10b981; font-size: 48px; margin-bottom: 20px; } h2 { color: #333; } p { color: #666; }</style></head>
-            <body>
-                <div class="success">✓</div>
+            return _render_invalid_token_page()
+
+        payload = verify_email_token(token)
+        if not payload:
+            return _render_invalid_token_page()
+
+        email = (payload.get("email") or "").strip().lower()
+        uid = int(payload.get("uid") or 0)
+        cat = (request.args.get("cat") or payload.get("cat") or "tips_reengagement").strip().lower()
+
+        if not email and uid:
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+            if u_row and u_row.get("email"):
+                email = u_row["email"].strip().lower()
+
+        if not email:
+            return _render_invalid_token_page()
+
+        # Execute granular unsubscribe
+        unsubscribe_email_category(email, cat, uid)
+
+        is_all = (cat in ("all", "unsubscribed_all"))
+        cat_meta = EMAIL_CATEGORIES_METADATA.get(cat, {})
+        cat_title = "All Non-Essential Emails" if is_all else cat_meta.get("title", "These Emails")
+
+        fresh_token = generate_email_token(email, cat, uid)
+        undo_url = f"/email/resubscribe?cat={cat}&token={fresh_token}"
+        pref_url = f"/email/preferences?token={fresh_token}"
+        unsub_all_url = f"/email/unsubscribe?cat=all&token={fresh_token}"
+
+        all_option_html = f'<p style="margin-top: 16px; font-size: 12px; color: #94a3b8;">Want to opt out of everything? <a href="{unsub_all_url}" style="color: #64748b; text-decoration: underline;">Unsubscribe from all ListMate emails</a></p>' if not is_all else ''
+
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ListMate • Unsubscribed</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh; box-sizing: border-box; }}
+                .card {{ background: #ffffff; max-width: 480px; width: 100%; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px 24px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
+                .check-badge {{ width: 52px; height: 52px; background: #ecfdf5; color: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: bold; margin: 0 auto 16px auto; }}
+                h2 {{ color: #0f172a; margin: 0 0 8px 0; font-size: 20px; font-weight: 700; }}
+                .email-chip {{ display: inline-block; background: #f1f5f9; color: #475569; font-size: 13px; font-weight: 500; padding: 3px 10px; border-radius: 20px; margin-bottom: 16px; }}
+                p.desc {{ color: #64748b; font-size: 14px; line-height: 1.5; margin: 0 0 20px 0; }}
+                .undo-box {{ background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px; margin-bottom: 24px; font-size: 13px; color: #475569; }}
+                .undo-box a {{ color: #10b981; font-weight: 600; text-decoration: underline; margin-left: 4px; }}
+                .btn-pref {{ display: block; background: #10b981; color: #ffffff; text-decoration: none; padding: 13px; border-radius: 10px; font-size: 15px; font-weight: 600; transition: background 0.15s; }}
+                .btn-pref:hover {{ background: #059669; }}
+                .btn-app {{ display: block; color: #64748b; text-decoration: none; font-size: 13px; margin-top: 14px; }}
+                .btn-app:hover {{ text-decoration: underline; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="check-badge">✓</div>
                 <h2>Unsubscribed Successfully</h2>
-                <p>You have been unsubscribed from all ListMate marketing emails.</p>
-                <p><a href="/" style="color: #10b981; text-decoration: none; font-weight: 600;">Return to App</a></p>
-            </body>
-            </html>
-            """
-        except Exception as e:
-            print("Unsubscribe error:", e)
+                <div class="email-chip">{escape(email)}</div>
+                <p class="desc">You have been unsubscribed from <strong>{escape(cat_title)}</strong>. You will no longer receive these messages.</p>
+                <div class="undo-box">
+                    Clicked by mistake? <a href="{undo_url}">Undo Unsubscribe</a>
+                </div>
+                <a href="{pref_url}" class="btn-pref">Customize All Email Preferences →</a>
+                {all_option_html}
+                <a href="/" class="btn-app">Return to ListMate</a>
+            </div>
+        </body>
+        </html>
+        """
+
+    @app.route("/email/resubscribe", methods=["GET"])
+    def email_resubscribe_page():
+        from flask import request
+        token = request.args.get("token")
+        cat = request.args.get("cat", "tips_reengagement")
+        if not token:
+            return _render_invalid_token_page()
+
+        payload = verify_email_token(token)
+        if not payload:
+            return _render_invalid_token_page()
+
+        email = (payload.get("email") or "").strip().lower()
+        uid = int(payload.get("uid") or 0)
+        resubscribe_email_category(email, cat, uid)
+
+        fresh_token = generate_email_token(email, cat, uid)
+        pref_url = f"/email/preferences?token={fresh_token}"
+        cat_meta = EMAIL_CATEGORIES_METADATA.get(cat, {})
+        cat_title = cat_meta.get("title", "These Emails")
+
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ListMate • Resubscribed</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh; box-sizing: border-box; }}
+                .card {{ background: #ffffff; max-width: 460px; width: 100%; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px 24px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
+                .badge {{ font-size: 36px; margin-bottom: 12px; }}
+                h2 {{ color: #0f172a; margin: 0 0 8px 0; font-size: 20px; font-weight: 700; }}
+                p {{ color: #64748b; font-size: 14px; line-height: 1.5; margin: 0 0 24px 0; }}
+                .btn {{ display: inline-block; background: #10b981; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="badge">🎉</div>
+                <h2>Resubscribed!</h2>
+                <p>You have been resubscribed to <strong>{escape(cat_title)}</strong>.</p>
+                <a href="{pref_url}" class="btn">Manage All Email Preferences</a>
+            </div>
+        </body>
+        </html>
+        """
+
+    @app.route("/email/preferences", methods=["GET"])
+    def email_preferences_page():
+        from flask import request
+        token = request.args.get("token")
+        if not token:
+            return _render_invalid_token_page()
+
+        payload = verify_email_token(token)
+        if not payload:
+            return _render_invalid_token_page()
+
+        email = (payload.get("email") or "").strip().lower()
+        uid = int(payload.get("uid") or 0)
+        if not email and uid:
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+            if u_row and u_row.get("email"):
+                email = u_row["email"].strip().lower()
+
+        if not email:
+            return _render_invalid_token_page()
+
+        prefs = get_email_preferences(email, uid)
+
+        # Generate category cards HTML
+        cards_html = []
+        for cat_id in EMAIL_PREFERENCE_CATEGORIES:
+            meta = EMAIL_CATEGORIES_METADATA.get(cat_id, {})
+            title = meta.get("title", cat_id.capitalize())
+            badge = meta.get("badge", "")
+            desc = meta.get("description", "")
+            checked = "checked" if prefs.get(cat_id, True) and not prefs.get("unsubscribed_all") else ""
+            cards_html.append(f"""
+            <div class="pref-row">
+                <div class="pref-info">
+                    <div class="pref-title"><span class="badge">{badge}</span> {escape(title)}</div>
+                    <div class="pref-desc">{escape(desc)}</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="cat_{cat_id}" {checked}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            """)
+
+        all_checked = "checked" if prefs.get("unsubscribed_all") else ""
+        categories_joined = "\n".join(cards_html)
+
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ListMate • Email Preferences</title>
+            <style>
+                * {{ box-sizing: border-box; }}
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #334155; margin: 0; padding: 24px 16px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }}
+                .container {{ background: #ffffff; max-width: 520px; width: 100%; border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }}
+                .header {{ text-align: center; margin-bottom: 24px; }}
+                .logo {{ font-size: 20px; font-weight: 800; color: #10b981; letter-spacing: -0.5px; display: inline-flex; align-items: center; gap: 6px; }}
+                h1 {{ font-size: 20px; font-weight: 700; color: #0f172a; margin: 8px 0 4px 0; }}
+                .email-tag {{ display: inline-block; background: #f1f5f9; color: #475569; font-size: 13px; font-weight: 500; padding: 4px 12px; border-radius: 20px; margin-top: 4px; }}
+                .pref-list {{ border-top: 1px solid #f1f5f9; margin-top: 18px; }}
+                .pref-row {{ display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f1f5f9; gap: 16px; }}
+                .pref-info {{ flex: 1; }}
+                .pref-title {{ font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }}
+                .pref-desc {{ font-size: 12.5px; color: #64748b; line-height: 1.4; }}
+                .badge {{ font-size: 14px; }}
+                
+                /* Switch */
+                .switch {{ position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }}
+                .switch input {{ opacity: 0; width: 0; height: 0; }}
+                .slider {{ position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .2s; border-radius: 26px; }}
+                .slider:before {{ position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }}
+                input:checked + .slider {{ background-color: #10b981; }}
+                input:checked + .slider:before {{ transform: translateX(18px); }}
+                
+                .actions {{ margin-top: 24px; text-align: center; }}
+                .btn-save {{ width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s; }}
+                .btn-save:hover {{ background: #059669; }}
+                .btn-save:disabled {{ opacity: 0.6; cursor: not-allowed; }}
+                .toast {{ display: none; margin-top: 12px; font-size: 13px; font-weight: 600; color: #059669; padding: 8px; border-radius: 8px; background: #ecfdf5; }}
+                .unsub-all {{ margin-top: 20px; text-align: center; font-size: 12px; color: #94a3b8; }}
+                .unsub-all a {{ color: #64748b; text-decoration: underline; cursor: pointer; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">🛒 ListMate</div>
+                    <h1>Email Preferences</h1>
+                    <div class="email-tag">{escape(email)}</div>
+                </div>
+                
+                <div class="pref-list">
+                    {categories_joined}
+                </div>
+
+                <div class="actions">
+                    <button class="btn-save" id="saveBtn" onclick="savePreferences()">Save Preferences</button>
+                    <div class="toast" id="toast">✓ Preferences updated successfully!</div>
+                </div>
+
+                <div class="unsub-all">
+                    Need a break? <a onclick="unsubscribeAll()">Unsubscribe from all non-essential emails</a>
+                </div>
+            </div>
+
+            <script>
+                const TOKEN = {json.dumps(token)};
+                const CATEGORIES = {json.dumps(EMAIL_PREFERENCE_CATEGORIES)};
+
+                async function savePreferences(unsubAll = false) {{
+                    const saveBtn = document.getElementById('saveBtn');
+                    const toast = document.getElementById('toast');
+                    saveBtn.disabled = true;
+                    saveBtn.innerText = 'Saving...';
+                    
+                    const payload = {{
+                        token: TOKEN,
+                        preferences: {{
+                            unsubscribed_all: unsubAll
+                        }}
+                    }};
+
+                    CATEGORIES.forEach(cat => {{
+                        const el = document.getElementById('cat_' + cat);
+                        payload.preferences[cat] = unsubAll ? false : (el ? el.checked : true);
+                    }});
+
+                    try {{
+                        const res = await fetch('/api/email/preferences', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify(payload)
+                        }});
+                        const data = await res.json();
+                        if (data.ok) {{
+                            toast.style.display = 'block';
+                            toast.innerText = unsubAll ? '✓ You have been unsubscribed from all emails.' : '✓ Preferences saved successfully!';
+                            setTimeout(() => {{ toast.style.display = 'none'; }}, 4000);
+                        }} else {{
+                            alert(data.error || 'Failed to save preferences.');
+                        }}
+                    }} catch (err) {{
+                        alert('Error connecting to server. Please try again.');
+                    }} finally {{
+                        saveBtn.disabled = false;
+                        saveBtn.innerText = 'Save Preferences';
+                    }}
+                }}
+
+                function unsubscribeAll() {{
+                    if (confirm('Are you sure you want to unsubscribe from all marketing, tips, and reminder emails?')) {{
+                        CATEGORIES.forEach(cat => {{
+                            const el = document.getElementById('cat_' + cat);
+                            if (el) el.checked = false;
+                        }});
+                        savePreferences(true);
+                    }}
+                }}
+            </script>
+        </body>
+        </html>
+        """
+
+    @app.route("/api/email/preferences", methods=["POST"])
+    def api_email_preferences():
+        data = request.get_json(silent=True) or {}
+        token = data.get("token")
+        if not token:
+            return jsonify({"error": "Missing token"}), 400
+
+        payload = verify_email_token(token)
+        if not payload:
+            return jsonify({"error": "Invalid or expired token"}), 400
+
+        email = (payload.get("email") or "").strip().lower()
+        uid = int(payload.get("uid") or 0)
+        prefs = data.get("preferences") or {}
+
+        if not email and uid:
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+            if u_row and u_row.get("email"):
+                email = u_row["email"].strip().lower()
+
+        if not email:
+            return jsonify({"error": "Email required"}), 400
+
+        updated = update_email_preferences(email, prefs, uid)
+        return jsonify({"ok": True, "preferences": updated})
+
+    @app.route("/api/email/list-unsubscribe", methods=["POST", "GET"])
+    def api_email_list_unsubscribe():
+        """RFC 8058 1-click unsubscribe endpoint for mail clients (Gmail / iOS Mail)."""
+        token = request.args.get("token") or (request.form.get("token") if request.form else "")
+        cat = request.args.get("cat") or (request.form.get("cat") if request.form else "") or "tips_reengagement"
+        if not token:
+            return "Missing token", 400
+
+        payload = verify_email_token(token)
+        if not payload:
             return "Invalid or expired token", 400
+
+        email = (payload.get("email") or "").strip().lower()
+        uid = int(payload.get("uid") or 0)
+        resolved_cat = (cat or payload.get("cat") or "tips_reengagement").strip().lower()
+
+        unsubscribe_email_category(email, resolved_cat, uid)
+        return "Unsubscribe successful", 200
+
+    @app.route("/api/user/email-preferences", methods=["GET", "POST"])
+    @require_user
+    def api_user_email_preferences():
+        uid = get_user_id()
+        email = get_email()
+        if not email:
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (uid,))
+            if u_row and u_row.get("email"):
+                email = u_row["email"]
+
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            prefs = data.get("preferences") or data
+            updated = update_email_preferences(email, prefs, uid)
+            return jsonify({"ok": True, "preferences": updated})
+
+        # GET
+        prefs = get_email_preferences(email, uid)
+        return jsonify({
+            "ok": True,
+            "preferences": prefs,
+            "metadata": EMAIL_CATEGORIES_METADATA,
+            "categories": EMAIL_PREFERENCE_CATEGORIES
+        })
 
     @app.route("/api/user/inspiration", methods=["GET", "POST"])
     @app.route("/api/settings/inspiration", methods=["GET", "POST"])

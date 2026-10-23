@@ -47,7 +47,7 @@ APP_STORE_BADGE = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/app_
 PLAY_STORE_BADGE = "https://cdn.jsdelivr.net/gh/santven/listmate@main/static/google_play_badge.png"
 
 
-def generate_email_content(user_name: str = "", user_id: int = 0, household_id: int = 0) -> tuple:
+def generate_email_content(user_name: str = "", user_id: int = 0, household_id: int = 0, to_email: str = "") -> tuple:
     """Generates (subject, plain_text, html_body) for the v1.0.1 release announcement."""
     safe_name = (user_name or "").strip()
     greeting = f"Hi {safe_name}," if safe_name else "Hi there,"
@@ -58,6 +58,8 @@ def generate_email_content(user_name: str = "", user_id: int = 0, household_id: 
         user_id,
         "product updates and release announcements",
         "You received this email because you have a ListMate account.",
+        email=to_email,
+        category="product_updates",
     )
 
     plain_text = (
@@ -226,10 +228,19 @@ def send_update_email(
         print(f"[Suppressed] Skipping {clean_email}: Present in email_suppressions")
         return False
 
+    try:
+        from shared.auth import is_email_category_allowed
+        if not is_email_category_allowed(clean_email, "product_updates"):
+            print(f"[Opted Out] Skipping {clean_email}: Opted out of product_updates in email_preferences")
+            return False
+    except Exception:
+        pass
+
     subject, plain_text, html_body = generate_email_content(
         user_name=user_name,
         user_id=user_id,
         household_id=household_id,
+        to_email=clean_email,
     )
 
     if dry_run:
@@ -332,6 +343,14 @@ def get_eligible_users() -> tuple:
         if is_email_suppressed_db(clean_email):
             suppressed_count += 1
             continue
+
+        try:
+            from shared.auth import is_email_category_allowed
+            if not is_email_category_allowed(clean_email, "product_updates"):
+                suppressed_count += 1
+                continue
+        except Exception:
+            pass
 
         eligible.append(u)
 

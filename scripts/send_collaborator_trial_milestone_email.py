@@ -95,6 +95,8 @@ def generate_email_content():
         TARGET_USER_ID,
         "subscription updates and household milestones",
         unsub_desc,
+        email=TARGET_EMAIL,
+        category="billing_account",
     )
 
     # Plain text version
@@ -354,6 +356,14 @@ def send_email(api_key: str, dry_run: bool = False, force: bool = False, test_em
     if not is_test and is_email_suppressed_db(TARGET_EMAIL):
         print(f"ABORT: {TARGET_EMAIL} is in email_suppressions table. Cannot send.")
         return False
+
+    try:
+        from shared.auth import is_email_category_allowed
+        if not is_test and not is_email_category_allowed(TARGET_EMAIL, "billing_account"):
+            print(f"ABORT: {TARGET_EMAIL} has opted out of 'billing_account' in email_preferences. Cannot send.")
+            return False
+    except Exception:
+        pass
 
     # Check if already sent
     if not is_test and not force:

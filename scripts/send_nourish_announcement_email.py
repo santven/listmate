@@ -52,6 +52,7 @@ def generate_email_content(
     user_id: int = 0,
     household_id: int = 0,
     is_preview: bool = False,
+    to_email: str = "",
 ) -> tuple:
     """
     Generates (subject, plain_text, html_body) for the specified household tier.
@@ -179,6 +180,8 @@ def generate_email_content(
         user_id,
         "feature announcements and product updates",
         unsub_desc,
+        email=to_email,
+        category="product_updates",
     )
 
     # Plain text version
@@ -562,6 +565,14 @@ def query_households_by_tier() -> dict:
             LEFT JOIN auth_household_members ahm ON ahm.user_id = u.id AND ahm.household_id = h.id
             WHERE u.email IS NOT NULL AND TRIM(u.email) != ''
               AND COALESCE(ahm.marketing_opt_in, TRUE) = TRUE
+              AND NOT EXISTS (
+                  SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM email_preferences ep 
+                  WHERE (LOWER(ep.email) = LOWER(u.email) OR ep.user_id = u.id)
+                    AND (ep.product_updates = FALSE OR ep.unsubscribed_all = TRUE)
+              )
             ORDER BY h.id ASC, u.id ASC;
         """
         rows = db_pg.execute_query(query) or []
@@ -646,6 +657,15 @@ def send_campaign_email(
         print(f"[Suppressed] Skipping {clean_email} (in email_suppressions)")
         return False
 
+    if has_db:
+        try:
+            from shared.auth import is_email_category_allowed
+            if not is_email_category_allowed(clean_email, "product_updates"):
+                print(f"[Opted Out] Skipping {clean_email} (opted out of 'product_updates' in email_preferences)")
+                return False
+        except Exception:
+            pass
+
     if not force and has_already_received(user_id, clean_email):
         print(f"[Already Sent] Skipping {clean_email} (already received {CAMPAIGN_NAME})")
         return False
@@ -656,6 +676,7 @@ def send_campaign_email(
         household_name=household_name,
         user_id=user_id,
         household_id=household_id,
+        to_email=clean_email,
     )
 
     if dry_run:

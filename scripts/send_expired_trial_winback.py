@@ -52,7 +52,9 @@ def send_winback_email(
     unsub_txt, unsub_html = _get_unsub_blocks(
         user_id,
         "product updates and promotions",
-        "You received this email because you created a ListMate household."
+        "You received this email because you created a ListMate household.",
+        email=to_email,
+        category="billing_account",
     )
 
     plain_body = (
@@ -179,6 +181,11 @@ def run_winback(dry_run: bool = True, limit: int = None, household_id: int = Non
         {hh_filter}
         AND NOT EXISTS (
             SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email)
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM email_preferences ep 
+            WHERE (LOWER(ep.email) = LOWER(u.email) OR ep.user_id = u.id)
+              AND (ep.billing_account = FALSE OR ep.unsubscribed_all = TRUE)
         )
         AND NOT EXISTS (
             SELECT 1 FROM email_events ee 

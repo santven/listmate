@@ -34,6 +34,31 @@ def process_email_events(email, user_name, events, user_id=0, household_id=0):
         print(f"[{email}] Skipping email dispatch — address is suppressed.")
         return False
 
+    # Granular email preference check: filter out events where recipient has opted out of category
+    try:
+        from shared.auth import is_email_category_allowed
+        from email_helper import resolve_category_for_campaign
+
+        for ev_key in list(events.keys()):
+            # Resolve canonical category
+            cat = resolve_category_for_campaign(ev_key)
+            if ev_key == 'expiration':
+                cat = 'billing_account'
+            elif ev_key == 'store_plan':
+                cat = 'shopping_reminders'
+            elif ev_key in ('invite_reminder', 'invite_expired'):
+                cat = 'household_activity'
+
+            if cat and not is_email_category_allowed(email, cat):
+                print(f"[{email}] Skipping event '{ev_key}' — recipient opted out of '{cat}' category in email_preferences.")
+                events.pop(ev_key, None)
+    except Exception as e:
+        print(f"[{email}] Category filter check error: {e}")
+
+    if not events:
+        print(f"[{email}] No active eligible events remaining after category preference filtering.")
+        return False
+
     sent = False
     campaign_names = []
     db_updates = []

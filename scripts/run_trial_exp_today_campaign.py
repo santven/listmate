@@ -100,6 +100,7 @@ def run_trial_exp_today_campaign(dry_run=False, force=False, target_hhid=None):
         "h.subscription_status = 'trial'",
         "(DATE(h.trial_ends_at) = CURRENT_DATE OR h.trial_ends_at BETWEEN NOW() - INTERVAL '12 hours' AND NOW() + INTERVAL '24 hours')",
         "NOT EXISTS (SELECT 1 FROM email_suppressions es WHERE LOWER(es.email) = LOWER(u.email))",
+        "NOT EXISTS (SELECT 1 FROM email_preferences ep WHERE (LOWER(ep.email) = LOWER(u.email) OR ep.user_id = u.id) AND (ep.billing_account = FALSE OR ep.unsubscribed_all = TRUE))",
     ]
 
     if target_hhid:

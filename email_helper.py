@@ -20,20 +20,123 @@ def is_email_suppressed_db(to_email: str) -> bool:
         return False
 
 
-def _send_via_api(api_key: str, payload: dict) -> bool:
-    """Send via SendGrid REST API directly — avoids helper class quirks."""
+EMAIL_CATEGORY_MAP = {
+    # Household Activity
+    "trip_completed": "household_activity",
+    "invite_reminder": "household_activity",
+    "invite_reminder_day2": "household_activity",
+    "invite_reminder_day5": "household_activity",
+    "invite_expired_inviter": "household_activity",
+    "invite_expired": "household_activity",
+
+    # Shopping & Reminders
+    "store_plan": "shopping_reminders",
+
+    # Billing & Subscription
+    "expiration": "billing_account",
+    "trial_exp_today": "billing_account",
+    "trial_exp_3days": "billing_account",
+    "sub_exp_today": "billing_account",
+    "sub_exp_3days": "billing_account",
+    "trial_lapsed_day2": "billing_account",
+    "trial_ext_day7": "billing_account",
+    "trial_winback": "billing_account",
+    "trial_winback_extension": "billing_account",
+    "collaborator_trial_milestone": "billing_account",
+
+    # Product Announcements
+    "nourish_announcement": "product_updates",
+    "still_good_announcement": "product_updates",
+    "app_update": "product_updates",
+    "lifetime_thanks": "product_updates",
+    "lifetime_premium_thanks": "product_updates",
+    "feedback_resolved": "product_updates",
+
+    # Tips & Re-engagement
+    "solo_nudge": "tips_reengagement",
+    "store_nudge": "tips_reengagement",
+    "activation": "tips_reengagement",
+    "trial_week1": "tips_reengagement",
+    "trial_week3": "tips_reengagement",
+    "reengagement": "tips_reengagement",
+    "signup_abandon_day2": "tips_reengagement",
+    "signup_abandon_day5": "tips_reengagement",
+    "signup_abandon_day7": "tips_reengagement",
+    "lifetime_premium_digest": "tips_reengagement",
+    "breakup_day60": "tips_reengagement",
+}
+
+def resolve_category_for_campaign(campaign: str) -> str:
+    """Resolve a campaign name or prefix to its canonical email preference category."""
+    if not campaign:
+        return ""
+    c = str(campaign).strip().lower()
+    if c in EMAIL_CATEGORY_MAP:
+        return EMAIL_CATEGORY_MAP[c]
+    if c.startswith("store_plan_reminder_"):
+        return "shopping_reminders"
+    if any(c.startswith(p) for p in ("nourish_", "still_good_", "app_update_")):
+        return "product_updates"
+    if any(c.startswith(p) for p in ("trial_exp_", "sub_exp_", "trial_winback_")):
+        return "billing_account"
+    if any(c.startswith(p) for p in ("invite_reminder_", "invite_")):
+        return "household_activity"
+    return "tips_reengagement"
+
+
+def _send_via_api(api_key: str, payload: dict, category: str = None) -> bool:
+    """Send via SendGrid REST API directly with defense-in-depth deliverability and preference gating."""
     import json
     from urllib.request import Request, urlopen
     from urllib.error import HTTPError
 
-    # Defense-in-depth suppression check before sending
+    # Resolve category if not explicitly provided
+    resolved_category = category
+    if not resolved_category:
+        custom_args = payload.get("custom_args", {})
+        campaign = custom_args.get("campaign")
+        if not campaign:
+            pers = payload.get("personalizations", [{}])[0]
+            campaign = pers.get("custom_args", {}).get("campaign")
+        if campaign:
+            resolved_category = resolve_category_for_campaign(campaign)
+
+    # Defense-in-depth suppression and preference checks before sending
     personalizations = payload.get("personalizations", [])
     for p in personalizations:
         for to_obj in p.get("to", []):
             to_addr = to_obj.get("email")
-            if to_addr and is_email_suppressed_db(to_addr):
+            if not to_addr:
+                continue
+
+            # 1. Hard suppression check (bounces, spam complaints, etc.)
+            if is_email_suppressed_db(to_addr):
                 print(f"[email_helper] Skipping email to {to_addr}: recipient is suppressed in email_suppressions")
                 return False
+
+            # 2. Granular customer preference check
+            if resolved_category:
+                try:
+                    from shared.auth import is_email_category_allowed
+                    if not is_email_category_allowed(to_addr, resolved_category):
+                        print(f"[email_helper] Skipping email to {to_addr}: recipient opted out of '{resolved_category}' category in email_preferences")
+                        return False
+                except Exception as pref_err:
+                    print(f"[email_helper] Warning: preference check error for {to_addr}: {pref_err}")
+
+            # 3. Inject standard RFC 8058 List-Unsubscribe headers for mail clients (Gmail / iOS Mail)
+            if resolved_category:
+                try:
+                    from shared.auth import generate_email_token
+                    uid_arg = p.get("custom_args", {}).get("user_id") or payload.get("custom_args", {}).get("user_id") or 0
+                    token = generate_email_token(to_addr, resolved_category, int(uid_arg or 0))
+                    unsub_url = f"{BASE_URL}/api/email/list-unsubscribe?cat={resolved_category}&token={token}"
+                    if "headers" not in payload:
+                        payload["headers"] = {}
+                    payload["headers"]["List-Unsubscribe"] = f"<{unsub_url}>"
+                    payload["headers"]["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+                except Exception:
+                    pass
 
     # Ensure sender identity and reply_to are always configured
     if "from" not in payload:
@@ -415,7 +518,7 @@ def send_invite_expired_notice(
     subject = f"Household invite to {invitee_email} has expired"
 
     settings_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_invite_expired')}"
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "household notices", f"You received this notice because you manage the {household_name} household on ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "household notices", f"You received this notice because you manage the {household_name} household on ListMate.", email=to_email, category="household_activity")
 
     plain_text = (
         f"Hi {name_str},\n\n"
@@ -470,52 +573,74 @@ def send_invite_expired_notice(
     return _send_via_api(api_key, payload)
 
 
-def _get_unsub_link(user_id: int) -> str:
+def _infer_category_from_purpose(purpose: str) -> str:
+    """Infer email preference category from legacy purpose string if not explicitly passed."""
+    p = (purpose or "").lower()
+    if any(k in p for k in ("billing", "subscription", "trial", "renewal")):
+        return "billing_account"
+    elif any(k in p for k in ("household", "shopping notification", "trip", "invite")):
+        return "household_activity"
+    elif any(k in p for k in ("store", "list reminder", "plan")):
+        return "shopping_reminders"
+    elif any(k in p for k in ("product", "feature", "announcement", "update", "feedback")):
+        return "product_updates"
+    else:
+        return "tips_reengagement"
+
+
+def _get_unsub_link(user_id: int, category: str = "tips_reengagement") -> str:
     if not user_id: return ""
-    import base64, json
-    data = {"uid": user_id}
-    token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
-    return f"{BASE_URL}/api/unsubscribe?token={token}"
+    try:
+        from shared.auth import generate_email_token
+        token = generate_email_token("", category=category, user_id=user_id)
+        return f"{BASE_URL}/email/unsubscribe?cat={category}&token={token}"
+    except Exception:
+        import base64, json
+        data = {"uid": user_id, "cat": category}
+        token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+        return f"{BASE_URL}/api/unsubscribe?token={token}"
 
-def _get_unsub_link_email(email: str) -> str:
+
+def _get_unsub_link_email(email: str, category: str = "tips_reengagement") -> str:
     if not email: return ""
-    import base64, json
-    data = {"email": email}
-    token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
-    return f"{BASE_URL}/api/unsubscribe?token={token}"
+    try:
+        from shared.auth import generate_email_token
+        token = generate_email_token(email, category=category)
+        return f"{BASE_URL}/email/unsubscribe?cat={category}&token={token}"
+    except Exception:
+        import base64, json
+        data = {"email": email, "cat": category}
+        token = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+        return f"{BASE_URL}/api/unsubscribe?token={token}"
 
-def _get_footer_blocks_email(email: str = "", purpose: str = "marketing emails", context_reason: str = "You received this email because you were invited to ListMate.") -> tuple:
-    unsub_link = _get_unsub_link_email(email) if email else ""
-    txt_lines = [
-        "\n\n--",
-        "ListMate • Powered by PVKS Labs",
-    ]
-    if context_reason:
-        txt_lines.append(context_reason)
-    txt_lines.append(f"Need help or have feedback? Contact hello@grocerlist.app")
-    if unsub_link:
-        txt_lines.append(f"To unsubscribe from {purpose}, visit: {unsub_link}")
-    
-    footer_txt = "\n".join(txt_lines)
 
-    html_parts = [
-        '<div style="font-size: 11px; color: #888888; margin-top: 28px; padding-top: 16px; border-top: 1px solid #e2e8f0; text-align: center; line-height: 1.6;">',
-        '<p style="margin: 3px 0; font-weight: 600; color: #64748b;">ListMate • Powered by PVKS Labs</p>',
-    ]
-    if context_reason:
-        html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">{context_reason}</p>')
-    html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">Need help or have feedback? Contact <a href="mailto:hello@grocerlist.app" style="color: #64748b; text-decoration: underline;">hello@grocerlist.app</a>.</p>')
-    if unsub_link:
-        html_parts.append(f'<p style="margin: 6px 0 0 0;"><a href="{unsub_link}" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> from {purpose}.</p>')
-    html_parts.append('</div>')
+def _get_footer_blocks(user_id: int = 0, purpose: str = "marketing emails", context_reason: str = "You received this email because you are a registered user of ListMate.", email: str = "", category: str = "") -> tuple:
+    """Returns (footer_txt, footer_html) with sender branding, context reason, support contact,
+    Manage Preferences link, and 1-click category unsubscribe link.
+    """
+    cat = category or _infer_category_from_purpose(purpose)
     
-    footer_html = "\n".join(html_parts)
-    return footer_txt, footer_html
+    cat_title = purpose.capitalize()
+    if user_id and not email:
+        try:
+            from shared.auth import _one
+            u_row = _one("SELECT email FROM auth_users WHERE id = %s", (user_id,))
+            if u_row and u_row.get("email"):
+                email = u_row["email"]
+        except Exception:
+            pass
 
-def _get_footer_blocks(user_id: int = 0, purpose: str = "marketing emails", context_reason: str = "You received this email because you are a registered user of ListMate.") -> tuple:
-    """Returns (footer_txt, footer_html) with sender branding, context reason, support contact, and unsubscribe footer."""
-    unsub_link = _get_unsub_link(user_id) if user_id else ""
-    
+    try:
+        from shared.auth import EMAIL_CATEGORIES_METADATA, generate_email_token
+        if cat in EMAIL_CATEGORIES_METADATA:
+            cat_title = EMAIL_CATEGORIES_METADATA[cat]["title"]
+        token = generate_email_token(email, category=cat, user_id=user_id) if (email or user_id) else ""
+    except Exception:
+        token = ""
+
+    pref_link = f"{BASE_URL}/email/preferences?token={token}" if token else f"{BASE_URL}/settings"
+    unsub_link = f"{BASE_URL}/email/unsubscribe?cat={cat}&token={token}" if token else f"{BASE_URL}/settings"
+
     txt_lines = [
         "\n\n--",
         "ListMate • Powered by PVKS Labs",
@@ -523,9 +648,10 @@ def _get_footer_blocks(user_id: int = 0, purpose: str = "marketing emails", cont
     if context_reason:
         txt_lines.append(context_reason)
     txt_lines.append(f"Need help or have feedback? Contact hello@grocerlist.app or visit {BASE_URL}/requests")
-    if unsub_link:
-        txt_lines.append(f"To unsubscribe from {purpose}, visit: {unsub_link}")
-    
+    if token:
+        txt_lines.append(f"Preferences: Customize your email preferences at {pref_link}")
+        txt_lines.append(f"To unsubscribe from {cat_title}, visit: {unsub_link}")
+
     footer_txt = "\n".join(txt_lines)
 
     html_parts = [
@@ -535,16 +661,27 @@ def _get_footer_blocks(user_id: int = 0, purpose: str = "marketing emails", cont
     if context_reason:
         html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">{context_reason}</p>')
     html_parts.append(f'<p style="margin: 3px 0; color: #94a3b8;">Need help or have feedback? Contact <a href="mailto:hello@grocerlist.app" style="color: #64748b; text-decoration: underline;">hello@grocerlist.app</a> or visit <a href="{BASE_URL}/requests" style="color: #64748b; text-decoration: underline;">Support & Roadmap</a>.</p>')
-    if unsub_link:
-        html_parts.append(f'<p style="margin: 6px 0 0 0;"><a href="{unsub_link}" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> from {purpose}.</p>')
+    if token:
+        html_parts.append(
+            f'<p style="margin: 8px 0 0 0; color: #94a3b8;">'
+            f'<a href="{pref_link}" style="color: #64748b; text-decoration: underline; font-weight: 500;">Manage Email Preferences</a>'
+            f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+            f'<a href="{unsub_link}" style="color: #94a3b8; text-decoration: underline;">Unsubscribe from {cat_title}</a>'
+            f'</p>'
+        )
     html_parts.append('</div>')
-    
+
     footer_html = "\n".join(html_parts)
     return footer_txt, footer_html
 
-def _get_unsub_blocks(user_id: int, purpose: str = "marketing emails", context_reason: str = "You received this email because you are a registered user of ListMate.") -> tuple:
+
+def _get_footer_blocks_email(email: str = "", purpose: str = "marketing emails", context_reason: str = "You received this email because you were invited to ListMate.", category: str = "") -> tuple:
+    return _get_footer_blocks(user_id=0, purpose=purpose, context_reason=context_reason, email=email, category=category)
+
+
+def _get_unsub_blocks(user_id: int, purpose: str = "marketing emails", context_reason: str = "You received this email because you are a registered user of ListMate.", email: str = "", category: str = "") -> tuple:
     """Returns (footer_txt, footer_html) for backwards compatibility."""
-    return _get_footer_blocks(user_id=user_id, purpose=purpose, context_reason=context_reason)
+    return _get_footer_blocks(user_id=user_id, purpose=purpose, context_reason=context_reason, email=email, category=category)
 
 def send_subscription_notice(
     to_email: str,
@@ -582,7 +719,7 @@ def send_subscription_notice(
         subject = f"Your ListMate {term} ends in {days_left} days"
         urgency_text = f"expires in {days_left} days"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and billing reminders", "You received this email because you created a ListMate household or manage a household subscription.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and billing reminders", "You received this email because you created a ListMate household or manage a household subscription.", email=to_email, category="billing_account")
 
     if is_trial and days_left == 0 and can_extend:
         plain_body = (
@@ -679,7 +816,7 @@ def send_solo_nudge_notice(to_email: str, user_name: str, user_id: int = 0, hous
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_solo_nudge')}"
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_solo_nudge')}"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you created a household on ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you created a household on ListMate.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -757,7 +894,7 @@ def send_store_nudge_notice(to_email: str, user_name: str, user_id: int = 0, hou
 
     campaign = "store_nudge"
     add_store_link = f"{BASE_URL}/open?url={quote('/?action=add_store&source=email_store_nudge')}"
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you are using ListMate to organize your grocery lists.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you are using ListMate to organize your grocery lists.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -833,7 +970,7 @@ def send_trial_week1_checkin(to_email: str, user_name: str, user_id: int = 0, ho
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week1')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week1')}"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because your household is currently enjoying its ListMate 30-day Pro trial.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because your household is currently enjoying its ListMate 30-day Pro trial.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -915,7 +1052,7 @@ def send_trial_week3_checkin(to_email: str, user_name: str, user_id: int = 0, ho
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_trial_week3')}"
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_trial_week3')}"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because your household is currently enjoying its ListMate 30-day Pro trial.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because your household is currently enjoying its ListMate 30-day Pro trial.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -991,7 +1128,7 @@ def send_activation_notice(to_email: str, user_name: str, user_id: int = 0, hous
     app_link = f"{BASE_URL}/open?url={quote('/?source=email_activation')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_activation')}"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you recently signed up for ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you recently signed up for ListMate.", email=to_email, category="tips_reengagement")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -1059,7 +1196,7 @@ def send_reengagement_notice(to_email: str, user_name: str, user_id: int = 0, ho
     app_link = f"{BASE_URL}/open?url={quote('/?action=triage_stale&source=email_reengagement')}"
     add_member_link = f"{BASE_URL}/open?url={quote('/settings?action=add-member&source=email_reengagement')}"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you are a registered user of ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you are a registered user of ListMate.", email=to_email, category="tips_reengagement")
     
     clean_items = [str(it).strip() for it in (items or []) if str(it).strip()]
     if clean_items and store_name and store_name != "General List":
@@ -1160,7 +1297,7 @@ def send_trial_lapsed_day2_notice(to_email: str, user_name: str, partner_name: s
     partner_display = partner_name if partner_name and partner_name.strip() and partner_name.strip().lower() not in ("someone", "your household", "partner") else "your partner"
     subject = f"Missing real-time grocery sync with {partner_display}? 🛒"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and lifecycle updates", "You received this email because you created a ListMate household or manage household members.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "subscription and lifecycle updates", "You received this email because you created a ListMate household or manage household members.", email=to_email, category="billing_account")
 
     plain_text = (
         f"Hi {user_name},\n\n"
@@ -1233,7 +1370,7 @@ def send_trial_ext_day7_notice(to_email: str, user_name: str, household_name: st
     upgrade_link = f"{BASE_URL}/open?url={quote('/settings?action=upgrade&source=email_trial_ext_day7')}"
     subject = "Need more time? Here's 7 extra days of ListMate Premium on us 🎁"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "promotional and trial updates", "You received this email because you registered a ListMate household.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "promotional and trial updates", "You received this email because you registered a ListMate household.", email=to_email, category="billing_account")
 
     plain_text = (
         f"Hi {user_name},\n\n"
@@ -1308,7 +1445,7 @@ def send_breakup_day60_notice(to_email: str, user_name: str, user_id: int = 0, h
     unsub_direct_link = _get_unsub_link(user_id) if user_id else f"{BASE_URL}/open?url={quote('/settings?action=unsubscribe&source=email_breakup_day60')}"
     subject = "Should we stop emailing you? (Quick check-in from ListMate)"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "all marketing and product emails", "You received this email because you registered a ListMate account.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "all marketing and product emails", "You received this email because you registered a ListMate account.", email=to_email, category="tips_reengagement")
 
     plain_text = (
         f"Hi {user_name},\n\n"
@@ -1661,7 +1798,7 @@ def send_combined_notice(to_email: str, user_name: str, events: dict, user_id: i
     )
     text_body = f"Hi {user_name},\n\n" + "\n\n---\n\n".join(text_sections) + footer_links + "\n\n— The ListMate Team"
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you have an active household on ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "marketing emails", "You received this email because you have an active household on ListMate.", email=to_email, category="tips_reengagement")
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
         "reply_to": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -1757,7 +1894,7 @@ def send_feedback_resolved_email(
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "feedback updates", "You received this email because you submitted feedback or a feature request on ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "feedback updates", "You received this email because you submitted feedback or a feature request on ListMate.", email=to_email, category="product_updates")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -1864,7 +2001,7 @@ def send_signup_abandon_day2(to_email: str, user_name: str, user_id: int = 0) ->
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -1964,7 +2101,7 @@ def send_signup_abandon_day5(to_email: str, user_name: str, user_id: int = 0) ->
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -2056,7 +2193,7 @@ def send_signup_abandon_day7(to_email: str, user_name: str, user_id: int = 0) ->
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "onboarding reminders", "You received this email because you started signing up for ListMate.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -2141,7 +2278,7 @@ def send_app_invite(to_email: str, inviter_name: str) -> bool:
     </div>
     """
     
-    footer_txt, footer_html = _get_footer_blocks_email(email=to_email, purpose="invitations")
+    footer_txt, footer_html = _get_footer_blocks_email(email=to_email, purpose="household invitations", category="household_activity")
     
     payload = {
         "personalizations": [{"to": [{"email": to_email}]}],
@@ -2322,7 +2459,7 @@ def send_lifetime_premium_digest(to_email: str, user_name: str, household_name: 
             '</div>'
         )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "monthly household updates", "You received this email because your household is a Lifetime Premium Member on ListMate.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "monthly household updates", "You received this email because your household is a Lifetime Premium Member on ListMate.", email=to_email, category="tips_reengagement")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -2459,7 +2596,7 @@ def send_trip_completed_email(
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "shopping notifications", "You received this email because a member of your ListMate household purchased items you requested.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "shopping notifications", "You received this email because a member of your ListMate household purchased items you requested.", email=to_email, category="household_activity")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
@@ -2564,7 +2701,7 @@ def send_store_plan_reminder_email(
         f'</div>'
     )
 
-    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "list reminders", "You received this email because you have active grocery items waiting in your ListMate household.")
+    unsub_txt, unsub_html = _get_unsub_blocks(user_id, "store plan reminders", "You received this email because you have active grocery items waiting in your ListMate household.", email=to_email, category="shopping_reminders")
 
     payload = {
         "from": {"email": FROM_EMAIL, "name": FROM_NAME},
