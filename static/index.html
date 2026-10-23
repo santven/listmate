@@ -14125,10 +14125,18 @@ function dismissNourishDiscoveryDrawer() {
   closeNourishDiscoveryDrawer();
 }
 
-function initNourishDiscoveryIdleTrigger() {
+function initNourishDiscoveryIdleTrigger(force) {
+  // If prior instance was running, cancel timer and clean up listeners
+  if (typeof window._cancelNourishDiscoveryTimer === 'function') {
+    window._cancelNourishDiscoveryTimer();
+  }
+  if (typeof window._removeNourishDiscoveryListeners === 'function') {
+    window._removeNourishDiscoveryListeners();
+  }
+
   // 1. Session Count Guard:
   // Increment session counter in sessionStorage / localStorage (listmate_session_count).
-  // If session_count < 2, NEVER show on Session 1.
+  // If session_count < 2, NEVER show on Session 1 for brand new users.
   try {
     if (!sessionStorage.getItem('listmate_session_counted')) {
       sessionStorage.setItem('listmate_session_counted', '1');
@@ -14139,7 +14147,7 @@ function initNourishDiscoveryIdleTrigger() {
   } catch(e) {}
 
   var sessionCount = 0;
-  var hasExistingAccount = false;
+  var isExistingUser = false;
   try {
     sessionCount = parseInt(localStorage.getItem('listmate_session_count') || '0', 10);
     var cachedCfg = localStorage.getItem('listmate_cfg');
@@ -14147,30 +14155,45 @@ function initNourishDiscoveryIdleTrigger() {
       try {
         var parsedCfg = JSON.parse(cachedCfg);
         if (parsedCfg && (parsedCfg.user || parsedCfg.user_id || parsedCfg.household_id)) {
-          hasExistingAccount = true;
+          isExistingUser = true;
         }
       } catch (_) {
-        hasExistingAccount = true;
+        isExistingUser = true;
       }
+    }
+    if (localStorage.getItem('listmate_user')) {
+      isExistingUser = true;
+    }
+    if (typeof window.currentCfg !== 'undefined' && window.currentCfg && window.currentCfg.user) {
+      isExistingUser = true;
     }
   } catch(e) {}
 
-  if (sessionCount < 2 && !hasExistingAccount) {
-    // Strict Guard: NEVER show on Session 1 for fresh non-authenticated accounts
+  console.log('[Nourish Discovery] Initializing idle trigger...', {
+    sessionCount: sessionCount,
+    isExistingUser: isExistingUser,
+    force: !!force
+  });
+
+  if (!isExistingUser && sessionCount < 2 && !force) {
+    console.log('[Nourish Discovery] Suppressed on Session 1 for new user (session count:', sessionCount, ')');
     return;
   }
 
   // 2. Pre-check sync eligibility guards
-  if (typeof isNourishEnabled === 'function' && isNourishEnabled()) {
+  if (!force && typeof isNourishEnabled === 'function' && isNourishEnabled()) {
+    console.log('[Nourish Discovery] Suppressed: Nourish is already enabled');
     return;
   }
 
   try {
     var dismissedAt = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
-    if (dismissedAt > 0 && (Date.now() - dismissedAt < 14 * 86400000)) {
+    if (!force && dismissedAt > 0 && (Date.now() - dismissedAt < 14 * 86400000)) {
+      console.log('[Nourish Discovery] Suppressed: Dismissed within last 14 days');
       return;
     }
-    if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') {
+    if (!force && sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') {
+      console.log('[Nourish Discovery] Suppressed: Already shown this session');
       return;
     }
   } catch(e) {}
@@ -14243,31 +14266,47 @@ function initNourishDiscoveryIdleTrigger() {
 
   async function onIdleTimeout() {
     cancelIdleTimer();
+    console.log('[Nourish Discovery] Idle 5s reached. Checking eligibility...');
 
     // Check all blocking conditions
     if (isBlocked()) {
+      console.log('[Nourish Discovery] Idle trigger blocked by current UI state or tab hidden');
       return;
     }
 
     // Check sync guards
-    if (typeof isNourishEnabled === 'function' && isNourishEnabled()) return;
+    if (!force && typeof isNourishEnabled === 'function' && isNourishEnabled()) {
+      console.log('[Nourish Discovery] Blocked: Nourish already enabled');
+      return;
+    }
     try {
       var dismissed = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
-      if (dismissed > 0 && (Date.now() - dismissed < 14 * 86400000)) return;
-      if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') return;
+      if (!force && dismissed > 0 && (Date.now() - dismissed < 14 * 86400000)) {
+        console.log('[Nourish Discovery] Blocked: Dismissed recently');
+        return;
+      }
+      if (!force && sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') {
+        console.log('[Nourish Discovery] Blocked: Already shown this session');
+        return;
+      }
     } catch(e) {}
 
     // Check server eligibility: has_logged_meals === false (total_logs === 0)
     var eligible = await checkServerEligibility();
-    if (!eligible) return;
+    console.log('[Nourish Discovery] Server check result:', { eligible: eligible });
+    if (!eligible && !force) return;
 
     // Re-verify no blocking modal popped up during async check
-    if (isBlocked()) return;
+    if (isBlocked()) {
+      console.log('[Nourish Discovery] Blocked after server check by current UI state');
+      return;
+    }
 
     // Slide up drawer
     try {
       sessionStorage.setItem('nourish_discovery_shown_this_session', '1');
     } catch(e) {}
+    console.log('[Nourish Discovery] Showing discovery drawer');
     openNourishDiscoveryDrawer();
     removeActivityListeners();
   }
@@ -14275,6 +14314,7 @@ function initNourishDiscoveryIdleTrigger() {
   function scheduleIdleCountdown() {
     cancelIdleTimer();
     if (isBlocked()) return;
+    console.log('[Nourish Discovery] Scheduling 5s idle countdown...');
     idleTimer = setTimeout(onIdleTimeout, 5000);
   }
 
@@ -14289,6 +14329,7 @@ function initNourishDiscoveryIdleTrigger() {
     if (!document.hidden) {
       cancelIdleTimer();
       if (!isBlocked()) {
+        console.log('[Nourish Discovery] Tab became visible, resuming countdown');
         scheduleIdleCountdown();
       }
     } else {
@@ -14313,6 +14354,7 @@ function initNourishDiscoveryIdleTrigger() {
 
   window._cancelNourishDiscoveryTimer = cancelIdleTimer;
   window._scheduleNourishDiscoveryTimer = scheduleIdleCountdown;
+  window._removeNourishDiscoveryListeners = removeActivityListeners;
 
   addActivityListeners();
   scheduleIdleCountdown();
@@ -14323,7 +14365,15 @@ window.closeNourishDiscoveryDrawer = closeNourishDiscoveryDrawer;
 window.acceptNourishDiscoveryDrawer = acceptNourishDiscoveryDrawer;
 window.dismissNourishDiscoveryDrawer = dismissNourishDiscoveryDrawer;
 window.initNourishDiscoveryIdleTrigger = initNourishDiscoveryIdleTrigger;
-window.testNourishDiscoveryDrawer = openNourishDiscoveryDrawer;
+
+window.testNourishDiscoveryDrawer = function(force) {
+  console.log('[Nourish Discovery] Manual test triggered', { force: !!force });
+  if (force) {
+    openNourishDiscoveryDrawer();
+  } else {
+    initNourishDiscoveryIdleTrigger(true);
+  }
+};
 
 // Auto-run idle trigger on script / DOM ready
 if (document.readyState === 'loading') {
