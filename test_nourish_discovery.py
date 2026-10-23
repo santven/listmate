@@ -868,6 +868,58 @@ eval(landingMatch[0]);
     throw new Error('applyLastScreenLandingDefault should NOT override action query parameters');
   }
 
+  // ── 6. Explicit setting in listmate_default_landing_screen: 'stillGood' ──
+  shownScreen = null;
+  window.location.search = '';
+  localStorage.setItem('listmate_default_landing_screen', 'stillGood');
+  localStorage.setItem('listmate_last_screen', 'recipes');
+  applyLastScreenLandingDefault();
+  if (shownScreen !== 'stillGood') {
+    throw new Error('Expected stillGood when default landing screen is explicitly stillGood, got: ' + shownScreen);
+  }
+
+  // ── 7. Explicit setting: 'home' ──
+  shownScreen = null;
+  window.location.search = '';
+  localStorage.setItem('listmate_default_landing_screen', 'home');
+  localStorage.setItem('listmate_last_screen', 'recipes');
+  applyLastScreenLandingDefault();
+  if (shownScreen !== null && shownScreen !== 'home') {
+    throw new Error('Expected home when default landing screen is explicitly home, got: ' + shownScreen);
+  }
+
+  // ── 8. Explicit setting: 'nourish' when Nourish is enabled ──
+  shownScreen = null;
+  window.location.search = '';
+  nourishEnabled = true;
+  localStorage.setItem('listmate_default_landing_screen', 'nourish');
+  localStorage.setItem('listmate_last_screen', 'home');
+  applyLastScreenLandingDefault();
+  if (shownScreen !== 'nourish') {
+    throw new Error('Expected nourish when default landing screen is explicitly nourish and enabled, got: ' + shownScreen);
+  }
+
+  // ── 9. Explicit setting: 'nourish' when Nourish is disabled falls back to 'home' ──
+  shownScreen = null;
+  window.location.search = '';
+  nourishEnabled = false;
+  localStorage.setItem('listmate_default_landing_screen', 'nourish');
+  localStorage.setItem('listmate_last_screen', 'recipes');
+  applyLastScreenLandingDefault();
+  if (shownScreen !== null && shownScreen !== 'home') {
+    throw new Error('Expected fallback to home when default landing is nourish but nourish is disabled, got: ' + shownScreen);
+  }
+
+  // ── 10. Setting 'last_screen' uses listmate_last_screen ──
+  shownScreen = null;
+  window.location.search = '';
+  localStorage.setItem('listmate_default_landing_screen', 'last_screen');
+  localStorage.setItem('listmate_last_screen', 'recipes');
+  applyLastScreenLandingDefault();
+  if (shownScreen !== 'recipes') {
+    throw new Error('Expected recipes when default landing is last_screen and last was recipes, got: ' + shownScreen);
+  }
+
   console.log('ALL_LANDING_SCREEN_TESTS_PASSED');
 })();
 """
@@ -882,6 +934,25 @@ eval(landingMatch[0]);
             f"Default landing screen test failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}",
         )
         self.assertIn("ALL_LANDING_SCREEN_TESTS_PASSED", res.stdout)
+
+    def test_settings_default_landing_screen_ui(self):
+        """Verify static/settings.html includes Default Landing Screen UI, options, and logic."""
+        settings_path = os.path.join(os.path.dirname(__file__), "static", "settings.html")
+        self.assertTrue(os.path.exists(settings_path))
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings_html = f.read()
+
+        self.assertIn('id="defaultLandingSettingsCard"', settings_html)
+        self.assertIn('id="defaultLandingSelect"', settings_html)
+        self.assertIn('value="last_screen"', settings_html)
+        self.assertIn('value="home"', settings_html)
+        self.assertIn('value="stillGood"', settings_html)
+        self.assertIn('value="nourish"', settings_html)
+        self.assertIn('id="defaultLandingNourishOption"', settings_html)
+        self.assertIn('id="defaultLandingHelpText"', settings_html)
+        self.assertIn('onDefaultLandingChange', settings_html)
+        self.assertIn('initDefaultLandingUI', settings_html)
+        self.assertIn('updateDefaultLandingNourishOption', settings_html)
 
     def test_idle_trigger_autoruns_on_dom_load(self):
         """Verify initNourishDiscoveryIdleTrigger auto-runs upon script/DOM load."""
@@ -941,3 +1012,4 @@ console.log('AUTO_RUN_TESTS_PASSED');
 
 if __name__ == "__main__":
     unittest.main()
+
