@@ -14125,6 +14125,87 @@ function dismissNourishDiscoveryDrawer() {
   closeNourishDiscoveryDrawer();
 }
 
+var _nourishServerEligibilityPromise = null;
+
+async function checkNourishServerEligibility(forceRefresh) {
+  if (!forceRefresh && _nourishServerEligibilityPromise) {
+    return _nourishServerEligibilityPromise;
+  }
+
+  _nourishServerEligibilityPromise = (async function() {
+    try {
+      var apiBase = typeof API !== 'undefined' ? API : '/api';
+      var res = await fetch(apiBase + '/user/nourish-enabled').then(function(r) { return r.json(); });
+      if (res && res.ok) {
+        if (res.enabled === true) {
+          window._nourishEnabled = true;
+          try { localStorage.setItem('nourish_enabled', 'true'); } catch(e){}
+          window._nourishServerEligible = false;
+          return false;
+        }
+        var totalLogs = res.total_logs || 0;
+        var hasLogged = (res.has_logged_meals === true) || (totalLogs > 0);
+        window._nourishHasLoggedMeals = hasLogged;
+        if (hasLogged) {
+          window._nourishServerEligible = false;
+          return false;
+        }
+        window._nourishServerEligible = true;
+        return true;
+      }
+    } catch(err) {
+      console.warn('[Nourish Discovery] Server check error:', err);
+      return false;
+    }
+    return false;
+  })();
+
+  return _nourishServerEligibilityPromise;
+}
+
+function isNourishDiscoveryPending() {
+  try {
+    // 1. If Nourish is already enabled -> NOT pending
+    if (typeof isNourishEnabled === 'function' && isNourishEnabled()) return false;
+    if (window._nourishEnabled === true || localStorage.getItem('nourish_enabled') === 'true') return false;
+
+    // 2. If user already logged meals or server determined ineligible -> NOT pending
+    if (window._nourishHasLoggedMeals === true) return false;
+    if (window._nourishServerEligible === false) return false;
+
+    // 3. If dismissed in the last 14 days -> NOT pending
+    var dismissedAt = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
+    if (dismissedAt > 0 && (Date.now() - dismissedAt < 14 * 86400000)) return false;
+
+    // 4. If already shown this session -> NOT pending
+    if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') return false;
+
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function shouldDailyInspirationYieldToNourish() {
+  try {
+    // 1. If Nourish Discovery drawer or backdrop is currently active / visible in DOM -> MUST yield
+    var drawer = document.getElementById('nourishDiscoveryDrawer');
+    if (drawer && drawer.classList.contains('active')) return true;
+    var backdrop = document.getElementById('nourishDiscoveryBackdrop');
+    if (backdrop && backdrop.classList.contains('active')) return true;
+
+    // 2. If Nourish Discovery was shown in this session -> MUST yield for entire session/visit
+    if (sessionStorage.getItem('nourish_discovery_shown_this_session') === '1') return true;
+
+    // 3. If Nourish Discovery is eligible and pending to show -> MUST yield
+    if (isNourishDiscoveryPending()) return true;
+
+    return false;
+  } catch(e) {
+    return false;
+  }
+}
+
 function initNourishDiscoveryIdleTrigger(force) {
   // If prior instance was running, cancel timer and clean up listeners
   if (typeof window._cancelNourishDiscoveryTimer === 'function') {
@@ -14134,9 +14215,11 @@ function initNourishDiscoveryIdleTrigger(force) {
     window._removeNourishDiscoveryListeners();
   }
 
-  // 1. Session Count Guard:
+  _nourishServerEligibilityPromise = null;
+
+  // 1. Session Count Tracking:
   // Increment session counter in sessionStorage / localStorage (listmate_session_count).
-  // If session_count < 2, NEVER show on Session 1 for brand new users.
+  // Note: Brand new users on session 1 are fully eligible for Nourish Discovery.
   try {
     if (!sessionStorage.getItem('listmate_session_counted')) {
       sessionStorage.setItem('listmate_session_counted', '1');
@@ -14175,11 +14258,6 @@ function initNourishDiscoveryIdleTrigger(force) {
     force: !!force
   });
 
-  if (!isExistingUser && sessionCount < 2 && !force) {
-    console.log('[Nourish Discovery] Suppressed on Session 1 for new user (session count:', sessionCount, ')');
-    return;
-  }
-
   // 2. Pre-check sync eligibility guards
   if (!force && typeof isNourishEnabled === 'function' && isNourishEnabled()) {
     console.log('[Nourish Discovery] Suppressed: Nourish is already enabled');
@@ -14199,39 +14277,6 @@ function initNourishDiscoveryIdleTrigger(force) {
   } catch(e) {}
 
   var idleTimer = null;
-  var isCheckingEligibility = false;
-  var isEligible = null;
-
-  async function checkServerEligibility() {
-    if (isEligible !== null) return isEligible;
-    if (isCheckingEligibility) return false;
-    isCheckingEligibility = true;
-    try {
-      var res = await fetch(API + '/user/nourish-enabled').then(function(r) { return r.json(); });
-      if (res && res.ok) {
-        if (res.enabled === true) {
-          window._nourishEnabled = true;
-          try { localStorage.setItem('nourish_enabled', 'true'); } catch(e){}
-          isEligible = false;
-          return false;
-        }
-        var totalLogs = res.total_logs || 0;
-        var hasLogged = (res.has_logged_meals === true) || (totalLogs > 0);
-        if (hasLogged) {
-          isEligible = false;
-          return false;
-        }
-        isEligible = true;
-        return true;
-      }
-    } catch(err) {
-      console.warn('[Nourish Discovery] Server check error:', err);
-      return false;
-    } finally {
-      isCheckingEligibility = false;
-    }
-    return false;
-  }
 
   function cancelIdleTimer() {
     if (idleTimer) {
@@ -14246,7 +14291,7 @@ function initNourishDiscoveryIdleTrigger(force) {
     if (screen !== 'home') return true;
 
     // 2. If any modal or drawer is active => ABORT (including Daily Inspiration drawer)
-    var activeModalOrDrawer = document.querySelector('.modal.active, .drawer.active, #bottomDrawer.active, #shareDrawer.active, .modal-overlay.active, .app-switcher-menu.show, #burgerMenu.show, #dailyInspirationOverlay.show, .daily-inspiration-overlay.show, #dailyInspirationDrawer');
+    var activeModalOrDrawer = document.querySelector('.modal.active, .drawer.active, #bottomDrawer.active, #shareDrawer.active, .modal-overlay.active, .app-switcher-menu.show, #burgerMenu.show, #dailyInspirationOverlay.show, .daily-inspiration-overlay.show');
     if (activeModalOrDrawer) return true;
 
     // 2b. Prevent drawer stacking: If Daily Inspiration was already presented in this session, do not prompt Nourish in the same session
@@ -14299,7 +14344,7 @@ function initNourishDiscoveryIdleTrigger(force) {
     } catch(e) {}
 
     // Check server eligibility: has_logged_meals === false (total_logs === 0)
-    var eligible = await checkServerEligibility();
+    var eligible = await checkNourishServerEligibility();
     console.log('[Nourish Discovery] Server check result:', { eligible: eligible });
     if (!eligible && !force) return;
 
@@ -14371,6 +14416,9 @@ window.openNourishDiscoveryDrawer = openNourishDiscoveryDrawer;
 window.closeNourishDiscoveryDrawer = closeNourishDiscoveryDrawer;
 window.acceptNourishDiscoveryDrawer = acceptNourishDiscoveryDrawer;
 window.dismissNourishDiscoveryDrawer = dismissNourishDiscoveryDrawer;
+window.checkNourishServerEligibility = checkNourishServerEligibility;
+window.isNourishDiscoveryPending = isNourishDiscoveryPending;
+window.shouldDailyInspirationYieldToNourish = shouldDailyInspirationYieldToNourish;
 window.initNourishDiscoveryIdleTrigger = initNourishDiscoveryIdleTrigger;
 
 window.testNourishDiscoveryDrawer = function(force) {
@@ -14381,6 +14429,16 @@ window.testNourishDiscoveryDrawer = function(force) {
     initNourishDiscoveryIdleTrigger(true);
   }
 };
+
+// Eagerly kick off server eligibility check on startup if not already enabled or dismissed
+try {
+  var _dismissed = parseInt(localStorage.getItem('nourish_discovery_dismissed_at') || '0', 10);
+  var _isDismissed = _dismissed > 0 && (Date.now() - _dismissed < 14 * 86400000);
+  var _isEnabled = (typeof isNourishEnabled === 'function' && isNourishEnabled()) || localStorage.getItem('nourish_enabled') === 'true';
+  if (!_isDismissed && !_isEnabled) {
+    checkNourishServerEligibility();
+  }
+} catch(e) {}
 
 // Auto-run idle trigger on script / DOM ready
 if (document.readyState === 'loading') {
