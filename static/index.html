@@ -14139,12 +14139,24 @@ function initNourishDiscoveryIdleTrigger() {
   } catch(e) {}
 
   var sessionCount = 0;
+  var hasExistingAccount = false;
   try {
     sessionCount = parseInt(localStorage.getItem('listmate_session_count') || '0', 10);
+    var cachedCfg = localStorage.getItem('listmate_cfg');
+    if (cachedCfg) {
+      try {
+        var parsedCfg = JSON.parse(cachedCfg);
+        if (parsedCfg && (parsedCfg.user || parsedCfg.user_id || parsedCfg.household_id)) {
+          hasExistingAccount = true;
+        }
+      } catch (_) {
+        hasExistingAccount = true;
+      }
+    }
   } catch(e) {}
 
-  if (sessionCount < 2) {
-    // Strict Guard: NEVER show on Session 1
+  if (sessionCount < 2 && !hasExistingAccount) {
+    // Strict Guard: NEVER show on Session 1 for fresh non-authenticated accounts
     return;
   }
 
@@ -14273,17 +14285,30 @@ function initNourishDiscoveryIdleTrigger() {
     }
   }
 
+  function onVisibilityChange() {
+    if (!document.hidden) {
+      cancelIdleTimer();
+      if (!isBlocked()) {
+        scheduleIdleCountdown();
+      }
+    } else {
+      cancelIdleTimer();
+    }
+  }
+
   var activityEvents = ['keydown', 'input', 'touchstart', 'scroll', 'wheel', 'click'];
   function addActivityListeners() {
     activityEvents.forEach(function(evt) {
       window.addEventListener(evt, onUserActivity, { passive: true });
     });
+    document.addEventListener('visibilitychange', onVisibilityChange);
   }
 
   function removeActivityListeners() {
     activityEvents.forEach(function(evt) {
       window.removeEventListener(evt, onUserActivity);
     });
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   }
 
   window._cancelNourishDiscoveryTimer = cancelIdleTimer;
@@ -14298,6 +14323,16 @@ window.closeNourishDiscoveryDrawer = closeNourishDiscoveryDrawer;
 window.acceptNourishDiscoveryDrawer = acceptNourishDiscoveryDrawer;
 window.dismissNourishDiscoveryDrawer = dismissNourishDiscoveryDrawer;
 window.initNourishDiscoveryIdleTrigger = initNourishDiscoveryIdleTrigger;
+window.testNourishDiscoveryDrawer = openNourishDiscoveryDrawer;
+
+// Auto-run idle trigger on script / DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    initNourishDiscoveryIdleTrigger();
+  });
+} else {
+  initNourishDiscoveryIdleTrigger();
+}
 </script>
 </body>
 </html>
