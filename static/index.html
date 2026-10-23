@@ -4857,10 +4857,10 @@ function showScreen(name){
     if (typeof isNourishEnabled === 'function' && !isNourishEnabled()) {
       // Disabled view shown
     } else if (typeof loadNourishDay === 'function') {
-      if (!currentNourishDate) {
-        currentNourishDate = (typeof getTodayDateString === 'function') ? getTodayDateString() : '';
-      }
-      loadNourishDay(currentNourishDate);
+      var nourishDate = (typeof currentNourishDate !== 'undefined' && currentNourishDate)
+        ? currentNourishDate
+        : ((typeof getTodayDateString === 'function') ? getTodayDateString() : '');
+      loadNourishDay(nourishDate);
     }
     window.scrollTo(0, 0);
     document.body.scrollTop = 0;
